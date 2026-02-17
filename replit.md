@@ -29,9 +29,16 @@ A Sorare-inspired fantasy football platform without blockchain. Users deposit di
 - Professional card designs with rarity-specific gradients and glows
 - No blockchain - pure digital fund system
 
+## Where to deploy
+- **Replit**: Set `REPL_ID` (auto on Replit). Uses Replit Auth. Run: `npm run build && npm start` (or use Replit’s run button).
+- **Railway / Render / Fly.io / any Node host**: Set `DATABASE_URL`, `PORT` (often auto), and either:
+  - `USE_MOCK_AUTH=true` + optional `MOCK_USER_ID` for dev/demo (no real login), or
+  - Add your own auth (e.g. JWT/OIDC) and do not set `USE_MOCK_AUTH`. `/api/auth/user` will 401 until you implement login.
+- **Build**: `npm run build` (builds client into `dist/public` and server into `dist/server`). **Start**: `NODE_ENV=production npm start` (serves API + static client from one process).
+
 ## Project Architecture
 - **Frontend**: React + Vite + Tailwind CSS + Shadcn UI
-- **Backend**: Express.js with Replit Auth (OIDC)
+- **Backend**: Express.js; auth = Replit Auth on Replit, or mock/custom elsewhere
 - **Database**: PostgreSQL with Drizzle ORM
 - **Key Routes**:
   - `/` - Landing page (logged out) or Dashboard (logged in)
@@ -40,7 +47,7 @@ A Sorare-inspired fantasy football platform without blockchain. Users deposit di
   - `/collection` - View and manage owned cards
   - `/marketplace` - Buy/sell/swap rare+ cards with fee transparency
   - `/wallet` - Deposit funds, view transactions
-- **Auth**: Replit Auth via `/api/login`, `/api/logout`
+- **Auth**: On Replit, Replit Auth via `/api/login`, `/api/logout`. Elsewhere, mock auth (if `USE_MOCK_AUTH=true`) or your own.
 - **Onboarding**: First-time users get 3 packs of 3 common players, choose 5 for lineup + $100 welcome bonus
 - **Common cards are NOT tradable** on the marketplace
 - **8% fee (SITE_FEE_RATE)** applies to all financial transactions
