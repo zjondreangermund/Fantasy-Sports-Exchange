@@ -15,9 +15,9 @@ export default function LandingPage() {
             <span className="font-bold text-lg text-foreground">FantasyFC</span>
           </div>
           <div className="flex items-center gap-3">
-            <a href="/api/login">
-              <Button data-testid="button-login">Sign In</Button>
-            </a>
+            <a href="/api/auth/google">
+  <Button data-testid="button-login">Sign In with Google</Button>
+</a>
           </div>
         </div>
       </nav>
@@ -46,7 +46,7 @@ export default function LandingPage() {
               cards, compete in leagues, and rise to the top of the leaderboards.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <a href="/api/login">
+              <a href="/api/auth/google">
                 <Button size="lg" data-testid="button-get-started">
                   Get Started Free
                 </Button>
