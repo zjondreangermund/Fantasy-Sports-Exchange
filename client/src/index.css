@@ -212,8 +212,14 @@
    * buttons/badges can remove the automatic brightness adjustment on interactions
    * and program their own. */
   .no-default-hover-elevate {}
-
   .no-default-active-elevate {}
+
+  /* ✅ FIX: anchor the ::before background to the element itself (prevents full-page dark overlay) */
+  .toggle-elevate,
+  .toggle-elevate-2 {
+    position: relative;
+    z-index: 0;
+  }
 
   /**
    * Toggleable backgrounds go behind the content. Hoverable/active goes on top.
@@ -227,10 +233,8 @@
     pointer-events: none;
     position: absolute;
     inset: 0px;
-    /*border-radius: inherit;   match rounded corners */
     border-radius: inherit;
-    z-index: -1;
-    /* sits behind content but above backdrop */
+    z-index: -1; /* behind content, inside this element */
   }
 
   .toggle-elevate.toggle-elevated::before {
@@ -241,6 +245,8 @@
   .border.toggle-elevate::before {
     inset: -1px;
   }
+
+}
 
   /* Does not work on elements with overflow:hidden! */
   .hover-elevate:not(.no-default-hover-elevate),
