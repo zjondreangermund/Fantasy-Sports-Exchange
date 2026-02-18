@@ -1,10 +1,11 @@
-export * from "./models/auth.";
-
 import { sql, relations } from "drizzle-orm";
 import { pgTable, text, varchar, integer, real, boolean, timestamp, jsonb, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { users } from "./models/auth.";
+
+// Import the users table used for FK references
+import { users } from "./models/auth.js";
+export { users };
 
 export const rarityEnum = pgEnum("rarity", ["common", "rare", "unique", "epic", "legendary"]);
 export const positionEnum = pgEnum("position", ["GK", "DEF", "MID", "FWD"]);
@@ -302,6 +303,9 @@ export const insertCompetitionSchema = createInsertSchema(competitions);
 export const insertCompetitionEntrySchema = createInsertSchema(competitionEntries);
 export const insertSwapOfferSchema = createInsertSchema(swapOffers);
 export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalRequests);
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
 
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
