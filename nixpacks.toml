@@ -1,8 +1,10 @@
-﻿[variables]
-NPM_CONFIG_CACHE = "/root/.npm"
-
-[phases.setup]
+﻿[phases.setup]
+# Pin nixpkgs so nodejs_20 resolves to >= 20.19.0
+nixpkgsArchive = "3e2cf88148e732abc1d259286123e06a9d8c964a"
 nixPkgs = ["nodejs_20", "npm-10_x"]
+
+[variables]
+NPM_CONFIG_CACHE = "/root/.npm"
 
 [phases.install]
 cmds = ["npm ci"]
