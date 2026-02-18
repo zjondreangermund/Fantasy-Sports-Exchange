@@ -121,7 +121,7 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
-..dark {
+.dark {
   --button-outline: transparent;
   --badge-outline: transparent;
 
