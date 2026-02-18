@@ -164,39 +164,57 @@ export async function registerRoutes(
   app.get("/api/epl/players", async (req, res) => {
   try {
     const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
-    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || "100"), 10)));
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(String(req.query.limit || "100"), 10)),
+    );
+
     const search = String(req.query.search || "").toLowerCase().trim();
-    const position = String(req.query.position || "").trim(); // GK/DEF/MID/FWD optional
+    const position = String(req.query.position || "").trim(); // optional: GK/DEF/MID/FWD
 
     const players = await fplApi.getPlayers();
-
-    let filtered = players;
+    let filtered = Array.isArray(players) ? players : [];
 
     // Search
     if (search) {
       filtered = filtered.filter((p: any) => {
-        const n = `${p.first_name} ${p.second_name} ${p.web_name}`.toLowerCase();
+        const n = `${p.first_name ?? ""} ${p.second_name ?? ""} ${p.web_name ?? ""}`.toLowerCase();
         return n.includes(search);
       });
     }
 
-    // Position (FPL element_type: 1 GK, 2 DEF, 3 MID, 4 FWD)
-    const posMap: Record<string, number> = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
-    const t = posMap[position.toUpperCase()];
-    if (t) filtered = filtered.filter((p: any) => p.element_type === t);
+    // Position filter (if your player object has position)
+    // Common FPL-style position might be: p.position or p.position_short or p.element_type
+    if (position) {
+      const pos = position.toUpperCase();
 
-    // Pagination
+      filtered = filtered.filter((p: any) => {
+        const pPos =
+          String(p.position_short || p.position || "").toUpperCase();
+
+        // If you use element_type instead (FPL: 1 GK, 2 DEF, 3 MID, 4 FWD)
+        const map: Record<string, number> = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
+        const wantedType = map[pos];
+
+        return (
+          (pPos && pPos === pos) ||
+          (wantedType && Number(p.element_type) === wantedType)
+        );
+      });
+    }
+
+    // Pagination AFTER filtering
     const total = filtered.length;
     const start = (page - 1) * limit;
-    const results = filtered.slice(start, start + limit);
+    const end = start + limit;
+    const pageItems = filtered.slice(start, end);
 
-    // ✅ Return API-Football-compatible shape + new shape
+    // ✅ IMPORTANT: wrap in { response: ... } because your UI expects API-Football shape
     res.json({
-      page,
-      limit,
+      response: pageItems,
+      results: pageItems.length,
+      paging: { current: page, total: Math.max(1, Math.ceil(total / limit)) },
       total,
-      results,
-      response: results, // <-- this is what your frontend likely expects
     });
   } catch (e: any) {
     console.error("EPL players:", e);
