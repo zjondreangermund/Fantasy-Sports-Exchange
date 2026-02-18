@@ -3,8 +3,6 @@ import { type Server } from "http";
 import { storage } from "./storage.js";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth/index.js";
 import { seedDatabase, seedCompetitions } from "./seed.js";
-// ❌ removed API-Football
-// import * as apiFootball from "./services/apiFootball.js";
 import { fplApi } from "./services/fplApi.js";
 import { fetchSorarePlayer } from "./services/sorare.js";
 
