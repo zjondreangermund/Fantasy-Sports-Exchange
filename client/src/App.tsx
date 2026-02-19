@@ -1,6 +1,8 @@
+import * as React from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+
 // Fixed aliases: @/ -> ./ for files in the same or deeper subdirectories
 import { Toaster } from "./components/ui/toaster";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -8,8 +10,8 @@ import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
 import { AppSidebar } from "./components/app-sidebar";
 import { ThemeProvider, ThemeToggle } from "./components/ThemeProvider";
 import { useAuth } from "./hooks/use-auth";
-import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "./components/ui/skeleton";
+
 import NotFound from "./pages/not-found";
 import LandingPage from "./pages/landing";
 import OnboardingPage from "./pages/onboarding";
@@ -22,10 +24,11 @@ import PremierLeaguePage from "./pages/premier-league";
 import AdminPage from "./pages/admin";
 
 function AuthenticatedRouter() {
+  // ✅ Use the NEW onboarding endpoint
   const { data: onboarding, isLoading } = useQuery<{
     completed: boolean;
   }>({
-    queryKey: ["/api/onboarding/status"],
+    queryKey: ["/api/onboarding/offers"],
   });
 
   if (isLoading) {
@@ -36,13 +39,20 @@ function AuthenticatedRouter() {
     );
   }
 
+  // ✅ If not completed, route to onboarding page (but still allow /onboarding route too)
   if (onboarding && !onboarding.completed) {
-    return <OnboardingPage />;
+    return (
+      <Switch>
+        <Route path="/onboarding" component={OnboardingPage} />
+        <Route component={OnboardingPage} />
+      </Switch>
+    );
   }
 
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
+      <Route path="/onboarding" component={OnboardingPage} />
       <Route path="/competitions" component={CompetitionsPage} />
       <Route path="/premier-league" component={PremierLeaguePage} />
       <Route path="/collection" component={CollectionPage} />
