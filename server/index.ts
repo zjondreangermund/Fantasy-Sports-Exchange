@@ -8,6 +8,7 @@ import session from "express-session";
 import cookieParser from "cookie-parser";
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import pgSession from "connect-pg-simple";
 
 const app = express();
 const httpServer = createServer(app);
@@ -32,6 +33,7 @@ app.use(
   session({
     store: new PgSession({
       conString: process.env.DATABASE_URL,
+      createTableIfMissing: true, // 👈 ADD THIS LINE
     }),
     secret: process.env.SESSION_SECRET || "dev_secret_change_me",
     resave: false,
