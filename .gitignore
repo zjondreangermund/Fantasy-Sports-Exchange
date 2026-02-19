@@ -4,5 +4,13 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Ignore real env files
 .env
-.env.*
+.env.local
+.env.production
+.env.development
+.env.*.local
+
+# Allow example file
+!.env.example
