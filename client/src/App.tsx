@@ -3,7 +3,6 @@ import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 
-// Fixed aliases: @/ -> ./ for files in the same or deeper subdirectories
 import { Toaster } from "./components/ui/toaster";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
@@ -15,6 +14,7 @@ import { Skeleton } from "./components/ui/skeleton";
 import NotFound from "./pages/not-found";
 import LandingPage from "./pages/landing";
 import OnboardingPage from "./pages/onboarding";
+import OnboardingPacksScene from "./pages/onboarding-packs"; // ✅ NEW animation scene page
 import DashboardPage from "./pages/dashboard";
 import CollectionPage from "./pages/collection";
 import MarketplacePage from "./pages/marketplace";
@@ -24,11 +24,9 @@ import PremierLeaguePage from "./pages/premier-league";
 import AdminPage from "./pages/admin";
 
 function AuthenticatedRouter() {
-  // ✅ Use the NEW onboarding endpoint
-  const { data: onboarding, isLoading } = useQuery<{
-    completed: boolean;
-  }>({
-    queryKey: ["/api/onboarding/offers"],
+  // ✅ Use /status (doesn't 404 when offers not created yet)
+  const { data: onboarding, isLoading } = useQuery<{ completed: boolean }>({
+    queryKey: ["/api/onboarding/status"],
   });
 
   if (isLoading) {
@@ -39,11 +37,12 @@ function AuthenticatedRouter() {
     );
   }
 
-  // ✅ If not completed, route to onboarding page (but still allow /onboarding route too)
+  // ✅ If onboarding is not completed, force user into onboarding flow
   if (onboarding && !onboarding.completed) {
     return (
       <Switch>
         <Route path="/onboarding" component={OnboardingPage} />
+        <Route path="/onboarding-packs" component={OnboardingPacksScene} />
         <Route component={OnboardingPage} />
       </Switch>
     );
@@ -53,6 +52,7 @@ function AuthenticatedRouter() {
     <Switch>
       <Route path="/" component={DashboardPage} />
       <Route path="/onboarding" component={OnboardingPage} />
+      <Route path="/onboarding-packs" component={OnboardingPacksScene} />
       <Route path="/competitions" component={CompetitionsPage} />
       <Route path="/premier-league" component={PremierLeaguePage} />
       <Route path="/collection" component={CollectionPage} />
