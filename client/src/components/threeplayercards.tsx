@@ -1,10 +1,10 @@
-import React, { useMemo, useRef, useEffect, useState } from "react";
+import React, { useMemo, useEffect, useState, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Float, Environment, PerspectiveCamera, ContactShadows } from "@react-three/drei";
+import { Environment, PerspectiveCamera, ContactShadows } from "@react-three/drei";
 import * as THREE from "three";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
-// Holographic shader
+// Holographic shader (kept, but still animated lightly)
 const HoloMaterial = () => {
   const materialRef = useRef<any>();
 
@@ -110,10 +110,10 @@ export default function ThreeDPlayerCard({
 
   const texture = useSafeTexture(
     imageUrl ??
+      (card as any)?.player?.photo ??
       (card as any)?.player?.photoUrl ??
       (card as any)?.player?.imageUrl ??
       (card as any)?.player?.image_url ??
-      (card as any)?.player?.photo ??
       null,
   );
 
@@ -132,43 +132,42 @@ export default function ThreeDPlayerCard({
         <ambientLight intensity={0.6} />
         <spotLight position={[10, 10, 10]} angle={0.2} penumbra={1} intensity={1.2} castShadow />
 
-        <Float speed={1.6} rotationIntensity={0.4} floatIntensity={0.8}>
-          <group>
-            {/* Card body */}
-            <mesh castShadow receiveShadow>
-              <extrudeGeometry
-                args={[
-                  cardShape,
-                  {
-                    depth: 0.1,
-                    bevelEnabled: true,
-                    bevelThickness: 0.04,
-                    bevelSize: 0.04,
-                    bevelSegments: 2,
-                  },
-                ]}
-              />
-              <meshPhysicalMaterial color={baseColor} metalness={1} roughness={0.25} clearcoat={1} />
-            </mesh>
+        {/* ✅ NO Float wrapper (stops the non-stop zoom/motion) */}
+        <group>
+          {/* Card body */}
+          <mesh castShadow receiveShadow>
+            <extrudeGeometry
+              args={[
+                cardShape,
+                {
+                  depth: 0.1,
+                  bevelEnabled: true,
+                  bevelThickness: 0.04,
+                  bevelSize: 0.04,
+                  bevelSegments: 2,
+                },
+              ]}
+            />
+            <meshPhysicalMaterial color={baseColor} metalness={1} roughness={0.25} clearcoat={1} />
+          </mesh>
 
-            {/* Player image on front */}
-            <mesh position={[0, 0, 0.075]}>
-              <planeGeometry args={[1.75, 2.65]} />
-              <meshStandardMaterial
-                map={texture ?? undefined}
-                color={texture ? "#ffffff" : "#0b0f1a"}
-                roughness={0.9}
-                metalness={0.0}
-              />
-            </mesh>
+          {/* Player image on front */}
+          <mesh position={[0, 0, 0.075]}>
+            <planeGeometry args={[1.75, 2.65]} />
+            <meshStandardMaterial
+              map={texture ?? undefined}
+              color={texture ? "#ffffff" : "#0b0f1a"}
+              roughness={0.9}
+              metalness={0.0}
+            />
+          </mesh>
 
-            {/* Holographic overlay */}
-            <mesh position={[0, 0, 0.09]}>
-              <planeGeometry args={[1.78, 2.68]} />
-              <HoloMaterial />
-            </mesh>
-          </group>
-        </Float>
+          {/* Holographic overlay */}
+          <mesh position={[0, 0, 0.09]}>
+            <planeGeometry args={[1.78, 2.68]} />
+            <HoloMaterial />
+          </mesh>
+        </group>
 
         <ContactShadows position={[0, -2, 0]} opacity={0.45} scale={10} blur={2.5} far={4} />
       </Canvas>
