@@ -12,13 +12,23 @@ interface PlayerCardProps {
 }
 
 export default function PlayerCard(props: PlayerCardProps) {
-  // Use the name you imported from threeplayercards
+  const img =
+    props.sorareImageUrl ||
+    (props.card as any)?.player?.photoUrl ||
+    (props.card as any)?.player?.imageUrl ||
+    (props.card as any)?.player?.image_url ||
+    (props.card as any)?.player?.avatarUrl ||
+    (props.card as any)?.player?.photo ||
+    null;
+
   return (
-    <div 
-      onClick={props.onClick} 
-      className={`${props.selectable ? 'cursor-pointer' : ''} ${props.selected ? 'ring-2 ring-primary rounded-xl' : ''}`}
+    <div
+      onClick={props.onClick}
+      className={`${props.selectable ? "cursor-pointer" : ""} ${
+        props.selected ? "ring-2 ring-primary rounded-xl" : ""
+      }`}
     >
-      <ThreeDPlayerCard card={props.card} />
+      <ThreeDPlayerCard card={props.card} imageUrl={img} />
     </div>
   );
 }
