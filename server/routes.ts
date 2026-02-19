@@ -253,6 +253,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ONBOARDING (3 packs -> 9 cards -> choose 5)
   // -------------------------
 
+  // ✅ Status route (used by App router sometimes)
+  app.get("/api/onboarding/status", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const ob = await storage.getOnboarding(userId);
+      res.json({ completed: ob?.completed ?? false });
+    } catch (error: any) {
+      console.error("Onboarding status failed:", error);
+      res.status(500).json({ message: "Failed to fetch onboarding status" });
+    }
+  });
+
   // 1) Create offer (generate 9 from 3 packs)
   app.post("/api/onboarding/create-offer", requireAuth, async (req: any, res) => {
     try {
@@ -306,9 +318,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const offeredPlayerIds = ob.packCards.flat();
-      const offeredPlayers = await Promise.all(
-        offeredPlayerIds.map((id) => storage.getPlayer(id)),
-      );
+
+      // NOTE: we return players as full objects so the UI can show cards immediately
+      const offeredPlayers = await Promise.all(offeredPlayerIds.map((id) => storage.getPlayer(id)));
       const players = offeredPlayers.filter(Boolean);
 
       res.json({
@@ -352,6 +364,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
+      // Mint 5 common cards
       for (const playerId of selected) {
         await storage.createPlayerCard({
           playerId,
