@@ -27,6 +27,17 @@ export function requireAuth(req: any, res: any, next: any) {
   if (useMockAuth) {
     const mockUserId = process.env.MOCK_USER_ID || "test-user-1";
     req.authUserId = mockUserId;
+
+    // Helpful for code paths that expect req.user
+    if (!req.user) {
+      req.user = {
+        id: mockUserId,
+        claims: { sub: mockUserId },
+        firstName: process.env.MOCK_FIRST_NAME || "Mock",
+        lastName: process.env.MOCK_LAST_NAME || "User",
+      };
+    }
+
     return next();
   }
 
@@ -250,7 +261,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // -------------------------
-  // ONBOARDING (3 packs -> 9 cards -> choose 5)
+  // ✅ CARDS: My Collection
+  // -------------------------
+  app.get("/api/cards/my", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const cards = await storage.getUserCards(userId);
+      return res.json({ cards });
+    } catch (error: any) {
+      console.error("Fetch my cards failed:", error);
+      return res.status(500).json({ message: "Failed to fetch my cards" });
+    }
+  });
+
+  // -------------------------
+  // ONBOARDING (5 packs -> 15 cards -> choose 5)
   // -------------------------
 
   // ✅ Status route (used by App router sometimes)
@@ -266,94 +291,168 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // 1) Create offer (5 packs of 3 -> 15 total cards)
-app.post("/api/onboarding/create-offer", requireAuth, async (req: any, res) => {
-  try {
-    const userId = req.authUserId;
-    const ob = await storage.getOnboarding(userId);
-
-    if (ob?.completed) {
-      return res.status(400).json({ message: "Onboarding already completed" });
-    }
-
-    // If already generated, return existing offer (no re-roll)
-    if (ob?.packCards?.length === 5 && ob.packCards.flat().length === 15) {
-      return res.json({ packCards: ob.packCards });
-    }
-
-    const allPlayers = await storage.getRandomPlayers(200);
-    if (allPlayers.length < 15) {
-      return res.status(400).json({ message: "Not enough players in database" });
-    }
-
-    const normalize = (pos: string) => {
-      const p = (pos || "").toLowerCase();
-      if (p.includes("goal")) return "GK";
-      if (p.includes("def")) return "DEF";
-      if (p.includes("mid")) return "MID";
-      if (p.includes("for")) return "FWD";
-      return "MID";
-    };
-
-    const gk = allPlayers.filter(p => normalize(p.position) === "GK").slice(0, 3);
-    const def = allPlayers.filter(p => normalize(p.position) === "DEF").slice(0, 3);
-    const mid = allPlayers.filter(p => normalize(p.position) === "MID").slice(0, 3);
-    const fwd = allPlayers.filter(p => normalize(p.position) === "FWD").slice(0, 3);
-    const random = shuffle(allPlayers).slice(0, 3);
-
-    if (gk.length < 3 || def.length < 3 || mid.length < 3 || fwd.length < 3) {
-      return res.status(400).json({ message: "Not enough players per position" });
-    }
-
-    const packCards = [
-      gk.map(p => p.id),
-      def.map(p => p.id),
-      mid.map(p => p.id),
-      fwd.map(p => p.id),
-      random.map(p => p.id),
-    ];
-
-  if (!ob) {
-  await storage.createOnboarding({
-    userId,
-    completed: false,
-    packCards,
-    selectedCards: [],
-  } as any);
-} else {
-  await storage.updateOnboarding(
-    userId,
-    {
-      packCards,
-      selectedCards: [],
-    } as any,
-  );
-}
-
-    return res.json({ packCards });
-
-  } catch (error: any) {
-    console.error("Onboarding/packs failed:", error);
-    return res.status(500).json({
-      message: "Failed to create onboarding packs",
-    });
-  }
-});
-
-
-  // 2) Get offers (pack structure + 9 player details)
-  app.get("/api/onboarding/offers", requireAuth, async (req: any, res) => {
+  // ✅ UPDATED: auto-seed + better shuffling + retry
+  app.post("/api/onboarding/create-offer", requireAuth, async (req: any, res) => {
     try {
       const userId = req.authUserId;
       const ob = await storage.getOnboarding(userId);
 
+      if (ob?.completed) {
+        return res.status(400).json({ message: "Onboarding already completed" });
+      }
+
+      // If already generated, return existing offer (no re-roll)
+      if (ob?.packCards?.length === 5 && ob.packCards.flat().length === 15) {
+        return res.json({ packCards: ob.packCards });
+      }
+
+      // Pull players; if not enough, seed then retry once
+      let allPlayers = await storage.getRandomPlayers(250);
+      if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
+        console.log("Not enough players found. Seeding database, then retrying...");
+        await seedDatabase();
+        await seedCompetitions();
+        allPlayers = await storage.getRandomPlayers(250);
+      }
+
+      if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
+        return res.status(400).json({
+          message:
+            "Not enough players in database. Seeding may have failed or player table is still empty.",
+          count: allPlayers?.length ?? 0,
+        });
+      }
+
+      const normalize = (pos: string) => {
+        const p = (pos || "").toLowerCase();
+        if (p.includes("goal")) return "GK";
+        if (p.includes("def")) return "DEF";
+        if (p.includes("mid")) return "MID";
+        if (p.includes("for") || p.includes("strik") || p.includes("att")) return "FWD";
+        return "MID";
+      };
+
+      // Shuffle each position pool so you don't always select the same first 3
+      const gkPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "GK"));
+      const defPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "DEF"));
+      const midPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "MID"));
+      const fwdPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "FWD"));
+      const randomPool = shuffle(allPlayers);
+
+      const gk = gkPool.slice(0, 3);
+      const def = defPool.slice(0, 3);
+      const mid = midPool.slice(0, 3);
+      const fwd = fwdPool.slice(0, 3);
+      const random = randomPool.slice(0, 3);
+
+      if (gk.length < 3 || def.length < 3 || mid.length < 3 || fwd.length < 3) {
+        return res.status(400).json({
+          message: "Not enough players per position",
+          counts: { gk: gkPool.length, def: defPool.length, mid: midPool.length, fwd: fwdPool.length },
+        });
+      }
+
+      const packCards = [
+        gk.map((p: any) => p.id),
+        def.map((p: any) => p.id),
+        mid.map((p: any) => p.id),
+        fwd.map((p: any) => p.id),
+        random.map((p: any) => p.id),
+      ];
+
+      if (!ob) {
+        await storage.createOnboarding({
+          userId,
+          completed: false,
+          packCards,
+          selectedCards: [],
+        } as any);
+      } else {
+        await storage.updateOnboarding(
+          userId,
+          { packCards, selectedCards: [] } as any,
+        );
+      }
+
+      return res.json({ packCards });
+    } catch (error: any) {
+      console.error("Onboarding/create-offer failed:", error);
+      return res.status(500).json({ message: "Failed to create onboarding packs" });
+    }
+  });
+
+  // 2) Get offers (pack structure + player details)
+  // ✅ UPDATED: auto-create offer if missing so UI never gets stuck
+  app.get("/api/onboarding/offers", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      let ob = await storage.getOnboarding(userId);
+
+      // Auto-create offer if none exists
       if (!ob?.packCards?.length) {
-        return res.status(404).json({ message: "No offer found. Create offer first." });
+        let allPlayers = await storage.getRandomPlayers(250);
+        if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
+          console.log("No offer found. Seeding database, then creating offer...");
+          await seedDatabase();
+          await seedCompetitions();
+          allPlayers = await storage.getRandomPlayers(250);
+        }
+
+        if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
+          return res
+            .status(404)
+            .json({ message: "No offer found. Create offer first." });
+        }
+
+        const normalize = (pos: string) => {
+          const p = (pos || "").toLowerCase();
+          if (p.includes("goal")) return "GK";
+          if (p.includes("def")) return "DEF";
+          if (p.includes("mid")) return "MID";
+          if (p.includes("for") || p.includes("strik") || p.includes("att")) return "FWD";
+          return "MID";
+        };
+
+        const gkPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "GK"));
+        const defPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "DEF"));
+        const midPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "MID"));
+        const fwdPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "FWD"));
+        const randomPool = shuffle(allPlayers);
+
+        const gk = gkPool.slice(0, 3);
+        const def = defPool.slice(0, 3);
+        const mid = midPool.slice(0, 3);
+        const fwd = fwdPool.slice(0, 3);
+        const random = randomPool.slice(0, 3);
+
+        const packCards = [
+          gk.map((p: any) => p.id),
+          def.map((p: any) => p.id),
+          mid.map((p: any) => p.id),
+          fwd.map((p: any) => p.id),
+          random.map((p: any) => p.id),
+        ];
+
+        if (!ob) {
+          await storage.createOnboarding({
+            userId,
+            completed: false,
+            packCards,
+            selectedCards: [],
+          } as any);
+        } else {
+          await storage.updateOnboarding(userId, { packCards, selectedCards: [] } as any);
+        }
+
+        ob = await storage.getOnboarding(userId);
       }
 
       const offeredPlayerIds = ob.packCards.flat();
 
       // NOTE: we return players as full objects so the UI can show cards immediately
-      const offeredPlayers = await Promise.all(offeredPlayerIds.map((id) => storage.getPlayer(id)));
+      const offeredPlayers = await Promise.all(
+        offeredPlayerIds.map((id: number) => storage.getPlayer(id)),
+      );
       const players = offeredPlayers.filter(Boolean);
 
       res.json({
@@ -397,18 +496,6 @@ app.post("/api/onboarding/create-offer", requireAuth, async (req: any, res) => {
         }
       }
 
-      // ✅ My collection (cards I own)
-app.get("/api/cards/my", requireAuth, async (req: any, res) => {
-  try {
-    const userId = req.authUserId;
-    const cards = await storage.getUserCards(userId);
-    return res.json({ cards });
-  } catch (error: any) {
-    console.error("Fetch my cards failed:", error);
-    return res.status(500).json({ message: "Failed to fetch my cards" });
-  }
-});
-
       // Mint 5 common cards
       for (const playerId of selected) {
         await storage.createPlayerCard({
@@ -426,7 +513,7 @@ app.get("/api/cards/my", requireAuth, async (req: any, res) => {
       await storage.updateOnboarding(userId, {
         selectedCards: selected,
         completed: true,
-      });
+      } as any);
 
       res.json({ success: true, kept: 5 });
     } catch (error: any) {
@@ -444,7 +531,7 @@ app.get("/api/cards/my", requireAuth, async (req: any, res) => {
     try {
       const userId = req.authUserId;
       const cards = await storage.getUserCards(userId);
-      res.json(cards);
+      res.json({ cards });
     } catch (error: any) {
       console.error("Failed to fetch user cards:", error);
       res.status(500).json({ message: "Failed to fetch user cards" });
