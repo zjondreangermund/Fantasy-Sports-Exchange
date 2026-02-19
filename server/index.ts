@@ -24,17 +24,25 @@ app.set("trust proxy", 1);
 // ✅ Cookie + session middleware (must be BEFORE passport.session())
 app.use(cookieParser());
 
+import pgSession from "connect-pg-simple";
+
+const PgSession = pgSession(session);
+
 app.use(
   session({
+    store: new PgSession({
+      conString: process.env.DATABASE_URL,
+    }),
     secret: process.env.SESSION_SECRET || "dev_secret_change_me",
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // Railway uses HTTPS in prod
-      sameSite: "lax", // same domain is fine
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
-  }),
+  })
 );
 
 // ✅ Passport init (must be AFTER session())
