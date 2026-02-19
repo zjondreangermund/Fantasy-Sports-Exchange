@@ -35,7 +35,7 @@ import {
   RARITY_SUPPLY,
 } from "../shared/schema.js";
 import { db } from "./db.js";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, or, sql, desc } from "drizzle-orm";
 
 /**
  * Fixes TS2339 (`card` inferred as `{}`) by widening the insert type locally.

@@ -305,24 +305,20 @@ export async function registerRoutes(
   // Sync Data Route
   // With FPL, you can run without syncing into DB (no rate-limit key needed).
   // This just warms caches so the UI loads fast.
-  app.post("/api/epl/sync", async (_req, res) => {
-    try {
-      console.log("Starting Premier League data sync (FPL)...");
-      // Optional: keep your existing seeds (marketplace/cards/etc.)
-      await seedDatabase();
+app.post("/api/epl/sync", async (_req, res) => {
+  try {
+    // Warm EPL caches (players + fixtures)
+    await Promise.all([fplApi.bootstrap(), fplApi.fixtures()]);
 
-      // Warm FPL caches (players + fixtures)
-      await Promise.all([fplApi.bootstrap(), fplApi.fixtures()]);
+    // If you still want the old competition seeding, re-enable after fixing the "desc" SQL issue:
+    // await seedCompetitions();
 
-      // If you still want the old competition seeding, re-enable after fixing the "desc" SQL issue:
-      // await seedCompetitions();
-
-      res.json({ success: true, message: "Data synced successfully" });
-    } catch (error: any) {
-      console.error("Sync failed:", error);
-      res.status(500).json({ message: "Failed to sync data", error: error.message });
-    }
-  });
+    res.json({ success: true, message: "Data synced successfully" });
+  } catch (error: any) {
+    console.error("Sync failed:", error);
+    res.status(500).json({ message: "Failed to sync data", error: error?.message });
+  }
+});
 
   // Fetch cards owned by the logged-in user
 app.get("/api/user/cards", requireAuth, async (req: any, res) => {
@@ -349,3 +345,4 @@ app.get("/api/players/:id", async (req, res) => {
 });
 
 return httpServer;
+}
