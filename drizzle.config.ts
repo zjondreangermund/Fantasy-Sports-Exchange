@@ -12,6 +12,8 @@ export default {
   schema: "./shared/schema.ts",
   out: "./drizzle",
   dialect: "postgresql",
+  // Keep all tables under the `app` schema (not `public`).
+  schemaFilter: ["app"],
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },

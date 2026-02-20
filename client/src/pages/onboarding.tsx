@@ -4,7 +4,8 @@ import { apiRequest, queryClient } from "../lib/queryClient";
 import { Button } from "../components/ui/button";
 import PlayerCard from "../components/PlayerCard";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
-import { Package, ChevronRight, Check, Sparkles, Shield, Swords, Target, Zap } from "lucide-react";
+import { Package, ChevronRight, Check, Sparkles, Shield, Swords, Zap } from "lucide-react";
+import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import { Skeleton } from "../components/ui/skeleton";
 
@@ -182,6 +183,9 @@ export default function OnboardingPage() {
   if (step === "packs") {
     return (
       <div className="flex-1 flex flex-col items-center p-4 sm:p-8 overflow-y-auto">
+        <div className="w-full flex justify-center mb-6">
+          <StadiumWelcome teamName={teamName} />
+        </div>
         <div className="text-center mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
             Welcome to FantasyFC
@@ -229,15 +233,18 @@ export default function OnboardingPage() {
             }
 
             return (
-              <button
+              <motion.button
                 key={i}
                 onClick={() => revealPack(i)}
                 className={`w-36 h-52 rounded-xl border-2 border-dashed border-primary/40 bg-gradient-to-b ${packColors[i]} flex flex-col items-center justify-center gap-3 hover:scale-105 hover:border-primary/70 active:scale-95 transition-all duration-300`}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: i * 0.06 }}
               >
                 <Package className="w-10 h-10 text-primary" />
                 <span className="text-sm font-bold text-foreground">{packLabels[i]}</span>
                 <span className="text-xs text-muted-foreground">3 Players</span>
-              </button>
+              </motion.button>
             );
           })}
         </div>
@@ -252,6 +259,9 @@ export default function OnboardingPage() {
 
     return (
       <div className="flex-1 flex flex-col items-center p-4 sm:p-8 overflow-y-auto">
+        <div className="w-full flex justify-center mb-6">
+          <StadiumWelcome teamName={teamName} />
+        </div>
         <div className="text-center mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
             Choose Your Top 5

@@ -2,10 +2,25 @@
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Trophy, Users, TrendingUp, Star, Shield, Zap } from "lucide-react";
+import { motion } from "framer-motion";
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
+      {/* Stadium lights + button glow keyframes */}
+      <style>{`
+        @keyframes crowdSweep {
+          0% { transform: translateX(-60%) rotate(-10deg); opacity: 0 }
+          22% { opacity: .35 }
+          55% { transform: translateX(60%) rotate(10deg); opacity: .25 }
+          100% { transform: translateX(120%) rotate(14deg); opacity: 0 }
+        }
+        @keyframes glowPulse {
+          0%, 100% { opacity: .35; transform: scale(1) }
+          50% { opacity: .7; transform: scale(1.04) }
+        }
+      `}</style>
+
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-background/80 border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14">
           <div className="flex items-center gap-2">
@@ -30,36 +45,69 @@ export default function LandingPage() {
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/70 to-background" />
+
+          {/* Crowd lights sweep */}
+          <div
+            className="absolute -top-10 left-0 h-[140%] w-[60%] blur-3xl"
+            style={{
+              background:
+                "linear-gradient(90deg, rgba(59,130,246,0) 0%, rgba(59,130,246,0.16) 50%, rgba(59,130,246,0) 100%)",
+              animation: "crowdSweep 6.2s ease-in-out infinite",
+            }}
+          />
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32 lg:py-40">
           <div className="max-w-2xl">
-            <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight">
-              Collect. Compete.
-              <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
-                Conquer.
-              </span>
-            </h1>
-            <p className="mt-6 text-lg text-white/70 max-w-lg">
-              Build your dream squad with collectible player cards. Trade rare
-              cards, compete in leagues, and rise to the top of the leaderboards.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <a href="/api/auth/google">
-                <Button size="lg" data-testid="button-get-started">
-                  Get Started Free
-                </Button>
-              </a>
-            </div>
-            <div className="mt-6 flex items-center gap-4 text-white/50 text-sm">
-              <span className="flex items-center gap-1">
-                <Star className="w-4 h-4" /> 5 Free Packs on Signup
-              </span>
-              <span className="flex items-center gap-1">
-                <Shield className="w-4 h-4" /> No Blockchain Required
-              </span>
-            </div>
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, ease: "easeOut" }}
+            >
+              <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight">
+                Collect. Compete.
+                <br />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+                  Conquer.
+                </span>
+              </h1>
+              <p className="mt-6 text-lg text-white/70 max-w-lg">
+                Build your dream squad with collectible player cards. Trade rare
+                cards, compete in leagues, and rise to the top of the leaderboards.
+              </p>
+
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <a href="/api/auth/google" className="relative inline-flex">
+                  {/* Glow underlay */}
+                  <span
+                    className="absolute -inset-2 rounded-2xl blur-xl"
+                    style={{
+                      background:
+                        "radial-gradient(circle at 50% 50%, rgba(99,102,241,0.55), rgba(59,130,246,0.0) 70%)",
+                      animation: "glowPulse 2.4s ease-in-out infinite",
+                    }}
+                    aria-hidden
+                  />
+                  <Button size="lg" data-testid="button-get-started" className="relative">
+                    Get Started Free
+                  </Button>
+                </a>
+              </div>
+
+              <motion.div
+                className="mt-6 flex items-center gap-4 text-white/50 text-sm"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2, duration: 0.35 }}
+              >
+                <span className="flex items-center gap-1">
+                  <Star className="w-4 h-4" /> 5 Free Packs on Signup
+                </span>
+                <span className="flex items-center gap-1">
+                  <Shield className="w-4 h-4" /> No Blockchain Required
+                </span>
+              </motion.div>
+            </motion.div>
           </div>
         </div>
       </section>

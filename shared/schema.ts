@@ -1,22 +1,72 @@
-import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, real, boolean, timestamp, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import {
+  pgSchema,
+  pgEnum,
+  text,
+  varchar,
+  integer,
+  real,
+  boolean,
+  timestamp,
+  jsonb,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Import the users table used for FK references
-import { users } from "./models/auth.js";
-export { users };
+// -----------------------------------------------------------------------------
+// IMPORTANT
+// -----------------------------------------------------------------------------
+// All application tables live under the `app` schema in Postgres.
+// This avoids conflicts with Postgres extensions/system views in `public`.
+export const appSchema = pgSchema("app");
 
+// -----------------------------------------------------------------------------
+// Enums
+// -----------------------------------------------------------------------------
 export const rarityEnum = pgEnum("rarity", ["common", "rare", "unique", "epic", "legendary"]);
 export const positionEnum = pgEnum("position", ["GK", "DEF", "MID", "FWD"]);
-export const transactionTypeEnum = pgEnum("transaction_type", ["deposit", "withdrawal", "purchase", "sale", "entry_fee", "prize", "swap_fee"]);
+export const transactionTypeEnum = pgEnum("transaction_type", [
+  "deposit",
+  "withdrawal",
+  "purchase",
+  "sale",
+  "entry_fee",
+  "prize",
+  "swap_fee",
+  "auction_bid",
+  "auction_settlement",
+]);
 export const competitionTierEnum = pgEnum("competition_tier", ["common", "rare"]);
 export const competitionStatusEnum = pgEnum("competition_status", ["open", "active", "completed"]);
 export const swapStatusEnum = pgEnum("swap_status", ["pending", "accepted", "rejected", "cancelled"]);
 export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "processing", "completed", "rejected"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["eft", "ewallet", "bank_transfer", "mobile_money", "other"]);
 
-export const players = pgTable("players", {
+export const auctionStatusEnum = pgEnum("auction_status", ["draft", "live", "ended", "cancelled", "settled"]);
+export const lockReasonEnum = pgEnum("card_lock_reason", ["competition", "transfer_pending", "security_review"]);
+
+// -----------------------------------------------------------------------------
+// Users (simple table for FK references)
+// -----------------------------------------------------------------------------
+// Your auth layer can populate this table on first login (recommended).
+// Keeping this in shared/schema.ts prevents drizzle-kit from failing due to
+// missing imports (like ./models/auth).
+export const users = appSchema.table("users", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  email: text("email"),
+  name: text("name"),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  avatarUrl: text("avatar_url"),
+  managerTeamName: text("manager_team_name"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// -----------------------------------------------------------------------------
+// Core football data
+// -----------------------------------------------------------------------------
+export const players = appSchema.table("players", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
   team: text("team").notNull(),
@@ -28,34 +78,10 @@ export const players = pgTable("players", {
   imageUrl: text("image_url"),
 });
 
-export const RARITY_SUPPLY: Record<string, number> = {
-  common: 0,
-  rare: 100,
-  unique: 1,
-  epic: 10,
-  legendary: 5,
-};
-
-export const DECISIVE_LEVELS: { level: number; points: number }[] = [
-  { level: 0, points: 35 },
-  { level: 1, points: 60 },
-  { level: 2, points: 70 },
-  { level: 3, points: 80 },
-  { level: 4, points: 90 },
-  { level: 5, points: 100 },
-];
-
-export function calculateDecisiveLevel(stats: { goals?: number; assists?: number; cleanSheets?: number; penaltySaves?: number; redCards?: number; ownGoals?: number; errorsLeadingToGoal?: number }): { level: number; points: number } {
-  const positives = (stats.goals ?? 0) + (stats.assists ?? 0) + (stats.cleanSheets ?? 0) + (stats.penaltySaves ?? 0);
-  const negatives = (stats.redCards ?? 0) + (stats.ownGoals ?? 0) + (stats.errorsLeadingToGoal ?? 0);
-  const rawLevel = Math.max(0, Math.min(5, positives - negatives));
-  return DECISIVE_LEVELS[rawLevel];
-}
-
-export const playerCards = pgTable("player_cards", {
+export const playerCards = appSchema.table("player_cards", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   playerId: integer("player_id").notNull().references(() => players.id),
-  ownerId: varchar("owner_id").references(() => users.id),
+  ownerId: varchar("owner_id", { length: 255 }).references(() => users.id),
   rarity: rarityEnum("rarity").notNull().default("common"),
   serialId: text("serial_id").unique(),
   serialNumber: integer("serial_number"),
@@ -64,21 +90,25 @@ export const playerCards = pgTable("player_cards", {
   xp: integer("xp").notNull().default(0),
   decisiveScore: integer("decisive_score").default(35),
   last5Scores: jsonb("last_5_scores").$type<number[]>().default([0, 0, 0, 0, 0]),
+  // fixed-price sale flags
   forSale: boolean("for_sale").notNull().default(false),
   price: real("price").default(0),
   acquiredAt: timestamp("acquired_at").defaultNow(),
 });
 
-export const wallets = pgTable("wallets", {
+// -----------------------------------------------------------------------------
+// Wallet
+// -----------------------------------------------------------------------------
+export const wallets = appSchema.table("wallets", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id).unique(),
   balance: real("balance").notNull().default(0),
   lockedBalance: real("locked_balance").notNull().default(0),
 });
 
-export const transactions = pgTable("transactions", {
+export const transactions = appSchema.table("transactions", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
   type: transactionTypeEnum("type").notNull(),
   amount: real("amount").notNull(),
   description: text("description"),
@@ -87,22 +117,25 @@ export const transactions = pgTable("transactions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const lineups = pgTable("lineups", {
+// -----------------------------------------------------------------------------
+// Lineups / competitions
+// -----------------------------------------------------------------------------
+export const lineups = appSchema.table("lineups", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id).unique(),
   cardIds: jsonb("card_ids").$type<number[]>().notNull().default([]),
   captainId: integer("captain_id").references(() => playerCards.id),
 });
 
-export const userOnboarding = pgTable("user_onboarding", {
+export const userOnboarding = appSchema.table("user_onboarding", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  userId: varchar("user_id").notNull().references(() => users.id).unique(),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id).unique(),
   completed: boolean("completed").notNull().default(false),
   packCards: jsonb("pack_cards").$type<number[][]>().default([]),
   selectedCards: jsonb("selected_cards").$type<number[]>().default([]),
 });
 
-export const competitions = pgTable("competitions", {
+export const competitions = appSchema.table("competitions", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
   tier: competitionTierEnum("tier").notNull(),
@@ -115,10 +148,10 @@ export const competitions = pgTable("competitions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const competitionEntries = pgTable("competition_entries", {
+export const competitionEntries = appSchema.table("competition_entries", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   competitionId: integer("competition_id").notNull().references(() => competitions.id),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
   lineupCardIds: jsonb("lineup_card_ids").$type<number[]>().notNull().default([]),
   captainId: integer("captain_id"),
   totalScore: real("total_score").notNull().default(0),
@@ -128,10 +161,13 @@ export const competitionEntries = pgTable("competition_entries", {
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
-export const swapOffers = pgTable("swap_offers", {
+// -----------------------------------------------------------------------------
+// Swaps / withdrawals
+// -----------------------------------------------------------------------------
+export const swapOffers = appSchema.table("swap_offers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  offererUserId: varchar("offerer_user_id").notNull().references(() => users.id),
-  receiverUserId: varchar("receiver_user_id").notNull().references(() => users.id),
+  offererUserId: varchar("offerer_user_id", { length: 255 }).notNull().references(() => users.id),
+  receiverUserId: varchar("receiver_user_id", { length: 255 }).notNull().references(() => users.id),
   offeredCardId: integer("offered_card_id").notNull().references(() => playerCards.id),
   requestedCardId: integer("requested_card_id").notNull().references(() => playerCards.id),
   topUpAmount: real("top_up_amount").default(0),
@@ -140,9 +176,9 @@ export const swapOffers = pgTable("swap_offers", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const withdrawalRequests = pgTable("withdrawal_requests", {
+export const withdrawalRequests = appSchema.table("withdrawal_requests", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
   amount: real("amount").notNull(),
   fee: real("fee").notNull().default(0),
   netAmount: real("net_amount").notNull(),
@@ -160,97 +196,105 @@ export const withdrawalRequests = pgTable("withdrawal_requests", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// -----------------------------------------------------------------------------
+// Auctions + card locks (for competitions / abuse prevention)
+// -----------------------------------------------------------------------------
+export const auctions = appSchema.table("auctions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  cardId: integer("card_id").notNull().references(() => playerCards.id),
+  sellerUserId: varchar("seller_user_id", { length: 255 }).notNull().references(() => users.id),
+  status: auctionStatusEnum("status").notNull().default("draft"),
+  reservePrice: real("reserve_price").notNull().default(0),
+  startPrice: real("start_price").notNull().default(0),
+  buyNowPrice: real("buy_now_price"),
+  minIncrement: real("min_increment").notNull().default(1),
+  startsAt: timestamp("starts_at"),
+  endsAt: timestamp("ends_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const auctionBids = appSchema.table("auction_bids", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  auctionId: integer("auction_id").notNull().references(() => auctions.id),
+  bidderUserId: varchar("bidder_user_id", { length: 255 }).notNull().references(() => users.id),
+  amount: real("amount").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const cardLocks = appSchema.table("card_locks", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  cardId: integer("card_id").notNull().references(() => playerCards.id),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
+  reason: lockReasonEnum("reason").notNull(),
+  refId: text("ref_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+});
+
+export const playerValues = appSchema.table("player_values", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  playerId: integer("player_id").notNull().references(() => players.id).unique(),
+  baseValue: real("base_value").notNull().default(0),
+  formMultiplier: real("form_multiplier").notNull().default(1),
+  lastUpdated: timestamp("last_updated").defaultNow(),
+});
+
+export const auditLogs = appSchema.table("audit_logs", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: varchar("user_id", { length: 255 }).references(() => users.id),
+  action: text("action").notNull(),
+  meta: jsonb("meta").$type<Record<string, any>>().default({}),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const idempotencyKeys = appSchema.table("idempotency_keys", {
+  key: text("key").primaryKey(),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+});
+
+// -----------------------------------------------------------------------------
+// Constants / helpers
+// -----------------------------------------------------------------------------
+export const RARITY_SUPPLY: Record<string, number> = {
+  common: 0,
+  rare: 100,
+  unique: 1,
+  epic: 10,
+  legendary: 5,
+};
+
+export const DECISIVE_LEVELS: { level: number; points: number }[] = [
+  { level: 0, points: 35 },
+  { level: 1, points: 60 },
+  { level: 2, points: 70 },
+  { level: 3, points: 80 },
+  { level: 4, points: 90 },
+  { level: 5, points: 100 },
+];
+
+export function calculateDecisiveLevel(stats: {
+  goals?: number;
+  assists?: number;
+  cleanSheets?: number;
+  penaltySaves?: number;
+  redCards?: number;
+  ownGoals?: number;
+  errorsLeadingToGoal?: number;
+}): { level: number; points: number } {
+  const positives =
+    (stats.goals ?? 0) + (stats.assists ?? 0) + (stats.cleanSheets ?? 0) + (stats.penaltySaves ?? 0);
+  const negatives = (stats.redCards ?? 0) + (stats.ownGoals ?? 0) + (stats.errorsLeadingToGoal ?? 0);
+  const rawLevel = Math.max(0, Math.min(5, positives - negatives));
+  return DECISIVE_LEVELS[rawLevel];
+}
+
 export const SITE_FEE_RATE = 0.08;
 
-export const eplPlayers = pgTable("epl_players", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  apiId: integer("api_id").notNull().unique(),
-  name: text("name").notNull(),
-  firstname: text("firstname"),
-  lastname: text("lastname"),
-  age: integer("age"),
-  nationality: text("nationality"),
-  photo: text("photo"),
-  team: text("team"),
-  teamLogo: text("team_logo"),
-  teamId: integer("team_id"),
-  position: text("epl_position"),
-  number: integer("number"),
-  goals: integer("goals").default(0),
-  assists: integer("assists").default(0),
-  yellowCards: integer("yellow_cards").default(0),
-  redCards: integer("red_cards").default(0),
-  appearances: integer("appearances").default(0),
-  minutes: integer("minutes").default(0),
-  rating: text("rating"),
-  injured: boolean("injured").default(false),
-  season: integer("season").notNull().default(2024),
-  lastUpdated: timestamp("last_updated").defaultNow(),
-});
-
-export const eplFixtures = pgTable("epl_fixtures", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  apiId: integer("api_id").notNull().unique(),
-  homeTeam: text("home_team").notNull(),
-  homeTeamLogo: text("home_team_logo"),
-  homeTeamId: integer("home_team_id"),
-  awayTeam: text("away_team").notNull(),
-  awayTeamLogo: text("away_team_logo"),
-  awayTeamId: integer("away_team_id"),
-  homeGoals: integer("home_goals"),
-  awayGoals: integer("away_goals"),
-  status: text("fixture_status").notNull().default("NS"),
-  statusLong: text("status_long").default("Not Started"),
-  elapsed: integer("elapsed"),
-  venue: text("venue"),
-  referee: text("referee"),
-  round: text("round"),
-  matchDate: timestamp("match_date").notNull(),
-  season: integer("season").notNull().default(2024),
-  lastUpdated: timestamp("last_updated").defaultNow(),
-});
-
-export const eplInjuries = pgTable("epl_injuries", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  playerApiId: integer("player_api_id").notNull(),
-  playerName: text("player_name").notNull(),
-  playerPhoto: text("player_photo"),
-  team: text("team").notNull(),
-  teamLogo: text("team_logo"),
-  type: text("injury_type"),
-  reason: text("reason"),
-  fixtureApiId: integer("fixture_api_id"),
-  fixtureDate: timestamp("fixture_date"),
-  season: integer("season").notNull().default(2024),
-  lastUpdated: timestamp("last_updated").defaultNow(),
-});
-
-export const eplStandings = pgTable("epl_standings", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  teamId: integer("team_id").notNull().unique(),
-  teamName: text("team_name").notNull(),
-  teamLogo: text("team_logo"),
-  rank: integer("rank").notNull(),
-  points: integer("points").notNull().default(0),
-  played: integer("played").notNull().default(0),
-  won: integer("won").notNull().default(0),
-  drawn: integer("drawn").notNull().default(0),
-  lost: integer("lost").notNull().default(0),
-  goalsFor: integer("goals_for").notNull().default(0),
-  goalsAgainst: integer("goals_against").notNull().default(0),
-  goalDiff: integer("goal_diff").notNull().default(0),
-  form: text("form"),
-  season: integer("season").notNull().default(2024),
-  lastUpdated: timestamp("last_updated").defaultNow(),
-});
-
-export const eplSyncLog = pgTable("epl_sync_log", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  endpoint: text("endpoint").notNull(),
-  syncedAt: timestamp("synced_at").defaultNow(),
-  recordCount: integer("record_count").default(0),
-});
-
+// -----------------------------------------------------------------------------
+// Relations
+// -----------------------------------------------------------------------------
 export const playersRelations = relations(players, ({ many }) => ({
   cards: many(playerCards),
 }));
@@ -285,14 +329,26 @@ export const competitionEntriesRelations = relations(competitionEntries, ({ one 
   user: one(users, { fields: [competitionEntries.userId], references: [users.id] }),
 }));
 
-export const swapOffersRelations = relations(swapOffers, ({ one }) => ({
-  offerer: one(users, { fields: [swapOffers.offererUserId], references: [users.id] }),
+export const auctionsRelations = relations(auctions, ({ one, many }) => ({
+  card: one(playerCards, { fields: [auctions.cardId], references: [playerCards.id] }),
+  seller: one(users, { fields: [auctions.sellerUserId], references: [users.id] }),
+  bids: many(auctionBids),
 }));
 
-export const withdrawalRequestsRelations = relations(withdrawalRequests, ({ one }) => ({
-  user: one(users, { fields: [withdrawalRequests.userId], references: [users.id] }),
+export const auctionBidsRelations = relations(auctionBids, ({ one }) => ({
+  auction: one(auctions, { fields: [auctionBids.auctionId], references: [auctions.id] }),
+  bidder: one(users, { fields: [auctionBids.bidderUserId], references: [users.id] }),
 }));
 
+export const cardLocksRelations = relations(cardLocks, ({ one }) => ({
+  card: one(playerCards, { fields: [cardLocks.cardId], references: [playerCards.id] }),
+  user: one(users, { fields: [cardLocks.userId], references: [users.id] }),
+}));
+
+// -----------------------------------------------------------------------------
+// Zod insert schemas + Types
+// -----------------------------------------------------------------------------
+export const insertUserSchema = createInsertSchema(users);
 export const insertPlayerSchema = createInsertSchema(players);
 export const insertPlayerCardSchema = createInsertSchema(playerCards);
 export const insertWalletSchema = createInsertSchema(wallets);
@@ -301,37 +357,31 @@ export const insertLineupSchema = createInsertSchema(lineups);
 export const insertOnboardingSchema = createInsertSchema(userOnboarding);
 export const insertCompetitionSchema = createInsertSchema(competitions);
 export const insertCompetitionEntrySchema = createInsertSchema(competitionEntries);
-export const insertSwapOfferSchema = createInsertSchema(swapOffers);
-export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalRequests);
+export const insertAuctionSchema = createInsertSchema(auctions);
+export const insertAuctionBidSchema = createInsertSchema(auctionBids);
+export const insertCardLockSchema = createInsertSchema(cardLocks);
+export const insertPlayerValueSchema = createInsertSchema(playerValues);
+export const insertAuditLogSchema = createInsertSchema(auditLogs);
+export const insertIdempotencySchema = createInsertSchema(idempotencyKeys);
 
 export type User = typeof users.$inferSelect;
-export type InsertUser = typeof users.$inferInsert;
-
+export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
 export type PlayerCard = typeof playerCards.$inferSelect;
 export type InsertPlayerCard = z.infer<typeof insertPlayerCardSchema>;
 export type Wallet = typeof wallets.$inferSelect;
-export type InsertWallet = z.infer<typeof insertWalletSchema>;
 export type Transaction = typeof transactions.$inferSelect;
-export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 export type Lineup = typeof lineups.$inferSelect;
-export type InsertLineup = z.infer<typeof insertLineupSchema>;
 export type UserOnboarding = typeof userOnboarding.$inferSelect;
-export type InsertOnboarding = z.infer<typeof insertOnboardingSchema>;
 export type Competition = typeof competitions.$inferSelect;
-export type InsertCompetition = z.infer<typeof insertCompetitionSchema>;
 export type CompetitionEntry = typeof competitionEntries.$inferSelect;
-export type InsertCompetitionEntry = z.infer<typeof insertCompetitionEntrySchema>;
-export type SwapOffer = typeof swapOffers.$inferSelect;
-export type InsertSwapOffer = z.infer<typeof insertSwapOfferSchema>;
-export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
-export type InsertWithdrawalRequest = z.infer<typeof insertWithdrawalRequestSchema>;
+export type Auction = typeof auctions.$inferSelect;
+export type AuctionBid = typeof auctionBids.$inferSelect;
+export type CardLock = typeof cardLocks.$inferSelect;
+export type PlayerValue = typeof playerValues.$inferSelect;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
 
 export type PlayerCardWithPlayer = PlayerCard & { player: Player };
 export type CompetitionWithEntries = Competition & { entries: CompetitionEntry[]; entryCount: number };
-
-export type EplPlayer = typeof eplPlayers.$inferSelect;
-export type EplFixture = typeof eplFixtures.$inferSelect;
-export type EplInjury = typeof eplInjuries.$inferSelect;
-export type EplStanding = typeof eplStandings.$inferSelect;
