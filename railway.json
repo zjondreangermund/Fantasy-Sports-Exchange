@@ -4,6 +4,6 @@
     "buildCommand": "npm run build"
   },
   "deploy": {
-    "startCommand": "(npm run db:push || echo 'Schema already exists, continuing...') && node dist/server/index.js"
+    "startCommand": "bash start.sh"
   }
 }

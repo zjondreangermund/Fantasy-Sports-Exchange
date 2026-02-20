@@ -12,4 +12,4 @@ cmds = ["npm ci"]
 cmds = ["npm run build"]
 
 [start]
-cmd = "(npm run db:push || echo 'Schema already exists, continuing...') && node dist/server/index.js"
+cmd = "bash start.sh"
