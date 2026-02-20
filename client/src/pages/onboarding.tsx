@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { Button } from "../components/ui/button";
-import PlayerCard from "../components/PlayerCard";
+import Card3D from "../components/Card3D";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 import { Package, ChevronRight, Check, Sparkles, Shield, Swords, Zap } from "lucide-react";
 import { motion } from "framer-motion";
@@ -187,7 +187,7 @@ export default function OnboardingPage() {
             Welcome to FantasyFC
           </h1>
           <p className="text-muted-foreground">
-            Open your 3 starter packs (9 players total), then choose your top 5.
+            Open your 3 starter packs: 3x GK, 3x MID, 3x FWD (9 players total), then choose your top 5.
           </p>
 
           <div className="flex items-center justify-center gap-2 mt-3">
@@ -220,7 +220,7 @@ export default function OnboardingPage() {
                   <div className="flex gap-2">
                     {pack.map((card) => (
                       <div key={card.id} className="transition-all duration-300">
-                        <PlayerCard card={card} size="sm" />
+                        <Card3D card={card} size="sm" />
                       </div>
                     ))}
                   </div>
@@ -279,7 +279,7 @@ export default function OnboardingPage() {
                 }`}
                 onClick={() => toggleSelect(card.playerId)}
               >
-                <PlayerCard card={card} size="md" selected={isSelected as any} />
+                <Card3D card={card} size="md" selected={isSelected} selectable />
               </div>
             );
           })}

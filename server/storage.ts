@@ -49,6 +49,7 @@ type InsertPlayerCardSafe = InsertPlayerCard & {
 
 export interface IStorage {
   getUser(userId: string): Promise<User | undefined>;
+  createUser(user: { id: string; email?: string; name?: string; avatarUrl?: string }): Promise<User>;
   getPlayers(): Promise<Player[]>;
   getPlayer(id: number): Promise<Player | undefined>;
   createPlayer(player: InsertPlayer): Promise<Player>;
@@ -120,6 +121,16 @@ export class DatabaseStorage implements IStorage {
   async getUser(userId: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, userId));
     return user || undefined;
+  }
+
+  async createUser(user: { id: string; email?: string; name?: string; avatarUrl?: string }): Promise<User> {
+    const [created] = await db.insert(users).values({
+      id: user.id,
+      email: user.email ?? null,
+      name: user.name ?? null,
+      avatarUrl: user.avatarUrl ?? null,
+    } as any).returning();
+    return created;
   }
 
   async getPlayers(): Promise<Player[]> {

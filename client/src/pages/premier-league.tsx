@@ -16,8 +16,8 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { type EplPlayer, type EplFixture, type EplInjury, type EplStanding } from "../../../shared/schema";
-import PlayerCard from "../components/PlayerCard";
-import { eplPlayerToCard } from "../components/threeplayercards";
+import Card3D from "../components/Card3D";
+import LiveGames from "../components/LiveGames";
 import {
   Trophy, Calendar, Users, AlertTriangle, Search, RefreshCw,
   Clock, CheckCircle, Activity,
@@ -178,8 +178,11 @@ export default function PremierLeaguePage() {
             </Button>
           </div>
 
-          <Tabs defaultValue="players" className="w-full">
+          <Tabs defaultValue="live" className="w-full">
             <TabsList className="mb-4 flex-wrap bg-background/50 backdrop-blur-sm border border-border/50">
+              <TabsTrigger value="live" className="flex items-center gap-1 data-[state=active]:bg-red-600 data-[state=active]:text-white">
+                <Activity className="w-4 h-4" /> Live Games
+              </TabsTrigger>
               <TabsTrigger value="players" className="flex items-center gap-1 data-[state=active]:bg-purple-600 data-[state=active]:text-white">
                 <Users className="w-4 h-4" /> Player Cards
               </TabsTrigger>
@@ -193,6 +196,10 @@ export default function PremierLeaguePage() {
                 <AlertTriangle className="w-4 h-4" /> Injuries
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="live">
+              <LiveGames />
+            </TabsContent>
 
             <TabsContent value="players">
               <div className="flex flex-wrap items-center gap-2 mb-6">
@@ -227,13 +234,41 @@ export default function PremierLeaguePage() {
                   ))}
                 </div>
               ) : filteredPlayers.length > 0 ? (
-                <div className="flex flex-wrap gap-8 justify-center sm:justify-start">
-                  {filteredPlayers.map((player) => (
-                    <PlayerCard
-                      key={player.id}
-                      card={eplPlayerToCard(player) as any}
-                    />
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                  {filteredPlayers.map((eplPlayer) => {
+                    const cardData = {
+                      id: eplPlayer.id,
+                      playerId: eplPlayer.id,
+                      ownerId: null,
+                      rarity: assignRarity(eplPlayer),
+                      serialId: null,
+                      serialNumber: 1,
+                      maxSupply: 1000,
+                      level: 1,
+                      xp: 0,
+                      decisiveScore: 0,
+                      last5Scores: [0,0,0,0,0],
+                      forSale: false,
+                      price: 0,
+                      acquiredAt: new Date(),
+                      player: {
+                        id: eplPlayer.id,
+                        name: eplPlayer.name,
+                        position: eplPlayer.position,
+                        photo: eplPlayer.photo,
+                        club: eplPlayer.team,
+                        clubLogo: eplPlayer.teamLogo,
+                        nationality: eplPlayer.nationality,
+                        rating: eplPlayer.rating,
+                      },
+                    } as any;
+
+                    return (
+                      <div key={eplPlayer.id} className="w-full aspect-[2/3] min-h-[280px]">
+                        <Card3D card={cardData} size="md" />
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <Card className="p-12 text-center bg-background/50 backdrop-blur-sm border-border/50">

@@ -71,14 +71,43 @@ passport.use(
       callbackURL: `${publicUrl}/api/auth/google/callback`,
     },
     async (_accessToken, _refreshToken, profile, done) => {
-      // TODO: find-or-create user in DB here
-      const user = {
-        id: profile.id,
-        name: profile.displayName,
-        email: profile.emails?.[0]?.value,
-        photo: profile.photos?.[0]?.value,
-      };
-      return done(null, user);
+      try {
+        // Import storage dynamically to avoid circular deps
+        const { storage } = await import("./storage.js");
+        
+        const userId = profile.id;
+        const email = profile.emails?.[0]?.value || "";
+        const name = profile.displayName || "";
+        
+        // Find or create user
+        let user = await storage.getUser(userId);
+        if (!user) {
+          // Create user in DB
+          await storage.createUser({
+            id: userId,
+            email,
+            name,
+            avatarUrl: profile.photos?.[0]?.value,
+          });
+          user = await storage.getUser(userId);
+        }
+        
+        // Ensure wallet exists
+        let wallet = await storage.getWallet(userId);
+        if (!wallet) {
+          await storage.createWallet({ userId, balance: 0, lockedBalance: 0 });
+        }
+        
+        return done(null, {
+          id: userId,
+          name,
+          email,
+          photo: profile.photos?.[0]?.value,
+        });
+      } catch (error) {
+        console.error("Auth error:", error);
+        return done(error as Error);
+      }
     },
   ),
 );

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../hooks/use-auth";
 // Fixed: @/components -> ../components
 import { AppSidebar } from "../components/app-sidebar";
-import PlayerCard from "../components/threeplayercards";
+import Card3D from "../components/Card3D";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -178,7 +178,7 @@ export default function DashboardPage() {
           ) : lineup?.cards && lineup.cards.length > 0 ? (
             <div className="flex flex-wrap gap-4">
               {lineup.cards.map((card) => (
-                <PlayerCard key={card.id} card={card} />
+                <Card3D key={card.id} card={card} size="md" />
               ))}
             </div>
           ) : (

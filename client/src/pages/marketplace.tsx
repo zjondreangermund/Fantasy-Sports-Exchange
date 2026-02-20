@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 // IMPORT YOUR 3D CARD COMPONENT HERE
-import ThreePlayerCard from "../components/threeplayercards"; 
+import Card3D from "../components/Card3D";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -126,23 +126,14 @@ export default function MarketplacePage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredListings?.map((card) => (
-              <div 
-                key={card.id} 
-                className="relative group h-[450px] w-full bg-card/50 rounded-xl overflow-hidden border border-border/50 hover:border-primary/50 transition-all cursor-pointer"
-                onClick={() => setBuyCard(card)}
-              >
-                {/* 3D CARD INTEGRATION */}
-                {card.player && <ThreePlayerCard card={{...card, player: card.player}} imageUrl={(card.player as any)?.photo} />}
-                
-                {/* Overlay price for Marketplace feel */}
-                <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center z-10">
-                  <Badge variant="secondary" className="bg-background/80 backdrop-blur">
-                    {card.rarity.toUpperCase()}
-                  </Badge>
-                  <div className="text-primary font-bold text-lg drop-shadow-md">
-                    ${card.price}
-                  </div>
-                </div>
+              <div key={card.id} className="relative">
+                <Card3D
+                  card={card}
+                  size="md"
+                  showPrice
+                  selectable
+                  onClick={() => setBuyCard(card)}
+                />
               </div>
             ))}
           </div>
