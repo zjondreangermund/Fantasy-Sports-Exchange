@@ -20,15 +20,6 @@ const packColors = [
 ];
 const defaultPackLabels = ["Pack 1", "Pack 2", "Pack 3"];
 
-function shuffle<T>(arr: T[]) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
 export default function OnboardingPage() {
   const [step, setStep] = useState<OnboardingStep>("packs");
   const [currentPack, setCurrentPack] = useState(0);
@@ -56,12 +47,17 @@ export default function OnboardingPage() {
     return () => clearTimeout(t);
   }, [refetch]);
 
+  // If onboarding already completed, move to done (avoid setState during render)
+  useEffect(() => {
+    if (onboardingData?.completed) setStep("done");
+  }, [onboardingData?.completed]);
+
   // Turn players into "fake cards" so your existing <PlayerCard /> can render them
   const cardsByPlayerId = useMemo(() => {
     const map = new Map<number, PlayerCardWithPlayer>();
     const players = onboardingData?.players || [];
+
     for (const p of players) {
-      // Fake minimal card shape; cast to satisfy TS.
       map.set(
         p.id,
         ({
@@ -83,6 +79,7 @@ export default function OnboardingPage() {
         } as any) satisfies PlayerCardWithPlayer,
       );
     }
+
     return map;
   }, [onboardingData]);
 
@@ -95,9 +92,7 @@ export default function OnboardingPage() {
     );
   }, [onboardingData, cardsByPlayerId]);
 
-  const allOfferedCards: PlayerCardWithPlayer[] = useMemo(() => {
-    return packs.flat();
-  }, [packs]);
+  const allOfferedCards: PlayerCardWithPlayer[] = useMemo(() => packs.flat(), [packs]);
 
   const chooseMutation = useMutation({
     mutationFn: async (playerIds: number[]) => {
@@ -114,15 +109,19 @@ export default function OnboardingPage() {
   });
 
   const revealPack = (index: number) => {
-    setRevealedPacks((prev) => new Set(prev).add(index));
     setCurrentPack(index);
 
-    // When all 3 packs revealed, move to selection step
-    const next = new Set(revealedPacks);
-    next.add(index);
-    if (next.size >= 3) {
-      setTimeout(() => setStep("select"), 500);
-    }
+    setRevealedPacks((prev) => {
+      const next = new Set(prev);
+      next.add(index);
+
+      // When all 3 packs revealed, move to selection step
+      if (next.size >= 3) {
+        setTimeout(() => setStep("select"), 500);
+      }
+
+      return next;
+    });
   };
 
   const toggleSelect = (playerId: number) => {
@@ -175,18 +174,10 @@ export default function OnboardingPage() {
 
   const packLabels = defaultPackLabels;
 
-  // Already completed? show done state
-  if (onboardingData.completed && step !== "done") {
-    setStep("done");
-  }
-
   if (step === "packs") {
     return (
       <div className="flex-1 flex flex-col items-center p-4 sm:p-8 overflow-y-auto">
-        <div className="w-full flex justify-center mb-6">
-          <StadiumWelcome teamName={teamName} />
-        </div>
-        <div className="text-center mb-6">
+        <div className="w-full max-w-5xl text-center mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
             Welcome to FantasyFC
           </h1>
@@ -259,16 +250,11 @@ export default function OnboardingPage() {
 
     return (
       <div className="flex-1 flex flex-col items-center p-4 sm:p-8 overflow-y-auto">
-        <div className="w-full flex justify-center mb-6">
-          <StadiumWelcome teamName={teamName} />
-        </div>
-        <div className="text-center mb-6">
+        <div className="w-full max-w-6xl text-center mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
             Choose Your Top 5
           </h1>
-          <p className="text-muted-foreground">
-            Pick any 5 players from the 9 you opened.
-          </p>
+          <p className="text-muted-foreground">Pick any 5 players from the 9 you opened.</p>
           <p className="text-sm mt-2">
             Selected: <span className="font-bold text-primary">{selectedCount}/5</span>
           </p>
@@ -277,11 +263,14 @@ export default function OnboardingPage() {
         <div className="flex flex-wrap justify-center gap-4 mb-6 w-full max-w-6xl">
           {allOfferedCards.map((card) => {
             const isSelected = selectedPlayerIds.has(card.playerId);
+
             return (
               <div
                 key={card.playerId}
                 className={`cursor-pointer transition-all duration-200 ${
-                  isSelected ? "ring-2 ring-primary ring-offset-2 ring-offset-background rounded-xl scale-[1.02]" : "hover:scale-[1.02]"
+                  isSelected
+                    ? "ring-2 ring-primary ring-offset-2 ring-offset-background rounded-xl scale-[1.02]"
+                    : "hover:scale-[1.02]"
                 }`}
                 onClick={() => toggleSelect(card.playerId)}
               >
