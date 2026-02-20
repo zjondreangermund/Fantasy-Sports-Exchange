@@ -462,14 +462,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Auto-create offer if none exists
       if (!ob?.packCards?.length) {
         let allPlayers = await storage.getRandomPlayers(250);
-        if (!Array.isArray(allPlayers) || allPlayers.length < 9) {
+        if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
           console.log("No offer found. Seeding database, then creating offer...");
           await seedDatabase();
           await seedCompetitions();
           allPlayers = await storage.getRandomPlayers(250);
         }
 
-        if (!Array.isArray(allPlayers) || allPlayers.length < 9) {
+        if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
           return res
             .status(404)
             .json({ message: "No offer found. Create offer first." });
@@ -494,16 +494,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         };
 
         const gkPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "GK"));
+        const defPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "DEF"));
         const midPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "MID"));
         const fwdPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "FWD"));
 
         const gk = gkPool.slice(0, 3);
-        const mid = midPool.slice(0, 3);
+        const def = defPool.slice(0, 3);
+        const mid1 = midPool.slice(0, 3);
+        const mid2 = midPool.slice(3, 6);
         const fwd = fwdPool.slice(0, 3);
 
         const packCards = [
           gk.map((p: any) => p.id),
-          mid.map((p: any) => p.id),
+          def.map((p: any) => p.id),
+          mid1.map((p: any) => p.id),
+          mid2.map((p: any) => p.id),
           fwd.map((p: any) => p.id),
         ];
 
