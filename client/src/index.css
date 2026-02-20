@@ -288,6 +288,21 @@
 }
 
 @layer components {
+  /* 3D Card System - preserve 3D transforms throughout the chain */
+  .preserve-3d {
+    transform-style: preserve-3d !important;
+  }
+
+  .perspective-wrapper {
+    perspective: 1500px;
+    transform-style: preserve-3d;
+  }
+
+  .card-3d-container {
+    transform-style: preserve-3d;
+    position: relative;
+  }
+
   .card-slab {
     @apply relative overflow-visible transition-all duration-500;
     transform-style: preserve-3d;

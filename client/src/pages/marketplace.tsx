@@ -124,14 +124,18 @@ export default function MarketplacePage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          <div 
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 preserve-3d"
+            style={{ transformStyle: "preserve-3d" }}
+          >
             {filteredListings?.map((card) => (
               <div 
                 key={card.id} 
-                className="flex justify-center items-center" 
+                className="flex justify-center items-center card-3d-container"
                 style={{ 
                   transformStyle: "preserve-3d",
-                  minHeight: "360px"
+                  minHeight: "380px",
+                  perspectiveOrigin: "center"
                 }}
               >
                 <Card3D

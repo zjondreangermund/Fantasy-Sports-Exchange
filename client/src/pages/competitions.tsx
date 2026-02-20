@@ -222,9 +222,19 @@ export default function CompetitionsPage() {
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-4 mb-4 max-h-80 overflow-auto justify-center">
+              <div 
+                className="flex flex-wrap gap-4 mb-4 max-h-80 overflow-auto justify-center preserve-3d"
+                style={{ transformStyle: "preserve-3d" }}
+              >
                 {availableCards.map(card => (
-                  <div key={card.id} className="relative" style={{ transformStyle: "preserve-3d" }}>
+                  <div 
+                    key={card.id} 
+                    className="card-3d-container" 
+                    style={{ 
+                      transformStyle: "preserve-3d",
+                      minHeight: "300px"
+                    }}
+                  >
                     <Card3D
                       card={card}
                       size="sm"

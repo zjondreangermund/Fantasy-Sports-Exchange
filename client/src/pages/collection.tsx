@@ -161,16 +161,20 @@ export default function CollectionPage() {
             ))}
           </div>
         ) : filteredCards && filteredCards.length > 0 ? (
-          <div className="flex flex-wrap gap-8 justify-center">
+          <div 
+            className="flex flex-wrap gap-8 justify-center preserve-3d"
+            style={{ transformStyle: "preserve-3d" }}
+          >
             {filteredCards.map((card) => {
               const isInLineup = lineupData?.lineup?.cardIds?.includes(card.id);
               return (
                 <div 
                   key={card.id} 
-                  className="relative" 
+                  className="card-3d-container" 
                   style={{ 
                     transformStyle: "preserve-3d",
-                    minHeight: "360px"
+                    minHeight: "380px",
+                    position: "relative"
                   }}
                 >
                   <Card3D
