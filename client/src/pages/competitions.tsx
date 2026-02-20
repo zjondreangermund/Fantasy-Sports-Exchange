@@ -91,11 +91,22 @@ export default function CompetitionsPage() {
   const toggleCard = (cardId: number) => {
     setSelectedCards(prev => {
       if (prev.includes(cardId)) {
-        if (captainId === cardId) setCaptainId(null);
+        // Removing card
+        if (captainId === cardId) {
+          // If removing captain, set next card as captain
+          const remaining = prev.filter(id => id !== cardId);
+          setCaptainId(remaining.length > 0 ? remaining[0] : null);
+        }
         return prev.filter(id => id !== cardId);
       }
+      // Adding card
       if (prev.length >= 5) return prev;
-      return [...prev, cardId];
+      const newCards = [...prev, cardId];
+      // Auto-set first card as captain
+      if (!captainId) {
+        setCaptainId(cardId);
+      }
+      return newCards;
     });
   };
 

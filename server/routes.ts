@@ -2305,39 +2305,40 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const fee = marketPrice * 0.08; // 8% fee based on market price
         
         // Handle cash top-up
-        if (offer.topUpAmount > 0) {
+        const topUpAmount = offer.topUpAmount || 0;
+        if (topUpAmount > 0) {
           const payerId = offer.topUpDirection === "offerer_to_receiver" ? offer.offererUserId : offer.receiverUserId;
           const payeeId = offer.topUpDirection === "offerer_to_receiver" ? offer.receiverUserId : offer.offererUserId;
           
           // Check payer balance
           const [payerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, payerId));
-          if (!payerWallet || (payerWallet.balance || 0) < offer.topUpAmount + fee) {
+          if (!payerWallet || (payerWallet.balance || 0) < topUpAmount + fee) {
             throw new Error("Insufficient balance for trade (including fee)");
           }
           
           // Transfer cash
           await tx
             .update(wallets)
-            .set({ balance: sql`${wallets.balance} - ${offer.topUpAmount + fee}` } as any)
+            .set({ balance: sql`${wallets.balance} - ${topUpAmount + fee}` } as any)
             .where(eq(wallets.userId, payerId));
           
           await tx
             .update(wallets)
-            .set({ balance: sql`${wallets.balance} + ${offer.topUpAmount}` } as any)
+            .set({ balance: sql`${wallets.balance} + ${topUpAmount}` } as any)
             .where(eq(wallets.userId, payeeId));
           
           // Create transaction records
           await tx.insert(transactions).values({
             userId: payerId,
             type: "swap_fee",
-            amount: -(offer.topUpAmount + fee),
-            description: `Trade: paid N$${offer.topUpAmount} + N$${fee.toFixed(2)} fee`,
+            amount: -(topUpAmount + fee),
+            description: `Trade: paid N$${topUpAmount} + N$${fee.toFixed(2)} fee`,
           } as any);
           
           await tx.insert(transactions).values({
             userId: payeeId,
             type: "swap_fee",
-            amount: offer.topUpAmount,
+            amount: topUpAmount,
             description: `Trade: received N$${offer.topUpAmount}`,
           } as any);
         } else {
@@ -2496,13 +2497,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
         
         // Verify all same player
-        const playerIds = [...new Set(cards.map(c => c.playerId))];
+        const playerIds = Array.from(new Set(cards.map(c => c.playerId)));
         if (playerIds.length !== 1) {
           throw new Error("All cards must be of the same player");
         }
         
         // Verify all same rarity
-        const rarities = [...new Set(cards.map(c => c.rarity))];
+        const rarities = Array.from(new Set(cards.map(c => c.rarity)));
         if (rarities.length !== 1) {
           throw new Error("All cards must be the same rarity");
         }

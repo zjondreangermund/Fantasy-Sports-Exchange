@@ -57,7 +57,7 @@ export class ScoreUpdateService {
   async updateAllActiveCompetitions() {
     try {
       const competitions = await this.storage.getCompetitions();
-      const activeComps = competitions.filter(c => 
+      const activeComps = competitions.filter((c: any) => 
         c.status === "open" || c.status === "active"
       );
       
@@ -88,7 +88,7 @@ export class ScoreUpdateService {
           try {
             // Get cards in lineup with player data
             const cards = await Promise.all(
-              (entry.lineupCardIds || []).map(cardId =>
+              (entry.lineupCardIds || []).map((cardId: any) =>
                 this.storage.getPlayerCardWithPlayer(cardId, entry.userId)
               )
             );
@@ -172,7 +172,7 @@ export class ScoreUpdateService {
     for (const entry of entries) {
       try {
         const cards = await Promise.all(
-          (entry.lineupCardIds || []).map(cardId =>
+          (entry.lineupCardIds || []).map((cardId: any) =>
             this.storage.getPlayerCardWithPlayer(cardId, entry.userId)
           )
         );
