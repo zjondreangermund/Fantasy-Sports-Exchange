@@ -392,14 +392,32 @@ export type CompetitionWithEntries = Competition & { entries: CompetitionEntry[]
 export type InsertUser = typeof users.$inferInsert;
 export type InsertPlayer = typeof players.$inferInsert;
 export type InsertPlayerCard = typeof playerCards.$inferInsert;
-export type InsertWallet = typeof wallets.$inferInsert;
-export type InsertTransaction = typeof transactions.$inferInsert;
+export type InsertWallet = typeof wallets.$inferInsert & { balance?: number; lockedBalance?: number };
+export type InsertTransaction = typeof transactions.$inferInsert & { 
+  description?: string; 
+  paymentMethod?: string; 
+  externalTransactionId?: string;
+};
 export type InsertLineup = typeof lineups.$inferInsert;
 export type InsertOnboarding = typeof userOnboarding.$inferInsert;
 export type InsertCompetition = typeof competitions.$inferInsert;
-export type InsertCompetitionEntry = typeof competitionEntries.$inferInsert;
+export type InsertCompetitionEntry = typeof competitionEntries.$inferInsert & { 
+  lineupCardIds?: number[];
+  captainId?: number;
+  totalScore?: number;
+};
 export type InsertSwapOffer = typeof swapOffers.$inferInsert;
-export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert;
+export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert & { 
+  fee?: number;
+  status?: "pending" | "processing" | "completed" | "rejected";
+  bankName?: string;
+  accountHolder?: string;
+  accountNumber?: string;
+  iban?: string;
+  swiftCode?: string;
+  ewalletProvider?: string;
+  ewalletId?: string;
+};
 
 export type SwapOffer = typeof swapOffers.$inferSelect;
 export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
