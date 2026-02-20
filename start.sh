@@ -12,4 +12,4 @@ fi
 
 # Start the server
 echo "Starting server..."
-exec node dist/server/index.js
+exec node dist/server/server/index.js
