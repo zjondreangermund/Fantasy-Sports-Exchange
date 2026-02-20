@@ -19,6 +19,7 @@ import OnboardingTunnelPage from "./pages/onboarding-tunnel";
 import DashboardPage from "./pages/dashboard";
 import CollectionPage from "./pages/collection";
 import MarketplacePage from "./pages/marketplace";
+import AuctionsPage from "./pages/auctions";
 import WalletPage from "./pages/wallet";
 import CompetitionsPage from "./pages/competitions";
 import PremierLeaguePage from "./pages/premier-league";
@@ -60,6 +61,7 @@ function AuthenticatedRouter() {
       <Route path="/premier-league" component={PremierLeaguePage} />
       <Route path="/collection" component={CollectionPage} />
       <Route path="/marketplace" component={MarketplacePage} />
+      <Route path="/auctions" component={AuctionsPage} />
       <Route path="/wallet" component={WalletPage} />
       <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />

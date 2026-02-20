@@ -285,18 +285,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Upcoming Fixtures Endpoint
-  app.get("/api/epl/fixtures", async (req, res) => {
-    try {
-      const gameweek = req.query.gameweek ? parseInt(req.query.gameweek as string) : undefined;
-      const fixtures = await fplApi.getUpcomingFixtures(gameweek);
-      res.json(fixtures);
-    } catch (e: any) {
-      console.error("EPL fixtures:", e);
-      res.status(500).json({ message: e?.message || "Failed to fetch fixtures" });
-    }
-  });
-
   app.get("/api/sorare/player", async (req, res) => {
     try {
       const firstName = (req.query.firstName as string) || "";
@@ -1030,6 +1018,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           throw new Error("Cannot buy your own card");
         }
         
+        // Calculate 8% platform fee
+        const fee = price * 0.08;
+        const sellerReceives = price - fee;
+        
         // Check buyer balance
         const [buyerWallet] = await tx
           .select()
@@ -1040,16 +1032,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           throw new Error("Insufficient balance");
         }
         
-        // Debit buyer
+        // Debit buyer (full price)
         await tx
           .update((await import("../shared/schema.js")).wallets)
           .set({ balance: (await import("drizzle-orm")).sql`${(await import("../shared/schema.js")).wallets.balance} - ${price}` } as any)
           .where((await import("drizzle-orm")).eq((await import("../shared/schema.js")).wallets.userId, buyerId));
         
-        // Credit seller
+        // Credit seller (price minus 8% fee)
         await tx
           .update((await import("../shared/schema.js")).wallets)
-          .set({ balance: (await import("drizzle-orm")).sql`${(await import("../shared/schema.js")).wallets.balance} + ${price}` } as any)
+          .set({ balance: (await import("drizzle-orm")).sql`${(await import("../shared/schema.js")).wallets.balance} + ${sellerReceives}` } as any)
           .where((await import("drizzle-orm")).eq((await import("../shared/schema.js")).wallets.userId, sellerId!));
         
         // Transfer card ownership
@@ -1067,14 +1059,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           userId: buyerId,
           type: "purchase",
           amount: -price,
-          description: `Purchased card #${cardId} from seller`,
+          description: `Purchased card #${cardId} (N$${price.toFixed(2)})`,
         } as any);
         
         await tx.insert((await import("../shared/schema.js")).transactions).values({
           userId: sellerId!,
           type: "sale",
-          amount: price,
-          description: `Sold card #${cardId} to buyer`,
+          amount: sellerReceives,
+          description: `Sold card #${cardId} (N$${price.toFixed(2)} - N$${fee.toFixed(2)} fee)`,
         } as any);
       });
       
