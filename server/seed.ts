@@ -190,7 +190,7 @@ export async function seedDemoUsers() {
         userId: userData.id,
         balance: 1000, // Start with $1000
         lockedBalance: 0,
-      });
+      } as any);
       
       // Create initial deposit transaction
       await storage.createTransaction({
@@ -198,7 +198,7 @@ export async function seedDemoUsers() {
         type: "deposit",
         amount: 1000,
         description: "Initial demo wallet balance",
-      });
+      } as any);
       
       console.log(`Created wallet for ${userData.name} with $1000`);
     }

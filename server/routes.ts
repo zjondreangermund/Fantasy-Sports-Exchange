@@ -603,7 +603,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Ensure wallet exists
       let wallet = await storage.getWallet(userId);
       if (!wallet) {
-        wallet = await storage.createWallet({ userId, balance: 0, lockedBalance: 0 });
+        wallet = await storage.createWallet({ userId, balance: 0, lockedBalance: 0 } as any);
       }
       
       res.json({
@@ -1663,7 +1663,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         lineupCardIds: cardIds,
         captainId: captainId || cardIds[0],
         totalScore: 0,
-      });
+      } as any);
       
       res.json({ 
         success: true, 
