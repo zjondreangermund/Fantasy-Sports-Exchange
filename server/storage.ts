@@ -315,19 +315,15 @@ async createOnboarding(data: InsertOnboarding | { userId: string }): Promise<Use
   const userId = data.userId;
 
   // 1) Ensure user exists (FK requirement)
-  // NOTE: Avoid db.query.users.findFirst() here because it selects all columns,
-  // which can crash if the production DB is missing newer columns (e.g. "name").
-  const existingUser = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
+// NOTE: Production DB may have an older `users` table schema (missing columns like first_name/name).
+// Using raw SQL ensures we only touch the `id` column and avoid referencing non-existent columns.
+await db.execute(sql`
+  insert into app.users (id)
+  values (${userId})
+  on conflict (id) do nothing
+`);
 
-  if (existingUser.length === 0) {
-    await db.insert(users).values({ id: userId } as any);
-  }
-
-  // 2) If onboarding already exists, return it
+// 2) If onboarding already exists, return it
   const [existingOnboarding] = await db
     .select()
     .from(userOnboarding)
