@@ -364,12 +364,11 @@ export const insertPlayerValueSchema = createInsertSchema(playerValues);
 export const insertAuditLogSchema = createInsertSchema(auditLogs);
 export const insertIdempotencySchema = createInsertSchema(idempotencyKeys);
 
-export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertUserInput = z.infer<typeof insertUserSchema>;
 export type Player = typeof players.$inferSelect;
-export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
+export type InsertPlayerInput = z.infer<typeof insertPlayerSchema>;
 export type PlayerCard = typeof playerCards.$inferSelect;
-export type InsertPlayerCard = z.infer<typeof insertPlayerCardSchema>;
+export type InsertPlayerCardInput = z.infer<typeof insertPlayerCardSchema>;
 export type Wallet = typeof wallets.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type Lineup = typeof lineups.$inferSelect;
@@ -382,6 +381,7 @@ export type CardLock = typeof cardLocks.$inferSelect;
 export type PlayerValue = typeof playerValues.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
+export type User = typeof users.$inferSelect;
 
 export type PlayerCardWithPlayer = PlayerCard & { player: Player };
 export type CompetitionWithEntries = Competition & { entries: CompetitionEntry[]; entryCount: number };
