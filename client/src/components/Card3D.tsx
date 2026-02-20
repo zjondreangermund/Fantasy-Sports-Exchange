@@ -390,7 +390,7 @@ export default function Card3D(props: Card3DProps) {
             left: 0,
             transformOrigin: "top",
             transform: `rotateX(90deg) translateZ(0px)`,
-            background: `linear-gradient(180deg, ${rarityConfig.edge} 0%, rgba(0,0,0,0.3) 100%)`,
+            background: `linear-gradient(90deg, rgba(0,0,0,0.5) 0%, ${rarityConfig.edge} 20%, rgba(255,255,255,0.15) 50%, ${rarityConfig.edge} 80%, rgba(0,0,0,0.5) 100%)`,
             borderTopLeftRadius: "16px",
             borderTopRightRadius: "16px",
             boxShadow: "inset 0 2px 8px rgba(0,0,0,0.6), inset 0 -2px 4px rgba(255,255,255,0.2)",
@@ -408,7 +408,7 @@ export default function Card3D(props: Card3DProps) {
             left: 0,
             transformOrigin: "bottom",
             transform: `rotateX(-90deg) translateZ(0px)`,
-            background: `linear-gradient(0deg, ${rarityConfig.edge} 0%, rgba(0,0,0,0.3) 100%)`,
+            background: `linear-gradient(90deg, rgba(0,0,0,0.5) 0%, ${rarityConfig.edge} 20%, rgba(255,255,255,0.15) 50%, ${rarityConfig.edge} 80%, rgba(0,0,0,0.5) 100%)`,
             borderBottomLeftRadius: "16px",
             borderBottomRightRadius: "16px",
             boxShadow: "inset 0 -2px 8px rgba(0,0,0,0.6), inset 0 2px 4px rgba(255,255,255,0.2)",
@@ -416,7 +416,7 @@ export default function Card3D(props: Card3DProps) {
           }}
         />
 
-        {/* EDGES - LEFT */}
+        {/* EDGES - LEFT (DARKER - shadow side) */}
         <div
           style={{
             position: "absolute",
@@ -426,15 +426,15 @@ export default function Card3D(props: Card3DProps) {
             top: 0,
             transformOrigin: "left",
             transform: `rotateY(-90deg) translateZ(0px)`,
-            background: `linear-gradient(90deg, ${rarityConfig.edge} 0%, rgba(0,0,0,0.3) 100%)`,
+            background: `linear-gradient(180deg, rgba(0,0,0,0.6) 0%, ${rarityConfig.edge} 30%, rgba(0,0,0,0.4) 70%, rgba(0,0,0,0.6) 100%)`,
             borderTopLeftRadius: "16px",
             borderBottomLeftRadius: "16px",
-            boxShadow: "inset 2px 0 8px rgba(0,0,0,0.6), inset -2px 0 4px rgba(255,255,255,0.2)",
-            border: `1px solid ${rarityConfig.accent}80`,
+            boxShadow: "inset 2px 0 8px rgba(0,0,0,0.8), inset -2px 0 2px rgba(255,255,255,0.1)",
+            border: `1px solid ${rarityConfig.accent}60`,
           }}
         />
 
-        {/* EDGES - RIGHT */}
+        {/* EDGES - RIGHT (LIGHTER - highlight side) */}
         <div
           style={{
             position: "absolute",
@@ -444,11 +444,11 @@ export default function Card3D(props: Card3DProps) {
             top: 0,
             transformOrigin: "right",
             transform: `rotateY(90deg) translateZ(0px)`,
-            background: `linear-gradient(-90deg, ${rarityConfig.edge} 0%, rgba(0,0,0,0.3) 100%)`,
+            background: `linear-gradient(180deg, rgba(255,255,255,0.25) 0%, ${rarityConfig.edge} 30%, rgba(255,255,255,0.15) 50%, ${rarityConfig.edge} 70%, rgba(255,255,255,0.25) 100%)`,
             borderTopRightRadius: "16px",
             borderBottomRightRadius: "16px",
-            boxShadow: "inset -2px 0 8px rgba(0,0,0,0.6), inset 2px 0 4px rgba(255,255,255,0.2)",
-            border: `1px solid ${rarityConfig.accent}80`,
+            boxShadow: "inset -2px 0 8px rgba(0,0,0,0.4), inset 2px 0 4px rgba(255,255,255,0.3)",
+            border: `1px solid ${rarityConfig.accent}90`,
           }}
         />
 

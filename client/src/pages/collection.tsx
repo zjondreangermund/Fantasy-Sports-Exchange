@@ -8,9 +8,18 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
+import { Input } from "../components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "../components/ui/dialog";
 // Fixed: @shared -> ../../../shared
 import { type PlayerCardWithPlayer, type Lineup } from "../../../shared/schema";
-import { Filter, Save, Check } from "lucide-react";
+import { Filter, Save, Check, DollarSign } from "lucide-react";
 // Fixed: @/hooks -> ../hooks
 import { useToast } from "../hooks/use-toast";
 
@@ -21,6 +30,14 @@ export default function CollectionPage() {
   const [selectedForLineup, setSelectedForLineup] = useState<Set<number>>(
     new Set(),
   );
+  const [listCard, setListCard] = useState<PlayerCardWithPlayer | null>(null);
+  const [listPrice, setListPrice] = useState("");
+
+  const BASE_PRICES: Record<string, number> = {
+    rare: 100,
+    unique: 250,
+    legendary: 500,
+  };
 
   const { data: cards, isLoading } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/user/cards"],
@@ -58,6 +75,72 @@ export default function CollectionPage() {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
+
+  const listForSaleMutation = useMutation({
+    mutationFn: async ({ cardId, price }: { cardId: number; price: number }) => {
+      const res = await apiRequest("POST", "/api/marketplace/list", { cardId, price });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
+      setListCard(null);
+      setListPrice("");
+      toast({ title: "Card listed for sale!" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to list card", 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const cancelListingMutation = useMutation({
+    mutationFn: async (cardId: number) => {
+      const res = await apiRequest("POST", `/api/marketplace/cancel/${cardId}`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
+      toast({ title: "Listing cancelled" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to cancel listing", 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const handleListCard = (card: PlayerCardWithPlayer) => {
+    setListCard(card);
+    const basePrice = BASE_PRICES[card.rarity] || 0;
+    setListPrice(basePrice.toString());
+  };
+
+  const handleConfirmList = () => {
+    if (!listCard) return;
+    const price = parseFloat(listPrice);
+    const basePrice = BASE_PRICES[listCard.rarity] || 0;
+    
+    if (isNaN(price) || price <= 0) {
+      toast({ title: "Invalid price", variant: "destructive" });
+      return;
+    }
+    
+    if (basePrice && price < basePrice) {
+      toast({ 
+        title: "Price too low", 
+        description: `Minimum price for ${listCard.rarity} cards is N$${basePrice}`,
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    listForSaleMutation.mutate({ cardId: listCard.id, price });
+  };
 
   const filteredCards = cards?.filter((c) => {
     if (filter === "all") return true;
@@ -196,6 +279,31 @@ export default function CollectionPage() {
                       In Lineup
                     </Badge>
                   )}
+                  {!editingLineup && (
+                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
+                      {card.forSale ? (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => cancelListingMutation.mutate(card.id)}
+                          disabled={cancelListingMutation.isPending}
+                          className="text-xs"
+                        >
+                          Cancel (N${card.price})
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleListCard(card)}
+                          className="text-xs"
+                        >
+                          <DollarSign className="w-3 h-3 mr-1" />
+                          Sell
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -208,6 +316,45 @@ export default function CollectionPage() {
           </Card>
         )}
       </div>
+
+      {/* List for Sale Dialog */}
+      <Dialog open={!!listCard} onOpenChange={() => setListCard(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>List Card for Sale</DialogTitle>
+            <DialogDescription>
+              {listCard && BASE_PRICES[listCard.rarity] 
+                ? `Minimum price for ${listCard.rarity} cards: N$${BASE_PRICES[listCard.rarity]}`
+                : "Set your listing price"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <p className="font-semibold">{listCard?.player?.name}</p>
+              <p className="text-sm text-muted-foreground capitalize">{listCard?.rarity} • {listCard?.player?.position}</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Price (N$)</label>
+              <Input
+                type="number"
+                value={listPrice}
+                onChange={(e) => setListPrice(e.target.value)}
+                placeholder={listCard && BASE_PRICES[listCard.rarity] ? `Min: ${BASE_PRICES[listCard.rarity]}` : "Enter price"}
+                min={listCard ? BASE_PRICES[listCard.rarity] || 1 : 1}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setListCard(null)}>Cancel</Button>
+            <Button 
+              onClick={handleConfirmList}
+              disabled={listForSaleMutation.isPending || !listPrice || parseFloat(listPrice) <= 0}
+            >
+              {listForSaleMutation.isPending ? "Listing..." : "List for Sale"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

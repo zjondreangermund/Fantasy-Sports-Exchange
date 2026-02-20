@@ -20,6 +20,10 @@ import {
   Smartphone,
   DollarSign,
   Send,
+  Users,
+  TrendingUp,
+  AlertTriangle,
+  Activity,
 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "../hooks/use-toast";
@@ -205,51 +209,151 @@ export default function AdminPage() {
           </Card>
         </div>
 
-        <Tabs defaultValue="pending">
+        <Tabs defaultValue="withdrawals" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="pending">
-              Pending Review ({pendingWithdrawals?.length || 0})
+            <TabsTrigger value="withdrawals">
+              <DollarSign className="w-4 h-4 mr-2" />
+              Withdrawals
             </TabsTrigger>
-            <TabsTrigger value="all">
-              All Requests ({allWithdrawals?.length || 0})
+            <TabsTrigger value="management">
+              <Shield className="w-4 h-4 mr-2" />
+              Site Management
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="pending">
-            {isLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-48 w-full rounded-md" />
-                ))}
-              </div>
-            ) : pendingWithdrawals && pendingWithdrawals.length > 0 ? (
-              <div className="space-y-3">
-                {pendingWithdrawals.map((wr) => renderWithdrawalCard(wr, true))}
-              </div>
-            ) : (
-              <Card className="p-8 text-center">
-                <CheckCircle2 className="w-12 h-12 mx-auto text-green-500 mb-3 opacity-50" />
-                <p className="text-muted-foreground">No pending withdrawal requests.</p>
-              </Card>
-            )}
+          <TabsContent value="withdrawals">
+            <Tabs defaultValue="pending">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="pending">
+                  Pending Review ({pendingWithdrawals?.length || 0})
+                </TabsTrigger>
+                <TabsTrigger value="all">
+                  All Requests ({allWithdrawals?.length || 0})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="pending">
+                {isLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-48 w-full rounded-md" />
+                    ))}
+                  </div>
+                ) : pendingWithdrawals && pendingWithdrawals.length > 0 ? (
+                  <div className="space-y-3">
+                    {pendingWithdrawals.map((wr) => renderWithdrawalCard(wr, true))}
+                  </div>
+                ) : (
+                  <Card className="p-8 text-center">
+                    <CheckCircle2 className="w-12 h-12 mx-auto text-green-500 mb-3 opacity-50" />
+                    <p className="text-muted-foreground">No pending withdrawal requests.</p>
+                  </Card>
+                )}
+              </TabsContent>
+
+              <TabsContent value="all">
+                {isLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-48 w-full rounded-md" />
+                    ))}
+                  </div>
+                ) : allWithdrawals && allWithdrawals.length > 0 ? (
+                  <div className="space-y-3">
+                    {allWithdrawals.map((wr) => renderWithdrawalCard(wr, false))}
+                  </div>
+                ) : (
+                  <Card className="p-8 text-center">
+                    <p className="text-muted-foreground">No withdrawal requests yet.</p>
+                  </Card>
+                )}
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
-          <TabsContent value="all">
-            {isLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-48 w-full rounded-md" />
-                ))}
-              </div>
-            ) : allWithdrawals && allWithdrawals.length > 0 ? (
-              <div className="space-y-3">
-                {allWithdrawals.map((wr) => renderWithdrawalCard(wr, false))}
-              </div>
-            ) : (
-              <Card className="p-8 text-center">
-                <p className="text-muted-foreground">No withdrawal requests yet.</p>
+          <TabsContent value="management">
+            <div className="space-y-6">
+              {/* System Health Dashboard */}
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Activity className="w-5 h-5 text-green-500" />
+                  <h3 className="text-lg font-semibold">System Health</h3>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-3 bg-green-500/10 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Server Status</p>
+                    <p className="text-lg font-bold text-green-500">Online</p>
+                  </div>
+                  <div className="p-3 bg-blue-500/10 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Active Users</p>
+                    <p className="text-lg font-bold text-blue-500">-</p>
+                  </div>
+                  <div className="p-3 bg-purple-500/10 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Total Trades</p>
+                    <p className="text-lg font-bold text-purple-500">-</p>
+                  </div>
+                  <div className="p-3 bg-orange-500/10 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Marketplace Volume</p>
+                    <p className="text-lg font-bold text-orange-500">-</p>
+                  </div>
+                </div>
               </Card>
-            )}
+
+              {/* Quick Actions */}
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Shield className="w-5 h-5 text-blue-500" />
+                  <h3 className="text-lg font-semibold">Quick Actions</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Button variant="outline" className="justify-start">
+                    <Users className="w-4 h-4 mr-2" />
+                    User Management
+                  </Button>
+                  <Button variant="outline" className="justify-start">
+                    <TrendingUp className="w-4 h-4 mr-2" />
+                    Market Analytics
+                  </Button>
+                  <Button variant="outline" className="justify-start">
+                    <AlertTriangle className="w-4 h-4 mr-2" />
+                    Reports & Flags
+                  </Button>
+                  <Button variant="outline" className="justify-start">
+                    <Activity className="w-4 h-4 mr-2" />
+                    System Logs
+                  </Button>
+                </div>
+              </Card>
+
+              {/* Admin Notes */}
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                  <h3 className="text-lg font-semibold">Admin Notes</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Use this section to monitor site activity, review user reports, and manage administrative tasks.
+                </p>
+                <ul className="mt-4 space-y-2 text-sm">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5" />
+                    <span>Base prices enforced: Rare N$100, Unique N$250, Legendary N$500</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5" />
+                    <span>Trading system active with same-rarity restrictions</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5" />
+                    <span>Card fusion available: 5 cards → 1 higher rarity</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Clock className="w-4 h-4 text-yellow-500 mt-0.5" />
+                    <span>Monitor high-value trades for suspicious activity</span>
+                  </li>
+                </ul>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

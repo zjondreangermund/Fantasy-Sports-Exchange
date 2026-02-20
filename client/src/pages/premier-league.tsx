@@ -183,9 +183,6 @@ export default function PremierLeaguePage() {
               <TabsTrigger value="live" className="flex items-center gap-1 data-[state=active]:bg-red-600 data-[state=active]:text-white">
                 <Activity className="w-4 h-4" /> Live Games
               </TabsTrigger>
-              <TabsTrigger value="players" className="flex items-center gap-1 data-[state=active]:bg-purple-600 data-[state=active]:text-white">
-                <Users className="w-4 h-4" /> Player Cards
-              </TabsTrigger>
               <TabsTrigger value="standings" className="flex items-center gap-1 data-[state=active]:bg-purple-600 data-[state=active]:text-white">
                 <Trophy className="w-4 h-4" /> Standings
               </TabsTrigger>
@@ -199,85 +196,6 @@ export default function PremierLeaguePage() {
 
             <TabsContent value="live">
               <LiveGames />
-            </TabsContent>
-
-            <TabsContent value="players">
-              <div className="flex flex-wrap items-center gap-2 mb-6">
-                <div className="relative flex-1 min-w-[200px] max-w-sm">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search players..."
-                    value={playerSearch}
-                    onChange={(e) => setPlayerSearch(e.target.value)}
-                    className="pl-9 bg-background/50 backdrop-blur-sm border-border/50"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {rarityButtons.map(({ key, label, color }) => (
-                    <button
-                      key={key}
-                      onClick={() => setRarityFilter(key)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${color} ${
-                        rarityFilter === key ? "ring-2 ring-white/50 scale-105" : "opacity-70 hover:opacity-100"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {playersLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <Skeleton key={i} className="h-72 rounded-xl" />
-                  ))}
-                </div>
-              ) : filteredPlayers.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-                  {filteredPlayers.map((eplPlayer) => {
-                    const cardData = {
-                      id: eplPlayer.id,
-                      playerId: eplPlayer.id,
-                      ownerId: null,
-                      rarity: assignRarity(eplPlayer),
-                      serialId: null,
-                      serialNumber: 1,
-                      maxSupply: 1000,
-                      level: 1,
-                      xp: 0,
-                      decisiveScore: 0,
-                      last5Scores: [0,0,0,0,0],
-                      forSale: false,
-                      price: 0,
-                      acquiredAt: new Date(),
-                      player: {
-                        id: eplPlayer.id,
-                        name: eplPlayer.name,
-                        position: eplPlayer.position,
-                        photo: eplPlayer.photo,
-                        club: eplPlayer.team,
-                        clubLogo: eplPlayer.teamLogo,
-                        nationality: eplPlayer.nationality,
-                        rating: eplPlayer.rating,
-                      },
-                    } as any;
-
-                    return (
-                      <div key={eplPlayer.id} className="w-full aspect-[2/3] min-h-[280px]">
-                        <Card3D card={cardData} size="md" />
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <Card className="p-12 text-center bg-background/50 backdrop-blur-sm border-border/50">
-                  <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground text-lg">
-                    {playerSearch ? "No players match your search" : "No player data yet. Click \"Refresh Data\" to sync."}
-                  </p>
-                </Card>
-              )}
             </TabsContent>
 
             <TabsContent value="standings">

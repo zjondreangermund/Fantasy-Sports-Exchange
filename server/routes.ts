@@ -916,6 +916,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Card is already listed for sale" });
       }
       
+      // Enforce base prices by rarity
+      const basePrices: Record<string, number> = {
+        rare: 100,
+        unique: 250,
+        legendary: 500,
+      };
+      
+      const basePrice = basePrices[card.rarity];
+      if (basePrice && price < basePrice) {
+        return res.status(400).json({ 
+          message: `Minimum price for ${card.rarity} cards is N$${basePrice}` 
+        });
+      }
+      
       // TODO: Check if card is in an active auction (when auctions are implemented)
       
       // List the card
@@ -2029,6 +2043,416 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Failed to review withdrawal:", error);
       res.status(500).json({ message: "Failed to review withdrawal" });
+    }
+  });
+
+  // -------------------------
+  // TRADING ENDPOINTS
+  // -------------------------
+  
+  // Get user's trade offers (sent and received)
+  app.get("/api/trades", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const offers = await storage.getUserSwapOffers(userId);
+      res.json(offers);
+    } catch (error: any) {
+      console.error("Failed to fetch trades:", error);
+      res.status(500).json({ message: "Failed to fetch trades" });
+    }
+  });
+
+  // Create trade offer (card-for-card with optional cash top-up)
+  app.post("/api/trades/create", requireAuth, async (req: any, res) => {
+    try {
+      const offererId = req.authUserId;
+      const { offeredCardId, requestedCardId, receiverUserId, topUpAmount } = req.body;
+      
+      if (!offeredCardId || !requestedCardId || !receiverUserId) {
+        return res.status(400).json({ message: "offeredCardId, requestedCardId, and receiverUserId required" });
+      }
+      
+      const { db } = await import("./db.js");
+      const { playerCards } = await import("../shared/schema.js");
+      const { eq } = await import("drizzle-orm");
+      
+      // Get both cards
+      const [offeredCard] = await db.select().from(playerCards).where(eq(playerCards.id, offeredCardId));
+      const [requestedCard] = await db.select().from(playerCards).where(eq(playerCards.id, requestedCardId));
+      
+      if (!offeredCard || !requestedCard) {
+        return res.status(404).json({ message: "One or both cards not found" });
+      }
+      
+      // Verify ownership
+      if (offeredCard.ownerId !== offererId) {
+        return res.status(403).json({ message: "You don't own the offered card" });
+      }
+      
+      if (requestedCard.ownerId !== receiverUserId) {
+        return res.status(400).json({ message: "Receiver doesn't own the requested card" });
+      }
+      
+      // Enforce same rarity rule
+      if (offeredCard.rarity !== requestedCard.rarity) {
+        return res.status(400).json({ 
+          message: `Can only trade same rarity cards (${offeredCard.rarity} ≠ ${requestedCard.rarity})` 
+        });
+      }
+      
+      // Can't trade cards that are for sale
+      if (offeredCard.forSale || requestedCard.forSale) {
+        return res.status(400).json({ message: "Cannot trade cards that are listed for sale" });
+      }
+      
+      // Create trade offer
+      const topUp = parseFloat(topUpAmount || 0);
+      const topUpDirection = topUp > 0 ? "offerer_to_receiver" : topUp < 0 ? "receiver_to_offerer" : "none";
+      
+      const offer = await storage.createSwapOffer({
+        offererUserId: offererId,
+        receiverUserId,
+        offeredCardId,
+        requestedCardId,
+        topUpAmount: Math.abs(topUp),
+        topUpDirection,
+        status: "pending",
+      });
+      
+      res.json({ 
+        success: true, 
+        message: "Trade offer sent",
+        offer
+      });
+    } catch (error: any) {
+      console.error("Failed to create trade:", error);
+      res.status(500).json({ message: error.message || "Failed to create trade" });
+    }
+  });
+
+  // Accept trade offer
+  app.post("/api/trades/:id/accept", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const offerId = parseInt(req.params.id, 10);
+      
+      const { db } = await import("./db.js");
+      const { swapOffers, playerCards, wallets, transactions } = await import("../shared/schema.js");
+      const { eq, and, sql } = await import("drizzle-orm");
+      
+      await db.transaction(async (tx) => {
+        const [offer] = await tx.select().from(swapOffers).where(eq(swapOffers.id, offerId)).for("update");
+        
+        if (!offer) {
+          throw new Error("Trade offer not found");
+        }
+        
+        if (offer.receiverUserId !== userId) {
+          throw new Error("You are not the receiver of this trade");
+        }
+        
+        if (offer.status !== "pending") {
+          throw new Error("Trade already processed");
+        }
+        
+        // Get both cards
+        const [offeredCard] = await tx.select().from(playerCards).where(eq(playerCards.id, offer.offeredCardId));
+        const [requestedCard] = await tx.select().from(playerCards).where(eq(playerCards.id, offer.requestedCardId));
+        
+        if (!offeredCard || !requestedCard) {
+          throw new Error("One or both cards no longer exist");
+        }
+        
+        // Calculate fee based on lowest market price for this rarity
+        const lowestPriceCards = await tx
+          .select()
+          .from(playerCards)
+          .where(and(
+            eq(playerCards.rarity, offeredCard.rarity),
+            eq(playerCards.forSale, true)
+          ))
+          .orderBy(playerCards.price)
+          .limit(1);
+        
+        const marketPrice = lowestPriceCards[0]?.price || 100; // Default to 100 if no listings
+        const fee = marketPrice * 0.08; // 8% fee based on market price
+        
+        // Handle cash top-up
+        if (offer.topUpAmount > 0) {
+          const payerId = offer.topUpDirection === "offerer_to_receiver" ? offer.offererUserId : offer.receiverUserId;
+          const payeeId = offer.topUpDirection === "offerer_to_receiver" ? offer.receiverUserId : offer.offererUserId;
+          
+          // Check payer balance
+          const [payerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, payerId));
+          if (!payerWallet || (payerWallet.balance || 0) < offer.topUpAmount + fee) {
+            throw new Error("Insufficient balance for trade (including fee)");
+          }
+          
+          // Transfer cash
+          await tx
+            .update(wallets)
+            .set({ balance: sql`${wallets.balance} - ${offer.topUpAmount + fee}` } as any)
+            .where(eq(wallets.userId, payerId));
+          
+          await tx
+            .update(wallets)
+            .set({ balance: sql`${wallets.balance} + ${offer.topUpAmount}` } as any)
+            .where(eq(wallets.userId, payeeId));
+          
+          // Create transaction records
+          await tx.insert(transactions).values({
+            userId: payerId,
+            type: "swap_fee",
+            amount: -(offer.topUpAmount + fee),
+            description: `Trade: paid N$${offer.topUpAmount} + N$${fee.toFixed(2)} fee`,
+          } as any);
+          
+          await tx.insert(transactions).values({
+            userId: payeeId,
+            type: "swap_fee",
+            amount: offer.topUpAmount,
+            description: `Trade: received N$${offer.topUpAmount}`,
+          } as any);
+        } else {
+          // No cash top-up, but still charge fee based on market price
+          // Fee split between both parties
+          const feePerPerson = fee / 2;
+          
+          for (const traderId of [offer.offererUserId, offer.receiverUserId]) {
+            const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, traderId));
+            if (!wallet || (wallet.balance || 0) < feePerPerson) {
+              throw new Error("Insufficient balance for trade fee");
+            }
+            
+            await tx
+              .update(wallets)
+              .set({ balance: sql`${wallets.balance} - ${feePerPerson}` } as any)
+              .where(eq(wallets.userId, traderId));
+            
+            await tx.insert(transactions).values({
+              userId: traderId,
+              type: "swap_fee",
+              amount: -feePerPerson,
+              description: `Trade fee: N$${feePerPerson.toFixed(2)} (market: N$${marketPrice})`,
+            } as any);
+          }
+        }
+        
+        // Swap card ownership
+        await tx
+          .update(playerCards)
+          .set({ ownerId: offer.receiverUserId } as any)
+          .where(eq(playerCards.id, offer.offeredCardId));
+        
+        await tx
+          .update(playerCards)
+          .set({ ownerId: offer.offererUserId } as any)
+          .where(eq(playerCards.id, offer.requestedCardId));
+        
+        // Update offer status
+        await tx
+          .update(swapOffers)
+          .set({ status: "accepted" } as any)
+          .where(eq(swapOffers.id, offerId));
+      });
+      
+      res.json({ 
+        success: true, 
+        message: "Trade completed successfully"
+      });
+    } catch (error: any) {
+      console.error("Failed to accept trade:", error);
+      res.status(500).json({ message: error.message || "Failed to accept trade" });
+    }
+  });
+
+  // Reject trade offer
+  app.post("/api/trades/:id/reject", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const offerId = parseInt(req.params.id, 10);
+      
+      const offer = await storage.getSwapOffer(offerId);
+      if (!offer) {
+        return res.status(404).json({ message: "Trade offer not found" });
+      }
+      
+      if (offer.receiverUserId !== userId) {
+        return res.status(403).json({ message: "You are not the receiver of this trade" });
+      }
+      
+      if (offer.status !== "pending") {
+        return res.status(400).json({ message: "Trade already processed" });
+      }
+      
+      await storage.updateSwapOffer(offerId, { status: "rejected" });
+      
+      res.json({ 
+        success: true, 
+        message: "Trade offer rejected"
+      });
+    } catch (error: any) {
+      console.error("Failed to reject trade:", error);
+      res.status(500).json({ message: "Failed to reject trade" });
+    }
+  });
+
+  // Cancel trade offer (offerer only)
+  app.post("/api/trades/:id/cancel", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const offerId = parseInt(req.params.id, 10);
+      
+      const offer = await storage.getSwapOffer(offerId);
+      if (!offer) {
+        return res.status(404).json({ message: "Trade offer not found" });
+      }
+      
+      if (offer.offererUserId !== userId) {
+        return res.status(403).json({ message: "You are not the offerer of this trade" });
+      }
+      
+      if (offer.status !== "pending") {
+        return res.status(400).json({ message: "Trade already processed" });
+      }
+      
+      await storage.updateSwapOffer(offerId, { status: "cancelled" });
+      
+      res.json({ 
+        success: true, 
+        message: "Trade offer cancelled"
+      });
+    } catch (error: any) {
+      console.error("Failed to cancel trade:", error);
+      res.status(500).json({ message: "Failed to cancel trade" });
+    }
+  });
+
+  // -------------------------
+  // BURN/MINT FUSION ENDPOINTS
+  // -------------------------
+  
+  // Burn 5 cards of same rarity/player to mint 1 card of higher rarity
+  app.post("/api/cards/burn-mint", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const { cardIds } = req.body;
+      
+      if (!Array.isArray(cardIds) || cardIds.length !== 5) {
+        return res.status(400).json({ message: "Exactly 5 cards required for fusion" });
+      }
+      
+      const { db } = await import("./db.js");
+      const { playerCards, players } = await import("../shared/schema.js");
+      const { eq, and, inArray } = await import("drizzle-orm");
+      
+      await db.transaction(async (tx) => {
+        // Get all cards with lock
+        const cards = await tx
+          .select()
+          .from(playerCards)
+          .where(inArray(playerCards.id, cardIds))
+          .for("update");
+        
+        if (cards.length !== 5) {
+          throw new Error("One or more cards not found");
+        }
+        
+        // Verify all cards owned by user
+        for (const card of cards) {
+          if (card.ownerId !== userId) {
+            throw new Error("You don't own all these cards");
+          }
+          if (card.forSale) {
+            throw new Error("Cannot burn cards that are listed for sale");
+          }
+        }
+        
+        // Verify all same player
+        const playerIds = [...new Set(cards.map(c => c.playerId))];
+        if (playerIds.length !== 1) {
+          throw new Error("All cards must be of the same player");
+        }
+        
+        // Verify all same rarity
+        const rarities = [...new Set(cards.map(c => c.rarity))];
+        if (rarities.length !== 1) {
+          throw new Error("All cards must be the same rarity");
+        }
+        
+        const currentRarity = rarities[0];
+        const rarityUpgrade: Record<string, string> = {
+          rare: "unique",
+          unique: "legendary",
+        };
+        
+        const newRarity = rarityUpgrade[currentRarity];
+        if (!newRarity) {
+          throw new Error(`Cannot upgrade ${currentRarity} cards (only rare → unique, unique → legendary)`);
+        }
+        
+        // Delete the 5 cards
+        await tx.delete(playerCards).where(inArray(playerCards.id, cardIds));
+        
+        // Create new card with higher rarity
+        const [newCard] = await tx.insert(playerCards).values({
+          playerId: playerIds[0],
+          ownerId: userId,
+          rarity: newRarity as any,
+          level: 1,
+          xp: 0,
+          decisiveScore: 35,
+          last5Scores: [0, 0, 0, 0, 0],
+          forSale: false,
+          price: 0,
+        }).returning();
+        
+        res.json({
+          success: true,
+          message: `Fused 5 ${currentRarity} cards into 1 ${newRarity} card!`,
+          newCard
+        });
+      });
+    } catch (error: any) {
+      console.error("Failed to burn/mint cards:", error);
+      res.status(500).json({ message: error.message || "Failed to burn/mint cards" });
+    }
+  });
+
+  // Get eligible cards for fusion (grouped by player and rarity)
+  app.get("/api/cards/fusion-eligible", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      
+      const { db } = await import("./db.js");
+      const { playerCards, players } = await import("../shared/schema.js");
+      const { eq, and, sql } = await import("drizzle-orm");
+      
+      // Get all user's non-sale cards grouped by player and rarity
+      const eligibleGroups = await db
+        .select({
+          playerId: playerCards.playerId,
+          rarity: playerCards.rarity,
+          count: sql<number>`count(*)::int`,
+          cardIds: sql<number[]>`array_agg(${playerCards.id})`,
+        })
+        .from(playerCards)
+        .where(and(
+          eq(playerCards.ownerId, userId),
+          eq(playerCards.forSale, false)
+        ))
+        .groupBy(playerCards.playerId, playerCards.rarity)
+        .having(sql`count(*) >= 5`);
+      
+      // Filter to only rare and unique (can be upgraded)
+      const upgradeable = eligibleGroups.filter(g => 
+        g.rarity === "rare" || g.rarity === "unique"
+      );
+      
+      res.json(upgradeable);
+    } catch (error: any) {
+      console.error("Failed to get fusion-eligible cards:", error);
+      res.status(500).json({ message: "Failed to get fusion-eligible cards" });
     }
   });
 

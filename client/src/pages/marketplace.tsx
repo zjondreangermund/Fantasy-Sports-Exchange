@@ -8,6 +8,7 @@ import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
 import { Badge } from "../components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,7 @@ export default function MarketplacePage() {
   const [buyCard, setBuyCard] = useState<PlayerCardWithPlayer | null>(null);
   const [sellCard, setSellCard] = useState<PlayerCardWithPlayer | null>(null);
   const [sellPrice, setSellPrice] = useState("");
+  const [activeTab, setActiveTab] = useState("buy");
   
   const { data: listings, isLoading } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/marketplace"],
@@ -65,7 +67,7 @@ export default function MarketplacePage() {
 
   const buyMutation = useMutation({
     mutationFn: async (cardId: number) => {
-      const res = await apiRequest("POST", "/api/marketplace/buy", { cardId });
+      const res = await apiRequest("POST", `/api/marketplace/buy/${cardId}`, {});
       return res.json();
     },
     onSuccess: () => {
@@ -94,6 +96,22 @@ export default function MarketplacePage() {
     return matchesSearch && matchesRarity;
   });
 
+  // Sort listings: group by rarity, then by price (lowest first)
+  const sortedListings = filteredListings?.sort((a, b) => {
+    const rarityOrder = ["common", "rare", "unique", "epic", "legendary"];
+    const rarityA = rarityOrder.indexOf(a.rarity);
+    const rarityB = rarityOrder.indexOf(b.rarity);
+    
+    if (rarityA !== rarityB) {
+      return rarityA - rarityB;
+    }
+    
+    return (a.price || 0) - (b.price || 0);
+  });
+
+  // Filter user's listed cards
+  const myListedCards = myCards?.filter(card => card.forSale);
+
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
@@ -102,53 +120,116 @@ export default function MarketplacePage() {
             <h1 className="text-2xl font-bold text-foreground">Marketplace</h1>
             <p className="text-muted-foreground text-sm">Buy and sell rare player cards</p>
           </div>
+          <Badge variant="outline" className="flex items-center gap-1">
+            <TrendingUp className="w-3 h-3" />
+            Balance: N${wallet?.balance || 0}
+          </Badge>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 mb-6">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search players..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="buy" className="flex items-center gap-2">
+              <ShoppingCart className="w-4 h-4" />
+              Buy Cards
+            </TabsTrigger>
+            <TabsTrigger value="sell" className="flex items-center gap-2">
+              <Tag className="w-4 h-4" />
+              My Listings
+            </TabsTrigger>
+          </TabsList>
 
-        {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-[400px] w-full rounded-xl" />
-            ))}
-          </div>
-        ) : (
-          <div 
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 preserve-3d"
-            style={{ transformStyle: "preserve-3d" }}
-          >
-            {filteredListings?.map((card) => (
-              <div 
-                key={card.id} 
-                className="flex justify-center items-center card-3d-container"
-                style={{ 
-                  transformStyle: "preserve-3d",
-                  minHeight: "380px",
-                  perspectiveOrigin: "center"
-                }}
-              >
-                <Card3D
-                  card={card}
-                  size="md"
-                  showPrice
-                  selectable
-                  onClick={() => setBuyCard(card)}
+          <TabsContent value="buy">
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3 mb-6">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search players..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
                 />
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+
+            {isLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <Skeleton key={i} className="h-[400px] w-full rounded-xl" />
+                ))}
+              </div>
+            ) : sortedListings && sortedListings.length > 0 ? (
+              <div 
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 preserve-3d"
+                style={{ transformStyle: "preserve-3d" }}
+              >
+                {sortedListings.map((card) => (
+                  <div 
+                    key={card.id} 
+                    className="flex justify-center items-center card-3d-container"
+                    style={{ 
+                      transformStyle: "preserve-3d",
+                      minHeight: "380px",
+                      perspectiveOrigin: "center"
+                    }}
+                  >
+                    <Card3D
+                      card={card}
+                      size="md"
+                      showPrice
+                      selectable
+                      onClick={() => setBuyCard(card)}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Card className="p-12 text-center bg-background/50 backdrop-blur-sm border-border/50">
+                <ShoppingCart className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground text-lg">
+                  {search ? "No cards match your search" : "No cards for sale"}
+                </p>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="sell">
+            {myListedCards && myListedCards.length > 0 ? (
+              <div 
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 preserve-3d"
+                style={{ transformStyle: "preserve-3d" }}
+              >
+                {myListedCards.map((card) => (
+                  <div 
+                    key={card.id} 
+                    className="flex justify-center items-center card-3d-container relative"
+                    style={{ 
+                      transformStyle: "preserve-3d",
+                      minHeight: "380px",
+                      perspectiveOrigin: "center"
+                    }}
+                  >
+                    <Card3D
+                      card={card}
+                      size="md"
+                      showPrice
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Card className="p-12 text-center bg-background/50 backdrop-blur-sm border-border/50">
+                <Tag className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground text-lg">
+                  You don't have any cards listed for sale
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Go to your Collection to list cards
+                </p>
+              </Card>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Buy Dialog */}
