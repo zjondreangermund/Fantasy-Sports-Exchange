@@ -324,11 +324,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const normalize = (pos: string) => {
-        const p = (pos || "").toLowerCase();
+        const p = (pos || "").toLowerCase().trim();
+
+        // handle common abbreviations
+        if (p === "gk") return "GK";
+        if (p === "def") return "DEF";
+        if (p === "mid") return "MID";
+        if (p === "fwd") return "FWD";
+
+        // handle words
         if (p.includes("goal")) return "GK";
         if (p.includes("def")) return "DEF";
         if (p.includes("mid")) return "MID";
         if (p.includes("for") || p.includes("strik") || p.includes("att")) return "FWD";
+
         return "MID";
       };
 
@@ -405,11 +414,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
 
         const normalize = (pos: string) => {
-          const p = (pos || "").toLowerCase();
+          const p = (pos || "").toLowerCase().trim();
+
+          // handle common abbreviations
+          if (p === "gk") return "GK";
+          if (p === "def") return "DEF";
+          if (p === "mid") return "MID";
+          if (p === "fwd") return "FWD";
+
+          // handle words
           if (p.includes("goal")) return "GK";
           if (p.includes("def")) return "DEF";
           if (p.includes("mid")) return "MID";
           if (p.includes("for") || p.includes("strik") || p.includes("att")) return "FWD";
+
           return "MID";
         };
 
