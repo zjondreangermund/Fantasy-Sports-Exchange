@@ -98,7 +98,7 @@ export default function CompetitionsPage() {
   };
 
   // Filter by status instead of tier
-  const liveComps = competitions?.filter(c => c.status === "active") || [];
+  const liveComps = competitions?.filter(c => c.status === "open" || c.status === "active") || [];
   const upcomingComps = competitions?.filter(c => c.status === "upcoming") || [];
   const availableCards = myCards?.filter(c => !c.forSale) || [];
 

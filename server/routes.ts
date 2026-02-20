@@ -5,6 +5,7 @@ import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth/index.
 import { seedDatabase, seedCompetitions } from "./seed.js";
 import { fplApi } from "./services/fplApi.js";
 import { fetchSorarePlayer } from "./services/sorare.js";
+import { ScoreUpdateService } from "./services/scoreUpdater.js";
 
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
 import passport from "passport";
@@ -17,6 +18,9 @@ const isReplit = Boolean(process.env.REPL_ID);
 /** True when we want to skip real auth (e.g. Railway/Vercel/local dev without real auth). */
 const useMockAuth =
   process.env.USE_MOCK_AUTH === "true" || (!isReplit && !process.env.SESSION_SECRET);
+
+// Initialize score updater service
+const scoreUpdater = new ScoreUpdateService(storage as any);
 
 /**
  * Base authentication middleware
@@ -918,6 +922,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       // Enforce base prices by rarity
       const basePrices: Record<string, number> = {
+        common: 10,
         rare: 100,
         unique: 250,
         legendary: 500,
@@ -1696,6 +1701,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
       
+      // Check if any cards are listed for sale
+      const listedCards = cards.filter(c => c && c.forSale);
+      if (listedCards.length > 0) {
+        return res.status(400).json({ 
+          message: "Cannot use cards that are listed on the marketplace. Cancel the listings first." 
+        });
+      }
+      
+      // Check if any cards are already in an active competition
+      const activeEntries = await storage.getUserCompetitions(userId);
+      const cardsInActiveComps = new Set<number>();
+      
+      for (const entry of activeEntries) {
+        // Get competition status
+        const entryComp = await storage.getCompetition(entry.competitionId);
+        if (entryComp && (entryComp.status === "open" || entryComp.status === "active")) {
+          // This entry is in an active competition
+          if (entry.lineupCardIds) {
+            entry.lineupCardIds.forEach((id: number) => cardsInActiveComps.add(id));
+          }
+        }
+      }
+      
+      const conflictingCards = cardIds.filter(id => cardsInActiveComps.has(id));
+      if (conflictingCards.length > 0) {
+        return res.status(400).json({ 
+          message: "Some cards are already in an active competition. Each card can only be in one competition at a time." 
+        });
+      }
+      
+      // Check rarity restriction: user can only enter ONE competition per rarity tier
+      const userTierEntries = await storage.getUserCompetitions(userId);
+      const tierCompIds = new Set<number>();
+      
+      for (const entry of userTierEntries) {
+        const entryComp = await storage.getCompetition(entry.competitionId);
+        if (entryComp && entryComp.tier === competition.tier && 
+            (entryComp.status === "open" || entryComp.status === "active")) {
+          tierCompIds.add(entryComp.id);
+        }
+      }
+      
+      if (tierCompIds.size > 0 && !tierCompIds.has(competitionId)) {
+        return res.status(400).json({ 
+          message: `You can only enter one ${competition.tier} competition at a time. Complete or wait for your current ${competition.tier} competition to finish.` 
+        });
+      }
+      
       // Get full card details with players
       const fullCards = await Promise.all(
         cardIds.map(id => storage.getPlayerCardWithPlayer(id, userId))
@@ -1823,6 +1876,55 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Failed to settle competition:", error);
       res.status(500).json({ message: "Failed to settle competition" });
+    }
+  });
+
+  // -------------------------
+  // SCORE MANAGEMENT ENDPOINTS
+  // -------------------------
+  
+  // Admin: Manually trigger score update for all active competitions
+  app.post("/api/admin/scores/update-all", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      await scoreUpdater.updateAllActiveCompetitions();
+      res.json({ success: true, message: "Score update triggered successfully" });
+    } catch (error: any) {
+      console.error("Failed to update scores:", error);
+      res.status(500).json({ message: error.message || "Failed to update scores" });
+    }
+  });
+  
+  // Admin: Manually trigger score update for specific competition
+  app.post("/api/admin/scores/update/:competitionId", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const competitionId = parseInt(req.params.competitionId, 10);
+      const result = await scoreUpdater.updateCompetition(competitionId);
+      res.json({ 
+        success: true, 
+        message: `Updated ${result.updatedCount} of ${result.totalEntries} entries`,
+        ...result
+      });
+    } catch (error: any) {
+      console.error("Failed to update competition scores:", error);
+      res.status(500).json({ message: error.message || "Failed to update scores" });
+    }
+  });
+  
+  // Admin: Start/stop automatic score updates
+  app.post("/api/admin/scores/auto-update", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const { enabled } = req.body;
+      
+      if (enabled) {
+        scoreUpdater.startAutoUpdates();
+        res.json({ success: true, message: "Automatic score updates enabled (every 5 minutes)" });
+      } else {
+        scoreUpdater.stopAutoUpdates();
+        res.json({ success: true, message: "Automatic score updates disabled" });
+      }
+    } catch (error: any) {
+      console.error("Failed to toggle auto-updates:", error);
+      res.status(500).json({ message: error.message || "Failed to toggle auto-updates" });
     }
   });
 
@@ -2455,6 +2557,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ message: "Failed to get fusion-eligible cards" });
     }
   });
+
+  // -------------------------
+  // INITIALIZE SERVICES
+  // -------------------------
+  
+  // Start automatic score updates (every 5 minutes)
+  console.log("🚀 Starting automatic score update service...");
+  scoreUpdater.startAutoUpdates();
 
   return httpServer;
 }

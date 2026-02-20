@@ -34,6 +34,7 @@ export default function CollectionPage() {
   const [listPrice, setListPrice] = useState("");
 
   const BASE_PRICES: Record<string, number> = {
+    common: 10,
     rare: 100,
     unique: 250,
     legendary: 500,
@@ -184,42 +185,6 @@ export default function CollectionPage() {
               {cards?.length || 0} cards in your collection
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {editingLineup ? (
-              <>
-                <span className="text-sm text-muted-foreground">
-                  {selectedForLineup.size}/5 selected
-                </span>
-                <Button
-                  onClick={() =>
-                    saveLineupMutation.mutate(Array.from(selectedForLineup))
-                  }
-                  disabled={
-                    selectedForLineup.size !== 5 ||
-                    saveLineupMutation.isPending
-                  }
-                  data-testid="button-save-lineup"
-                >
-                  <Save className="w-4 h-4 mr-1" />
-                  {saveLineupMutation.isPending ? "Saving..." : "Save Lineup"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setEditingLineup(false)}
-                  data-testid="button-cancel-edit"
-                >
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <Button
-                onClick={startEditLineup}
-                data-testid="button-edit-lineup"
-              >
-                Edit Lineup
-              </Button>
-            )}
-          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 mb-6">
@@ -260,50 +225,30 @@ export default function CollectionPage() {
                     position: "relative"
                   }}
                 >
-                  <Card3D
-                    card={card}
-                    selected={
-                      editingLineup
-                        ? selectedForLineup.has(card.id)
-                        : !!isInLineup
-                    }
-                    selectable={editingLineup}
-                    onClick={
-                      editingLineup
-                        ? () => toggleLineupCard(card.id)
-                        : undefined
-                    }
-                  />
-                  {isInLineup && !editingLineup && (
-                    <Badge className="absolute -top-2 -left-2 z-30 bg-primary text-primary-foreground text-[10px] no-default-hover-elevate no-default-active-elevate">
-                      In Lineup
-                    </Badge>
-                  )}
-                  {!editingLineup && (
-                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
-                      {card.forSale ? (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => cancelListingMutation.mutate(card.id)}
-                          disabled={cancelListingMutation.isPending}
-                          className="text-xs"
-                        >
-                          Cancel (N${card.price})
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => handleListCard(card)}
-                          className="text-xs"
-                        >
-                          <DollarSign className="w-3 h-3 mr-1" />
-                          Sell
-                        </Button>
-                      )}
-                    </div>
-                  )}
+                  <Card3D card={card} />
+                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
+                    {card.forSale ? (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => cancelListingMutation.mutate(card.id)}
+                        disabled={cancelListingMutation.isPending}
+                        className="text-xs"
+                      >
+                        Cancel (N${card.price})
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleListCard(card)}
+                        className="text-xs"
+                      >
+                        <DollarSign className="w-3 h-3 mr-1" />
+                        Sell
+                      </Button>
+                    )}
+                  </div>
                 </div>
               );
             })}
