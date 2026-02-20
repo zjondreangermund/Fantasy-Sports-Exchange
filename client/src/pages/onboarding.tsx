@@ -7,8 +7,8 @@ import Card3D from "../components/Card3D";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 import { Package, ChevronRight, Check, Sparkles, Shield, Swords, Zap, Target, Flame } from "lucide-react";
 import { motion } from "framer-motion";
-import confetti from "canvas-confetti";
 import { Skeleton } from "../components/ui/skeleton";
+import { useLocation } from "wouter";
 
 type OnboardingStep = "teamName" | "packs" | "select" | "done";
 
@@ -24,6 +24,7 @@ const packColors = [
 const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Midfielders", "Forwards"];
 
 export default function OnboardingPage() {
+  const [, setLocation] = useLocation();
   const [step, setStep] = useState<OnboardingStep>("teamName");
   const [teamName, setTeamName] = useState("");
   const [currentPack, setCurrentPack] = useState(0);
@@ -165,17 +166,11 @@ export default function OnboardingPage() {
 
     chooseMutation.mutate(ids, {
       onSuccess: () => {
-        setStep("done");
-        setTimeout(() => {
-          confetti({
-            particleCount: 150,
-            spread: 90,
-            origin: { y: 0.6 },
-          });
-        }, 300);
+        // Redirect to tunnel animation
+        setLocation("/onboarding-tunnel");
       },
     });
-  }, [selectedPlayerIds, chooseMutation]);
+  }, [selectedPlayerIds, chooseMutation, setLocation]);
 
   if (isLoading) {
     return (

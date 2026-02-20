@@ -369,7 +369,7 @@ export default function Card3D(props: Card3DProps) {
               }}
             >
               <div style={{ fontSize: "18px", fontWeight: 900, color: "#10b981" }}>
-                ${card.price}
+                N${card.price}
               </div>
             </div>
           )}

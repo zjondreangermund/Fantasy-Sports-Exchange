@@ -14,7 +14,8 @@ import { Skeleton } from "./components/ui/skeleton";
 import NotFound from "./pages/not-found";
 import LandingPage from "./pages/landing";
 import OnboardingPage from "./pages/onboarding";
-import OnboardingPacksScene from "./pages/onboarding-packs"; // ✅ NEW animation scene page
+import OnboardingPacksScene from "./pages/onboarding-packs";
+import OnboardingTunnelPage from "./pages/onboarding-tunnel";
 import DashboardPage from "./pages/dashboard";
 import CollectionPage from "./pages/collection";
 import MarketplacePage from "./pages/marketplace";
@@ -43,6 +44,7 @@ function AuthenticatedRouter() {
       <Switch>
         <Route path="/onboarding" component={OnboardingPage} />
         <Route path="/onboarding-packs" component={OnboardingPacksScene} />
+        <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
         <Route component={OnboardingPage} />
       </Switch>
     );
@@ -53,6 +55,7 @@ function AuthenticatedRouter() {
       <Route path="/" component={DashboardPage} />
       <Route path="/onboarding" component={OnboardingPage} />
       <Route path="/onboarding-packs" component={OnboardingPacksScene} />
+      <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
       <Route path="/competitions" component={CompetitionsPage} />
       <Route path="/premier-league" component={PremierLeaguePage} />
       <Route path="/collection" component={CollectionPage} />

@@ -778,15 +778,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Valid positive amount required" });
       }
       
-      // In a real app, you would integrate with a payment processor here
-      // For now, just credit the wallet directly (dev/testing only)
+      //Calculate fee (8%)
+      const fee = amount * 0.08;
+      const netAmount = amount - fee;
       
-      await storage.updateWalletBalance(userId, amount);
+      // In a real app, you would integrate with a payment processor here
+      // For now, just credit the wallet with net amount after fee (dev/testing only)
+      
+      await storage.updateWalletBalance(userId, netAmount);
       await storage.createTransaction({
         userId,
         type: "deposit",
-        amount,
-        description: `Deposit via ${paymentMethod || "manual"}`,
+        amount: netAmount,
+        description: `Deposit via ${paymentMethod || "manual"} (N$${amount.toFixed(2)} - N$${fee.toFixed(2)} fee)`,
         paymentMethod: paymentMethod || "manual",
         externalTransactionId,
       });
@@ -794,7 +798,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ 
         success: true,
         message: "Deposit processed successfully",
-        amount
+        amount,
+        fee,
+        netAmount
       });
     } catch (error: any) {
       console.error("Failed to process deposit:", error);

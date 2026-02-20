@@ -147,8 +147,8 @@ export default function MarketplacePage() {
             <DialogTitle>Confirm Purchase</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <p>Are you sure you want to buy <strong>{buyCard?.player?.name}</strong> for ${buyCard?.price}?</p>
-            <p className="text-sm text-muted-foreground mt-2">Your Balance: ${wallet?.balance || 0}</p>
+            <p>Are you sure you want to buy <strong>{buyCard?.player?.name}</strong> for N${buyCard?.price}?</p>
+            <p className="text-sm text-muted-foreground mt-2">Your Balance: N${wallet?.balance || 0}</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBuyCard(null)}>Cancel</Button>

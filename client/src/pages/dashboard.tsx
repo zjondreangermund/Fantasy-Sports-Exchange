@@ -112,7 +112,7 @@ export default function DashboardPage() {
                     className="text-xl font-bold text-foreground"
                     data-testid="text-balance"
                   >
-                    ${wallet?.balance?.toFixed(2) || "0.00"}
+                    N${wallet?.balance?.toFixed(2) || "0.00"}
                   </p>
                 )}
               </div>
