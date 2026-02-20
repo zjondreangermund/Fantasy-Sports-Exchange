@@ -1,5 +1,6 @@
 import { useState, useRef, type ReactNode, type MouseEvent } from "react";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
+import PlayerCard3D from "./PlayerCard3D";
 
 interface Card3DProps {
   card: PlayerCardWithPlayer;
@@ -10,9 +11,10 @@ interface Card3DProps {
   showPrice?: boolean;
   sorareImageUrl?: string | null;
   children?: ReactNode;
+  useEnhanced?: boolean; // Flag to use the new enhanced card
 }
 
-const RARITY_COLORS = {
+const RARITY_COLORS: Record<"common" | "rare" | "epic" | "legendary" | "unique", any> = {
   legendary: {
     edge: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%)",
     glow: "rgba(251, 191, 36, 0.4)",
@@ -49,15 +51,58 @@ export default function Card3D(props: Card3DProps) {
     onClick,
     showPrice = false,
     sorareImageUrl,
+    useEnhanced = true, // Default to new enhanced card
   } = props;
 
+  const player = card?.player || ({} as any);
+  const rarity = (card?.rarity ?? "common").toLowerCase() as "common" | "rare" | "epic" | "legendary" | "unique";
+  
+  // Use enhanced card component if enabled
+  if (useEnhanced) {
+    const img =
+      sorareImageUrl ||
+      (player as any).photo ||
+      (player as any).photoUrl ||
+      player.imageUrl ||
+      (player as any).image_url ||
+      null;
+
+    const clubName = (player as any).club || player.team || "FC";
+    const serialNumber = card?.serialNumber ?? (card as any)?.serial_number ?? 1;
+    const maxSupply = card?.maxSupply ?? (card as any)?.max_supply ?? 100;
+    const position = player?.position || "MID";
+    const nation = (player as any).nationality || (player as any).nation || "INT";
+    
+    // Calculate rating (placeholder logic - adjust based on your card stats)
+    const rating = card?.decisiveScore || 75;
+
+    // Size mapping
+    const sizeClass = size === "sm" ? "scale-[0.6]" : size === "lg" ? "scale-[1.2]" : "scale-100";
+
+    return (
+      <div className={`${sizeClass} ${selected ? "ring-4 ring-primary rounded-3xl" : ""}`}>
+        <PlayerCard3D
+          name={player?.name || "Unknown Player"}
+          position={position}
+          rating={rating}
+          club={clubName}
+          nation={nation}
+          imageUrl={img}
+          rarity={rarity}
+          serial={`${serialNumber}/${maxSupply}`}
+          onClick={onClick}
+          className={selectable ? "cursor-pointer" : ""}
+        />
+      </div>
+    );
+  }
+
+  // Legacy card rendering (fallback)
   const cardRef = useRef<HTMLDivElement>(null);
   const [rotateX, setRotateX] = useState(0);
   const [rotateY, setRotateY] = useState(0);
   const [isHovering, setIsHovering] = useState(false);
 
-  const player = card?.player || ({} as any);
-  const rarity = (card?.rarity ?? "common").toLowerCase() as keyof typeof RARITY_COLORS;
   const rarityConfig = RARITY_COLORS[rarity] || RARITY_COLORS.common;
 
   const img =
