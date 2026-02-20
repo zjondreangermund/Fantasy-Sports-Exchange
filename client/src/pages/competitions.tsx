@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 // Fixed: @/lib -> ../lib
 import { apiRequest, queryClient } from "../lib/queryClient";
 // Fixed: @/components -> ../components
-import PlayerCard from "../components/PlayerCard";
+import Card3D from "../components/Card3D";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -97,8 +97,9 @@ export default function CompetitionsPage() {
     });
   };
 
-  const commonComps = competitions?.filter(c => c.tier === "common") || [];
-  const rareComps = competitions?.filter(c => c.tier === "rare") || [];
+  // Filter by status instead of tier
+  const liveComps = competitions?.filter(c => c.status === "active") || [];
+  const upcomingComps = competitions?.filter(c => c.status === "upcoming") || [];
   const availableCards = myCards?.filter(c => !c.forSale) || [];
 
   const unclaimedRewards = rewards?.filter(r => r.prizeAmount > 0 || r.prizeCard) || [];
@@ -138,44 +139,44 @@ export default function CompetitionsPage() {
           )}
         </div>
 
-        <Tabs defaultValue="common" className="w-full">
+        <Tabs defaultValue="live" className="w-full">
           <TabsList className="mb-4">
-            <TabsTrigger value="common">Common Tier (Free)</TabsTrigger>
-            <TabsTrigger value="rare">Rare Tier (N$20)</TabsTrigger>
+            <TabsTrigger value="live">🔴 Live Competitions</TabsTrigger>
+            <TabsTrigger value="upcoming">📅 Upcoming</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="common">
+          <TabsContent value="live">
             {isLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}
               </div>
-            ) : commonComps.length > 0 ? (
+            ) : liveComps.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {commonComps.map(comp => (
+                {liveComps.map(comp => (
                   <CompetitionCard key={comp.id} comp={comp} onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }} />
                 ))}
               </div>
             ) : (
               <Card className="p-8 text-center">
-                <p className="text-muted-foreground">No common tier competitions available</p>
+                <p className="text-muted-foreground">No live competitions available</p>
               </Card>
             )}
           </TabsContent>
 
-          <TabsContent value="rare">
+          <TabsContent value="upcoming">
             {isLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}
               </div>
-            ) : rareComps.length > 0 ? (
+            ) : upcomingComps.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {rareComps.map(comp => (
+                {upcomingComps.map(comp => (
                   <CompetitionCard key={comp.id} comp={comp} onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }} />
                 ))}
               </div>
             ) : (
               <Card className="p-8 text-center">
-                <p className="text-muted-foreground">No rare tier competitions available</p>
+                <p className="text-muted-foreground">No upcoming competitions available</p>
               </Card>
             )}
           </TabsContent>
@@ -221,10 +222,10 @@ export default function CompetitionsPage() {
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-3 mb-4 max-h-80 overflow-auto">
+              <div className="flex flex-wrap gap-4 mb-4 max-h-80 overflow-auto justify-center">
                 {availableCards.map(card => (
-                  <div key={card.id} className="relative">
-                    <PlayerCard
+                  <div key={card.id} className="relative" style={{ transformStyle: "preserve-3d" }}>
+                    <Card3D
                       card={card}
                       size="sm"
                       selected={selectedCards.includes(card.id)}

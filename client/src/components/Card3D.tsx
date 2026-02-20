@@ -86,10 +86,13 @@ export default function Card3D(props: Card3DProps) {
       ? { width: 280, height: 420 }
       : { width: 220, height: 330 };
 
-  const CARD_THICKNESS = size === "sm" ? 8 : size === "lg" ? 14 : 10;
+  // Increased thickness for more visible 3D effect
+  const CARD_THICKNESS = size === "sm" ? 12 : size === "lg" ? 20 : 16;
 
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
+    // Disable tilt on mobile/touch devices
+    if (window.matchMedia("(pointer: coarse)").matches) return;
 
     const rect = cardRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -98,7 +101,7 @@ export default function Card3D(props: Card3DProps) {
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
 
-    const maxTilt = 12;
+    const maxTilt = 15; // Increased from 12 for more dramatic effect
     const rotY = ((x - centerX) / centerX) * maxTilt;
     const rotX = -((y - centerY) / centerY) * maxTilt;
 
@@ -121,9 +124,10 @@ export default function Card3D(props: Card3DProps) {
   return (
     <div
       style={{
-        perspective: "1200px",
+        perspective: "1500px", // Increased from 1200px for more depth
         width: `${dimensions.width}px`,
         height: `${dimensions.height}px`,
+        transformStyle: "preserve-3d",
       }}
       className={`${selectable ? "cursor-pointer" : ""} ${selected ? "ring-2 ring-primary" : ""}`}
       onClick={onClick}
@@ -139,7 +143,7 @@ export default function Card3D(props: Card3DProps) {
           position: "relative",
           transformStyle: "preserve-3d",
           transform: isHovering
-            ? `rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(20px)`
+            ? `rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(30px)` // Increased lift
             : "rotateX(0deg) rotateY(0deg) translateZ(0px)",
           transition: "transform 0.2s ease-out",
         }}
@@ -155,9 +159,10 @@ export default function Card3D(props: Card3DProps) {
             transformStyle: "preserve-3d",
             transform: `translateZ(${CARD_THICKNESS / 2}px)`,
             boxShadow: isHovering
-              ? `0 20px 60px ${rarityConfig.glow}, 0 0 80px ${rarityConfig.glow}`
-              : `0 8px 24px rgba(0, 0, 0, 0.6), 0 0 20px ${rarityConfig.glow}`,
+              ? `0 25px 70px ${rarityConfig.glow}, 0 0 90px ${rarityConfig.glow}, inset 0 0 0 1px ${rarityConfig.accent}40`
+              : `0 10px 30px rgba(0, 0, 0, 0.7), 0 0 25px ${rarityConfig.glow}, inset 0 0 0 1px ${rarityConfig.accent}30`,
             background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+            border: `2px solid ${rarityConfig.accent}`,
           }}
         >
           {/* Player Image */}
@@ -388,6 +393,7 @@ export default function Card3D(props: Card3DProps) {
             background: rarityConfig.edge,
             borderTopLeftRadius: "16px",
             borderTopRightRadius: "16px",
+            boxShadow: "inset 0 2px 8px rgba(0,0,0,0.4)",
           }}
         />
 
@@ -404,6 +410,7 @@ export default function Card3D(props: Card3DProps) {
             background: rarityConfig.edge,
             borderBottomLeftRadius: "16px",
             borderBottomRightRadius: "16px",
+            boxShadow: "inset 0 -2px 8px rgba(0,0,0,0.4)",
           }}
         />
 
@@ -420,6 +427,7 @@ export default function Card3D(props: Card3DProps) {
             background: rarityConfig.edge,
             borderTopLeftRadius: "16px",
             borderBottomLeftRadius: "16px",
+            boxShadow: "inset 2px 0 8px rgba(0,0,0,0.4)",
           }}
         />
 
@@ -436,6 +444,7 @@ export default function Card3D(props: Card3DProps) {
             background: rarityConfig.edge,
             borderTopRightRadius: "16px",
             borderBottomRightRadius: "16px",
+            boxShadow: "inset -2px 0 8px rgba(0,0,0,0.4)",
           }}
         />
 
@@ -447,8 +456,9 @@ export default function Card3D(props: Card3DProps) {
             height: "100%",
             borderRadius: "16px",
             transform: `translateZ(-${CARD_THICKNESS / 2}px)`,
-            background: "linear-gradient(135deg, #18181b 0%, #27272a 50%, #3f3f46 100%)",
-            boxShadow: "inset 0 0 20px rgba(0,0,0,0.5)",
+            background: `linear-gradient(135deg, #18181b 0%, #27272a 50%, #3f3f46 100%)`,
+            boxShadow: `inset 0 0 30px rgba(0,0,0,0.6), inset 0 0 0 2px ${rarityConfig.accent}40`,
+            border: `1px solid ${rarityConfig.accent}20`,
           }}
         />
       </div>

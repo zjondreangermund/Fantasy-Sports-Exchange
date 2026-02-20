@@ -118,15 +118,22 @@ export default function MarketplacePage() {
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-[400px] w-full rounded-xl" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
             {filteredListings?.map((card) => (
-              <div key={card.id} className="relative">
+              <div 
+                key={card.id} 
+                className="flex justify-center items-center" 
+                style={{ 
+                  transformStyle: "preserve-3d",
+                  minHeight: "360px"
+                }}
+              >
                 <Card3D
                   card={card}
                   size="md"
