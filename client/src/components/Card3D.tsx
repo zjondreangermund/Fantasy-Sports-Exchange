@@ -159,6 +159,27 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
 
   const ref = useRef<THREE.Mesh>(null);
 
+  const portraitMaterial = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        map: processedTexture,
+        alphaMap: processedTexture,
+        bumpMap: processedTexture,
+        bumpScale: 0.09,
+        roughness: 0.3,
+        metalness: 0.7,
+        clearcoat: 0.9,
+        clearcoatRoughness: 0.08,
+        reflectivity: 0.95,
+        emissive: new THREE.Color("#7dd3fc"),
+        emissiveIntensity: 0.06,
+        transparent: true,
+        alphaTest: 0.08,
+        opacity: 0.98,
+      }),
+    [processedTexture],
+  );
+
   useMemo(() => {
     processedTexture.wrapS = THREE.ClampToEdgeWrapping;
     processedTexture.wrapT = THREE.ClampToEdgeWrapping;
@@ -175,19 +196,7 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
   return (
     <mesh ref={ref} position={[0, 0.08, 0.36]}>
       <planeGeometry args={[1.62, 2.06, 64, 64]} />
-      <meshStandardMaterial
-        map={processedTexture}
-        alphaMap={processedTexture}
-        bumpMap={processedTexture}
-        bumpScale={0.11}
-        roughness={0.26}
-        metalness={0.85}
-        emissive={new THREE.Color("#7dd3fc")}
-        emissiveIntensity={0.08}
-        transparent
-        alphaTest={0.08}
-        opacity={0.98}
-      />
+      <primitive object={portraitMaterial} attach="material" />
     </mesh>
   );
 }
@@ -252,21 +261,27 @@ function CardMesh({
 
   const baseMat = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         color: colors.base,
-        metalness: 0.95,
-        roughness: 0.18,
-        envMapIntensity: 1.5,
+        metalness: 0.98,
+        roughness: 0.06,
+        clearcoat: 1,
+        clearcoatRoughness: 0.02,
+        reflectivity: 1,
+        envMapIntensity: 2.1,
       }),
     [colors.base],
   );
 
   const frameMat = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         color: new THREE.Color(colors.base).multiplyScalar(0.35),
-        metalness: 0.85,
-        roughness: 0.15,
+        metalness: 0.95,
+        roughness: 0.08,
+        clearcoat: 1,
+        clearcoatRoughness: 0.03,
+        reflectivity: 1,
       }),
     [colors.base],
   );
@@ -298,6 +313,21 @@ function CardMesh({
     [],
   );
 
+  const epoxyCoatMat = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.24,
+        metalness: 0.05,
+        roughness: 0.02,
+        clearcoat: 1,
+        clearcoatRoughness: 0,
+        reflectivity: 1,
+      }),
+    [],
+  );
+
   return (
     <group>
       <mesh geometry={geometry} scale={[1.03, 1.03, 1.03]} material={frameMat} />
@@ -307,6 +337,9 @@ function CardMesh({
       </Suspense>
       <mesh geometry={geometry} renderOrder={1}>
         <primitive object={crystalMat} attach="material" />
+      </mesh>
+      <mesh geometry={geometry} scale={[1.004, 1.004, 1.004]} renderOrder={2}>
+        <primitive object={epoxyCoatMat} attach="material" />
       </mesh>
       <ShineLight mouse={mouse} hovered={hovered} />
     </group>
