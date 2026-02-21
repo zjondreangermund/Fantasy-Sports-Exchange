@@ -304,6 +304,7 @@ interface Card3DProps {
   selectable?: boolean;
   onClick?: () => void;
   showPrice?: boolean;
+  showSaleBadge?: boolean;
   sorareImageUrl?: string | null;
 }
 
@@ -314,6 +315,7 @@ export default function Card3D({
   selectable = false,
   onClick,
   showPrice = false,
+  showSaleBadge = true,
   sorareImageUrl,
 }: Card3DProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -665,7 +667,7 @@ export default function Card3D({
           />
         </div>
 
-        {(showPrice || card.forSale) && card.price != null && card.price > 0 && (
+        {(showPrice || (showSaleBadge && card.forSale)) && card.price != null && card.price > 0 && (
           <div
             style={{
               position: "absolute",
