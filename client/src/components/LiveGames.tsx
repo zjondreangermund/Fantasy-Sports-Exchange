@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Skeleton } from "./ui/skeleton";
-import { Activity, Clock, Users, Target, TrendingUp } from "lucide-react";
+import { Activity, Clock, ShieldAlert, Save, Sparkles } from "lucide-react";
 import { useEffect } from "react";
 
 interface LiveGame {
@@ -25,9 +25,11 @@ interface LiveGame {
   };
   stats: any[];
   statsSummary?: {
-    shots?: { home: number | null; away: number | null };
-    onTarget?: { home: number | null; away: number | null };
-    possession?: { home: number | null; away: number | null };
+    assists?: { home: number | null; away: number | null };
+    saves?: { home: number | null; away: number | null };
+    cards?: { home: number | null; away: number | null };
+    bonus?: { home: number | null; away: number | null };
+    bps?: { home: number | null; away: number | null };
   };
   playerStats: any[];
 }
@@ -118,23 +120,16 @@ export default function LiveGames() {
 
       {liveGames.map((game) => (
         (() => {
-          const homeShots = getStatValue(game, ["shots total", "shots"], "h");
-          const awayShots = getStatValue(game, ["shots total", "shots"], "a");
-          const homeOnTarget = getStatValue(game, ["shots on goal", "on target"], "h");
-          const awayOnTarget = getStatValue(game, ["shots on goal", "on target"], "a");
-          const homePossession = getStatValue(game, ["ball possession", "possession"], "h");
-          const awayPossession = getStatValue(game, ["ball possession", "possession"], "a");
-          const homeCorners = getStatValue(game, ["corner", "corners"], "h");
-          const awayCorners = getStatValue(game, ["corner", "corners"], "a");
-          const homeCards = getStatValue(game, ["yellow cards", "red cards", "cards"], "h");
-          const awayCards = getStatValue(game, ["yellow cards", "red cards", "cards"], "a");
-
-          const shotsHomeVal = game.statsSummary?.shots?.home ?? homeShots;
-          const shotsAwayVal = game.statsSummary?.shots?.away ?? awayShots;
-          const onTargetHomeVal = game.statsSummary?.onTarget?.home ?? homeOnTarget;
-          const onTargetAwayVal = game.statsSummary?.onTarget?.away ?? awayOnTarget;
-          const possessionHomeVal = game.statsSummary?.possession?.home ?? homePossession;
-          const possessionAwayVal = game.statsSummary?.possession?.away ?? awayPossession;
+          const homeAssists = game.statsSummary?.assists?.home ?? getStatValue(game, ["assists"], "h") ?? 0;
+          const awayAssists = game.statsSummary?.assists?.away ?? getStatValue(game, ["assists"], "a") ?? 0;
+          const homeSaves = game.statsSummary?.saves?.home ?? getStatValue(game, ["saves"], "h") ?? 0;
+          const awaySaves = game.statsSummary?.saves?.away ?? getStatValue(game, ["saves"], "a") ?? 0;
+          const homeCards = game.statsSummary?.cards?.home ?? getStatValue(game, ["yellow_cards", "red_cards", "cards"], "h") ?? 0;
+          const awayCards = game.statsSummary?.cards?.away ?? getStatValue(game, ["yellow_cards", "red_cards", "cards"], "a") ?? 0;
+          const homeBonus = game.statsSummary?.bonus?.home ?? getStatValue(game, ["bonus"], "h") ?? 0;
+          const awayBonus = game.statsSummary?.bonus?.away ?? getStatValue(game, ["bonus"], "a") ?? 0;
+          const homeBps = game.statsSummary?.bps?.home ?? getStatValue(game, ["bps"], "h") ?? 0;
+          const awayBps = game.statsSummary?.bps?.away ?? getStatValue(game, ["bps"], "a") ?? 0;
 
           return (
         <Card
@@ -199,36 +194,36 @@ export default function LiveGames() {
             {game.stats && game.stats.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-5 gap-2 pt-4 border-t border-border/30">
                 <div className="flex flex-col items-center gap-1">
-                  <Target className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Shots</span>
+                  <span className="text-xs text-muted-foreground">Assists</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {shotsHomeVal ?? "N/A"} - {shotsAwayVal ?? "N/A"}
+                    {homeAssists} - {awayAssists}
                   </span>
                 </div>
                 <div className="flex flex-col items-center gap-1">
-                  <TrendingUp className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">On Target</span>
+                  <Save className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Saves</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {onTargetHomeVal ?? "N/A"} - {onTargetAwayVal ?? "N/A"}
+                    {homeSaves} - {awaySaves}
                   </span>
                 </div>
                 <div className="flex flex-col items-center gap-1">
-                  <Users className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Possession</span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {possessionHomeVal == null ? "N/A" : `${possessionHomeVal}%`} - {possessionAwayVal == null ? "N/A" : `${possessionAwayVal}%`}
-                  </span>
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-xs text-muted-foreground">Corners</span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {homeCorners ?? "N/A"} - {awayCorners ?? "N/A"}
-                  </span>
-                </div>
-                <div className="flex flex-col items-center gap-1">
+                  <ShieldAlert className="w-4 h-4 text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">Cards</span>
                   <span className="text-sm font-semibold text-foreground">
-                    {homeCards ?? "N/A"} - {awayCards ?? "N/A"}
+                    {homeCards} - {awayCards}
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <Sparkles className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Bonus</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {homeBonus} - {awayBonus}
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-xs text-muted-foreground">BPS</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {homeBps} - {awayBps}
                   </span>
                 </div>
               </div>

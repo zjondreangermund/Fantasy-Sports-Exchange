@@ -209,9 +209,11 @@ export const fplApi = {
           },
           stats: fixture.stats || [],
           statsSummary: {
-            shots: extractStat(fixture, ["shots total", "shots"]),
-            onTarget: extractStat(fixture, ["shots on goal", "on target"]),
-            possession: extractStat(fixture, ["ball possession", "possession"]),
+            assists: extractStat(fixture, ["assists"]),
+            saves: extractStat(fixture, ["saves"]),
+            cards: extractStat(fixture, ["yellow_cards", "red_cards", "cards"]),
+            bonus: extractStat(fixture, ["bonus"]),
+            bps: extractStat(fixture, ["bps"]),
           },
           playerStats,
         };
