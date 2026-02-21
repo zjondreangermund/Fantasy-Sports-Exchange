@@ -177,12 +177,14 @@ export default function MarketplacePage() {
                       <Card3D
                         card={card}
                         size="md"
-                        showPrice
                         selectable
                         onClick={() => setBuyCard(card)}
                       />
                       <p className="text-xs text-muted-foreground">
                         Seller: {card.ownerUsername || card.ownerName || "FantasyFC"}
+                      </p>
+                      <p className="text-sm font-semibold text-green-500">
+                        N${(card.price || 0).toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -214,11 +216,15 @@ export default function MarketplacePage() {
                       perspectiveOrigin: "center"
                     }}
                   >
-                    <Card3D
-                      card={card}
-                      size="md"
-                      showPrice
-                    />
+                    <div className="flex flex-col items-center gap-2">
+                      <Card3D
+                        card={card}
+                        size="md"
+                      />
+                      <p className="text-sm font-semibold text-green-500">
+                        N${(card.price || 0).toFixed(2)}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>

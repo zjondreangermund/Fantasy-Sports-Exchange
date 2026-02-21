@@ -105,46 +105,55 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
 
     img.onload = () => {
       if (cancelled) return;
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth || img.width || 512;
-      canvas.height = img.naturalHeight || img.height || 512;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        setProcessedTexture(fallbackTexture);
-        return;
-      }
-
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imgData.data;
-
-      let removed = 0;
-      const totalPixels = data.length / 4;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const max = Math.max(r, g, b);
-        const min = Math.min(r, g, b);
-        const sat = max === 0 ? 0 : (max - min) / max;
-        const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        const likelyWhiteBg = luminance > 246 && sat < 0.1;
-        if (likelyWhiteBg) {
-          data[i + 3] = 0;
-          removed += 1;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth || img.width || 512;
+        canvas.height = img.naturalHeight || img.height || 512;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          setProcessedTexture(fallbackTexture);
+          return;
         }
-      }
 
-      if (removed / totalPixels <= 0.65) {
-        ctx.putImageData(imgData, 0, 0);
-      }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
 
-      const out = new THREE.CanvasTexture(canvas);
-      out.needsUpdate = true;
-      out.wrapS = THREE.ClampToEdgeWrapping;
-      out.wrapT = THREE.ClampToEdgeWrapping;
-      out.colorSpace = THREE.SRGBColorSpace;
-      setProcessedTexture(out);
+        let removed = 0;
+        const totalPixels = data.length / 4;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const sat = max === 0 ? 0 : (max - min) / max;
+          const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          const likelyWhiteBg = luminance > 246 && sat < 0.1;
+          if (likelyWhiteBg) {
+            data[i + 3] = 0;
+            removed += 1;
+          }
+        }
+
+        if (removed / totalPixels <= 0.65) {
+          ctx.putImageData(imgData, 0, 0);
+        }
+
+        const out = new THREE.CanvasTexture(canvas);
+        out.needsUpdate = true;
+        out.wrapS = THREE.ClampToEdgeWrapping;
+        out.wrapT = THREE.ClampToEdgeWrapping;
+        out.colorSpace = THREE.SRGBColorSpace;
+        setProcessedTexture(out);
+      } catch {
+        const out = new THREE.Texture(img);
+        out.needsUpdate = true;
+        out.wrapS = THREE.ClampToEdgeWrapping;
+        out.wrapT = THREE.ClampToEdgeWrapping;
+        out.colorSpace = THREE.SRGBColorSpace;
+        setProcessedTexture(out);
+      }
     };
 
     img.onerror = () => {
@@ -261,27 +270,21 @@ function CardMesh({
 
   const baseMat = useMemo(
     () =>
-      new THREE.MeshPhysicalMaterial({
+      new THREE.MeshStandardMaterial({
         color: colors.base,
-        metalness: 0.98,
-        roughness: 0.06,
-        clearcoat: 1,
-        clearcoatRoughness: 0.02,
-        reflectivity: 1,
-        envMapIntensity: 2.1,
+        metalness: 0.95,
+        roughness: 0.18,
+        envMapIntensity: 1.5,
       }),
     [colors.base],
   );
 
   const frameMat = useMemo(
     () =>
-      new THREE.MeshPhysicalMaterial({
+      new THREE.MeshStandardMaterial({
         color: new THREE.Color(colors.base).multiplyScalar(0.35),
-        metalness: 0.95,
-        roughness: 0.08,
-        clearcoat: 1,
-        clearcoatRoughness: 0.03,
-        reflectivity: 1,
+        metalness: 0.85,
+        roughness: 0.15,
       }),
     [colors.base],
   );
@@ -318,11 +321,11 @@ function CardMesh({
       new THREE.MeshPhysicalMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.24,
+        opacity: 0.15,
         metalness: 0.05,
-        roughness: 0.02,
+        roughness: 0.06,
         clearcoat: 1,
-        clearcoatRoughness: 0,
+        clearcoatRoughness: 0.02,
         reflectivity: 1,
       }),
     [],
