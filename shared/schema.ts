@@ -435,6 +435,10 @@ export type InsertSwapOffer = typeof swapOffers.$inferInsert;
 export type InsertNotification = typeof notifications.$inferInsert;
 export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert & { 
   fee?: number;
+  destinationKey?: string;
+  destinationVerified?: boolean;
+  verificationToken?: string | null;
+  releaseAfter?: Date;
   status?: "pending" | "processing" | "completed" | "rejected";
   bankName?: string;
   accountHolder?: string;
