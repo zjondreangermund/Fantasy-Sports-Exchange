@@ -60,7 +60,7 @@ export default function CinematicBackground({
 
   // Determine which video to use
   const videoSrc = isMobile ? "/cinematics/tunnel_9x16.mp4" : "/cinematics/tunnel_16x9.mp4";
-  const posterSrc = "/cinematics/tunnel_poster.jpg";
+  const posterSrc = "/cinematics/tunnel.png";
 
   if (!show) return null;
 

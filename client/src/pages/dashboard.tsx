@@ -92,7 +92,7 @@ export default function DashboardPage() {
               Welcome back, {user?.firstName || "Manager"}
             </h1>
             <p className="text-muted-foreground text-sm">
-              Manage your squad and rise to the top
+              Track live EPL performances, manage your squad, and climb the leaderboard
             </p>
           </div>
         </div>

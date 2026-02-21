@@ -224,9 +224,18 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(playerCards)
       .innerJoin(players, eq(playerCards.playerId, players.id))
+      .leftJoin(users, eq(playerCards.ownerId, users.id))
       .where(eq(playerCards.forSale, true));
 
-    return results.map((r: any) => ({ ...r.player_cards, player: r.players }));
+    return results.map((r: any) => ({
+      ...r.player_cards,
+      player: r.players,
+      ownerName: r.users?.name || null,
+      ownerUsername:
+        r.users?.name ||
+        r.users?.email ||
+        (r.player_cards?.ownerId ? String(r.player_cards.ownerId) : "FantasyFC"),
+    }));
   }
 
   async getWallet(userId: string): Promise<Wallet | undefined> {

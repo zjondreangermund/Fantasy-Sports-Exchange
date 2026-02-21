@@ -21,6 +21,7 @@ import CollectionPage from "./pages/collection";
 import MarketplacePage from "./pages/marketplace";
 import AuctionsPage from "./pages/auctions";
 import WalletPage from "./pages/wallet";
+import AccountPage from "./pages/account";
 import CompetitionsPage from "./pages/competitions";
 import PremierLeaguePage from "./pages/premier-league";
 import AdminPage from "./pages/admin";
@@ -63,6 +64,7 @@ function AuthenticatedRouter() {
       <Route path="/marketplace" component={MarketplacePage} />
       <Route path="/auctions" component={AuctionsPage} />
       <Route path="/wallet" component={WalletPage} />
+      <Route path="/account" component={AccountPage} />
       <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>

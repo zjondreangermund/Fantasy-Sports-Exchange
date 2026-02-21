@@ -194,7 +194,7 @@ export default function OnboardingTunnelPage() {
               muted
               playsInline
               onError={() => setVideoError(true)}
-              poster="/cinematics/tunnel_poster.jpg"
+              poster="/cinematics/tunnel.png"
             />
           )}
           

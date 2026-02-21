@@ -46,6 +46,7 @@ export default function PremierLeaguePage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [position, setPosition] = useState("");
+  const [todayOnlyPlayers, setTodayOnlyPlayers] = useState(false);
 
   const { data: standings, isLoading: standingsLoading } = useQuery<EplStanding[]>({
     queryKey: ["/api/epl/standings"],
@@ -63,13 +64,14 @@ export default function PremierLeaguePage() {
   const search = playerSearch;
   const { data: players = [], isLoading: playersLoading, error: playersError } =
   useQuery<EplPlayer[]>({
-    queryKey: ["eplPlayers", page, limit, search, position],
+    queryKey: ["eplPlayers", page, limit, search, position, todayOnlyPlayers],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("page", String(page));
       params.set("limit", String(limit));
       if (search?.trim()) params.set("search", search.trim());
       if (position?.trim()) params.set("position", position.trim());
+      if (todayOnlyPlayers) params.set("today", "1");
 
       const res = await fetch(`/api/epl/players?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch players");
@@ -280,6 +282,15 @@ export default function PremierLeaguePage() {
 
             <TabsContent value="fixtures">
               <div className="flex gap-2 mb-4">
+                <Button
+                  variant={todayOnlyPlayers ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setTodayOnlyPlayers((prev) => !prev)}
+                  className={todayOnlyPlayers ? "bg-green-600 hover:bg-green-700" : ""}
+                >
+                  <Users className="w-4 h-4 mr-1" />
+                  {todayOnlyPlayers ? "Today: ON" : "Today: OFF"}
+                </Button>
                 {[
                   { key: "upcoming", label: "Upcoming", icon: Clock },
                   { key: "live", label: "Live", icon: Activity },

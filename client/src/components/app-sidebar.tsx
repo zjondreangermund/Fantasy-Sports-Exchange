@@ -26,6 +26,7 @@ import {
   LogOut,
   Shield,
   Gavel,
+  Bell,
 } from "lucide-react";
 
 const menuItems = [
@@ -36,6 +37,7 @@ const menuItems = [
   { title: "Marketplace", href: "/marketplace", icon: ShoppingCart },
   { title: "Auctions", href: "/auctions", icon: Gavel },
   { title: "Wallet", href: "/wallet", icon: Wallet },
+  { title: "Account", href: "/account", icon: Bell },
 ];
 
 export function AppSidebar() {

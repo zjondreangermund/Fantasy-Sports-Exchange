@@ -41,6 +41,7 @@ export const competitionStatusEnum = pgEnum("competition_status", ["open", "upco
 export const swapStatusEnum = pgEnum("swap_status", ["pending", "accepted", "rejected", "cancelled"]);
 export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "processing", "completed", "rejected"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["eft", "ewallet", "bank_transfer", "mobile_money", "other"]);
+export const notificationTypeEnum = pgEnum("notification_type", ["win", "runner_up", "system"]);
 
 export const auctionStatusEnum = pgEnum("auction_status", ["draft", "live", "ended", "cancelled", "settled"]);
 export const lockReasonEnum = pgEnum("card_lock_reason", ["competition", "transfer_pending", "security_review"]);
@@ -190,6 +191,10 @@ export const withdrawalRequests = appSchema.table("withdrawal_requests", {
   swiftCode: text("swift_code"),
   ewalletProvider: text("ewallet_provider"),
   ewalletId: text("ewallet_id"),
+  destinationKey: text("destination_key"),
+  destinationVerified: boolean("destination_verified").notNull().default(false),
+  verificationToken: text("verification_token"),
+  releaseAfter: timestamp("release_after"),
   status: withdrawalStatusEnum("status").notNull().default("pending"),
   adminNotes: text("admin_notes"),
   reviewedAt: timestamp("reviewed_at"),
@@ -252,6 +257,16 @@ export const idempotencyKeys = appSchema.table("idempotency_keys", {
   userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   expiresAt: timestamp("expires_at"),
+});
+
+export const notifications = appSchema.table("notifications", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
+  type: notificationTypeEnum("type").notNull().default("system"),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // -----------------------------------------------------------------------------
@@ -345,6 +360,10 @@ export const cardLocksRelations = relations(cardLocks, ({ one }) => ({
   user: one(users, { fields: [cardLocks.userId], references: [users.id] }),
 }));
 
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, { fields: [notifications.userId], references: [users.id] }),
+}));
+
 // -----------------------------------------------------------------------------
 // Zod insert schemas + Types
 // -----------------------------------------------------------------------------
@@ -363,6 +382,7 @@ export const insertCardLockSchema = createInsertSchema(cardLocks);
 export const insertPlayerValueSchema = createInsertSchema(playerValues);
 export const insertAuditLogSchema = createInsertSchema(auditLogs);
 export const insertIdempotencySchema = createInsertSchema(idempotencyKeys);
+export const insertNotificationSchema = createInsertSchema(notifications);
 
 export type InsertUserInput = z.infer<typeof insertUserSchema>;
 export type Player = typeof players.$inferSelect;
@@ -381,9 +401,14 @@ export type CardLock = typeof cardLocks.$inferSelect;
 export type PlayerValue = typeof playerValues.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
 export type User = typeof users.$inferSelect;
 
-export type PlayerCardWithPlayer = PlayerCard & { player: Player };
+export type PlayerCardWithPlayer = PlayerCard & {
+  player: Player;
+  ownerUsername?: string;
+  ownerName?: string;
+};
 export type CompetitionWithEntries = Competition & { entries: CompetitionEntry[]; entryCount: number };
 
 // -----------------------------------------------------------------------------
@@ -407,6 +432,7 @@ export type InsertCompetitionEntry = typeof competitionEntries.$inferInsert & {
   totalScore?: number;
 };
 export type InsertSwapOffer = typeof swapOffers.$inferInsert;
+export type InsertNotification = typeof notifications.$inferInsert;
 export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert & { 
   fee?: number;
   status?: "pending" | "processing" | "completed" | "rejected";

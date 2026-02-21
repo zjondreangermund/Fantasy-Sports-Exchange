@@ -1,10 +1,13 @@
 // Fixed: Go up one level to reach /components/ from /pages/
+import { useState } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Trophy, Users, TrendingUp, Star, Shield, Zap } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function LandingPage() {
+  const [heroVideoError, setHeroVideoError] = useState(false);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Stadium lights + button glow keyframes */}
@@ -39,11 +42,26 @@ export default function LandingPage() {
 
       <section className="relative pt-14 overflow-hidden">
         <div className="absolute inset-0">
-          <img
-            src="/images/hero-banner.png"
-            alt="Fantasy Football"
-            className="w-full h-full object-cover"
-          />
+          {!heroVideoError ? (
+            <video
+              className="w-full h-full object-cover"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              poster="/cinematics/tunnel.png"
+              onError={() => setHeroVideoError(true)}
+            >
+              <source src="/cinematics/tunnel_16x9.mp4" type="video/mp4" />
+            </video>
+          ) : (
+            <img
+              src="/images/hero-banner.png"
+              alt="Fantasy Football"
+              className="w-full h-full object-cover"
+            />
+          )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/70 to-background" />
 
           {/* Crowd lights sweep */}
@@ -126,7 +144,7 @@ export default function LandingPage() {
             </div>
             <h3 className="font-semibold text-foreground mb-2">Open Packs</h3>
             <p className="text-sm text-muted-foreground">
-              Sign up and receive 3 starter packs with 9 players. Choose your
+              Sign up and receive 5 starter packs with 15 players. Choose your
               best 5 to build your lineup.
             </p>
           </Card>

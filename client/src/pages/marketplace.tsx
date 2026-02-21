@@ -173,13 +173,18 @@ export default function MarketplacePage() {
                       perspectiveOrigin: "center"
                     }}
                   >
-                    <Card3D
-                      card={card}
-                      size="md"
-                      showPrice
-                      selectable
-                      onClick={() => setBuyCard(card)}
-                    />
+                    <div className="flex flex-col items-center gap-2">
+                      <Card3D
+                        card={card}
+                        size="md"
+                        showPrice
+                        selectable
+                        onClick={() => setBuyCard(card)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Seller: {card.ownerUsername || card.ownerName || "FantasyFC"}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -240,6 +245,9 @@ export default function MarketplacePage() {
           </DialogHeader>
           <div className="py-4">
             <p>Are you sure you want to buy <strong>{buyCard?.player?.name}</strong> for N${buyCard?.price}?</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Seller: {buyCard?.ownerUsername || buyCard?.ownerName || "FantasyFC"}
+            </p>
             <p className="text-sm text-muted-foreground mt-2">Your Balance: N${wallet?.balance || 0}</p>
           </div>
           <DialogFooter>

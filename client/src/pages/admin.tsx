@@ -46,12 +46,34 @@ export default function AdminPage() {
   const [selectedCompForUpdate, setSelectedCompForUpdate] = useState<number | null>(null);
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
 
+  const { data: adminStats, refetch: refetchAdminStats } = useQuery<{
+    users: number;
+    cards: number;
+    auctions: number;
+    competitions: number;
+    transactions: number;
+  }>({
+    queryKey: ["/api/admin/stats"],
+  });
+
+  const { data: usersResponse, refetch: refetchUsers } = useQuery<{ users: any[]; total: number }>({
+    queryKey: ["/api/admin/users"],
+  });
+
+  const { data: marketListings, refetch: refetchMarketListings } = useQuery<any[]>({
+    queryKey: ["/api/marketplace"],
+  });
+
+  const { refetch: refetchAdminLogs } = useQuery<{ logs: any[]; total: number }>({
+    queryKey: ["/api/admin/logs"],
+  });
+
   // Withdrawals
   const { data: allWithdrawals, isLoading } = useQuery<WithdrawalRequest[]>({
     queryKey: ["/api/admin/withdrawals"],
   });
 
-  const { data: pendingWithdrawals } = useQuery<WithdrawalRequest[]>({
+  const { data: pendingWithdrawals, refetch: refetchPendingWithdrawals } = useQuery<WithdrawalRequest[]>({
     queryKey: ["/api/admin/withdrawals/pending"],
   });
 
@@ -63,7 +85,11 @@ export default function AdminPage() {
   // Mutations
   const actionMutation = useMutation({
     mutationFn: async (data: { id: number; action: "approve" | "reject"; adminNotes?: string }) => {
-      const res = await apiRequest("POST", "/api/admin/withdrawals/action", data);
+      const status = data.action === "approve" ? "completed" : "rejected";
+      const res = await apiRequest("POST", `/api/admin/withdrawals/${data.id}/review`, {
+        status,
+        adminNotes: data.adminNotes,
+      });
       return res.json();
     },
     onSuccess: () => {
@@ -141,6 +167,39 @@ export default function AdminPage() {
         description: error.message || "Failed to settle competition", 
         variant: "destructive" 
       });
+    },
+  });
+
+  const grantTodayCardsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/cards/grant-today-starters", {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      toast({
+        title: "Cards Granted",
+        description: data?.message || "5 common cards granted per registered user",
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to grant cards", variant: "destructive" });
+    },
+  });
+
+  const resetUsersMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/reset-users", {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
+      toast({ title: "Users Reset", description: data?.message || "All users removed successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to reset users", variant: "destructive" });
     },
   });
 
@@ -288,14 +347,27 @@ export default function AdminPage() {
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-md bg-purple-500/10 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-purple-500" />
+        <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-md bg-purple-500/10 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-purple-500" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
+              <p className="text-sm text-muted-foreground">Manage withdrawal requests and platform operations</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Manage withdrawal requests and platform operations</p>
-          </div>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              const ok = window.confirm("This will remove ALL users, balances, onboarding data, and force everyone to sign in again. Continue?");
+              if (ok) resetUsersMutation.mutate();
+            }}
+            disabled={resetUsersMutation.isPending}
+          >
+            <XCircle className="w-4 h-4 mr-2" />
+            Reset Users Now
+          </Button>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mb-6">
@@ -392,7 +464,7 @@ export default function AdminPage() {
                     <Button 
                       size="sm" 
                       variant="outline"
-                      onClick={() => updateScoresMutation.mutate()}
+                      onClick={() => updateScoresMutation.mutate(undefined)}
                       disabled={updateScoresMutation.isPending}
                     >
                       <RefreshCw className={`w-4 h-4 mr-1 ${updateScoresMutation.isPending ? 'animate-spin' : ''}`} />
@@ -498,7 +570,7 @@ export default function AdminPage() {
               <Card className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <BarChart3 className="w-5 h-5 text-green-500" />
-                  <h3 className="text-lg font-semibold">Scoring System (Sorare-Style)</h3>
+                  <h3 className="text-lg font-semibold">Scoring System</h3>
                 </div>
                 <div className="space-y-3 text-sm">
                   <div className="grid md:grid-cols-2 gap-4">
@@ -551,15 +623,15 @@ export default function AdminPage() {
                   </div>
                   <div className="p-3 bg-blue-500/10 rounded-lg">
                     <p className="text-xs text-muted-foreground">Active Users</p>
-                    <p className="text-lg font-bold text-blue-500">-</p>
+                    <p className="text-lg font-bold text-blue-500">{usersResponse?.total ?? 0}</p>
                   </div>
                   <div className="p-3 bg-purple-500/10 rounded-lg">
                     <p className="text-xs text-muted-foreground">Total Trades</p>
-                    <p className="text-lg font-bold text-purple-500">-</p>
+                    <p className="text-lg font-bold text-purple-500">{adminStats?.transactions ?? 0}</p>
                   </div>
                   <div className="p-3 bg-orange-500/10 rounded-lg">
                     <p className="text-xs text-muted-foreground">Marketplace Volume</p>
-                    <p className="text-lg font-bold text-orange-500">-</p>
+                    <p className="text-lg font-bold text-orange-500">{marketListings?.length ?? 0}</p>
                   </div>
                 </div>
               </Card>
@@ -571,21 +643,82 @@ export default function AdminPage() {
                   <h3 className="text-lg font-semibold">Quick Actions</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Button variant="outline" className="justify-start">
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={async () => {
+                      const result = await refetchUsers();
+                      toast({
+                        title: "User Management",
+                        description: `Loaded ${result.data?.total ?? 0} users`,
+                      });
+                    }}
+                  >
                     <Users className="w-4 h-4 mr-2" />
                     User Management
                   </Button>
-                  <Button variant="outline" className="justify-start">
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={async () => {
+                      await Promise.all([refetchAdminStats(), refetchMarketListings()]);
+                      toast({
+                        title: "Market Analytics",
+                        description: "Marketplace and trade metrics refreshed",
+                      });
+                    }}
+                  >
                     <TrendingUp className="w-4 h-4 mr-2" />
                     Market Analytics
                   </Button>
-                  <Button variant="outline" className="justify-start">
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={async () => {
+                      const result = await refetchPendingWithdrawals();
+                      toast({
+                        title: "Reports & Flags",
+                        description: `${result.data?.length ?? 0} pending withdrawal reports`,
+                      });
+                    }}
+                  >
                     <AlertTriangle className="w-4 h-4 mr-2" />
                     Reports & Flags
                   </Button>
-                  <Button variant="outline" className="justify-start">
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={async () => {
+                      const result = await refetchAdminLogs();
+                      toast({
+                        title: "System Logs",
+                        description: `Loaded ${result.data?.total ?? 0} logs`,
+                      });
+                    }}
+                  >
                     <Activity className="w-4 h-4 mr-2" />
                     System Logs
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="justify-start"
+                    onClick={() => grantTodayCardsMutation.mutate()}
+                    disabled={grantTodayCardsMutation.isPending}
+                  >
+                    <Zap className="w-4 h-4 mr-2" />
+                    Grant 5 Today Starter Cards
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="justify-start"
+                    onClick={() => {
+                      const ok = window.confirm("This will remove ALL users and user-owned data. Continue?");
+                      if (ok) resetUsersMutation.mutate();
+                    }}
+                    disabled={resetUsersMutation.isPending}
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Reset All Users
                   </Button>
                 </div>
               </Card>

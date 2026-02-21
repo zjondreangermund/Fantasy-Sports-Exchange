@@ -6,11 +6,16 @@ import { seedDatabase, seedCompetitions } from "./seed.js";
 import { fplApi } from "./services/fplApi.js";
 import { fetchSorarePlayer } from "./services/sorare.js";
 import { ScoreUpdateService } from "./services/scoreUpdater.js";
+import { randomUUID } from "crypto";
 
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
 import passport from "passport";
 
 const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || "").split(",").filter(Boolean);
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
 
 /** True when deployed on Replit (has REPL_ID). Use Replit Auth there. */
 const isReplit = Boolean(process.env.REPL_ID);
@@ -62,7 +67,15 @@ export function isAdmin(req: any, res: any, next: any) {
   const userId = req.authUserId;
   if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-  if (ADMIN_USER_IDS.length > 0 && !ADMIN_USER_IDS.includes(userId)) {
+  const requestEmail = String(req.user?.email || req.user?.claims?.email || "").toLowerCase();
+  const idAllowed = ADMIN_USER_IDS.includes(userId);
+  const emailAllowed = Boolean(requestEmail) && ADMIN_EMAILS.includes(requestEmail);
+
+  if (ADMIN_USER_IDS.length === 0 && ADMIN_EMAILS.length === 0) {
+    return next();
+  }
+
+  if (!idAllowed && !emailAllowed) {
     return res.status(403).json({ message: "Admin access required" });
   }
 
@@ -76,6 +89,74 @@ function shuffle<T>(arr: T[]) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+function normalizePackPosition(pos: string) {
+  const p = (pos || "").toLowerCase().trim();
+  if (p === "gk") return "GK";
+  if (p === "def") return "DEF";
+  if (p === "mid") return "MID";
+  if (p === "fwd") return "FWD";
+  if (p.includes("goal")) return "GK";
+  if (p.includes("def")) return "DEF";
+  if (p.includes("mid")) return "MID";
+  if (p.includes("for") || p.includes("strik") || p.includes("att")) return "FWD";
+  return "MID";
+}
+
+async function sendEmailNotification(to: string, subject: string, html: string) {
+  const recipient = String(to || "").trim();
+  if (!recipient) return { sent: false, reason: "missing-recipient" };
+
+  const from = process.env.NOTIFY_FROM_EMAIL || "FantasyFC <notifications@fantasyfc.local>";
+  const resendKey = process.env.RESEND_API_KEY;
+
+  if (!resendKey) {
+    console.log(`[email:skip] RESEND_API_KEY missing; would send to ${recipient}: ${subject}`);
+    return { sent: false, reason: "missing-config" };
+  }
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [recipient],
+        subject,
+        html,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("Resend email failed:", response.status, text);
+      return { sent: false, reason: `resend-${response.status}` };
+    }
+
+    return { sent: true };
+  } catch (error) {
+    console.error("Email send error:", error);
+    return { sent: false, reason: "exception" };
+  }
+}
+
+function normalizeWithdrawalDestination(paymentMethod: string, data: any): string {
+  const method = String(paymentMethod || "bank_transfer").toLowerCase().trim();
+  if (method === "ewallet" || method === "mobile_money") {
+    const provider = String(data?.ewalletProvider || "").toLowerCase().trim();
+    const id = String(data?.ewalletId || "").toLowerCase().trim();
+    return `${method}:${provider}:${id}`;
+  }
+
+  const bankName = String(data?.bankName || "").toLowerCase().trim();
+  const accountHolder = String(data?.accountHolder || "").toLowerCase().trim();
+  const accountNumber = String(data?.accountNumber || "").toLowerCase().replace(/\s+/g, "");
+  const iban = String(data?.iban || "").toLowerCase().replace(/\s+/g, "");
+  return `${method}:${bankName}:${accountHolder}:${accountNumber}:${iban}`;
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -150,6 +231,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // --- API ROUTES ---
   // ----------------
 
+  const processEligibleAutoWithdrawals = async () => {
+    try {
+      const { db } = await import("./db.js");
+      const { withdrawalRequests, wallets, transactions } = await import("../shared/schema.js");
+      const { and, eq, lte, sql } = await import("drizzle-orm");
+
+      const eligible = await db
+        .select()
+        .from(withdrawalRequests)
+        .where(
+          and(
+            eq(withdrawalRequests.status, "processing" as any),
+            eq(withdrawalRequests.destinationVerified, true),
+            lte(withdrawalRequests.releaseAfter, new Date()),
+          ),
+        );
+
+      for (const withdrawal of eligible) {
+        await db.transaction(async (tx) => {
+          const [fresh] = await tx
+            .select()
+            .from(withdrawalRequests)
+            .where(eq(withdrawalRequests.id, withdrawal.id))
+            .for("update");
+
+          if (!fresh || fresh.status !== "processing" || !fresh.destinationVerified) return;
+
+          await tx
+            .update(wallets)
+            .set({ lockedBalance: sql`${wallets.lockedBalance} - ${fresh.amount}` } as any)
+            .where(eq(wallets.userId, fresh.userId));
+
+          await tx.insert(transactions).values({
+            userId: fresh.userId,
+            type: "withdrawal",
+            amount: -fresh.amount,
+            description: `Withdrawal auto-approved: ${fresh.netAmount} (fee: ${fresh.fee})`,
+          } as any);
+
+          await tx
+            .update(withdrawalRequests)
+            .set({
+              status: "completed",
+              adminNotes: "Auto-approved after 24h destination hold + email verification",
+              reviewedAt: new Date(),
+              verificationToken: null,
+            } as any)
+            .where(eq(withdrawalRequests.id, fresh.id));
+        });
+      }
+    } catch (error) {
+      console.error("Auto-withdrawal processing failed:", error);
+    }
+  };
+
   // User Profile
   app.get("/api/user", requireAuth, async (req: any, res) => {
     try {
@@ -190,9 +326,107 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/notifications", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const { db } = await import("./db.js");
+      const { notifications } = await import("../shared/schema.js");
+      const { eq, desc, and, sql } = await import("drizzle-orm");
+
+      const items = await db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.userId, userId))
+        .orderBy(desc(notifications.createdAt))
+        .limit(100);
+
+      const [unread] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(notifications)
+        .where(and(eq(notifications.userId, userId), eq(notifications.read, false)));
+
+      res.json({ notifications: items, unreadCount: Number(unread?.count || 0) });
+    } catch (error: any) {
+      console.error("Failed to fetch notifications:", error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  app.post("/api/notifications/:id/read", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const notificationId = parseInt(req.params.id, 10);
+      if (!Number.isFinite(notificationId)) {
+        return res.status(400).json({ message: "Invalid notification ID" });
+      }
+
+      const { db } = await import("./db.js");
+      const { notifications } = await import("../shared/schema.js");
+      const { and, eq } = await import("drizzle-orm");
+
+      const [updated] = await db
+        .update(notifications)
+        .set({ read: true } as any)
+        .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Failed to mark notification read:", error);
+      res.status(500).json({ message: "Failed to update notification" });
+    }
+  });
+
+  app.post("/api/notifications/read-all", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.authUserId;
+      const { db } = await import("./db.js");
+      const { notifications } = await import("../shared/schema.js");
+      const { eq } = await import("drizzle-orm");
+
+      await db
+        .update(notifications)
+        .set({ read: true } as any)
+        .where(eq(notifications.userId, userId));
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Failed to mark notifications read:", error);
+      res.status(500).json({ message: "Failed to update notifications" });
+    }
+  });
+
   app.get("/api/epl/standings", async (_req, res) => {
     try {
-      res.json([]);
+      const bootstrap = await fplApi.bootstrap();
+      const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+
+      const standings = teams
+        .map((team: any) => ({
+          position: Number(team.position) || 0,
+          rank: Number(team.position) || 0,
+          teamId: Number(team.id) || 0,
+          teamName: String(team.name || "Unknown"),
+          played: Number(team.played) || 0,
+          won: Number(team.win) || 0,
+          drawn: Number(team.draw) || 0,
+          lost: Number(team.loss) || 0,
+          goalsFor: Number(team.goals_scored) || 0,
+          goalsAgainst: Number(team.goals_conceded) || 0,
+          goalDifference: Number(team.goal_difference) || 0,
+          goalDiff: Number(team.goal_difference) || 0,
+          points: Number(team.points) || 0,
+          form: String(team.form || "").replace(/\s+/g, ""),
+          teamLogo: "",
+          logo: "",
+        }))
+        .sort((a: any, b: any) => a.position - b.position);
+
+      res.json(standings);
     } catch (e: any) {
       console.error("EPL standings:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch standings" });
@@ -201,21 +435,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/epl/fixtures", async (req, res) => {
     try {
-      const status = String(req.query.status || "").toLowerCase().trim(); // optional
-      const fixtures = await fplApi.fixtures();
+      const status = String(req.query.status || "").toLowerCase().trim();
+      const [fixtures, bootstrap] = await Promise.all([fplApi.fixtures(), fplApi.bootstrap()]);
 
-      let filtered = fixtures;
+      const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+      const teamMap = new Map(teams.map((t: any) => [Number(t.id), t]));
+
+      let filtered = Array.isArray(fixtures) ? fixtures : [];
       if (status) {
         if (status === "upcoming" || status === "scheduled") {
-          filtered = fixtures.filter((f: any) => !f.finished && !f.started);
+          filtered = filtered.filter((f: any) => !f.finished && !f.started);
         } else if (status === "live" || status === "inplay") {
-          filtered = fixtures.filter((f: any) => f.started && !f.finished);
+          filtered = filtered.filter((f: any) => f.started && !f.finished);
         } else if (status === "finished" || status === "ft") {
-          filtered = fixtures.filter((f: any) => f.finished);
+          filtered = filtered.filter((f: any) => f.finished);
         }
       }
 
-      res.json({ response: filtered });
+      const normalized = filtered
+        .map((fixture: any) => {
+          const homeTeam = teamMap.get(Number(fixture.team_h)) as any;
+          const awayTeam = teamMap.get(Number(fixture.team_a)) as any;
+
+          const statusCode = fixture.finished ? "FT" : fixture.started ? "LIVE" : "NS";
+
+          return {
+            id: Number(fixture.id),
+            gameweek: Number(fixture.event) || undefined,
+            round: Number(fixture.event) || undefined,
+            homeTeam: String(homeTeam?.name || `Team ${fixture.team_h}`),
+            awayTeam: String(awayTeam?.name || `Team ${fixture.team_a}`),
+            homeTeamId: Number(fixture.team_h),
+            awayTeamId: Number(fixture.team_a),
+            status: statusCode,
+            kickoffTime: fixture.kickoff_time || undefined,
+            matchDate: fixture.kickoff_time || undefined,
+            homeTeamLogo: "",
+            awayTeamLogo: "",
+            homeGoals: fixture.team_h_score ?? null,
+            awayGoals: fixture.team_a_score ?? null,
+            elapsed: Number(fixture.minutes) || 0,
+            venue: "",
+          };
+        })
+        .sort((a: any, b: any) => {
+          const ta = a.matchDate ? new Date(a.matchDate).getTime() : 0;
+          const tb = b.matchDate ? new Date(b.matchDate).getTime() : 0;
+          return ta - tb;
+        });
+
+      res.json(normalized);
     } catch (e: any) {
       console.error("EPL fixtures:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch fixtures" });
@@ -229,32 +498,105 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const search = String(req.query.search || "").toLowerCase().trim();
       const position = String(req.query.position || "").trim(); // optional: GK/DEF/MID/FWD
+      const todayOnly = String(req.query.today || "").toLowerCase() === "1" || String(req.query.today || "").toLowerCase() === "true";
 
-      const players = await fplApi.getPlayers();
-      let filtered = Array.isArray(players) ? players : [];
+      const [players, bootstrap, fixtures] = await Promise.all([
+        fplApi.getPlayers(),
+        fplApi.bootstrap(),
+        fplApi.fixtures(),
+      ]);
+
+      const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+      const teamMap = new Map(teams.map((t: any) => [Number(t.id), t]));
+
+      const positionMap: Record<number, string> = {
+        1: "Goalkeeper",
+        2: "Defender",
+        3: "Midfielder",
+        4: "Attacker",
+      };
+
+      const today = new Date();
+      const isSameUtcDay = (dateStr: string) => {
+        const d = new Date(dateStr);
+        return (
+          d.getUTCFullYear() === today.getUTCFullYear() &&
+          d.getUTCMonth() === today.getUTCMonth() &&
+          d.getUTCDate() === today.getUTCDate()
+        );
+      };
+
+      const todayTeamIds = new Set<number>();
+      if (todayOnly) {
+        (Array.isArray(fixtures) ? fixtures : []).forEach((fixture: any) => {
+          if (fixture?.kickoff_time && isSameUtcDay(String(fixture.kickoff_time))) {
+            todayTeamIds.add(Number(fixture.team_h));
+            todayTeamIds.add(Number(fixture.team_a));
+          }
+        });
+      }
+
+      const normalizedPlayers = (Array.isArray(players) ? players : []).map((p: any) => {
+        const team = teamMap.get(Number(p.team)) as any;
+        const photoId = typeof p.photo === "string" ? p.photo.replace(".jpg", "") : "";
+
+        return {
+          id: Number(p.id),
+          name: String(p.web_name || `${p.first_name || ""} ${p.second_name || ""}`.trim() || "Unknown"),
+          firstname: p.first_name || "",
+          lastname: p.second_name || "",
+          firstName: p.first_name || "",
+          lastName: p.second_name || "",
+          rating: Number(p.form || 0),
+          goals: Number(p.goals_scored || 0),
+          assists: Number(p.assists || 0),
+          appearances: Number(p.starts || 0),
+          minutes: Number(p.minutes || 0),
+          position: positionMap[Number(p.element_type)] || "Midfielder",
+          team: team?.name || "Unknown",
+          club: team?.name || "Unknown",
+          teamLogo: "",
+          clubLogo: "",
+          photo: photoId ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoId}.png` : "/images/player-1.png",
+          photoUrl: photoId ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoId}.png` : "/images/player-1.png",
+          imageUrl: photoId ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoId}.png` : "/images/player-1.png",
+          nationality: "",
+          age: 0,
+          stats: p,
+          _teamId: Number(p.team),
+        };
+      });
+
+      let filtered = normalizedPlayers;
+
+      if (todayOnly) {
+        filtered = filtered.filter((p: any) => todayTeamIds.has(Number(p._teamId)));
+      }
 
       if (search) {
-        filtered = filtered.filter((p: any) => {
-          const n = `${p.first_name ?? ""} ${p.second_name ?? ""} ${p.web_name ?? ""}`.toLowerCase();
-          return n.includes(search);
-        });
+        filtered = filtered.filter((p: any) => String(p.name || "").toLowerCase().includes(search) || String(p.team || "").toLowerCase().includes(search));
       }
 
       if (position) {
         const pos = position.toUpperCase();
-        const map: Record<string, number> = { GK: 1, DEF: 2, MID: 3, FWD: 4 };
-        const wantedType = map[pos];
+        const map: Record<string, string> = {
+          GK: "GOALKEEPER",
+          DEF: "DEFENDER",
+          MID: "MIDFIELDER",
+          FWD: "ATTACKER",
+        };
+        const wanted = map[pos] || pos;
 
-        filtered = filtered.filter((p: any) => {
-          const pPos = String(p.position_short || p.position || "").toUpperCase();
-          return (pPos && pPos === pos) || (wantedType && Number(p.element_type) === wantedType);
-        });
+        filtered = filtered.filter((p: any) => String(p.position || "").toUpperCase() === wanted);
       }
 
       const total = filtered.length;
       const start = (page - 1) * limit;
       const end = start + limit;
-      const pageItems = filtered.slice(start, end);
+      const pageItems = filtered.slice(start, end).map((p: any) => {
+        const { _teamId, ...clean } = p;
+        return clean;
+      });
 
       res.json({
         response: pageItems,
@@ -271,7 +613,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/epl/injuries", async (_req, res) => {
     try {
       const data = await fplApi.getInjuries();
-      res.json({ response: data });
+      const injuries = (Array.isArray(data) ? data : []).map((inj: any, index: number) => ({
+        id: index + 1,
+        playerId: Number(inj.playerId) || 0,
+        playerName: String(inj.name || "Unknown"),
+        playerPhoto: "",
+        status: String(inj.status || "unknown"),
+        expectedReturn: String(inj.news || "TBD"),
+      }));
+
+      res.json(injuries);
     } catch (e: any) {
       console.error("EPL injuries:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch injuries" });
@@ -333,6 +684,153 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ONBOARDING (5 packs -> 15 cards -> choose 5)
   // -------------------------
 
+  const getTodayTeamNames = async () => {
+    const [fixtures, bootstrap] = await Promise.all([fplApi.fixtures(), fplApi.bootstrap()]);
+    const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+    const teamMap = new Map<number, string>(
+      teams.map((t: any) => [Number(t.id), String(t.name || "")] as [number, string]),
+    );
+
+    const now = new Date();
+    const sameUtcDay = (dateStr: string) => {
+      const d = new Date(dateStr);
+      return (
+        d.getUTCFullYear() === now.getUTCFullYear() &&
+        d.getUTCMonth() === now.getUTCMonth() &&
+        d.getUTCDate() === now.getUTCDate()
+      );
+    };
+
+    const names = new Set<string>();
+    (Array.isArray(fixtures) ? fixtures : []).forEach((fixture: any) => {
+      if (!fixture?.kickoff_time || !sameUtcDay(String(fixture.kickoff_time))) return;
+      const home = teamMap.get(Number(fixture.team_h));
+      const away = teamMap.get(Number(fixture.team_a));
+      if (home) names.add(home.toLowerCase());
+      if (away) names.add(away.toLowerCase());
+    });
+
+    return names;
+  };
+
+  const getOnboardingPlayerPool = async () => {
+    const [fplPlayers, bootstrap, fixtures] = await Promise.all([
+      fplApi.getPlayers(),
+      fplApi.bootstrap(),
+      fplApi.fixtures(),
+    ]);
+
+    const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+    const teamMap = new Map<number, any>(teams.map((t: any) => [Number(t.id), t] as [number, any]));
+
+    const now = new Date();
+    const sameUtcDay = (dateStr: string) => {
+      const d = new Date(dateStr);
+      return (
+        d.getUTCFullYear() === now.getUTCFullYear() &&
+        d.getUTCMonth() === now.getUTCMonth() &&
+        d.getUTCDate() === now.getUTCDate()
+      );
+    };
+
+    const todayTeamIds = new Set<number>();
+    (Array.isArray(fixtures) ? fixtures : []).forEach((fixture: any) => {
+      if (!fixture?.kickoff_time || !sameUtcDay(String(fixture.kickoff_time))) return;
+      todayTeamIds.add(Number(fixture.team_h));
+      todayTeamIds.add(Number(fixture.team_a));
+    });
+
+    if (todayTeamIds.size === 0) {
+      return [] as any[];
+    }
+
+    const positionMap: Record<number, "GK" | "DEF" | "MID" | "FWD"> = {
+      1: "GK",
+      2: "DEF",
+      3: "MID",
+      4: "FWD",
+    };
+
+    const candidates = (Array.isArray(fplPlayers) ? fplPlayers : [])
+      .filter((p: any) => todayTeamIds.has(Number(p.team)))
+      .sort((a: any, b: any) => {
+        const sa = Number(a.starts || 0);
+        const sb = Number(b.starts || 0);
+        if (sb !== sa) return sb - sa;
+        const ma = Number(a.minutes || 0);
+        const mb = Number(b.minutes || 0);
+        if (mb !== ma) return mb - ma;
+        return Number(b.form || 0) - Number(a.form || 0);
+      });
+
+    const existingPlayers = await storage.getPlayers();
+    const mapKey = (name: string, team: string, pos: string) => `${name.toLowerCase()}::${team.toLowerCase()}::${pos}`;
+    const existingMap = new Map<string, any>();
+    existingPlayers.forEach((p: any) => {
+      existingMap.set(mapKey(String(p.name), String(p.team), String(p.position)), p);
+    });
+
+    const ensurePlayer = async (fplPlayer: any) => {
+      const teamName = String(teamMap.get(Number(fplPlayer.team))?.name || "Unknown");
+      const position = positionMap[Number(fplPlayer.element_type)] || "MID";
+      const fullName = `${String(fplPlayer.first_name || "").trim()} ${String(fplPlayer.second_name || "").trim()}`.trim() || String(fplPlayer.web_name || "Unknown");
+      const key = mapKey(fullName, teamName, position);
+      const existing = existingMap.get(key);
+      if (existing) return existing;
+
+      const photoId = typeof fplPlayer.photo === "string" ? fplPlayer.photo.replace(".jpg", "") : "";
+      const overall = Math.max(55, Math.min(95, Math.round(Number(fplPlayer.now_cost || 50) + 30)));
+
+      const created = await storage.createPlayer({
+        name: fullName,
+        team: teamName,
+        league: "Premier League",
+        position,
+        nationality: "Unknown",
+        age: 24,
+        overall,
+        imageUrl: photoId
+          ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoId}.png`
+          : "/images/player-1.png",
+      } as any);
+
+      existingMap.set(key, created);
+      return created;
+    };
+
+    const result: any[] = [];
+    for (const player of candidates.slice(0, 120)) {
+      result.push(await ensurePlayer(player));
+    }
+
+    return result;
+  };
+
+  const buildPackCards = (playersPool: any[]) => {
+    const gkPool = shuffle(playersPool.filter((p: any) => normalizePackPosition(p.position) === "GK"));
+    const defPool = shuffle(playersPool.filter((p: any) => normalizePackPosition(p.position) === "DEF"));
+    const midPool = shuffle(playersPool.filter((p: any) => normalizePackPosition(p.position) === "MID"));
+    const fwdPool = shuffle(playersPool.filter((p: any) => normalizePackPosition(p.position) === "FWD"));
+
+    const gk = gkPool.slice(0, 3);
+    const def = defPool.slice(0, 3);
+    const mid1 = midPool.slice(0, 3);
+    const mid2 = midPool.slice(3, 6);
+    const fwd = fwdPool.slice(0, 3);
+
+    if (gk.length < 3 || def.length < 3 || mid1.length < 3 || mid2.length < 3 || fwd.length < 3) {
+      return null;
+    }
+
+    return [
+      gk.map((p: any) => p.id),
+      def.map((p: any) => p.id),
+      mid1.map((p: any) => p.id),
+      mid2.map((p: any) => p.id),
+      fwd.map((p: any) => p.id),
+    ];
+  };
+
   // ✅ Status route (used by App router sometimes)
   app.get("/api/onboarding/status", requireAuth, async (req: any, res) => {
     try {
@@ -361,14 +859,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.json({ packCards: ob.packCards });
       }
 
-      // Pull players; if not enough, seed then retry once
-      let allPlayers = await storage.getRandomPlayers(250);
-      if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
-        console.log("Not enough players found. Seeding database, then retrying...");
-        await seedDatabase();
-        await seedCompetitions();
-        allPlayers = await storage.getRandomPlayers(250);
-      }
+      const allPlayers = await getOnboardingPlayerPool();
 
       if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
         return res.status(400).json({
@@ -378,50 +869,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
 
-      const normalize = (pos: string) => {
-        const p = (pos || "").toLowerCase().trim();
-
-        // handle common abbreviations
-        if (p === "gk") return "GK";
-        if (p === "def") return "DEF";
-        if (p === "mid") return "MID";
-        if (p === "fwd") return "FWD";
-
-        // handle words
-        if (p.includes("goal")) return "GK";
-        if (p.includes("def")) return "DEF";
-        if (p.includes("mid")) return "MID";
-        if (p.includes("for") || p.includes("strik") || p.includes("att")) return "FWD";
-
-        return "MID";
-      };
-
-      // Shuffle each position pool so you don't always select the same players
-      const gkPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "GK"));
-      const defPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "DEF"));
-      const midPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "MID"));
-      const fwdPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "FWD"));
-
-      const gk = gkPool.slice(0, 3);
-      const def = defPool.slice(0, 3);
-      const mid1 = midPool.slice(0, 3);
-      const mid2 = midPool.slice(3, 6);
-      const fwd = fwdPool.slice(0, 3);
-
-      if (gk.length < 3 || def.length < 3 || mid1.length < 3 || mid2.length < 3 || fwd.length < 3) {
+      const packCards = buildPackCards(allPlayers);
+      if (!packCards) {
         return res.status(400).json({
           message: "Not enough players per position",
-          counts: { gk: gkPool.length, def: defPool.length, mid: midPool.length, fwd: fwdPool.length },
         });
       }
-
-      const packCards = [
-        gk.map((p: any) => p.id),
-        def.map((p: any) => p.id),
-        mid1.map((p: any) => p.id),
-        mid2.map((p: any) => p.id),
-        fwd.map((p: any) => p.id),
-      ];
 
       if (!ob) {
         await storage.createOnboarding({
@@ -453,13 +906,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Auto-create offer if none exists
       if (!ob?.packCards?.length) {
-        let allPlayers = await storage.getRandomPlayers(250);
-        if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
-          console.log("No offer found. Seeding database, then creating offer...");
-          await seedDatabase();
-          await seedCompetitions();
-          allPlayers = await storage.getRandomPlayers(250);
-        }
+        const allPlayers = await getOnboardingPlayerPool();
 
         if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
           return res
@@ -467,42 +914,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             .json({ message: "No offer found. Create offer first." });
         }
 
-        const normalize = (pos: string) => {
-          const p = (pos || "").toLowerCase().trim();
-
-          // handle common abbreviations
-          if (p === "gk") return "GK";
-          if (p === "def") return "DEF";
-          if (p === "mid") return "MID";
-          if (p === "fwd") return "FWD";
-
-          // handle words
-          if (p.includes("goal")) return "GK";
-          if (p.includes("def")) return "DEF";
-          if (p.includes("mid")) return "MID";
-          if (p.includes("for") || p.includes("strik") || p.includes("att")) return "FWD";
-
-          return "MID";
-        };
-
-        const gkPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "GK"));
-        const defPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "DEF"));
-        const midPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "MID"));
-        const fwdPool = shuffle(allPlayers.filter((p: any) => normalize(p.position) === "FWD"));
-
-        const gk = gkPool.slice(0, 3);
-        const def = defPool.slice(0, 3);
-        const mid1 = midPool.slice(0, 3);
-        const mid2 = midPool.slice(3, 6);
-        const fwd = fwdPool.slice(0, 3);
-
-        const packCards = [
-          gk.map((p: any) => p.id),
-          def.map((p: any) => p.id),
-          mid1.map((p: any) => p.id),
-          mid2.map((p: any) => p.id),
-          fwd.map((p: any) => p.id),
-        ];
+        const packCards = buildPackCards(allPlayers);
+        if (!packCards) {
+          return res.status(404).json({ message: "No offer found. Create offer first." });
+        }
 
         if (!ob) {
           await storage.createOnboarding({
@@ -803,6 +1218,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/wallet/withdraw", requireAuth, async (req: any, res) => {
     try {
       const userId = req.authUserId;
+      const user = await storage.getUser(userId);
       const { 
         amount, 
         paymentMethod,
@@ -818,6 +1234,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (typeof amount !== "number" || amount <= 0) {
         return res.status(400).json({ message: "Valid positive amount required" });
       }
+
+      if (!user?.email) {
+        return res.status(400).json({ message: "Email required before withdrawing. Please set and verify your email." });
+      }
+
+      const method = String(paymentMethod || "bank_transfer").toLowerCase();
+      if ((method === "ewallet" || method === "mobile_money") && (!ewalletProvider || !ewalletId)) {
+        return res.status(400).json({ message: "Provider and phone/account ID required for mobile withdrawals" });
+      }
+      if (method !== "ewallet" && method !== "mobile_money" && (!bankName || !accountHolder || !accountNumber)) {
+        return res.status(400).json({ message: "Bank name, account holder and account number are required" });
+      }
       
       // Check balance
       const wallet = await storage.getWallet(userId);
@@ -828,6 +1256,81 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Calculate fee (8%)
       const fee = amount * 0.08;
       const netAmount = amount - fee;
+
+      const destinationKey = normalizeWithdrawalDestination(method, {
+        bankName,
+        accountHolder,
+        accountNumber,
+        iban,
+        ewalletProvider,
+        ewalletId,
+      });
+
+      const userWithdrawals = await storage.getUserWithdrawalRequests(userId);
+      const hasTrustedDestination = userWithdrawals.some(
+        (w: any) => w.status === "completed" && String(w.destinationKey || "") === destinationKey,
+      );
+
+      if (hasTrustedDestination) {
+        const { db } = await import("./db.js");
+        const { wallets, transactions } = await import("../shared/schema.js");
+        const { eq, sql } = await import("drizzle-orm");
+
+        const withdrawal = await storage.createWithdrawalRequest({
+          userId,
+          amount,
+          fee,
+          netAmount,
+          paymentMethod: method,
+          bankName,
+          accountHolder,
+          accountNumber,
+          iban,
+          swiftCode,
+          ewalletProvider,
+          ewalletId,
+          destinationKey,
+          destinationVerified: true,
+          status: "completed",
+          reviewedAt: new Date(),
+          adminNotes: "Auto-approved trusted payout destination",
+        } as any);
+
+        await db.transaction(async (tx) => {
+          await tx
+            .update(wallets)
+            .set({ balance: sql`${wallets.balance} - ${amount}` } as any)
+            .where(eq(wallets.userId, userId));
+
+          await tx.insert(transactions).values({
+            userId,
+            type: "withdrawal",
+            amount: -amount,
+            description: `Instant withdrawal auto-approved: ${netAmount} (fee: ${fee})`,
+          } as any);
+        });
+
+        await sendEmailNotification(
+          user.email,
+          "Withdrawal processed instantly",
+          `<p>Your withdrawal of <strong>N$${amount.toFixed(2)}</strong> was auto-approved because it matches a trusted payout destination.</p>`,
+        );
+
+        return res.json({
+          success: true,
+          instant: true,
+          message: "Withdrawal processed instantly to your trusted payout destination.",
+          withdrawalId: withdrawal.id,
+          fee,
+          netAmount,
+        });
+      }
+
+      // Lock funds immediately until approved/rejected
+      await storage.lockFunds(userId, amount);
+
+      const releaseAfter = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const verificationToken = randomUUID().replace(/-/g, "");
       
       // Create withdrawal request
       const withdrawal = await storage.createWithdrawalRequest({
@@ -835,7 +1338,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         amount,
         fee,
         netAmount,
-        paymentMethod: paymentMethod || "bank_transfer",
+        paymentMethod: method,
         bankName,
         accountHolder,
         accountNumber,
@@ -843,19 +1346,63 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         swiftCode,
         ewalletProvider,
         ewalletId,
-        status: "pending",
+        destinationKey,
+        destinationVerified: false,
+        verificationToken,
+        releaseAfter,
+        status: "processing",
       });
+
+      const baseUrl = process.env.PUBLIC_BASE_URL || "https://fantasy-sports-exchange-production-b10a.up.railway.app";
+      const verifyUrl = `${baseUrl}/api/wallet/withdrawals/verify?token=${verificationToken}`;
+      await sendEmailNotification(
+        user.email,
+        "Confirm payout destination change",
+        `<p>We detected a withdrawal to a <strong>new bank/phone destination</strong>.</p><p>Please verify this change: <a href="${verifyUrl}">${verifyUrl}</a></p><p>Funds are held for 24 hours for security.</p>`,
+      );
       
       res.json({ 
         success: true,
-        message: "Withdrawal request submitted. Pending admin approval.",
+        message: "New payout destination detected. Funds are locked for 24h pending email verification.",
         withdrawalId: withdrawal.id,
         fee,
-        netAmount
+        netAmount,
+        releaseAfter,
       });
     } catch (error: any) {
       console.error("Failed to process withdrawal:", error);
       res.status(500).json({ message: "Failed to process withdrawal" });
+    }
+  });
+
+  app.get("/api/wallet/withdrawals/verify", async (req: any, res) => {
+    try {
+      const token = String(req.query.token || "").trim();
+      if (!token) return res.status(400).send("Missing verification token.");
+
+      const { db } = await import("./db.js");
+      const { withdrawalRequests } = await import("../shared/schema.js");
+      const { and, eq } = await import("drizzle-orm");
+
+      const [withdrawal] = await db
+        .select()
+        .from(withdrawalRequests)
+        .where(and(eq(withdrawalRequests.verificationToken, token), eq(withdrawalRequests.status, "processing" as any)));
+
+      if (!withdrawal) {
+        return res.status(404).send("Invalid or expired verification token.");
+      }
+
+      await db
+        .update(withdrawalRequests)
+        .set({ destinationVerified: true, verificationToken: null } as any)
+        .where(eq(withdrawalRequests.id, withdrawal.id));
+
+      await processEligibleAutoWithdrawals();
+      return res.send("Destination verified successfully. Your withdrawal will be auto-processed after the security hold ends.");
+    } catch (error: any) {
+      console.error("Failed to verify withdrawal destination:", error);
+      return res.status(500).send("Failed to verify destination.");
     }
   });
 
@@ -1858,6 +2405,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const entries = await storage.getCompetitionEntries(competitionId);
       const sortedEntries = entries
         .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
+
+      const { db } = await import("./db.js");
+      const { notifications } = await import("../shared/schema.js");
       
       // Distribute prizes (60%, 30%, 10% for top 3)
       const totalPrizePool = entries.length * (competition.entryFee || 0);
@@ -1887,16 +2437,100 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           });
         }
       }
+
+      let winnerPrizeCardId: number | null = null;
+      if (sortedEntries.length > 0) {
+        const winner = sortedEntries[0];
+        const todayTeams = await getTodayTeamNames();
+        const allPlayers = await storage.getPlayers();
+        const todayPlayers = todayTeams.size
+          ? allPlayers.filter((p: any) => todayTeams.has(String(p.team || "").toLowerCase()))
+          : [];
+        const candidatePool = shuffle(todayPlayers.length > 0 ? todayPlayers : allPlayers);
+
+        for (const p of candidatePool) {
+          try {
+            const created = await storage.createPlayerCard({
+              playerId: p.id,
+              ownerId: winner.userId,
+              rarity: "rare",
+              level: 1,
+              xp: 0,
+              decisiveScore: 35,
+              last5Scores: [0, 0, 0, 0, 0],
+              forSale: false,
+              price: 0,
+            } as any);
+            winnerPrizeCardId = created.id;
+            break;
+          } catch (_e) {
+            continue;
+          }
+        }
+
+        const winnerUser = await storage.getUser(winner.userId);
+        const winnerTitle = winnerPrizeCardId
+          ? "🏆 You won! Rare card awarded"
+          : "🏆 You won today's competition";
+        const winnerMessage = winnerPrizeCardId
+          ? `You finished 1st in ${competition.name}. Your rare card prize was auto-delivered to your collection.`
+          : `You finished 1st in ${competition.name}. Rare card supply was exhausted, but your cash prize was delivered.`;
+
+        await db.insert(notifications).values({
+          userId: winner.userId,
+          type: "win",
+          title: winnerTitle,
+          message: winnerMessage,
+          read: false,
+        } as any);
+
+        if (winnerUser?.email) {
+          await sendEmailNotification(
+            winnerUser.email,
+            "You won today - rare card awarded",
+            `<p>Congrats! You finished <strong>1st</strong> in <strong>${competition.name}</strong>.</p><p>${winnerMessage}</p>`,
+          );
+        }
+
+        if (sortedEntries.length > 1) {
+          const runnerUp = sortedEntries[1];
+          const runnerUpUser = await storage.getUser(runnerUp.userId);
+          const runnerUpMessage = `You finished 2nd in ${competition.name}. Great run today — stay confident and try again in the next contest.`;
+
+          await db.insert(notifications).values({
+            userId: runnerUp.userId,
+            type: "runner_up",
+            title: "🥈 Runner-up today — keep pushing",
+            message: runnerUpMessage,
+            read: false,
+          } as any);
+
+          if (runnerUpUser?.email) {
+            await sendEmailNotification(
+              runnerUpUser.email,
+              "Runner-up today - keep going",
+              `<p>You placed <strong>2nd</strong> in <strong>${competition.name}</strong>.</p><p>${runnerUpMessage}</p>`,
+            );
+          }
+        }
+      }
       
       // Mark competition as completed
       await storage.updateCompetition(competitionId, {
         status: "completed",
       });
+
+      if (winnerPrizeCardId && sortedEntries[0]) {
+        await storage.updateCompetitionEntry(sortedEntries[0].id, {
+          prizeCardId: winnerPrizeCardId,
+        });
+      }
       
       res.json({ 
         success: true,
         message: "Competition settled successfully",
-        winnersCount: Math.min(3, sortedEntries.length)
+        winnersCount: Math.min(3, sortedEntries.length),
+        winnerPrizeCardId,
       });
     } catch (error: any) {
       console.error("Failed to settle competition:", error);
@@ -1972,6 +2606,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // -------------------------
   // ADMIN ENDPOINTS
   // -------------------------
+
+  app.get("/api/admin/check", requireAuth, async (req: any, res) => {
+    const userId = req.authUserId;
+    const requestEmail = String(req.user?.email || req.user?.claims?.email || "").toLowerCase();
+    const isAdminUser =
+      Boolean(userId) &&
+      ((ADMIN_USER_IDS.length === 0 && ADMIN_EMAILS.length === 0) ||
+        ADMIN_USER_IDS.includes(userId) ||
+        (Boolean(requestEmail) && ADMIN_EMAILS.includes(requestEmail)));
+    res.json({ isAdmin: isAdminUser });
+  });
   
   // Get all users (paginated)
   app.get("/api/admin/users", requireAuth, isAdmin, async (req: any, res) => {
@@ -2036,6 +2681,164 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Failed to fetch stats:", error);
       res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+
+  app.post("/api/admin/cards/grant-today-starters", requireAuth, isAdmin, async (_req: any, res) => {
+    try {
+      const [fplPlayers, bootstrap, fixtures] = await Promise.all([
+        fplApi.getPlayers(),
+        fplApi.bootstrap(),
+        fplApi.fixtures(),
+      ]);
+
+      const { db } = await import("./db.js");
+      const { users } = await import("../shared/schema.js");
+      const usersList = await db.select({ id: users.id }).from(users);
+
+      const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+      const teamMap = new Map<number, any>(
+        teams.map((t: any) => [Number(t.id), t] as [number, any]),
+      );
+
+      const now = new Date();
+      const sameUtcDay = (dateStr: string) => {
+        const d = new Date(dateStr);
+        return (
+          d.getUTCFullYear() === now.getUTCFullYear() &&
+          d.getUTCMonth() === now.getUTCMonth() &&
+          d.getUTCDate() === now.getUTCDate()
+        );
+      };
+
+      const todayTeamIds = new Set<number>();
+      (Array.isArray(fixtures) ? fixtures : []).forEach((fixture: any) => {
+        if (!fixture?.kickoff_time || !sameUtcDay(String(fixture.kickoff_time))) return;
+        todayTeamIds.add(Number(fixture.team_h));
+        todayTeamIds.add(Number(fixture.team_a));
+      });
+
+      if (todayTeamIds.size === 0) {
+        return res.status(400).json({ message: "No EPL fixtures found for today." });
+      }
+
+      const positionMap: Record<number, "GK" | "DEF" | "MID" | "FWD"> = {
+        1: "GK",
+        2: "DEF",
+        3: "MID",
+        4: "FWD",
+      };
+
+      const candidates = (Array.isArray(fplPlayers) ? fplPlayers : [])
+        .filter((p: any) => todayTeamIds.has(Number(p.team)))
+        .sort((a: any, b: any) => {
+          const sa = Number(a.starts || 0);
+          const sb = Number(b.starts || 0);
+          if (sb !== sa) return sb - sa;
+          const ma = Number(a.minutes || 0);
+          const mb = Number(b.minutes || 0);
+          if (mb !== ma) return mb - ma;
+          return Number(b.form || 0) - Number(a.form || 0);
+        })
+        .slice(0, 80);
+
+      if (candidates.length < 5) {
+        return res.status(400).json({ message: "Not enough likely starters found for today's fixtures." });
+      }
+
+      const existingPlayers = await storage.getPlayers();
+      const mapKey = (name: string, team: string, pos: string) => `${name.toLowerCase()}::${team.toLowerCase()}::${pos}`;
+      const existingMap = new Map<string, any>();
+      existingPlayers.forEach((p: any) => {
+        existingMap.set(mapKey(String(p.name), String(p.team), String(p.position)), p);
+      });
+
+      const ensurePlayer = async (fplPlayer: any) => {
+        const teamName = String(teamMap.get(Number(fplPlayer.team))?.name || "Unknown");
+        const position = positionMap[Number(fplPlayer.element_type)] || "MID";
+        const fullName = `${String(fplPlayer.first_name || "").trim()} ${String(fplPlayer.second_name || "").trim()}`.trim() || String(fplPlayer.web_name || "Unknown");
+        const key = mapKey(fullName, teamName, position);
+        const existing = existingMap.get(key);
+        if (existing) return existing;
+
+        const photoId = typeof fplPlayer.photo === "string" ? fplPlayer.photo.replace(".jpg", "") : "";
+        const overall = Math.max(55, Math.min(95, Math.round(Number(fplPlayer.now_cost || 50) + 30)));
+
+        const created = await storage.createPlayer({
+          name: fullName,
+          team: teamName,
+          league: "Premier League",
+          position,
+          nationality: "Unknown",
+          age: 24,
+          overall,
+          imageUrl: photoId
+            ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoId}.png`
+            : "/images/player-1.png",
+        } as any);
+
+        existingMap.set(key, created);
+        return created;
+      };
+
+      let minted = 0;
+      for (let u = 0; u < usersList.length; u++) {
+        const user = usersList[u];
+        const local = [...candidates];
+        const picked = shuffle(local).slice(0, 5);
+        for (const candidate of picked) {
+          const player = await ensurePlayer(candidate);
+          await storage.createPlayerCard({
+            playerId: player.id,
+            ownerId: user.id,
+            rarity: "common",
+            level: 1,
+            xp: 0,
+            decisiveScore: 35,
+            last5Scores: [0, 0, 0, 0, 0],
+            forSale: false,
+            price: 0,
+          } as any);
+          minted++;
+        }
+      }
+
+      return res.json({ success: true, users: usersList.length, minted, message: `Granted 5 common cards each to ${usersList.length} users.` });
+    } catch (error: any) {
+      console.error("Failed to grant today starter cards:", error);
+      return res.status(500).json({ message: "Failed to grant cards", error: error?.message });
+    }
+  });
+
+  app.post("/api/admin/reset-users", requireAuth, isAdmin, async (_req: any, res) => {
+    try {
+      const { db } = await import("./db.js");
+      const schema = await import("../shared/schema.js");
+      const { sql } = await import("drizzle-orm");
+
+      await db.transaction(async (tx) => {
+        await tx.delete(schema.cardLocks);
+        await tx.delete(schema.auctionBids);
+        await tx.delete(schema.auctions);
+        await tx.delete(schema.swapOffers);
+        await tx.delete(schema.withdrawalRequests);
+        await tx.delete(schema.competitionEntries);
+        await tx.delete(schema.lineups);
+        await tx.delete(schema.userOnboarding);
+        await tx.delete(schema.transactions);
+        await tx.delete(schema.wallets);
+        await tx.delete(schema.auditLogs);
+        await tx.delete(schema.idempotencyKeys);
+        await tx.delete(schema.notifications);
+        await tx.delete(schema.playerCards);
+        await tx.delete(schema.users);
+        await tx.execute(sql`delete from session`);
+      });
+
+      return res.json({ success: true, message: "All users and user-owned data removed." });
+    } catch (error: any) {
+      console.error("Failed to reset users:", error);
+      return res.status(500).json({ message: "Failed to reset users", error: error?.message });
     }
   });
   
@@ -2131,16 +2934,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Withdrawal request not found" });
       }
       
-      if (withdrawal.status !== "pending") {
+      if (!["pending", "processing"].includes(String(withdrawal.status))) {
         return res.status(400).json({ message: "Withdrawal already processed" });
       }
       
       await db.transaction(async (tx) => {
         if (status === "completed") {
-          // Deduct from wallet
+          // Funds already moved to locked balance at request time; finalize by reducing locked
           await tx
             .update(wallets)
-            .set({ balance: sql`${wallets.balance} - ${withdrawal.amount}` } as any)
+            .set({ lockedBalance: sql`${wallets.lockedBalance} - ${withdrawal.amount}` } as any)
             .where(eq(wallets.userId, withdrawal.userId));
           
           // Create transaction
@@ -2150,6 +2953,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             amount: -withdrawal.amount,
             description: `Withdrawal approved: ${withdrawal.netAmount} (fee: ${withdrawal.fee})`,
           } as any);
+        } else if (status === "rejected") {
+          // Return locked funds back to available balance
+          await tx
+            .update(wallets)
+            .set({
+              balance: sql`${wallets.balance} + ${withdrawal.amount}`,
+              lockedBalance: sql`${wallets.lockedBalance} - ${withdrawal.amount}`,
+            } as any)
+            .where(eq(wallets.userId, withdrawal.userId));
         }
         
         // Update withdrawal status
@@ -2591,6 +3403,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Start automatic score updates (every 5 minutes)
   console.log("🚀 Starting automatic score update service...");
   scoreUpdater.startAutoUpdates();
+
+  // Start automatic withdrawal release checks (every minute)
+  setInterval(() => {
+    processEligibleAutoWithdrawals().catch((error) => {
+      console.error("Auto-withdraw interval failed:", error);
+    });
+  }, 60 * 1000);
 
   return httpServer;
 }
