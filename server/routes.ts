@@ -11,8 +11,9 @@ import { randomUUID } from "crypto";
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
 import passport from "passport";
 
+const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || "").split(",").filter(Boolean);
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "")
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || DEFAULT_ADMIN_EMAIL)
   .split(",")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
@@ -70,10 +71,6 @@ export function isAdmin(req: any, res: any, next: any) {
   const requestEmail = String(req.user?.email || req.user?.claims?.email || "").toLowerCase();
   const idAllowed = ADMIN_USER_IDS.includes(userId);
   const emailAllowed = Boolean(requestEmail) && ADMIN_EMAILS.includes(requestEmail);
-
-  if (ADMIN_USER_IDS.length === 0 && ADMIN_EMAILS.length === 0) {
-    return next();
-  }
 
   if (!idAllowed && !emailAllowed) {
     return res.status(403).json({ message: "Admin access required" });
@@ -2612,8 +2609,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const requestEmail = String(req.user?.email || req.user?.claims?.email || "").toLowerCase();
     const isAdminUser =
       Boolean(userId) &&
-      ((ADMIN_USER_IDS.length === 0 && ADMIN_EMAILS.length === 0) ||
-        ADMIN_USER_IDS.includes(userId) ||
+      (ADMIN_USER_IDS.includes(userId) ||
         (Boolean(requestEmail) && ADMIN_EMAILS.includes(requestEmail)));
     res.json({ isAdmin: isAdminUser });
   });
@@ -2829,10 +2825,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await tx.delete(schema.wallets);
         await tx.delete(schema.auditLogs);
         await tx.delete(schema.idempotencyKeys);
-        await tx.delete(schema.notifications);
+        try {
+          await tx.delete(schema.notifications);
+        } catch (error) {
+          console.warn("Skipping notifications wipe (table may not exist yet):", error);
+        }
         await tx.delete(schema.playerCards);
         await tx.delete(schema.users);
-        await tx.execute(sql`delete from session`);
+        try {
+          await tx.execute(sql`delete from session`);
+        } catch (error) {
+          console.warn("Skipping session wipe (session table may not exist):", error);
+        }
       });
 
       return res.json({ success: true, message: "All users and user-owned data removed." });

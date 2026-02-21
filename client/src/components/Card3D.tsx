@@ -1,5 +1,5 @@
 import { useRef, useState, useMemo, useCallback, Suspense, Component, type ReactNode, useEffect, type RefObject } from "react";
-import { Canvas, useFrame, useLoader } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { type PlayerCardWithPlayer, type EplPlayer } from "../../../shared/schema";
 import { Shield } from "lucide-react";
@@ -76,55 +76,87 @@ class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, { hasError
 }
 
 function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
-  const texture = useLoader(THREE.TextureLoader, url);
-  const processedTexture = useMemo(() => {
-    const image = texture.image as HTMLImageElement | undefined;
-    if (!image) return texture;
-
+  const fallbackTexture = useMemo(() => {
     const canvas = document.createElement("canvas");
-    canvas.width = image.naturalWidth || image.width || 512;
-    canvas.height = image.naturalHeight || image.height || 512;
-
+    canvas.width = 32;
+    canvas.height = 32;
     const ctx = canvas.getContext("2d");
-    if (!ctx) return texture;
+    if (ctx) {
+      const grad = ctx.createLinearGradient(0, 0, 32, 32);
+      grad.addColorStop(0, "#4b5563");
+      grad.addColorStop(1, "#9ca3af");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 32, 32);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  }, []);
 
-    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imgData.data;
+  const [processedTexture, setProcessedTexture] = useState<THREE.Texture>(fallbackTexture);
 
-    let removed = 0;
-    const totalPixels = data.length / 4;
+  useEffect(() => {
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.referrerPolicy = "no-referrer";
 
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const sat = max === 0 ? 0 : (max - min) / max;
-      const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-
-      const likelyWhiteBg = luminance > 244 && sat < 0.12;
-      if (likelyWhiteBg) {
-        data[i + 3] = 0;
-        removed += 1;
+    img.onload = () => {
+      if (cancelled) return;
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width || 512;
+      canvas.height = img.naturalHeight || img.height || 512;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        setProcessedTexture(fallbackTexture);
+        return;
       }
-    }
 
-    // Safety: if keying removed too much, keep the original photo texture
-    if (removed / totalPixels > 0.65) {
-      return texture;
-    }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
 
-    ctx.putImageData(imgData, 0, 0);
-    const out = new THREE.CanvasTexture(canvas);
-    out.needsUpdate = true;
-    out.wrapS = THREE.ClampToEdgeWrapping;
-    out.wrapT = THREE.ClampToEdgeWrapping;
-    out.colorSpace = THREE.SRGBColorSpace;
-    return out;
-  }, [texture]);
+      let removed = 0;
+      const totalPixels = data.length / 4;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const sat = max === 0 ? 0 : (max - min) / max;
+        const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        const likelyWhiteBg = luminance > 246 && sat < 0.1;
+        if (likelyWhiteBg) {
+          data[i + 3] = 0;
+          removed += 1;
+        }
+      }
+
+      if (removed / totalPixels <= 0.65) {
+        ctx.putImageData(imgData, 0, 0);
+      }
+
+      const out = new THREE.CanvasTexture(canvas);
+      out.needsUpdate = true;
+      out.wrapS = THREE.ClampToEdgeWrapping;
+      out.wrapT = THREE.ClampToEdgeWrapping;
+      out.colorSpace = THREE.SRGBColorSpace;
+      setProcessedTexture(out);
+    };
+
+    img.onerror = () => {
+      if (!cancelled) setProcessedTexture(fallbackTexture);
+    };
+
+    img.src = url;
+    return () => {
+      cancelled = true;
+    };
+  }, [url, fallbackTexture]);
+
   const ref = useRef<THREE.Mesh>(null);
 
   useMemo(() => {
@@ -153,7 +185,7 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
         emissive={new THREE.Color("#7dd3fc")}
         emissiveIntensity={0.08}
         transparent
-        alphaTest={0.12}
+        alphaTest={0.08}
         opacity={0.98}
       />
     </mesh>
