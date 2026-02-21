@@ -6,6 +6,7 @@ import { seedDatabase, seedCompetitions } from "./seed.js";
 import { fplApi } from "./services/fplApi.js";
 import { fetchSorarePlayer } from "./services/sorare.js";
 import { ScoreUpdateService } from "./services/scoreUpdater.js";
+import { calculatePlayerScore, mapFplStatsToPlayerStats } from "./services/scoring.js";
 import { randomUUID } from "crypto";
 
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
@@ -2254,11 +2255,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               };
             })
           );
+
+          const sortedEntries = enrichedEntries.sort(
+            (a: any, b: any) => Number(b.totalScore || 0) - Number(a.totalScore || 0),
+          );
           
           return {
             ...comp,
-            entries: enrichedEntries,
-            entryCount: enrichedEntries.length,
+            entries: sortedEntries,
+            entryCount: sortedEntries.length,
           };
         })
       );
@@ -2446,6 +2451,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const targetUser = await storage.getUser(targetEntry.userId);
       const cardIds = Array.isArray(targetEntry.lineupCardIds) ? targetEntry.lineupCardIds : [];
 
+      const normalize = (text: string) =>
+        String(text || "")
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim();
+
+      const [liveData, bootstrap] = await Promise.all([fplApi.getLiveGameweek(), fplApi.bootstrap()]);
+      const playerStatsMap = new Map<number, any>();
+      (Array.isArray(liveData?.elements) ? liveData.elements : []).forEach((element: any) => {
+        const mappedStats = mapFplStatsToPlayerStats(element);
+        playerStatsMap.set(Number(element.id), mappedStats);
+      });
+
+      const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+      const teamNameById = new Map<number, string>(
+        teams.map((t: any) => [Number(t.id), normalize(String(t.name || t.short_name || ""))] as [number, string]),
+      );
+      const byNameTeam = new Map<string, number>();
+      const byWebTeam = new Map<string, number>();
+      (Array.isArray(bootstrap?.elements) ? bootstrap.elements : []).forEach((el: any) => {
+        const teamNorm = teamNameById.get(Number(el.team)) || "";
+        const fullName = normalize(`${String(el.first_name || "")} ${String(el.second_name || "")}`);
+        const webName = normalize(String(el.web_name || ""));
+        if (teamNorm && fullName) byNameTeam.set(`${fullName}::${teamNorm}`, Number(el.id));
+        if (teamNorm && webName) byWebTeam.set(`${webName}::${teamNorm}`, Number(el.id));
+      });
+
+      const resolveElementId = (player: any) => {
+        const explicit = Number(player?.externalId || 0);
+        if (explicit > 0) return explicit;
+        const teamNorm = normalize(String(player?.team || ""));
+        const nameNorm = normalize(String(player?.name || ""));
+        if (!teamNorm || !nameNorm) return 0;
+        return byNameTeam.get(`${nameNorm}::${teamNorm}`) || byWebTeam.get(`${nameNorm}::${teamNorm}`) || 0;
+      };
+
       const cards = await Promise.all(
         cardIds.map(async (cardId: number) => {
           const card = await storage.getPlayerCard(cardId);
@@ -2453,16 +2496,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const player = await storage.getPlayer(card.playerId);
           if (!player) return null;
 
-          const scores = Array.isArray(card.last5Scores) ? (card.last5Scores as number[]) : [];
-          const latestPoints = scores.length ? Number(scores[scores.length - 1] || 0) : 0;
+          const elementId = resolveElementId(player);
+          const stats = elementId ? playerStatsMap.get(elementId) : undefined;
+          const score = stats ? calculatePlayerScore(stats, player.position) : null;
+          const basePoints = Number(score?.total_score || 0);
+          const points = targetEntry.captainId === card.id ? Math.round(basePoints * 1.1) : basePoints;
 
           return {
             ...card,
             player,
-            points: latestPoints,
+            points,
+            basePoints,
+            captainBonus: targetEntry.captainId === card.id ? Number((points - basePoints).toFixed(1)) : 0,
           };
         }),
       );
+
+      const validCards = cards.filter(Boolean) as any[];
+      const computedBaseTotal = validCards.reduce((sum, card) => sum + Number(card.basePoints || 0), 0);
+      const computedCaptainBonus = validCards.reduce((sum, card) => sum + Number(card.captainBonus || 0), 0);
+      const computedTotal = validCards.reduce((sum, card) => sum + Number(card.points || 0), 0);
 
       return res.json({
         entryId: targetEntry.id,
@@ -2472,7 +2525,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         userImage: targetUser?.avatarUrl || null,
         captainId: targetEntry.captainId,
         totalScore: targetEntry.totalScore || 0,
-        cards: cards.filter(Boolean),
+        scoreBreakdown: {
+          baseTotal: Number(computedBaseTotal.toFixed(1)),
+          captainBonus: Number(computedCaptainBonus.toFixed(1)),
+          computedTotal: Number(computedTotal.toFixed(1)),
+          storedTotal: Number(targetEntry.totalScore || 0),
+        },
+        cards: validCards,
       });
     } catch (error: any) {
       console.error("Failed to fetch competition lineup:", error);

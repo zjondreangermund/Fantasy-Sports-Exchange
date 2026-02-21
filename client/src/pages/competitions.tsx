@@ -347,13 +347,24 @@ export default function CompetitionsPage() {
               ))}
             </div>
           ) : (
-            <div className="flex flex-wrap gap-4 justify-center py-2">
-              {(viewTeamData?.cards || []).map((card: any) => (
-                <div key={card.id} className="flex flex-col items-center gap-1">
-                  <Card3D card={card} size="sm" selected={viewTeamData?.captainId === card.id} />
-                  <Badge variant="outline" className="text-xs">{Number(card.points || 0).toFixed(1)} pts</Badge>
-                </div>
-              ))}
+            <div className="py-2 space-y-3">
+              <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
+                <Badge variant="outline">Base: {Number(viewTeamData?.scoreBreakdown?.baseTotal || 0).toFixed(1)}</Badge>
+                <Badge variant="outline">Captain Bonus: +{Number(viewTeamData?.scoreBreakdown?.captainBonus || 0).toFixed(1)}</Badge>
+                <Badge variant="outline">Computed: {Number(viewTeamData?.scoreBreakdown?.computedTotal || 0).toFixed(1)}</Badge>
+                <Badge variant="outline">Stored: {Number(viewTeamData?.scoreBreakdown?.storedTotal || viewTeamData?.totalScore || 0).toFixed(1)}</Badge>
+              </div>
+              <div className="flex flex-wrap gap-4 justify-center">
+                {(viewTeamData?.cards || []).map((card: any) => (
+                  <div key={card.id} className="flex flex-col items-center gap-1">
+                    <Card3D card={card} size="sm" selected={viewTeamData?.captainId === card.id} />
+                    <Badge variant="outline" className="text-xs">
+                      {Number(card.points || 0).toFixed(1)} pts
+                      {viewTeamData?.captainId === card.id ? ` (C +${Number(card.captainBonus || 0).toFixed(1)})` : ""}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </DialogContent>
