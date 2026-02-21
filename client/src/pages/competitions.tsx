@@ -356,12 +356,18 @@ export default function CompetitionsPage() {
               </div>
               <div className="flex flex-wrap gap-4 justify-center">
                 {(viewTeamData?.cards || []).map((card: any) => (
-                  <div key={card.id} className="flex flex-col items-center gap-1">
+                  <div key={card.id} className="flex flex-col items-center gap-1 max-w-[180px]">
                     <Card3D card={card} size="sm" selected={viewTeamData?.captainId === card.id} />
                     <Badge variant="outline" className="text-xs">
                       {Number(card.points || 0).toFixed(1)} pts
                       {viewTeamData?.captainId === card.id ? ` (C +${Number(card.captainBonus || 0).toFixed(1)})` : ""}
                     </Badge>
+                    <div className="text-[10px] leading-tight text-muted-foreground text-center border rounded px-2 py-1 w-full">
+                      <div>D {Number(card?.pointsBreakdown?.decisive || 0).toFixed(1)} • P {Number(card?.pointsBreakdown?.performance || 0).toFixed(1)} • Pen {Number(card?.pointsBreakdown?.penalties || 0).toFixed(1)} • B {Number(card?.pointsBreakdown?.bonus || 0).toFixed(1)}</div>
+                      {(Array.isArray(card?.pointsExplanation) ? card.pointsExplanation : []).slice(0, 6).map((item: any, idx: number) => (
+                        <div key={idx}>{item.label}: {item.value}</div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>

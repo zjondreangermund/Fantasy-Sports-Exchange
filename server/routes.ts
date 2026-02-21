@@ -2489,6 +2489,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return byNameTeam.get(`${nameNorm}::${teamNorm}`) || byWebTeam.get(`${nameNorm}::${teamNorm}`) || 0;
       };
 
+      const buildPointsExplanation = (stats: any, position: string) => {
+        const minutes = Number(stats?.minutes || 0);
+        const goals = Number(stats?.goals_scored || 0);
+        const assists = Number(stats?.assists || 0);
+        const cleanSheets = Number(stats?.clean_sheets || 0);
+        const yellowCards = Number(stats?.yellow_cards || 0);
+        const redCards = Number(stats?.red_cards || 0);
+        const goalsConceded = Number(stats?.goals_conceded || 0);
+        const ownGoals = Number(stats?.own_goals || 0);
+        const penaltiesSaved = Number(stats?.penalties_saved || 0);
+        const penaltiesMissed = Number(stats?.penalties_missed || 0);
+        const saves = Number(stats?.saves || 0);
+        const bonus = Number(stats?.bonus || 0);
+
+        const items: Array<{ label: string; value: string }> = [];
+        items.push({ label: "Appearance", value: `${minutes} mins` });
+        if (goals > 0) items.push({ label: "Goals", value: `${goals}` });
+        if (assists > 0) items.push({ label: "Assists", value: `${assists}` });
+        if (cleanSheets > 0) items.push({ label: "Clean Sheets", value: `${cleanSheets}` });
+        if (position === "GK" && saves > 0) items.push({ label: "Saves", value: `${saves}` });
+        if (position === "GK" && penaltiesSaved > 0) items.push({ label: "Penalties Saved", value: `${penaltiesSaved}` });
+        if (bonus > 0) items.push({ label: "FPL Bonus", value: `${bonus}` });
+        if (goalsConceded > 0 && (position === "GK" || position === "DEF")) items.push({ label: "Goals Conceded", value: `${goalsConceded}` });
+        if (yellowCards > 0) items.push({ label: "Yellow Cards", value: `${yellowCards}` });
+        if (redCards > 0) items.push({ label: "Red Cards", value: `${redCards}` });
+        if (ownGoals > 0) items.push({ label: "Own Goals", value: `${ownGoals}` });
+        if (penaltiesMissed > 0) items.push({ label: "Penalties Missed", value: `${penaltiesMissed}` });
+
+        return items;
+      };
+
       const cards = await Promise.all(
         cardIds.map(async (cardId: number) => {
           const card = await storage.getPlayerCard(cardId);
@@ -2501,6 +2532,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const score = stats ? calculatePlayerScore(stats, player.position) : null;
           const basePoints = Number(score?.total_score || 0);
           const points = targetEntry.captainId === card.id ? Math.round(basePoints * 1.1) : basePoints;
+          const explanation = stats ? buildPointsExplanation(stats, player.position) : [{ label: "Status", value: "No live stats yet" }];
 
           return {
             ...card,
@@ -2508,6 +2540,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             points,
             basePoints,
             captainBonus: targetEntry.captainId === card.id ? Number((points - basePoints).toFixed(1)) : 0,
+            pointsBreakdown: {
+              decisive: Number(score?.breakdown?.decisive || 0),
+              performance: Number(score?.breakdown?.performance || 0),
+              penalties: Number(score?.breakdown?.penalties || 0),
+              bonus: Number(score?.breakdown?.bonus || 0),
+            },
+            pointsExplanation: explanation,
           };
         }),
       );
