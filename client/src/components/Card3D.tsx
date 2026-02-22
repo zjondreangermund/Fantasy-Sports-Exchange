@@ -461,6 +461,7 @@ export default function Card3D({
               height: "100%",
               borderRadius: 14,
               pointerEvents: "none",
+              overflow: "hidden",
             }}
             gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
             onCreated={({ gl }) => {
@@ -553,9 +554,9 @@ export default function Card3D({
                 transform: "scale(1)",
                 filter: "contrast(1.08) saturate(1.08)",
                 WebkitMaskImage:
-                  "radial-gradient(120% 70% at 50% 112%, #000 58%, transparent 84%), linear-gradient(to bottom, #000 0%, #000 72%, transparent 100%)",
+                  "radial-gradient(150% 95% at 50% 118%, #000 60%, transparent 92%), linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%)",
                 maskImage:
-                  "radial-gradient(120% 70% at 50% 112%, #000 58%, transparent 84%), linear-gradient(to bottom, #000 0%, #000 72%, transparent 100%)",
+                  "radial-gradient(150% 95% at 50% 118%, #000 60%, transparent 92%), linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%)",
               }}
             />
           </div>
