@@ -473,17 +473,23 @@ export default function Card3D({
             pointerEvents: "none",
             zIndex: 10,
             background: "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.05), rgba(0,0,0,0.8))",
+            outline: "none",
+            border: "none",
+            boxShadow: "0 18px 55px rgba(0,0,0,0.55)",
           }}
         >
           <div
             className="frontArtwork"
             style={{
               position: "absolute",
-              inset: "7% 6% 8% 6%",
-              borderRadius: 12,
+              inset: 0,
+              borderRadius: "inherit",
               zIndex: 1,
               backgroundImage: `linear-gradient(160deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.18) 100%)`,
               backgroundBlendMode: "overlay, normal",
+              outline: "none",
+              border: "none",
+              boxShadow: "none",
             }}
           />
 
@@ -538,6 +544,22 @@ export default function Card3D({
               }}
             />
           </div>
+
+          <div
+            className="fadeOverlay"
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "inherit",
+              pointerEvents: "none",
+              zIndex: 3,
+              background:
+                "linear-gradient(to bottom, rgba(0,0,0,0.00) 0%, rgba(0,0,0,0.00) 55%, rgba(0,0,0,0.55) 78%, rgba(0,0,0,0.90) 100%)",
+              outline: "none",
+              border: "none",
+              boxShadow: "none",
+            }}
+          />
 
           <div
             className="card-content"
@@ -698,7 +720,7 @@ export default function Card3D({
               inset: 0,
               borderRadius: "inherit",
               pointerEvents: "none",
-              zIndex: 999,
+              zIndex: 10,
               background: `radial-gradient(420px 280px at ${hovered ? glossX : 50}% ${hovered ? glossY : 20}%, rgba(255,255,255,0.28), rgba(255,255,255,0.07) 40%, rgba(255,255,255,0) 70%)`,
               mixBlendMode: "screen",
               opacity: hovered ? 0.8 : 0.4,

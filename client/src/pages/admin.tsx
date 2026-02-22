@@ -40,6 +40,16 @@ import { useState } from "react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
 
+type TournamentEntry = {
+  id: number;
+  totalScore?: number | null;
+};
+
+type TournamentWithStats = Competition & {
+  entryCount?: number;
+  entries?: TournamentEntry[];
+};
+
 export default function AdminPage() {
   const { toast } = useToast();
   const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
@@ -106,7 +116,7 @@ export default function AdminPage() {
   });
 
   // Competitions
-  const { data: competitions, isLoading: compLoading, refetch: refetchComps } = useQuery<Competition[]>({
+  const { data: competitions, isLoading: compLoading, refetch: refetchComps } = useQuery<TournamentWithStats[]>({
     queryKey: ["/api/competitions"],
   });
 
@@ -646,26 +656,41 @@ export default function AdminPage() {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-3 text-sm mb-3">
-                          <div>
-                            <p className="text-xs text-muted-foreground">Entries</p>
-                            <p className="font-semibold">-</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Prize Pool</p>
-                            <p className="font-semibold">-</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Avg Score</p>
-                            <p className="font-semibold">-</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Duration</p>
-                            <p className="font-semibold">GW {comp.gameWeek}</p>
-                          </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
+                          {(() => {
+                            const entries = comp.entryCount ?? comp.entries?.length ?? 0;
+                            const prizePool = Number(comp.entryFee || 0) * entries;
+                            const scores = (comp.entries || [])
+                              .map((entry) => Number(entry.totalScore || 0))
+                              .filter((value) => Number.isFinite(value));
+                            const avgScore = scores.length
+                              ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+                              : 0;
+
+                            return (
+                              <>
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Entries</p>
+                                  <p className="font-semibold">{entries}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Prize Pool</p>
+                                  <p className="font-semibold">N${prizePool.toFixed(2)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Avg Score</p>
+                                  <p className="font-semibold">{avgScore > 0 ? avgScore.toFixed(1) : "-"}</p>
+                                </div>
+                                <div>
+                                  <p className="text-xs text-muted-foreground">Duration</p>
+                                  <p className="font-semibold">GW {comp.gameWeek}</p>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           <Button
                             size="sm"
                             variant="outline"
