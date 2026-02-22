@@ -37,17 +37,16 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-      - name: Trigger Railway deploy hook
-        if: ${{ secrets.RAILWAY_DEPLOY_HOOK_URL != '' }}
+      - name: Trigger deploy if hook is configured
         env:
           RAILWAY_DEPLOY_HOOK_URL: ${{ secrets.RAILWAY_DEPLOY_HOOK_URL }}
         run: |
+          if [ -z "$RAILWAY_DEPLOY_HOOK_URL" ]; then
+            echo "RAILWAY_DEPLOY_HOOK_URL is not configured."
+            echo "Set this repo secret to enable automatic Railway deployment."
+            exit 0
+          fi
+
           echo "Triggering Railway deploy hook..."
           curl -fsSL -X POST "$RAILWAY_DEPLOY_HOOK_URL"
           echo "Deploy hook triggered successfully."
-
-      - name: Skip deploy (secret missing)
-        if: ${{ secrets.RAILWAY_DEPLOY_HOOK_URL == '' }}
-        run: |
-          echo "RAILWAY_DEPLOY_HOOK_URL is not configured."
-          echo "Set this repo secret to enable automatic Railway deployment."
