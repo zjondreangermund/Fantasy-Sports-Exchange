@@ -492,25 +492,6 @@ export default function Card3D({
           }}
         >
           <div
-            className="frontArtwork"
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "inherit",
-              zIndex: 1,
-              backgroundImage:
-                levelPattern !== "none"
-                  ? `${levelPattern}, linear-gradient(160deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.18) 100%)`
-                  : `linear-gradient(160deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.18) 100%)`,
-              backgroundBlendMode: "overlay, normal",
-              opacity: levelPatternOpacity > 0 ? 0.9 : 1,
-              outline: "none",
-              border: "none",
-              boxShadow: "none",
-            }}
-          />
-
-          <div
             className="photoWindow"
             style={{
               position: "absolute",
@@ -560,22 +541,6 @@ export default function Card3D({
               }}
             />
           </div>
-
-          <div
-            className="fadeOverlay"
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "inherit",
-              pointerEvents: "none",
-              zIndex: 3,
-              background:
-                "linear-gradient(to bottom, rgba(0,0,0,0.00) 0%, rgba(0,0,0,0.00) 55%, rgba(0,0,0,0.55) 78%, rgba(0,0,0,0.90) 100%)",
-              outline: "none",
-              border: "none",
-              boxShadow: "none",
-            }}
-          />
 
           <div
             className="card-content"
