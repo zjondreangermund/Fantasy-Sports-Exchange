@@ -43,7 +43,18 @@ import { isUnauthorizedError } from "../lib/auth-utils";
 export default function AdminPage() {
   const { toast } = useToast();
   const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
-  const [selectedCompForUpdate, setSelectedCompForUpdate] = useState<number | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingTournamentId, setEditingTournamentId] = useState<number | null>(null);
+  const [tournamentForm, setTournamentForm] = useState({
+    name: "",
+    tier: "common",
+    entryFee: "0",
+    status: "upcoming",
+    gameWeek: "27",
+    startDate: "",
+    endDate: "",
+    prizeCardRarity: "rare",
+  });
 
   const { data: autoUpdateStatus } = useQuery<{ enabled: boolean }>({
     queryKey: ["/api/admin/scores/auto-update"],
@@ -70,6 +81,19 @@ export default function AdminPage() {
 
   const { refetch: refetchAdminLogs } = useQuery<{ logs: any[]; total: number }>({
     queryKey: ["/api/admin/logs"],
+  });
+
+  const { data: trafficData, refetch: refetchTraffic } = useQuery<{
+    windowMinutes: number;
+    requestsLastMinute: number;
+    requestsLast5Minutes: number;
+    requestsLastHour: number;
+    onlineUsersLast10Minutes: number;
+    activeUsers: Array<{ userId: string; lastSeenSecondsAgo: number }>;
+    topRoutes: Array<{ route: string; count: number; errorRate: number; avgDurationMs: number }>;
+    perMinuteSeries: Array<{ minuteOffset: number; count: number }>;
+  }>({
+    queryKey: ["/api/admin/traffic"],
   });
 
   // Withdrawals
@@ -174,6 +198,42 @@ export default function AdminPage() {
     },
   });
 
+  const saveTournamentMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        name: tournamentForm.name,
+        tier: tournamentForm.tier,
+        entryFee: Number(tournamentForm.entryFee || 0),
+        status: tournamentForm.status,
+        gameWeek: Number(tournamentForm.gameWeek || 0),
+        startDate: tournamentForm.startDate,
+        endDate: tournamentForm.endDate,
+        prizeCardRarity: tournamentForm.prizeCardRarity,
+      };
+
+      if (editingTournamentId) {
+        const res = await apiRequest("PATCH", `/api/admin/competitions/${editingTournamentId}`, payload);
+        return res.json();
+      }
+
+      const res = await apiRequest("POST", "/api/admin/competitions", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
+      setEditorOpen(false);
+      setEditingTournamentId(null);
+      toast({ title: "Tournament saved" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save tournament",
+        variant: "destructive",
+      });
+    },
+  });
+
   const grantTodayCardsMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/cards/grant-today-starters", {});
@@ -249,6 +309,50 @@ export default function AdminPage() {
 
   const paymentIcon = (m: string) => {
     return m === "ewallet" || m === "mobile_money" ? Smartphone : Building2;
+  };
+
+  const sparklineData = trafficData?.perMinuteSeries || [];
+  const sparklineMax = Math.max(1, ...sparklineData.map((p) => p.count || 0));
+  const sparklinePoints = sparklineData
+    .map((point, index) => {
+      const x = sparklineData.length <= 1 ? 0 : (index / (sparklineData.length - 1)) * 100;
+      const y = 32 - ((point.count || 0) / sparklineMax) * 32;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const openCreateTournament = () => {
+    const now = new Date();
+    const nextWeek = new Date(now);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+
+    setEditingTournamentId(null);
+    setTournamentForm({
+      name: "",
+      tier: "common",
+      entryFee: "0",
+      status: "upcoming",
+      gameWeek: "27",
+      startDate: now.toISOString().slice(0, 16),
+      endDate: nextWeek.toISOString().slice(0, 16),
+      prizeCardRarity: "rare",
+    });
+    setEditorOpen(true);
+  };
+
+  const openEditTournament = (competition: Competition) => {
+    setEditingTournamentId(competition.id);
+    setTournamentForm({
+      name: String(competition.name || ""),
+      tier: String(competition.tier || "common"),
+      entryFee: String(Number(competition.entryFee || 0)),
+      status: String(competition.status || "upcoming"),
+      gameWeek: String(Number(competition.gameWeek || 27)),
+      startDate: new Date(competition.startDate as any).toISOString().slice(0, 16),
+      endDate: new Date(competition.endDate as any).toISOString().slice(0, 16),
+      prizeCardRarity: String(competition.prizeCardRarity || "rare"),
+    });
+    setEditorOpen(true);
   };
 
   const renderWithdrawalCard = (wr: WithdrawalRequest, showActions: boolean) => {
@@ -397,7 +501,7 @@ export default function AdminPage() {
             </TabsTrigger>
             <TabsTrigger value="competitions">
               <Trophy className="w-4 h-4 mr-2" />
-              Competitions
+              Tournaments
             </TabsTrigger>
             <TabsTrigger value="management">
               <Shield className="w-4 h-4 mr-2" />
@@ -486,16 +590,19 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Automatically updates competition scores every 5 minutes from live FPL data. 
+                  Automatically updates tournament scores every 5 minutes from live FPL data. 
                   Scores include decisive actions (goals, assists), performance metrics, and captain bonuses.
                 </p>
               </Card>
 
-              {/* Competitions List */}
+              {/* Tournaments List */}
               <Card className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Trophy className="w-5 h-5 text-purple-500" />
-                  <h3 className="text-lg font-semibold">Active Competitions</h3>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-3">
+                    <Trophy className="w-5 h-5 text-purple-500" />
+                    <h3 className="text-lg font-semibold">Active Tournaments</h3>
+                  </div>
+                  <Button size="sm" onClick={openCreateTournament}>Create Tournament</Button>
                 </div>
 
                 {compLoading ? (
@@ -544,6 +651,13 @@ export default function AdminPage() {
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={() => openEditTournament(comp)}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => updateScoresMutation.mutate(comp.id)}
                             disabled={updateScoresMutation.isPending}
                           >
@@ -566,7 +680,7 @@ export default function AdminPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8">No competitions found</p>
+                  <p className="text-sm text-muted-foreground text-center py-8">No tournaments found</p>
                 )}
               </Card>
 
@@ -636,6 +750,91 @@ export default function AdminPage() {
                   <div className="p-3 bg-orange-500/10 rounded-lg">
                     <p className="text-xs text-muted-foreground">Marketplace Volume</p>
                     <p className="text-lg font-bold text-orange-500">{marketListings?.length ?? 0}</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <Activity className="w-5 h-5 text-cyan-500" />
+                    <h3 className="text-lg font-semibold">Traffic & Online Users</h3>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => refetchTraffic()}>
+                    <RefreshCw className="w-4 h-4 mr-1" />
+                    Refresh
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <div className="p-3 bg-cyan-500/10 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Req / 1 min</p>
+                    <p className="text-lg font-bold text-cyan-500">{trafficData?.requestsLastMinute ?? 0}</p>
+                  </div>
+                  <div className="p-3 bg-blue-500/10 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Req / 5 min</p>
+                    <p className="text-lg font-bold text-blue-500">{trafficData?.requestsLast5Minutes ?? 0}</p>
+                  </div>
+                  <div className="p-3 bg-purple-500/10 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Req / 60 min</p>
+                    <p className="text-lg font-bold text-purple-500">{trafficData?.requestsLastHour ?? 0}</p>
+                  </div>
+                  <div className="p-3 bg-green-500/10 rounded-lg">
+                    <p className="text-xs text-muted-foreground">Online (10 min)</p>
+                    <p className="text-lg font-bold text-green-500">{trafficData?.onlineUsersLast10Minutes ?? 0}</p>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium mb-2">Top API Flows</p>
+                    <div className="space-y-2 max-h-56 overflow-auto">
+                      {(trafficData?.topRoutes || []).map((route) => (
+                        <div key={route.route} className="p-2 border rounded-md text-xs">
+                          <p className="font-semibold truncate">{route.route}</p>
+                          <p className="text-muted-foreground">
+                            {route.count} req • {route.avgDurationMs}ms avg • {route.errorRate}% errors
+                          </p>
+                        </div>
+                      ))}
+                      {(!trafficData?.topRoutes || trafficData.topRoutes.length === 0) && (
+                        <p className="text-xs text-muted-foreground">No traffic yet.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-medium mb-2">Recently Active Users</p>
+                    <div className="space-y-2 max-h-56 overflow-auto">
+                      {(trafficData?.activeUsers || []).map((u) => (
+                        <div key={u.userId} className="p-2 border rounded-md text-xs flex items-center justify-between gap-2">
+                          <span className="font-semibold truncate">{u.userId}</span>
+                          <span className="text-muted-foreground">{u.lastSeenSecondsAgo}s ago</span>
+                        </div>
+                      ))}
+                      {(!trafficData?.activeUsers || trafficData.activeUsers.length === 0) && (
+                        <p className="text-xs text-muted-foreground">No active users in last 10 minutes.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-sm font-medium mb-2">Requests Trend (Last 15 min)</p>
+                  <div className="border rounded-md p-3 bg-muted/20">
+                    {sparklineData.length > 1 ? (
+                      <svg viewBox="0 0 100 32" className="w-full h-20" preserveAspectRatio="none">
+                        <polyline
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          className="text-cyan-400"
+                          points={sparklinePoints}
+                        />
+                      </svg>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Not enough traffic data yet.</p>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -710,7 +909,7 @@ export default function AdminPage() {
                     disabled={grantTodayCardsMutation.isPending}
                   >
                     <Zap className="w-4 h-4 mr-2" />
-                    Grant 5 Today Starter Cards
+                    Grant 5 Mixed-Rarity Today Cards
                   </Button>
                   <Button
                     variant="destructive"
@@ -758,6 +957,111 @@ export default function AdminPage() {
             </div>
           </TabsContent>
         </Tabs>
+
+        <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>{editingTournamentId ? "Edit Tournament" : "Create Tournament"}</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
+              <div className="sm:col-span-2">
+                <label className="text-xs text-muted-foreground">Name</label>
+                <Input
+                  value={tournamentForm.name}
+                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Common Tournament - GW27"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground">Tier</label>
+                <select
+                  value={tournamentForm.tier}
+                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, tier: e.target.value }))}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="common">common</option>
+                  <option value="rare">rare</option>
+                  <option value="unique">unique</option>
+                  <option value="legendary">legendary</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground">Status</label>
+                <select
+                  value={tournamentForm.status}
+                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, status: e.target.value }))}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="open">open</option>
+                  <option value="upcoming">upcoming</option>
+                  <option value="active">active</option>
+                  <option value="completed">completed</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground">Entry Fee</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={tournamentForm.entryFee}
+                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, entryFee: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground">Game Week</label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={tournamentForm.gameWeek}
+                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, gameWeek: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground">Start</label>
+                <Input
+                  type="datetime-local"
+                  value={tournamentForm.startDate}
+                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, startDate: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground">End</label>
+                <Input
+                  type="datetime-local"
+                  value={tournamentForm.endDate}
+                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, endDate: e.target.value }))}
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="text-xs text-muted-foreground">Prize Card Rarity</label>
+                <select
+                  value={tournamentForm.prizeCardRarity}
+                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, prizeCardRarity: e.target.value }))}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="common">common</option>
+                  <option value="rare">rare</option>
+                  <option value="unique">unique</option>
+                  <option value="epic">epic</option>
+                  <option value="legendary">legendary</option>
+                </select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditorOpen(false)}>Cancel</Button>
+              <Button onClick={() => saveTournamentMutation.mutate()} disabled={saveTournamentMutation.isPending}>
+                {saveTournamentMutation.isPending ? "Saving..." : "Save Tournament"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

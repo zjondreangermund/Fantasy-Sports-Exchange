@@ -11,6 +11,23 @@ interface PlayerCardProps {
   sorareImageUrl?: string | null;
 }
 
+function normalizeImageUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const value = String(url).trim();
+  if (!value) return null;
+  if (/^(https?:)?\/\//i.test(value) || value.startsWith("data:")) return value;
+  return value.startsWith("/") ? value : `/${value}`;
+}
+
+function lowercaseFilenamePath(url: string): string {
+  const [pathOnly, search = ""] = url.split("?");
+  const parts = pathOnly.split("/");
+  const fileName = parts.pop() || "";
+  const lowerFileName = fileName.toLowerCase();
+  const rebuilt = `${parts.join("/")}/${lowerFileName}`.replace(/\/+/g, "/");
+  return search ? `${rebuilt}?${search}` : rebuilt;
+}
+
 function rarityLabel(rarity?: string) {
   const r = (rarity ?? "common").toLowerCase();
   if (r === "legendary") return "LEGENDARY";
@@ -46,6 +63,8 @@ export default function PlayerCard(props: PlayerCardProps) {
     player.imageUrl ||
     player.image_url ||
     null;
+  const playerImageUrl = normalizeImageUrl(img);
+  const fallbackCardBack = "/images/player-1.png";
 
   const clubLogo =
     player.clubLogo ||
@@ -80,7 +99,7 @@ export default function PlayerCard(props: PlayerCardProps) {
         {props.selected ? (
           // ✅ 3D fills the same frame (no layout zoom)
           <div className="absolute inset-0">
-            <ThreeDPlayerCard card={props.card} imageUrl={img} />
+            <ThreeDPlayerCard card={props.card} imageUrl={playerImageUrl} />
           </div>
         ) : (
           <>
@@ -95,10 +114,32 @@ export default function PlayerCard(props: PlayerCardProps) {
             />
 
             {/* image */}
-            {img ? (
-              <img src={img} alt={player?.name ?? "Player"} className="absolute inset-0 w-full h-full object-cover" />
+            {playerImageUrl ? (
+              <img
+                src={playerImageUrl}
+                alt={player?.name ?? "Player"}
+                className="absolute inset-0 w-full h-full object-cover bg-slate-900"
+                data-fallback-step="0"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  const step = Number(target.dataset.fallbackStep || "0");
+                  const current = target.getAttribute("src") || "";
+
+                  if (step === 0 && current) {
+                    const retriedPath = lowercaseFilenamePath(current);
+                    if (retriedPath !== current) {
+                      target.dataset.fallbackStep = "1";
+                      target.src = retriedPath;
+                      return;
+                    }
+                  }
+
+                  target.dataset.fallbackStep = "2";
+                  target.src = fallbackCardBack;
+                }}
+              />
             ) : (
-              <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-black/60" />
+              <div className="absolute inset-0 bg-slate-900" />
             )}
 
             {/* dark fade */}
@@ -110,7 +151,16 @@ export default function PlayerCard(props: PlayerCardProps) {
                 {rarityLabel(rarity)}
               </div>
 
-              {clubLogo ? <img src={clubLogo} alt="Club" className="w-9 h-9 object-contain drop-shadow" /> : null}
+              {clubLogo ? (
+                <img
+                  src={normalizeImageUrl(clubLogo) || ""}
+                  alt="Club"
+                  className="w-9 h-9 object-contain drop-shadow"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
+              ) : null}
             </div>
 
             {/* bottom text */}

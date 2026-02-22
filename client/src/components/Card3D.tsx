@@ -6,6 +6,14 @@ import { Shield } from "lucide-react";
 
 type RarityKey = "common" | "rare" | "unique" | "epic" | "legendary";
 
+function normalizeRarity(rarity?: string | null): RarityKey {
+  const value = String(rarity || "common").toLowerCase();
+  if (value === "rare" || value === "unique" || value === "epic" || value === "legendary") {
+    return value;
+  }
+  return "common";
+}
+
 const rarityStyles: Record<
   RarityKey,
   {
@@ -325,7 +333,7 @@ export default function Card3D({
   const [rotY, setRotY] = useState(0);
   const rafRef = useRef<number>(0);
 
-  const rarity = (card.rarity as RarityKey) || "common";
+  const rarity = normalizeRarity(card.rarity as string | null | undefined);
   const rs = rarityStyles[rarity];
 
   const sizeMap = { sm: { w: 170, h: 250 }, md: { w: 220, h: 320 }, lg: { w: 270, h: 390 } };
@@ -446,6 +454,7 @@ export default function Card3D({
             overflow: "hidden",
             pointerEvents: "none",
             zIndex: 10,
+            background: "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.05), rgba(0,0,0,0.8))",
           }}
         >
           <div
@@ -468,7 +477,7 @@ export default function Card3D({
               right: "10%",
               top: "18%",
               bottom: "22%",
-              background: "transparent",
+              background: "#0f172a",
               boxShadow: "none",
               border: "none",
               backdropFilter: "none",
@@ -483,6 +492,19 @@ export default function Card3D({
               alt=""
               onError={(e) => {
                 const target = e.currentTarget;
+                const current = target.getAttribute("src") || "";
+                const triedLower = target.dataset.triedLowercase === "1";
+                if (!triedLower && current) {
+                  const [pathOnly, search = ""] = current.split("?");
+                  const parts = pathOnly.split("/");
+                  const fileName = (parts.pop() || "").toLowerCase();
+                  const lowerPath = `${parts.join("/")}/${fileName}`.replace(/\/+/g, "/");
+                  if (lowerPath !== pathOnly) {
+                    target.dataset.triedLowercase = "1";
+                    target.src = search ? `${lowerPath}?${search}` : lowerPath;
+                    return;
+                  }
+                }
                 target.onerror = null;
                 target.src = `/images/player-${imageIndex}.png`;
               }}
@@ -493,8 +515,10 @@ export default function Card3D({
                 objectPosition: "center bottom",
                 transform: "scale(0.98)",
                 filter: "contrast(1.05) saturate(1.05)",
-                WebkitMaskImage: "radial-gradient(circle at 50% 40%, #000 55%, transparent 78%)",
-                maskImage: "radial-gradient(circle at 50% 40%, #000 55%, transparent 78%)",
+                WebkitMaskImage:
+                  "linear-gradient(to bottom, transparent 0%, black 12%, black 85%, transparent 100%)",
+                maskImage:
+                  "linear-gradient(to bottom, transparent 0%, black 12%, black 85%, transparent 100%)",
               }}
             />
           </div>

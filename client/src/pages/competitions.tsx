@@ -41,7 +41,7 @@ export default function CompetitionsPage() {
     queryKey: ["/api/competitions"],
     queryFn: async () => {
       const res = await fetch("/api/competitions", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch competitions");
+      if (!res.ok) throw new Error("Failed to fetch tournaments");
       const data = await res.json();
       // Ensure data is an array, not an object
       return Array.isArray(data) ? data : (data?.competitions || []);
@@ -71,7 +71,7 @@ export default function CompetitionsPage() {
     queryKey: ["/api/competitions/my-entries"],
     queryFn: async () => {
       const res = await fetch("/api/competitions/my-entries", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch your competition entries");
+      if (!res.ok) throw new Error("Failed to fetch your tournament entries");
       return res.json();
     },
   });
@@ -88,7 +88,7 @@ export default function CompetitionsPage() {
       setSelectedComp(null);
       setSelectedCards([]);
       setCaptainId(null);
-      toast({ title: "Entered competition!" });
+      toast({ title: "Entered tournament!" });
     },
     onError: (error) => {
       if (isUnauthorizedError(error)) {
@@ -171,10 +171,10 @@ export default function CompetitionsPage() {
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
               <Trophy className="w-6 h-6 text-primary" />
-              Competitions
+              Tournaments
             </h1>
             <p className="text-muted-foreground text-sm">
-              Enter weekly competitions and win prizes
+              Enter weekly tournaments and win prizes
             </p>
           </div>
           {unclaimedRewards.length > 0 && (
@@ -186,7 +186,7 @@ export default function CompetitionsPage() {
 
         <Tabs defaultValue="live" className="w-full">
           <TabsList className="mb-4">
-            <TabsTrigger value="live">🔴 Live Competitions</TabsTrigger>
+            <TabsTrigger value="live">🔴 Live Tournaments</TabsTrigger>
             <TabsTrigger value="upcoming">📅 Upcoming</TabsTrigger>
           </TabsList>
 
@@ -209,7 +209,7 @@ export default function CompetitionsPage() {
               </div>
             ) : (
               <Card className="p-8 text-center">
-                <p className="text-muted-foreground">No live competitions available</p>
+                <p className="text-muted-foreground">No live tournaments available</p>
               </Card>
             )}
           </TabsContent>
@@ -233,7 +233,7 @@ export default function CompetitionsPage() {
               </div>
             ) : (
               <Card className="p-8 text-center">
-                <p className="text-muted-foreground">No upcoming competitions available</p>
+                <p className="text-muted-foreground">No upcoming tournaments available</p>
               </Card>
             )}
           </TabsContent>

@@ -109,110 +109,42 @@ export async function seedCompetitions() {
     return;
   }
 
-  console.log("Seeding competitions...");
+  console.log("Seeding common tournaments (GW27+) ...");
   const now = new Date();
 
-  const endOfWeek = new Date(now);
-  endOfWeek.setDate(endOfWeek.getDate() + (7 - endOfWeek.getDay()));
-  endOfWeek.setHours(23, 59, 59, 999);
+  const endOfCurrentWeek = new Date(now);
+  endOfCurrentWeek.setDate(endOfCurrentWeek.getDate() + (7 - endOfCurrentWeek.getDay()));
+  endOfCurrentWeek.setHours(23, 59, 59, 999);
 
-  const nextWeekEnd = new Date(endOfWeek);
-  nextWeekEnd.setDate(nextWeekEnd.getDate() + 7);
+  const startOfNextWeek = new Date(endOfCurrentWeek);
+  startOfNextWeek.setDate(startOfNextWeek.getDate() + 1);
+  startOfNextWeek.setHours(0, 0, 0, 0);
 
-  const nextWeekStart = new Date(endOfWeek);
-  nextWeekStart.setDate(nextWeekStart.getDate() + 1);
+  const baseGameWeek = 27;
+  const weeksToSeed = 4; // GW27, 28, 29, 30
 
-  // Current Week (GW1) - Active/Open Competitions
-  await storage.createCompetition({
-    name: "Common Cup - GW1",
-    tier: "common",
-    entryFee: 0,
-    status: "open",
-    gameWeek: 1,
-    startDate: now,
-    endDate: endOfWeek,
-    prizeCardRarity: "rare",
-  } as any);
+  for (let index = 0; index < weeksToSeed; index++) {
+    const gw = baseGameWeek + index;
+    const startDate = new Date(startOfNextWeek);
+    startDate.setDate(startDate.getDate() + index * 7);
 
-  await storage.createCompetition({
-    name: "Rare Championship - GW1",
-    tier: "rare",
-    entryFee: 20,
-    status: "open",
-    gameWeek: 1,
-    startDate: now,
-    endDate: endOfWeek,
-    prizeCardRarity: "unique",
-  } as any);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + 6);
+    endDate.setHours(23, 59, 59, 999);
 
-  await storage.createCompetition({
-    name: "Unique Masters - GW1",
-    tier: "unique",
-    entryFee: 50,
-    status: "open",
-    gameWeek: 1,
-    startDate: now,
-    endDate: endOfWeek,
-    prizeCardRarity: "epic",
-  } as any);
+    await storage.createCompetition({
+      name: `Common Tournament - GW${gw}`,
+      tier: "common",
+      entryFee: 0,
+      status: index === 0 ? "open" : "upcoming",
+      gameWeek: gw,
+      startDate,
+      endDate,
+      prizeCardRarity: "rare",
+    } as any);
+  }
 
-  await storage.createCompetition({
-    name: "Legendary League - GW1",
-    tier: "legendary",
-    entryFee: 100,
-    status: "open",
-    gameWeek: 1,
-    startDate: now,
-    endDate: endOfWeek,
-    prizeCardRarity: "legendary",
-  } as any);
-
-  // Next Week (GW2) - Upcoming Competitions
-  await storage.createCompetition({
-    name: "Common Cup - GW2",
-    tier: "common",
-    entryFee: 0,
-    status: "upcoming",
-    gameWeek: 2,
-    startDate: nextWeekStart,
-    endDate: nextWeekEnd,
-    prizeCardRarity: "rare",
-  } as any);
-
-  await storage.createCompetition({
-    name: "Rare Championship - GW2",
-    tier: "rare",
-    entryFee: 20,
-    status: "upcoming",
-    gameWeek: 2,
-    startDate: nextWeekStart,
-    endDate: nextWeekEnd,
-    prizeCardRarity: "unique",
-  } as any);
-
-  await storage.createCompetition({
-    name: "Unique Masters - GW2",
-    tier: "unique",
-    entryFee: 50,
-    status: "upcoming",
-    gameWeek: 2,
-    startDate: nextWeekStart,
-    endDate: nextWeekEnd,
-    prizeCardRarity: "epic",
-  } as any);
-
-  await storage.createCompetition({
-    name: "Legendary League - GW2",
-    tier: "legendary",
-    entryFee: 100,
-    status: "upcoming",
-    gameWeek: 2,
-    startDate: nextWeekStart,
-    endDate: nextWeekEnd,
-    prizeCardRarity: "legendary",
-  } as any);
-
-  console.log("Seeded 8 competitions (4 tiers x 2 weeks)");
+  console.log("Seeded 4 common tournaments (GW27-GW30)");
 }
 
 export async function seedDemoUsers() {

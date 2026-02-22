@@ -260,7 +260,7 @@ export default function DashboardPage() {
               </div>
               <h3 className="font-semibold text-foreground mb-1.5">3. Compete Weekly</h3>
               <p className="text-sm text-muted-foreground">
-                Enter Common tier competitions for free or Rare tier for N$20. Your players score based on real-world performance. Top 3 win prizes — 60/30/10 split of the prize pool plus bonus cards.
+                Enter Common tier tournaments for free or Rare tier for N$20. Your players score based on real-world performance. Top 3 win prizes — 60/30/10 split of the prize pool plus bonus cards.
               </p>
             </Card>
 

@@ -78,7 +78,7 @@ export default function AccountPage() {
       <div className="max-w-5xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground">Account</h1>
-          <p className="text-sm text-muted-foreground">Profile and inbox notifications for competition results.</p>
+          <p className="text-sm text-muted-foreground">Profile and inbox notifications for tournament results.</p>
         </div>
 
         <Tabs defaultValue="profile" className="w-full">

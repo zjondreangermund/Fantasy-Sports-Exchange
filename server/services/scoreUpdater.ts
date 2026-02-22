@@ -16,6 +16,10 @@ export class ScoreUpdateService {
     this.storage = storage;
   }
 
+  isAutoUpdateEnabled() {
+    return Boolean(this.updateInterval);
+  }
+
   private normalize(text: string) {
     return String(text || "")
       .toLowerCase()

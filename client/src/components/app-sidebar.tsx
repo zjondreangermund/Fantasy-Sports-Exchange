@@ -32,7 +32,7 @@ import {
 const menuItems = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
   { title: "Premier League", href: "/premier-league", icon: Activity },
-  { title: "Competitions", href: "/competitions", icon: Trophy },
+  { title: "Tournaments", href: "/competitions", icon: Trophy },
   { title: "Collection", href: "/collection", icon: Library },
   { title: "Marketplace", href: "/marketplace", icon: ShoppingCart },
   { title: "Auctions", href: "/auctions", icon: Gavel },

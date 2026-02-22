@@ -220,12 +220,30 @@ export default function PlayerCard3D({
           className="absolute inset-0 flex items-end justify-center"
           style={{ transform: "translateZ(42px)" }}
         >
-          <div className="relative w-[92%] h-[70%]">
+          <div className="relative w-[92%] h-[70%] bg-slate-900 rounded-[18px] overflow-hidden">
             {imageUrl ? (
               <img
                 src={imageUrl}
                 alt={name}
                 className="absolute bottom-0 left-1/2 -translate-x-1/2 h-full w-auto object-contain drop-shadow-[0_25px_35px_rgba(0,0,0,.75)]"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  const current = target.getAttribute("src") || "";
+                  const triedLower = target.dataset.triedLowercase === "1";
+                  if (!triedLower && current) {
+                    const [pathOnly, search = ""] = current.split("?");
+                    const parts = pathOnly.split("/");
+                    const fileName = (parts.pop() || "").toLowerCase();
+                    const lowerPath = `${parts.join("/")}/${fileName}`.replace(/\/+/g, "/");
+                    if (lowerPath !== pathOnly) {
+                      target.dataset.triedLowercase = "1";
+                      target.src = search ? `${lowerPath}?${search}` : lowerPath;
+                      return;
+                    }
+                  }
+                  target.onerror = null;
+                  target.src = "/images/player-1.png";
+                }}
                 draggable={false}
               />
             ) : (

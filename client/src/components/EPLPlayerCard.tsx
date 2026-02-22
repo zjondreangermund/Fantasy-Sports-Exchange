@@ -389,7 +389,14 @@ export default function EPLPlayerCard({
               opacity: 0.85,
               filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.5))",
             }}>
-              <img src={player.teamLogo} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              <img
+                src={player.teamLogo}
+                alt=""
+                style={{ width: "100%", height: "100%", objectFit: "contain", background: "#0f172a" }}
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
             </div>
           )}
 
@@ -505,11 +512,30 @@ export default function EPLPlayerCard({
               <img
                 src={player.photo}
                 alt={player.name}
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  const current = target.getAttribute("src") || "";
+                  const triedLower = target.dataset.triedLowercase === "1";
+                  if (!triedLower && current) {
+                    const [pathOnly, search = ""] = current.split("?");
+                    const parts = pathOnly.split("/");
+                    const fileName = (parts.pop() || "").toLowerCase();
+                    const lowerPath = `${parts.join("/")}/${fileName}`.replace(/\/+/g, "/");
+                    if (lowerPath !== pathOnly) {
+                      target.dataset.triedLowercase = "1";
+                      target.src = search ? `${lowerPath}?${search}` : lowerPath;
+                      return;
+                    }
+                  }
+                  target.onerror = null;
+                  target.src = "/images/player-1.png";
+                }}
                 style={{
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",
                   objectPosition: "top center",
+                  background: "#0f172a",
                   filter: "contrast(1.08) saturate(1.12) drop-shadow(0 10px 20px rgba(0,0,0,0.6))",
                 }}
               />

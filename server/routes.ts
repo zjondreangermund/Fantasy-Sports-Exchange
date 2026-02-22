@@ -256,6 +256,68 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // --- API ROUTES ---
   // ----------------
 
+  const trafficWindowMs = 60 * 60 * 1000;
+  const onlineWindowMs = 10 * 60 * 1000;
+  const requestEvents: Array<{
+    ts: number;
+    method: string;
+    path: string;
+    status: number;
+    durationMs: number;
+    userId?: string;
+  }> = [];
+  const userLastSeen = new Map<string, number>();
+
+  const normalizeTrafficPath = (path: string) =>
+    String(path || "")
+      .replace(/\/\d+(?=\/|$)/g, "/:id")
+      .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ":uuid");
+
+  const pruneTraffic = () => {
+    const now = Date.now();
+    while (requestEvents.length > 0 && now - requestEvents[0].ts > trafficWindowMs) {
+      requestEvents.shift();
+    }
+    userLastSeen.forEach((ts, userId) => {
+      if (now - ts > onlineWindowMs) {
+        userLastSeen.delete(userId);
+      }
+    });
+  };
+
+  app.use((req: any, res, next) => {
+    if (!String(req.path || "").startsWith("/api")) return next();
+    const startedAt = Date.now();
+    const method = String(req.method || "GET").toUpperCase();
+    const normalizedPath = normalizeTrafficPath(String(req.path || ""));
+
+    res.on("finish", () => {
+      const now = Date.now();
+      const userId =
+        req?.authUserId ||
+        req?.user?.claims?.sub ||
+        req?.user?.id ||
+        undefined;
+
+      requestEvents.push({
+        ts: now,
+        method,
+        path: normalizedPath,
+        status: Number(res.statusCode || 0),
+        durationMs: Math.max(0, now - startedAt),
+        userId: userId ? String(userId) : undefined,
+      });
+
+      if (userId) {
+        userLastSeen.set(String(userId), now);
+      }
+
+      pruneTraffic();
+    });
+
+    next();
+  });
+
   let autoWithdrawEnabled = true;
 
   const processEligibleAutoWithdrawals = async () => {
@@ -580,6 +642,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
+      if (status === "finished" || status === "ft") {
+        const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        filtered = filtered.filter((f: any) => {
+          const kickoff = f?.kickoff_time ? new Date(String(f.kickoff_time)).getTime() : 0;
+          return Number.isFinite(kickoff) && kickoff >= recentCutoff;
+        });
+      }
+
       const normalized = filtered
         .map((fixture: any) => {
           const homeTeam = teamMap.get(Number(fixture.team_h)) as any;
@@ -609,6 +679,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .sort((a: any, b: any) => {
           const ta = a.matchDate ? new Date(a.matchDate).getTime() : 0;
           const tb = b.matchDate ? new Date(b.matchDate).getTime() : 0;
+          if (status === "finished" || status === "ft") return tb - ta;
           return ta - tb;
         });
 
@@ -1608,7 +1679,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       if (inActiveLineup) {
         return res.status(400).json({
-          message: "Cannot list a card that is currently used in a competition lineup.",
+          message: "Cannot list a card that is currently used in a tournament lineup.",
         });
       }
       
@@ -1835,7 +1906,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       if (inActiveLineup) {
         return res.status(400).json({
-          message: "Cannot list a card that is currently used in a competition lineup.",
+          message: "Cannot list a card that is currently used in a tournament lineup.",
         });
       }
       
@@ -2397,7 +2468,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json(competitionsWithEntries);
     } catch (error: any) {
       console.error("Failed to fetch competitions:", error);
-      res.status(500).json({ message: "Failed to fetch competitions" });
+      res.status(500).json({ message: "Failed to fetch tournaments" });
     }
   });
 
@@ -2408,24 +2479,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { competitionId, cardIds, captainId } = req.body;
       
       if (!competitionId || !Array.isArray(cardIds) || cardIds.length !== 5) {
-        return res.status(400).json({ message: "Competition ID and exactly 5 card IDs required" });
+        return res.status(400).json({ message: "Tournament ID and exactly 5 card IDs required" });
       }
       
       // Get competition
       const competition = await storage.getCompetition(competitionId);
       if (!competition) {
-        return res.status(404).json({ message: "Competition not found" });
+        return res.status(404).json({ message: "Tournament not found" });
       }
       
       // Check if already entered
       const existingEntry = await storage.getCompetitionEntry(competitionId, userId);
       if (existingEntry) {
-        return res.status(400).json({ message: "Already entered this competition" });
+        return res.status(400).json({ message: "Already entered this tournament" });
       }
       
       // Check competition status
       if (competition.status !== "open") {
-        return res.status(400).json({ message: "Competition is not open for entries" });
+        return res.status(400).json({ message: "Tournament is not open for entries" });
       }
       
       // Validate lineup (1 GK, 1 DEF, 1 MID, 1 FWD, 1 Utility)
@@ -2464,7 +2535,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const conflictingCards = cardIds.filter(id => cardsInActiveComps.has(id));
       if (conflictingCards.length > 0) {
         return res.status(400).json({ 
-          message: "Some cards are already in an active competition. Each card can only be in one competition at a time." 
+          message: "Some cards are already in an active tournament. Each card can only be in one tournament at a time." 
         });
       }
       
@@ -2482,7 +2553,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       if (tierCompIds.size > 0 && !tierCompIds.has(competitionId)) {
         return res.status(400).json({ 
-          message: `You can only enter one ${competition.tier} competition at a time. Complete or wait for your current ${competition.tier} competition to finish.` 
+          message: `You can only enter one ${competition.tier} tournament at a time. Complete or wait for your current ${competition.tier} tournament to finish.` 
         });
       }
       
@@ -2516,7 +2587,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           userId,
           type: "entry_fee",
           amount: -entryFee,
-          description: `Entered competition: ${competition.name}`,
+          description: `Entered tournament: ${competition.name}`,
         });
       }
       
@@ -2531,12 +2602,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       res.json({ 
         success: true, 
-        message: "Successfully joined competition",
+        message: "Successfully joined tournament",
         entryId: entry.id
       });
     } catch (error: any) {
       console.error("Failed to join competition:", error);
-      res.status(500).json({ message: error.message || "Failed to join competition" });
+      res.status(500).json({ message: error.message || "Failed to join tournament" });
     }
   });
 
@@ -2560,12 +2631,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const entryId = parseInt(req.params.entryId, 10);
 
       if (!Number.isFinite(competitionId) || !Number.isFinite(entryId)) {
-        return res.status(400).json({ message: "Invalid competition or entry id" });
+        return res.status(400).json({ message: "Invalid tournament or entry id" });
       }
 
       const viewerEntry = await storage.getCompetitionEntry(competitionId, viewerId);
       if (!viewerEntry) {
-        return res.status(403).json({ message: "Enter this competition to view other lineups" });
+        return res.status(403).json({ message: "Enter this tournament to view other lineups" });
       }
 
       const entries = await storage.getCompetitionEntries(competitionId);
@@ -2711,11 +2782,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const competition = await storage.getCompetition(competitionId);
       if (!competition) {
-        return res.status(404).json({ message: "Competition not found" });
+        return res.status(404).json({ message: "Tournament not found" });
       }
       
       if (competition.status === "completed") {
-        return res.status(400).json({ message: "Competition already settled" });
+        return res.status(400).json({ message: "Tournament already settled" });
       }
       
       // Get all entries sorted by score
@@ -2750,7 +2821,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             userId: entry.userId,
             type: "prize",
             amount: prize,
-            description: `Competition prize: ${competition.name} - Rank ${i + 1}`,
+            description: `Tournament prize: ${competition.name} - Rank ${i + 1}`,
           });
         }
       }
@@ -2758,6 +2829,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let winnerPrizeCardId: number | null = null;
       if (sortedEntries.length > 0) {
         const winner = sortedEntries[0];
+        const prizeRarity = String(competition.prizeCardRarity || "rare").toLowerCase();
         const todayTeams = await getTodayTeamNames();
         const allPlayers = await storage.getPlayers();
         const todayPlayers = todayTeams.size
@@ -2770,7 +2842,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             const created = await storage.createPlayerCard({
               playerId: p.id,
               ownerId: winner.userId,
-              rarity: "rare",
+              rarity: prizeRarity as any,
               level: 1,
               xp: 0,
               decisiveScore: 35,
@@ -2786,12 +2858,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
 
         const winnerUser = await storage.getUser(winner.userId);
+        const prizeRarityLabel = `${prizeRarity.charAt(0).toUpperCase()}${prizeRarity.slice(1)}`;
         const winnerTitle = winnerPrizeCardId
-          ? "🏆 You won! Rare card awarded"
-          : "🏆 You won today's competition";
+          ? `🏆 You won! ${prizeRarityLabel} card awarded`
+          : "🏆 You won today's tournament";
         const winnerMessage = winnerPrizeCardId
-          ? `You finished 1st in ${competition.name}. Your rare card prize was auto-delivered to your collection.`
-          : `You finished 1st in ${competition.name}. Rare card supply was exhausted, but your cash prize was delivered.`;
+          ? `You finished 1st in ${competition.name}. Your ${prizeRarityLabel.toLowerCase()} card prize was auto-delivered to your collection.`
+          : `You finished 1st in ${competition.name}. ${prizeRarityLabel} card supply was exhausted, but your cash prize was delivered.`;
 
         await db.insert(notifications).values({
           userId: winner.userId,
@@ -2804,7 +2877,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (winnerUser?.email) {
           await sendEmailNotification(
             winnerUser.email,
-            "You won today - rare card awarded",
+            `You won today - ${prizeRarityLabel.toLowerCase()} card awarded`,
             `<p>Congrats! You finished <strong>1st</strong> in <strong>${competition.name}</strong>.</p><p>${winnerMessage}</p>`,
           );
         }
@@ -2845,13 +2918,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       res.json({ 
         success: true,
-        message: "Competition settled successfully",
+        message: "Tournament settled successfully",
         winnersCount: Math.min(3, sortedEntries.length),
         winnerPrizeCardId,
       });
     } catch (error: any) {
       console.error("Failed to settle competition:", error);
-      res.status(500).json({ message: "Failed to settle competition" });
+      res.status(500).json({ message: "Failed to settle tournament" });
     }
   });
 
@@ -3009,6 +3082,216 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/admin/traffic", requireAuth, isAdmin, async (_req: any, res) => {
+    try {
+      pruneTraffic();
+      const now = Date.now();
+      const oneMinuteAgo = now - 60 * 1000;
+      const fiveMinutesAgo = now - 5 * 60 * 1000;
+      const tenMinutesMs = 10 * 60 * 1000;
+
+      const reqLastMinute = requestEvents.filter((e) => e.ts >= oneMinuteAgo);
+      const reqLastFive = requestEvents.filter((e) => e.ts >= fiveMinutesAgo);
+
+      const routeStats = new Map<string, { count: number; errors: number; totalMs: number }>();
+      for (const event of requestEvents) {
+        const key = `${event.method} ${event.path}`;
+        const prev = routeStats.get(key) || { count: 0, errors: 0, totalMs: 0 };
+        prev.count += 1;
+        prev.totalMs += event.durationMs;
+        if (event.status >= 400) prev.errors += 1;
+        routeStats.set(key, prev);
+      }
+
+      const topRoutes = Array.from(routeStats.entries())
+        .map(([route, data]) => ({
+          route,
+          count: data.count,
+          errorRate: data.count > 0 ? Number(((data.errors / data.count) * 100).toFixed(1)) : 0,
+          avgDurationMs: data.count > 0 ? Number((data.totalMs / data.count).toFixed(1)) : 0,
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+
+      const perMinuteSeries = Array.from({ length: 15 }).map((_, index) => {
+        const from = now - (15 - index) * 60 * 1000;
+        const to = from + 60 * 1000;
+        const count = requestEvents.filter((e) => e.ts >= from && e.ts < to).length;
+        return {
+          minuteOffset: index - 14,
+          count,
+        };
+      });
+
+      const activeUsers = Array.from(userLastSeen.entries())
+        .filter(([, ts]) => now - ts <= tenMinutesMs)
+        .map(([userId, ts]) => ({
+          userId,
+          lastSeenSecondsAgo: Math.max(0, Math.floor((now - ts) / 1000)),
+        }))
+        .sort((a, b) => a.lastSeenSecondsAgo - b.lastSeenSecondsAgo);
+
+      return res.json({
+        windowMinutes: 60,
+        requestsLastMinute: reqLastMinute.length,
+        requestsLast5Minutes: reqLastFive.length,
+        requestsLastHour: requestEvents.length,
+        onlineUsersLast10Minutes: activeUsers.length,
+        activeUsers,
+        topRoutes,
+        perMinuteSeries,
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch traffic metrics:", error);
+      return res.status(500).json({ message: "Failed to fetch traffic metrics" });
+    }
+  });
+
+  app.post("/api/admin/competitions", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const {
+        name,
+        tier,
+        entryFee,
+        status,
+        gameWeek,
+        startDate,
+        endDate,
+        prizeCardRarity,
+      } = req.body || {};
+
+      const normalizedName = String(name || "").trim();
+      const normalizedTier = String(tier || "common").toLowerCase();
+      const normalizedStatus = String(status || "upcoming").toLowerCase();
+      const normalizedPrizeRarity = String(prizeCardRarity || "rare").toLowerCase();
+      const normalizedEntryFee = Number(entryFee || 0);
+      const normalizedGameWeek = Number(gameWeek || 0);
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      const validTiers = new Set(["common", "rare", "unique", "legendary"]);
+      const validStatuses = new Set(["open", "upcoming", "active", "completed"]);
+      const validPrizeRarities = new Set(["common", "rare", "unique", "epic", "legendary"]);
+
+      if (!normalizedName) {
+        return res.status(400).json({ message: "Tournament name is required" });
+      }
+      if (!validTiers.has(normalizedTier)) {
+        return res.status(400).json({ message: "Invalid tournament tier" });
+      }
+      if (!validStatuses.has(normalizedStatus)) {
+        return res.status(400).json({ message: "Invalid tournament status" });
+      }
+      if (!validPrizeRarities.has(normalizedPrizeRarity)) {
+        return res.status(400).json({ message: "Invalid prize card rarity" });
+      }
+      if (!Number.isFinite(normalizedEntryFee) || normalizedEntryFee < 0) {
+        return res.status(400).json({ message: "Entry fee must be a non-negative number" });
+      }
+      if (!Number.isFinite(normalizedGameWeek) || normalizedGameWeek < 1) {
+        return res.status(400).json({ message: "Game week must be at least 1" });
+      }
+      if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+        return res.status(400).json({ message: "Invalid start/end dates" });
+      }
+
+      const created = await storage.createCompetition({
+        name: normalizedName,
+        tier: normalizedTier as any,
+        entryFee: normalizedEntryFee,
+        status: normalizedStatus as any,
+        gameWeek: normalizedGameWeek,
+        startDate: start,
+        endDate: end,
+        prizeCardRarity: normalizedPrizeRarity as any,
+      } as any);
+
+      return res.json({ success: true, message: "Tournament created successfully", competition: created });
+    } catch (error: any) {
+      console.error("Failed to create tournament:", error);
+      return res.status(500).json({ message: "Failed to create tournament", error: error?.message });
+    }
+  });
+
+  app.patch("/api/admin/competitions/:id", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const competitionId = parseInt(req.params.id, 10);
+      if (!Number.isFinite(competitionId)) {
+        return res.status(400).json({ message: "Invalid tournament id" });
+      }
+
+      const existing = await storage.getCompetition(competitionId);
+      if (!existing) {
+        return res.status(404).json({ message: "Tournament not found" });
+      }
+
+      const {
+        name,
+        tier,
+        entryFee,
+        status,
+        gameWeek,
+        startDate,
+        endDate,
+        prizeCardRarity,
+      } = req.body || {};
+
+      const updates: any = {};
+      const validTiers = new Set(["common", "rare", "unique", "legendary"]);
+      const validStatuses = new Set(["open", "upcoming", "active", "completed"]);
+      const validPrizeRarities = new Set(["common", "rare", "unique", "epic", "legendary"]);
+
+      if (name !== undefined) {
+        const normalizedName = String(name || "").trim();
+        if (!normalizedName) return res.status(400).json({ message: "Tournament name cannot be empty" });
+        updates.name = normalizedName;
+      }
+      if (tier !== undefined) {
+        const normalizedTier = String(tier || "").toLowerCase();
+        if (!validTiers.has(normalizedTier)) return res.status(400).json({ message: "Invalid tournament tier" });
+        updates.tier = normalizedTier;
+      }
+      if (status !== undefined) {
+        const normalizedStatus = String(status || "").toLowerCase();
+        if (!validStatuses.has(normalizedStatus)) return res.status(400).json({ message: "Invalid tournament status" });
+        updates.status = normalizedStatus;
+      }
+      if (prizeCardRarity !== undefined) {
+        const normalizedPrizeRarity = String(prizeCardRarity || "").toLowerCase();
+        if (!validPrizeRarities.has(normalizedPrizeRarity)) return res.status(400).json({ message: "Invalid prize card rarity" });
+        updates.prizeCardRarity = normalizedPrizeRarity;
+      }
+      if (entryFee !== undefined) {
+        const normalizedEntryFee = Number(entryFee);
+        if (!Number.isFinite(normalizedEntryFee) || normalizedEntryFee < 0) {
+          return res.status(400).json({ message: "Entry fee must be a non-negative number" });
+        }
+        updates.entryFee = normalizedEntryFee;
+      }
+      if (gameWeek !== undefined) {
+        const normalizedGameWeek = Number(gameWeek);
+        if (!Number.isFinite(normalizedGameWeek) || normalizedGameWeek < 1) {
+          return res.status(400).json({ message: "Game week must be at least 1" });
+        }
+        updates.gameWeek = normalizedGameWeek;
+      }
+
+      const nextStart = startDate !== undefined ? new Date(startDate) : new Date(existing.startDate as any);
+      const nextEnd = endDate !== undefined ? new Date(endDate) : new Date(existing.endDate as any);
+      if (!Number.isFinite(nextStart.getTime()) || !Number.isFinite(nextEnd.getTime()) || nextEnd <= nextStart) {
+        return res.status(400).json({ message: "Invalid start/end dates" });
+      }
+      if (startDate !== undefined) updates.startDate = nextStart;
+      if (endDate !== undefined) updates.endDate = nextEnd;
+
+      const updated = await storage.updateCompetition(competitionId, updates);
+      return res.json({ success: true, message: "Tournament updated successfully", competition: updated });
+    } catch (error: any) {
+      console.error("Failed to update tournament:", error);
+      return res.status(500).json({ message: "Failed to update tournament", error: error?.message });
+    }
+  });
+
   app.post("/api/admin/cards/grant-today-starters", requireAuth, isAdmin, async (_req: any, res) => {
     try {
       const [fplPlayers, bootstrap, fixtures] = await Promise.all([
@@ -3052,6 +3335,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         2: "DEF",
         3: "MID",
         4: "FWD",
+      };
+
+      const starterRarities = ["common", "rare", "unique", "epic", "legendary"] as const;
+      const rarityFallbackOrder: Record<string, string[]> = {
+        legendary: ["legendary", "epic", "rare", "common"],
+        epic: ["epic", "rare", "common"],
+        unique: ["unique", "rare", "common"],
+        rare: ["rare", "common"],
+        common: ["common"],
       };
 
       const candidates = (Array.isArray(fplPlayers) ? fplPlayers : [])
@@ -3111,24 +3403,52 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const user = usersList[u];
         const local = [...candidates];
         const picked = shuffle(local).slice(0, 5);
-        for (const candidate of picked) {
+        for (let index = 0; index < picked.length; index++) {
+          const candidate = picked[index];
           const player = await ensurePlayer(candidate);
-          await storage.createPlayerCard({
-            playerId: player.id,
-            ownerId: user.id,
-            rarity: "common",
-            level: 1,
-            xp: 0,
-            decisiveScore: 35,
-            last5Scores: [0, 0, 0, 0, 0],
-            forSale: false,
-            price: 0,
-          } as any);
-          minted++;
+          const requestedRarity = starterRarities[index] || "common";
+          const rarityTryOrder = rarityFallbackOrder[requestedRarity] || ["common"];
+
+          let created = false;
+          for (const rarity of rarityTryOrder) {
+            try {
+              await storage.createPlayerCard({
+                playerId: player.id,
+                ownerId: user.id,
+                rarity,
+                level: 1,
+                xp: 0,
+                decisiveScore: 35,
+                last5Scores: [0, 0, 0, 0, 0],
+                forSale: false,
+                price: 0,
+              } as any);
+              minted++;
+              created = true;
+              break;
+            } catch (_e) {
+              continue;
+            }
+          }
+
+          if (!created) {
+            await storage.createPlayerCard({
+              playerId: player.id,
+              ownerId: user.id,
+              rarity: "common",
+              level: 1,
+              xp: 0,
+              decisiveScore: 35,
+              last5Scores: [0, 0, 0, 0, 0],
+              forSale: false,
+              price: 0,
+            } as any);
+            minted++;
+          }
         }
       }
 
-      return res.json({ success: true, users: usersList.length, minted, message: `Granted 5 common cards each to ${usersList.length} users.` });
+      return res.json({ success: true, users: usersList.length, minted, message: `Granted 5 mixed-rarity cards each to ${usersList.length} users.` });
     } catch (error: any) {
       console.error("Failed to grant today starter cards:", error);
       return res.status(500).json({ message: "Failed to grant cards", error: error?.message });

@@ -36,6 +36,15 @@ export default function OnboardingTunnelPage() {
   const isMobile = window.innerWidth < 768 || window.innerHeight > window.innerWidth;
   const tunnelVideo = isMobile ? "/cinematics/tunnel_9x16.mp4" : "/cinematics/tunnel_16x9.mp4";
 
+  const tryPlayTunnelVideo = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.play().catch((e) => {
+      console.log("Tunnel video play failed:", e);
+    });
+  };
+
   // Fetch user's cards for onboarding
   const { data: cards, isLoading } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/user/cards"],
@@ -74,6 +83,11 @@ export default function OnboardingTunnelPage() {
     setAudioEnabled(true);
     setPhase("tunnel");
 
+    // Mirror landing behavior: start playback immediately on user gesture
+    requestAnimationFrame(() => {
+      tryPlayTunnelVideo();
+    });
+
     // Start crowd audio
     playAudio(crowdAudioRef);
 
@@ -100,11 +114,7 @@ export default function OnboardingTunnelPage() {
     const video = videoRef.current;
     if (!video) return;
 
-    const attemptPlay = () => {
-      video.play().catch((e) => {
-        console.log("Tunnel video play failed:", e);
-      });
-    };
+    const attemptPlay = () => tryPlayTunnelVideo();
 
     attemptPlay();
     video.addEventListener("canplay", attemptPlay);
@@ -145,7 +155,7 @@ export default function OnboardingTunnelPage() {
     <div className="relative w-full h-screen overflow-hidden bg-black">
       {/* Cinematic Background */}
       <CinematicBackground
-        show={phase !== "start"}
+        show={phase !== "start" && phase !== "tunnel"}
         overlayOpacity={phase === "light" ? 0.2 : 0.5}
       />
 
@@ -202,14 +212,24 @@ export default function OnboardingTunnelPage() {
           {!videoError && (
             <video
               ref={videoRef}
-              src={tunnelVideo}
               className="absolute inset-0 w-full h-full object-cover z-0"
               autoPlay
               muted
+              loop
               preload="auto"
               playsInline
               onError={() => setVideoError(true)}
               poster="/cinematics/tunnel.png"
+            >
+              <source src={tunnelVideo} type="video/mp4" />
+            </video>
+          )}
+
+          {videoError && (
+            <img
+              src="/cinematics/tunnel.png"
+              alt="Stadium tunnel"
+              className="absolute inset-0 w-full h-full object-cover z-0"
             />
           )}
           

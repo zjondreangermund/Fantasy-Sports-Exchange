@@ -20,7 +20,7 @@ export default function RewardPopup({ rewards, onClose }: RewardPopupProps) {
             <Trophy className="w-8 h-8 text-yellow-500" />
           </div>
           <h2 className="text-2xl font-bold text-foreground mb-2">Congratulations!</h2>
-          <p className="text-muted-foreground mb-6">You've won prizes in recent competitions</p>
+          <p className="text-muted-foreground mb-6">You've won prizes in recent tournaments</p>
 
           <div className="space-y-4 max-h-96 overflow-auto">
             {rewards.map((reward, index) => (
@@ -28,7 +28,7 @@ export default function RewardPopup({ rewards, onClose }: RewardPopupProps) {
                 <div className="flex items-center gap-2 mb-3">
                   <Star className="w-4 h-4 text-yellow-500" />
                   <span className="font-semibold text-foreground">
-                    {reward.competition?.name || "Competition"}
+                    {reward.competition?.name || "Tournament"}
                   </span>
                   {reward.rank && (
                     <Badge variant="outline" className={
