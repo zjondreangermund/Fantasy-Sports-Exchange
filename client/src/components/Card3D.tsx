@@ -130,46 +130,50 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imgData.data;
+      try {
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
 
-      let removed = 0;
-      const totalPixels = data.length / 4;
-      for (let i = 0; i < data.length; i += 4) {
-        data[i] = Math.min(255, Math.round(data[i] * 1.08 + 8));
-        data[i + 1] = Math.min(255, Math.round(data[i + 1] * 1.08 + 8));
-        data[i + 2] = Math.min(255, Math.round(data[i + 2] * 1.08 + 8));
+        let removed = 0;
+        const totalPixels = data.length / 4;
+        for (let i = 0; i < data.length; i += 4) {
+          data[i] = Math.min(255, Math.round(data[i] * 1.08 + 8));
+          data[i + 1] = Math.min(255, Math.round(data[i + 1] * 1.08 + 8));
+          data[i + 2] = Math.min(255, Math.round(data[i + 2] * 1.08 + 8));
 
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const max = Math.max(r, g, b);
-        const min = Math.min(r, g, b);
-        const sat = max === 0 ? 0 : (max - min) / max;
-        const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        const likelyWhiteBg = luminance > 232 && sat < 0.22;
-        if (likelyWhiteBg) {
-          data[i + 3] = 0;
-          removed += 1;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const sat = max === 0 ? 0 : (max - min) / max;
+          const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          const likelyWhiteBg = luminance > 232 && sat < 0.22;
+          if (likelyWhiteBg) {
+            data[i + 3] = 0;
+            removed += 1;
+          }
         }
-      }
 
-      if (removed / totalPixels <= 0.65) {
-        ctx.putImageData(imgData, 0, 0);
-      }
-
-      const cleaned = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const cleanedData = cleaned.data;
-      for (let i = 0; i < cleanedData.length; i += 4) {
-        const alpha = cleanedData[i + 3];
-        if (alpha < 24) {
-          cleanedData[i] = 0;
-          cleanedData[i + 1] = 0;
-          cleanedData[i + 2] = 0;
-          cleanedData[i + 3] = 0;
+        if (removed / totalPixels <= 0.65) {
+          ctx.putImageData(imgData, 0, 0);
         }
+
+        const cleaned = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const cleanedData = cleaned.data;
+        for (let i = 0; i < cleanedData.length; i += 4) {
+          const alpha = cleanedData[i + 3];
+          if (alpha < 24) {
+            cleanedData[i] = 0;
+            cleanedData[i + 1] = 0;
+            cleanedData[i + 2] = 0;
+            cleanedData[i + 3] = 0;
+          }
+        }
+        ctx.putImageData(cleaned, 0, 0);
+      } catch {
+        // If canvas pixel reads are blocked (CORS/tainted image), keep the drawn photo so it still renders.
       }
-      ctx.putImageData(cleaned, 0, 0);
 
       const inset = Math.round(Math.min(canvas.width, canvas.height) * 0.04);
       const radius = Math.round(Math.min(canvas.width, canvas.height) * 0.10);
