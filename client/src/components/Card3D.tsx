@@ -6,6 +6,23 @@ import { Shield } from "lucide-react";
 
 type RarityKey = "common" | "rare" | "unique" | "epic" | "legendary";
 
+function normalizeImageUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const value = String(url).trim();
+  if (!value) return null;
+  if (/^(https?:)?\/\//i.test(value) || value.startsWith("data:")) return value;
+  return value.startsWith("/") ? value : `/${value}`;
+}
+
+function lowercaseFilenamePath(url: string): string {
+  const [pathOnly, search = ""] = url.split("?");
+  const parts = pathOnly.split("/");
+  const fileName = parts.pop() || "";
+  const lowerFileName = fileName.toLowerCase();
+  const rebuilt = `${parts.join("/")}/${lowerFileName}`.replace(/\/+/g, "/");
+  return search ? `${rebuilt}?${search}` : rebuilt;
+}
+
 const rarityStyles: Record<
   RarityKey,
   {
@@ -82,11 +99,7 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
     canvas.height = 32;
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      const grad = ctx.createLinearGradient(0, 0, 32, 32);
-      grad.addColorStop(0, "#4b5563");
-      grad.addColorStop(1, "#9ca3af");
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 32, 32);
+      ctx.clearRect(0, 0, 32, 32);
     }
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.ClampToEdgeWrapping;
@@ -123,6 +136,10 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
       let removed = 0;
       const totalPixels = data.length / 4;
       for (let i = 0; i < data.length; i += 4) {
+        data[i] = Math.min(255, Math.round(data[i] * 1.08 + 8));
+        data[i + 1] = Math.min(255, Math.round(data[i + 1] * 1.08 + 8));
+        data[i + 2] = Math.min(255, Math.round(data[i + 2] * 1.08 + 8));
+
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
@@ -130,7 +147,7 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
         const min = Math.min(r, g, b);
         const sat = max === 0 ? 0 : (max - min) / max;
         const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        const likelyWhiteBg = luminance > 246 && sat < 0.1;
+        const likelyWhiteBg = luminance > 232 && sat < 0.22;
         if (likelyWhiteBg) {
           data[i + 3] = 0;
           removed += 1;
@@ -140,6 +157,19 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
       if (removed / totalPixels <= 0.65) {
         ctx.putImageData(imgData, 0, 0);
       }
+
+      const cleaned = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const cleanedData = cleaned.data;
+      for (let i = 0; i < cleanedData.length; i += 4) {
+        const alpha = cleanedData[i + 3];
+        if (alpha < 24) {
+          cleanedData[i] = 0;
+          cleanedData[i + 1] = 0;
+          cleanedData[i + 2] = 0;
+          cleanedData[i + 3] = 0;
+        }
+      }
+      ctx.putImageData(cleaned, 0, 0);
 
       const inset = Math.round(Math.min(canvas.width, canvas.height) * 0.04);
       const radius = Math.round(Math.min(canvas.width, canvas.height) * 0.10);
@@ -176,6 +206,13 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
     };
 
     img.onerror = () => {
+      if (!cancelled) {
+        const lowerPath = lowercaseFilenamePath(url);
+        if (lowerPath !== url) {
+          img.src = lowerPath;
+          return;
+        }
+      }
       if (!cancelled) setProcessedTexture(fallbackTexture);
     };
 
@@ -193,14 +230,16 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
         map: processedTexture,
         alphaMap: processedTexture,
         bumpMap: processedTexture,
-        bumpScale: 0.12,
-        metalness: 0.95,
-        roughness: 0.18,
+        bumpScale: 0.1,
+        metalness: 0.75,
+        roughness: 0.2,
         clearcoat: 1,
         clearcoatRoughness: 0.06,
         reflectivity: 1,
+        emissive: new THREE.Color("#8ec5ff"),
+        emissiveIntensity: 0.12,
         transparent: true,
-        alphaTest: 0.45,
+        alphaTest: 0.32,
         depthWrite: true,
         opacity: 1.0,
       }),
@@ -290,12 +329,14 @@ function CardMesh({
     () =>
       new THREE.MeshPhysicalMaterial({
         color: colors.base,
-        metalness: 0.98,
-        roughness: 0.06,
+        metalness: 0.82,
+        roughness: 0.12,
         clearcoat: 1,
         clearcoatRoughness: 0.02,
         reflectivity: 1,
-        envMapIntensity: 2.1,
+        envMapIntensity: 2.4,
+        emissive: new THREE.Color(colors.base).multiplyScalar(0.12),
+        emissiveIntensity: 0.35,
       }),
     [colors.base],
   );
@@ -304,11 +345,13 @@ function CardMesh({
     () =>
       new THREE.MeshPhysicalMaterial({
         color: new THREE.Color(colors.base).multiplyScalar(0.35),
-        metalness: 0.95,
-        roughness: 0.08,
+        metalness: 0.88,
+        roughness: 0.1,
         clearcoat: 1,
         clearcoatRoughness: 0.03,
         reflectivity: 1,
+        emissive: new THREE.Color(colors.base).multiplyScalar(0.08),
+        emissiveIntensity: 0.25,
       }),
     [colors.base],
   );
@@ -495,8 +538,8 @@ export default function Card3D({
   const pad = size === "sm" ? "10px 12px 8px" : size === "lg" ? "16px 18px 14px" : "12px 14px 10px";
 
   const imageIndex = ((card.playerId - 1) % 6) + 1;
-  const fallbackImage = card.player?.imageUrl || `/images/player-${imageIndex}.png`;
-  const imageUrl = sorareImageUrl || fallbackImage;
+  const fallbackImage = normalizeImageUrl(card.player?.imageUrl) || `/images/player-${imageIndex}.png`;
+  const imageUrl = normalizeImageUrl(sorareImageUrl) || fallbackImage;
 
   const serialText = card.serialNumber && card.maxSupply ? `#${String(card.serialNumber).padStart(3, "0")}/${card.maxSupply}` : card.serialId || "";
 
@@ -586,10 +629,11 @@ export default function Card3D({
               gl.setClearColor(0x000000, 0);
             }}
           >
-            <ambientLight intensity={0.5} />
+            <ambientLight intensity={0.75} />
             <directionalLight position={[5, 5, 5]} intensity={3} />
             <directionalLight position={[-3, 2, 4]} intensity={1} />
             <pointLight position={[0, 0, 4]} intensity={0.5} />
+            <pointLight position={[0, 2, 3]} intensity={0.45} color="#dbeafe" />
             <CardMesh rarity={rarity} playerImageUrl={imageUrl} hovered={hovered} mouse={mouseRef} />
           </Canvas>
         </CanvasErrorBoundary>
