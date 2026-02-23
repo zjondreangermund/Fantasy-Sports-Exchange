@@ -9,56 +9,7 @@ type RarityKey = "common" | "rare" | "unique" | "epic" | "legendary";
 const MAX_ACTIVE_CANVASES = 8;
 let activeCanvasCount = 0;
 
-function normalizeImageUrl(url?: string | null): string | null {
-  if (!url) return null;
-  const value = String(url).trim();
-  if (!value) return null;
-  if (/^(https?:)?\/\//i.test(value) || value.startsWith("data:")) return value;
-  return value.startsWith("/") ? value : `/${value}`;
-}
 
-function lowercaseFilenamePath(url: string): string {
-  const [pathOnly, search = ""] = url.split("?");
-  const parts = pathOnly.split("/");
-  const fileName = parts.pop() || "";
-  const lowerFileName = fileName.toLowerCase();
-  const rebuilt = `${parts.join("/")}/${lowerFileName}`.replace(/\/+/g, "/");
-  return search ? `${rebuilt}?${search}` : rebuilt;
-}
-
-function toSafeImageUrl(url: string): string {
-  if (/^https?:\/\/resources\.premierleague\.com\//i.test(url)) {
-    return url;
-  }
-  if (/^https?:\/\//i.test(url)) {
-    return `/api/image-proxy?url=${encodeURIComponent(url)}`;
-  }
-  return url;
-}
-
-function buildImageCandidates(primaryUrl: string, playerId?: number): string[] {
-  const candidates: string[] = [];
-
-  // 1) Try local API photo first (fast + consistent if your backend serves real image bytes)
-  if (playerId && Number.isFinite(playerId)) {
-    candidates.push(`/api/players/${playerId}/photo`);
-  }
-
-  // 2) Try the provided imageUrl (normalized + lowercase filename variant)
-  const normalized = normalizeImageUrl(primaryUrl);
-  if (normalized) {
-    const safe = toSafeImageUrl(normalized);
-    candidates.push(safe);
-
-    // some servers are case-sensitive; try lowercase filename variant too
-    if (!safe.startsWith("data:")) {
-      candidates.push(toSafeImageUrl(lowercaseFilenamePath(normalized)));
-    }
-  }
-
-  // remove empties + duplicates
-  return Array.from(new Set(candidates.filter(Boolean)));
-}
 
 const rarityStyles: Record<
   RarityKey,
@@ -129,263 +80,7 @@ class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, { hasError
   }
 }
 
-function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean }) {
-  const fallbackTexture = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 32;
-    canvas.height = 32;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (ctx) {
-      ctx.clearRect(0, 0, 32, 32);
-    }
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.colorSpace = THREE.SRGBColorSpace;
-    return texture;
-  }, []);
 
-  const [processedTexture, setProcessedTexture] = useState<THREE.Texture>(fallbackTexture);
-
-  useEffect(() => {
-    let cancelled = false;
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.referrerPolicy = "no-referrer";
-    let activeIndex = 0;
-
-    img.onload = () => {
-      if (cancelled) return;
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth || img.width || 512;
-      canvas.height = img.naturalHeight || img.height || 512;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      if (!ctx) {
-        setProcessedTexture(fallbackTexture);
-        return;
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const width = canvas.width;
-      const height = canvas.height;
-      const sourceWidth = img.naturalWidth || img.width || 512;
-      const sourceHeight = img.naturalHeight || img.height || 512;
-      const pad = Math.round(Math.min(width, height) * 0.02);
-      const availableWidth = Math.max(1, width - pad * 2);
-      const availableHeight = Math.max(1, height - pad * 2);
-      const scale = Math.min(availableWidth / sourceWidth, availableHeight / sourceHeight);
-      const drawWidth = Math.max(1, Math.round(sourceWidth * scale));
-      const drawHeight = Math.max(1, Math.round(sourceHeight * scale));
-      const drawX = Math.round((width - drawWidth) * 0.5);
-      const drawY = Math.round(height - drawHeight - pad * 0.5);
-
-      ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
-
-      try {
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imgData.data;
-        const source = new Uint8ClampedArray(data);
-
-        let removed = 0;
-        const totalPixels = data.length / 4;
-        for (let i = 0; i < data.length; i += 4) {
-          const r = source[i];
-          const g = source[i + 1];
-          const b = source[i + 2];
-          const max = Math.max(r, g, b);
-          const min = Math.min(r, g, b);
-          const sat = max === 0 ? 0 : (max - min) / max;
-          const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          const likelyWhiteBg = luminance > 232 && sat < 0.22;
-          if (likelyWhiteBg) {
-            data[i + 3] = 0;
-            removed += 1;
-          }
-        }
-
-        const shouldApplyBgRemoval = removed / totalPixels <= 0.65;
-
-        const getLuma = (x: number, y: number) => {
-          const cx = Math.max(0, Math.min(width - 1, x));
-          const cy = Math.max(0, Math.min(height - 1, y));
-          const idx = (cy * width + cx) * 4;
-          return 0.2126 * source[idx] + 0.7152 * source[idx + 1] + 0.0722 * source[idx + 2];
-        };
-
-        for (let y = 0; y < height; y += 1) {
-          for (let x = 0; x < width; x += 1) {
-            const i = (y * width + x) * 4;
-            const baseLuma = getLuma(x, y);
-            const right = getLuma(x + 1, y);
-            const left = getLuma(x - 1, y);
-            const down = getLuma(x, y + 1);
-            const up = getLuma(x, y - 1);
-            const edge = Math.min(255, Math.abs(right - left) + Math.abs(down - up));
-
-            const plate = Math.max(0, Math.min(255, baseLuma * 0.9 + 25));
-            const engraved = Math.max(0, Math.min(255, plate * 0.72 + edge * 0.95));
-
-            data[i] = Math.round(engraved * 0.86 + 22);
-            data[i + 1] = Math.round(engraved * 0.93 + 30);
-            data[i + 2] = Math.round(engraved * 1.03 + 44);
-
-            if (shouldApplyBgRemoval && data[i + 3] === 0) {
-              data[i] = 0;
-              data[i + 1] = 0;
-              data[i + 2] = 0;
-            } else {
-              data[i + 3] = Math.max(72, source[i + 3]);
-            }
-          }
-        }
-
-        ctx.putImageData(imgData, 0, 0);
-
-        const cleaned = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const cleanedData = cleaned.data;
-        const smoothstep = (edge0: number, edge1: number, value: number) => {
-          const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
-          return t * t * (3 - 2 * t);
-        };
-
-        let visiblePixels = 0;
-        for (let i = 0; i < cleanedData.length; i += 4) {
-          const pixel = i / 4;
-          const x = pixel % width;
-          const y = Math.floor(pixel / width);
-          const currentAlpha = cleanedData[i + 3];
-
-          const u = (x - drawX) / Math.max(1, drawWidth);
-          const v = (y - drawY) / Math.max(1, drawHeight);
-
-          if (u < 0 || u > 1 || v < 0 || v > 1) {
-            cleanedData[i] = 0;
-            cleanedData[i + 1] = 0;
-            cleanedData[i + 2] = 0;
-            cleanedData[i + 3] = 0;
-            continue;
-          }
-
-          const radialX = (u - 0.5) / 0.75;
-          const radialY = (v - 1.18) / 0.95;
-          const radialDist = Math.sqrt(radialX * radialX + radialY * radialY);
-          const radialMask = 1 - smoothstep(0.6, 0.92, radialDist);
-          const bottomMask = 1 - smoothstep(0.68, 1.0, v);
-          const alphaMask = Math.max(0, Math.min(1, radialMask * bottomMask));
-
-          const nextAlpha = Math.round(currentAlpha * alphaMask);
-          cleanedData[i + 3] = nextAlpha;
-
-          const r = cleanedData[i];
-          const g = cleanedData[i + 1];
-          const b = cleanedData[i + 2];
-          const avg = (r + g + b) / 3;
-          cleanedData[i] = Math.max(0, Math.min(255, (r - avg) * 1.08 + avg * 1.06));
-          cleanedData[i + 1] = Math.max(0, Math.min(255, (g - avg) * 1.08 + avg * 1.06));
-          cleanedData[i + 2] = Math.max(0, Math.min(255, (b - avg) * 1.08 + avg * 1.06));
-
-          if (cleanedData[i + 3] < 24) {
-            cleanedData[i] = 0;
-            cleanedData[i + 1] = 0;
-            cleanedData[i + 2] = 0;
-            cleanedData[i + 3] = 0;
-          } else {
-            visiblePixels += 1;
-          }
-        }
-        const portraitArea = Math.max(1, drawWidth * drawHeight);
-        const visibleRatio = visiblePixels / portraitArea;
-
-        if (visibleRatio < 0.08) {
-          ctx.clearRect(0, 0, width, height);
-          ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
-        } else {
-          ctx.putImageData(cleaned, 0, 0);
-        }
-      } catch {
-        // If canvas pixel reads are blocked (CORS/tainted image), keep the drawn photo so it still renders.
-      }
-
-      const out = new THREE.CanvasTexture(canvas);
-      out.needsUpdate = true;
-      out.wrapS = THREE.ClampToEdgeWrapping;
-      out.wrapT = THREE.ClampToEdgeWrapping;
-      out.colorSpace = THREE.SRGBColorSpace;
-      out.premultiplyAlpha = true;
-      out.generateMipmaps = false;
-      out.minFilter = THREE.LinearFilter;
-      out.magFilter = THREE.LinearFilter;
-      setProcessedTexture(out);
-    };
-
-    const loadNext = () => {
-      if (cancelled) return;
-      if (activeIndex >= urls.length) {
-        setProcessedTexture(fallbackTexture);
-        return;
-      }
-      const nextUrl = urls[activeIndex];
-      activeIndex += 1;
-      img.src = nextUrl;
-    };
-
-    img.onerror = () => {
-      loadNext();
-    };
-
-    loadNext();
-    return () => {
-      cancelled = true;
-    };
-  }, [urls, fallbackTexture]);
-
-  const ref = useRef<THREE.Mesh>(null);
-
-  const portraitMaterial = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        map: processedTexture,
-        alphaMap: processedTexture,
-        bumpMap: processedTexture,
-        bumpScale: 0.2,
-        metalness: 0.82,
-        roughness: 0.26,
-        clearcoat: 1,
-        clearcoatRoughness: 0.1,
-        reflectivity: 1,
-        emissive: new THREE.Color("#89a8d8"),
-        emissiveIntensity: 0.08,
-        transparent: true,
-        alphaTest: 0.02,
-        depthWrite: true,
-        polygonOffset: true,
-        polygonOffsetFactor: 1,
-        polygonOffsetUnits: 1,
-        opacity: 1.0,
-      }),
-    [processedTexture],
-  );
-
-  useMemo(() => {
-    processedTexture.wrapS = THREE.ClampToEdgeWrapping;
-    processedTexture.wrapT = THREE.ClampToEdgeWrapping;
-    processedTexture.colorSpace = THREE.SRGBColorSpace;
-  }, [processedTexture]);
-
-  useFrame(() => {
-    if (ref.current) {
-      ref.current.position.x = THREE.MathUtils.lerp(ref.current.position.x, hovered ? 0.04 : 0, 0.1);
-      ref.current.position.y = THREE.MathUtils.lerp(ref.current.position.y, hovered ? 0.015 : 0, 0.1);
-    }
-  });
-
-  return (
-    <mesh ref={ref} position={[0, 0.06, 0.385]} renderOrder={10}>
-      <planeGeometry args={[1.86, 2.46, 64, 64]} />
-      <primitive object={portraitMaterial} attach="material" />
-    </mesh>
-  );
-}
 
 function ShineLight({ mouse, hovered }: { mouse: RefObject<{ x: number; y: number }>; hovered: boolean }) {
   const lightRef = useRef<THREE.PointLight>(null);
@@ -760,15 +455,6 @@ export default function Card3D({
               <pointLight position={[0, 0, 4]} intensity={0.5} />
               <pointLight position={[0, 2, 3]} intensity={0.45} color="#dbeafe" />
               <CardMesh rarity={rarity} hovered={hovered} mouse={mouseRef} />
-              <EngravedPortrait
-                hovered={hovered}
-                urls={buildImageCandidates(
-                  toSafeImageUrl(
-                    normalizeImageUrl(card.player?.imageUrl) || ""
-                  ),
-                  card.player?.id
-                )}
-              />
             </Canvas>
           </CanvasErrorBoundary>
         ) : (
@@ -792,33 +478,33 @@ export default function Card3D({
             inset: 0,
             borderRadius: 14,
             pointerEvents: "none",
-            zIndex: 8,
-            background:
-              "radial-gradient(420px 280px at 50% 20%, rgba(255,255,255,0.22), rgba(255,255,255,0.06) 38%, rgba(255,255,255,0) 70%)",
-            mixBlendMode: "screen",
-            opacity: hovered ? 0.8 : 0.45,
-            transition: "opacity 180ms ease",
-          }}
-        />
-
-        <div
-          className="card-content"
-          style={{
-            position: "absolute",
-            top: "7%",
-            left: "9%",
-            right: "9%",
-            bottom: "9%",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            zIndex: 10,
-            pointerEvents: "none",
-            padding: pad,
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
+            return {
+              id: player.id,
+              playerId: player.id,
+              ownerId: null,
+              rarity,
+              serialId: null,
+              serialNumber: null,
+              maxSupply: rarity === "common" ? 0 : rarity === "rare" ? 100 : rarity === "unique" ? 1 : rarity === "epic" ? 10 : 5,
+              level: 1,
+              xp: 0,
+              decisiveScore: 35,
+              last5Scores: [0, 0, 0, 0, 0],
+              forSale: false,
+              price: 0,
+              acquiredAt: new Date(),
+              player: {
+                id: player.id,
+                name: player.name,
+                team: player.team || "Unknown",
+                league: "Premier League",
+                position: eplPositionShort(player.position ?? null),
+                nationality: player.nationality || "Unknown",
+                age: player.age || 0,
+                overall,
+                // imageUrl removed
+              },
+            } as PlayerCardWithPlayer;
               <div
                 style={{
                   fontSize: size === "sm" ? 20 : size === "lg" ? 28 : 24,
