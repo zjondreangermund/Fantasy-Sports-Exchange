@@ -38,27 +38,8 @@ function toSafeImageUrl(url: string): string {
 
 function buildImageCandidates(primaryUrl: string, playerId?: number): string[] {
   const candidates: string[] = [];
-  const isDummyHead = (value: string) => /^\/images\/player-\d+\.png(\?.*)?$/i.test(value);
-  const push = (value?: string | null) => {
-    if (!value) return;
-    const normalized = normalizeImageUrl(value);
-    if (!normalized) return;
-    if (isDummyHead(normalized)) return;
-    const safe = toSafeImageUrl(normalized);
-    if (!candidates.includes(safe)) candidates.push(safe);
-  };
-
   if (playerId && Number.isFinite(playerId)) {
-    push(`/api/players/${playerId}/photo`);
-    push(`/player-cache/${playerId}.png`);
-  }
-
-  push(primaryUrl);
-  push(lowercaseFilenamePath(primaryUrl));
-
-  const fileLike = primaryUrl.trim().match(/^\/?p?(\d+)\.(png|jpg|jpeg|webp)(\?.*)?$/i);
-  if (fileLike) {
-    push(`https://media.api-sports.io/football/players/${fileLike[1]}.png`);
+    candidates.push(`/api/players/${playerId}/photo`);
   }
 
   return candidates;

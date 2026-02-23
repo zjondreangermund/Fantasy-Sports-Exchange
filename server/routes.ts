@@ -1383,7 +1383,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!player) return res.status(404).json({ message: "Player not found" });
 
       const imageUrl = String(player.imageUrl || "").trim();
-      const photoCode = extractPhotoCode(imageUrl);
+      let photoCode = extractPhotoCode(imageUrl);
+
+      if (!photoCode && normalizeLookupText(String(player.league || "")) === "premier league") {
+        try {
+          const bootstrap = await fplApi.bootstrap();
+          const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+          const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
+
+          const teamNameById = new Map<number, string>();
+          for (const team of teams) {
+            teamNameById.set(Number(team.id), normalizeLookupText(String(team.name || team.short_name || "")));
+          }
+
+          const playerTeam = normalizeLookupText(String(player.team || ""));
+          const playerName = normalizeLookupText(String(player.name || ""));
+
+          const matched = elements.find((element: any) => {
+            const teamNorm = teamNameById.get(Number(element.team)) || "";
+            if (teamNorm !== playerTeam) return false;
+            const fullName = normalizeLookupText(`${String(element.first_name || "")} ${String(element.second_name || "")}`.trim());
+            const webName = normalizeLookupText(String(element.web_name || ""));
+            return fullName === playerName || webName === playerName;
+          });
+
+          if (matched) {
+            photoCode = extractPhotoCode(String(matched?.photo || matched?.code || ""));
+          }
+        } catch {
+          // keep existing fallback chain
+        }
+      }
 
       if (imageUrl.startsWith("/player-cache/")) {
         return res.redirect(302, imageUrl);
