@@ -61,10 +61,6 @@ function buildImageCandidates(primaryUrl: string, playerId?: number): string[] {
     push(`https://media.api-sports.io/football/players/${fileLike[1]}.png`);
   }
 
-  if (playerId && Number.isFinite(playerId)) {
-    push(`https://media.api-sports.io/football/players/${playerId}.png`);
-  }
-
   return candidates;
 }
 

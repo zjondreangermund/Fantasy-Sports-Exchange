@@ -222,6 +222,17 @@ function normalizeLookupText(value: string): string {
     .trim();
 }
 
+function extractPhotoCode(value: string): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const fromPng = raw.match(/\/p(\d+)\.(png|jpg|jpeg|webp)(\?.*)?$/i);
+  if (fromPng?.[1]) return fromPng[1];
+  const fromJpg = raw.match(/^(\d+)\.jpg$/i);
+  if (fromJpg?.[1]) return fromJpg[1];
+  const digitsOnly = raw.replace(/[^0-9]/g, "");
+  return digitsOnly;
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   try {
     await seedCompetitions();
@@ -1372,12 +1383,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!player) return res.status(404).json({ message: "Player not found" });
 
       const imageUrl = String(player.imageUrl || "").trim();
+      const photoCode = extractPhotoCode(imageUrl);
 
       if (imageUrl.startsWith("/player-cache/")) {
         return res.redirect(302, imageUrl);
       }
 
       const candidateUrls = [
+        photoCode ? `https://media.api-sports.io/football/players/${photoCode}.png` : null,
         imageUrl && /^https?:\/\//i.test(imageUrl) ? imageUrl : null,
       ].filter(Boolean) as string[];
 
@@ -3368,6 +3381,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
 
         const sources = [
+          (() => {
+            const code = element ? extractPhotoCode(String(element?.photo || "")) : extractPhotoCode(String(player.imageUrl || ""));
+            return code ? `https://media.api-sports.io/football/players/${code}.png` : null;
+          })(),
           element ? fplApi.playerPhotoUrl(element, 250) : null,
           String(player.imageUrl || "").startsWith("http") ? String(player.imageUrl) : null,
         ].filter(Boolean) as string[];
