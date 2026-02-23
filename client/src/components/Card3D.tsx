@@ -23,6 +23,33 @@ function lowercaseFilenamePath(url: string): string {
   return search ? `${rebuilt}?${search}` : rebuilt;
 }
 
+function buildImageCandidates(primaryUrl: string, playerId?: number): string[] {
+  const candidates: string[] = [];
+  const push = (value?: string | null) => {
+    if (!value) return;
+    const normalized = normalizeImageUrl(value);
+    if (!normalized) return;
+    if (!candidates.includes(normalized)) candidates.push(normalized);
+  };
+
+  push(primaryUrl);
+  push(lowercaseFilenamePath(primaryUrl));
+
+  const fileLike = primaryUrl.trim().match(/^\/?p?(\d+)\.(png|jpg|jpeg|webp)(\?.*)?$/i);
+  if (fileLike) {
+    push(`https://media.api-sports.io/football/players/${fileLike[1]}.png`);
+  }
+
+  if (playerId && Number.isFinite(playerId)) {
+    push(`https://media.api-sports.io/football/players/${playerId}.png`);
+  }
+
+  const index = (((playerId ?? 1) - 1) % 6) + 1;
+  push(`/images/player-${index}.png`);
+
+  return candidates;
+}
+
 const rarityStyles: Record<
   RarityKey,
   {
@@ -92,7 +119,7 @@ class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, { hasError
   }
 }
 
-function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
+function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean }) {
   const fallbackTexture = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 32;
@@ -115,6 +142,7 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.referrerPolicy = "no-referrer";
+    let activeIndex = 0;
 
     img.onload = () => {
       if (cancelled) return;
@@ -209,22 +237,26 @@ function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
       setProcessedTexture(out);
     };
 
-    img.onerror = () => {
-      if (!cancelled) {
-        const lowerPath = lowercaseFilenamePath(url);
-        if (lowerPath !== url) {
-          img.src = lowerPath;
-          return;
-        }
+    const loadNext = () => {
+      if (cancelled) return;
+      if (activeIndex >= urls.length) {
+        setProcessedTexture(fallbackTexture);
+        return;
       }
-      if (!cancelled) setProcessedTexture(fallbackTexture);
+      const nextUrl = urls[activeIndex];
+      activeIndex += 1;
+      img.src = nextUrl;
     };
 
-    img.src = url;
+    img.onerror = () => {
+      loadNext();
+    };
+
+    loadNext();
     return () => {
       cancelled = true;
     };
-  }, [url, fallbackTexture]);
+  }, [urls, fallbackTexture]);
 
   const ref = useRef<THREE.Mesh>(null);
 
@@ -291,11 +323,13 @@ function ShineLight({ mouse, hovered }: { mouse: RefObject<{ x: number; y: numbe
 function CardMesh({
   rarity,
   playerImageUrl,
+  playerId,
   hovered,
   mouse,
 }: {
   rarity: RarityKey;
   playerImageUrl: string;
+  playerId: number;
   hovered: boolean;
   mouse: RefObject<{ x: number; y: number }>;
 }) {
@@ -407,7 +441,7 @@ function CardMesh({
       <mesh geometry={geometry} scale={[1.03, 1.03, 1.03]} material={frameMat} />
       <mesh geometry={geometry} material={baseMat} />
       <Suspense fallback={null}>
-        <EngravedPortrait url={playerImageUrl} hovered={hovered} />
+        <EngravedPortrait urls={buildImageCandidates(playerImageUrl, playerId)} hovered={hovered} />
       </Suspense>
       <mesh geometry={geometry} renderOrder={1}>
         <primitive object={crystalMat} attach="material" />
@@ -638,7 +672,7 @@ export default function Card3D({
             <directionalLight position={[-3, 2, 4]} intensity={1} />
             <pointLight position={[0, 0, 4]} intensity={0.5} />
             <pointLight position={[0, 2, 3]} intensity={0.45} color="#dbeafe" />
-            <CardMesh rarity={rarity} playerImageUrl={imageUrl} hovered={hovered} mouse={mouseRef} />
+            <CardMesh rarity={rarity} playerImageUrl={imageUrl} playerId={card.playerId} hovered={hovered} mouse={mouseRef} />
           </Canvas>
         </CanvasErrorBoundary>
 
