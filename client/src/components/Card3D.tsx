@@ -478,33 +478,7 @@ export default function Card3D({
             inset: 0,
             borderRadius: 14,
             pointerEvents: "none",
-            return {
-              id: player.id,
-              playerId: player.id,
-              ownerId: null,
-              rarity,
-              serialId: null,
-              serialNumber: null,
-              maxSupply: rarity === "common" ? 0 : rarity === "rare" ? 100 : rarity === "unique" ? 1 : rarity === "epic" ? 10 : 5,
-              level: 1,
-              xp: 0,
-              decisiveScore: 35,
-              last5Scores: [0, 0, 0, 0, 0],
-              forSale: false,
-              price: 0,
-              acquiredAt: new Date(),
-              player: {
-                id: player.id,
-                name: player.name,
-                team: player.team || "Unknown",
-                league: "Premier League",
-                position: eplPositionShort(player.position ?? null),
-                nationality: player.nationality || "Unknown",
-                age: player.age || 0,
-                overall,
-                // imageUrl removed
-              },
-            } as PlayerCardWithPlayer;
+          }}
               <div
                 style={{
                   fontSize: size === "sm" ? 20 : size === "lg" ? 28 : 24,
