@@ -246,6 +246,7 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
           return t * t * (3 - 2 * t);
         };
 
+        let visiblePixels = 0;
         for (let i = 0; i < cleanedData.length; i += 4) {
           const pixel = i / 4;
           const x = pixel % width;
@@ -286,9 +287,19 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
             cleanedData[i + 1] = 0;
             cleanedData[i + 2] = 0;
             cleanedData[i + 3] = 0;
+          } else {
+            visiblePixels += 1;
           }
         }
-        ctx.putImageData(cleaned, 0, 0);
+        const portraitArea = Math.max(1, drawWidth * drawHeight);
+        const visibleRatio = visiblePixels / portraitArea;
+
+        if (visibleRatio < 0.08) {
+          ctx.clearRect(0, 0, width, height);
+          ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+        } else {
+          ctx.putImageData(cleaned, 0, 0);
+        }
       } catch {
         // If canvas pixel reads are blocked (CORS/tainted image), keep the drawn photo so it still renders.
       }
@@ -343,7 +354,7 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
         emissive: new THREE.Color("#89a8d8"),
         emissiveIntensity: 0.08,
         transparent: true,
-        alphaTest: 0.12,
+        alphaTest: 0.02,
         depthWrite: true,
         polygonOffset: true,
         polygonOffsetFactor: 1,
