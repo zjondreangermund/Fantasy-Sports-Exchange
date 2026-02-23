@@ -844,7 +844,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const normalizedPlayers = (Array.isArray(players) ? players : []).map((p: any) => {
         const team = teamMap.get(Number(p.team)) as any;
-        const photoId = typeof p.photo === "string" ? p.photo.replace(".jpg", "") : "";
+        const photoUrl = fplApi.playerPhotoUrl(p, 250);
 
         return {
           id: Number(p.id),
@@ -863,9 +863,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           club: team?.name || "Unknown",
           teamLogo: "",
           clubLogo: "",
-          photo: photoId ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoId}.png` : "/images/player-1.png",
-          photoUrl: photoId ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoId}.png` : "/images/player-1.png",
-          imageUrl: photoId ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoId}.png` : "/images/player-1.png",
+          photo: photoUrl,
+          photoUrl,
+          imageUrl: photoUrl,
           nationality: "",
           age: 0,
           stats: p,
@@ -1084,7 +1084,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const existing = existingMap.get(key);
       if (existing) return existing;
 
-      const photoId = typeof fplPlayer.photo === "string" ? fplPlayer.photo.replace(".jpg", "") : "";
+      const photoUrl = fplApi.playerPhotoUrl(fplPlayer, 250);
       const overall = Math.max(55, Math.min(95, Math.round(Number(fplPlayer.now_cost || 50) + 30)));
 
       const created = await storage.createPlayer({
@@ -1095,9 +1095,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         nationality: "Unknown",
         age: 24,
         overall,
-        imageUrl: photoId
-          ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoId}.png`
-          : "/images/player-1.png",
+        imageUrl: photoUrl,
       } as any);
 
       existingMap.set(key, created);
@@ -3758,7 +3756,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const existing = existingMap.get(key);
         if (existing) return existing;
 
-        const photoId = typeof fplPlayer.photo === "string" ? fplPlayer.photo.replace(".jpg", "") : "";
+        const photoUrl = fplApi.playerPhotoUrl(fplPlayer, 250);
         const overall = Math.max(55, Math.min(95, Math.round(Number(fplPlayer.now_cost || 50) + 30)));
 
         const created = await storage.createPlayer({
@@ -3769,9 +3767,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           nationality: "Unknown",
           age: 24,
           overall,
-          imageUrl: photoId
-            ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoId}.png`
-            : "/images/player-1.png",
+          imageUrl: photoUrl,
         } as any);
 
         existingMap.set(key, created);

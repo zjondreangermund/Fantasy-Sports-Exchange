@@ -48,6 +48,25 @@ async function cached<T>(key: string, ttl: number, fn: () => Promise<T>): Promis
 
 export const fplApi = {
   /**
+   * Build a stable FPL player photo URL from player payload.
+   */
+  playerPhotoUrl(player: any, size: 250 | 110 = 250) {
+    const fromPhotoField = String(player?.photo || "")
+      .toLowerCase()
+      .replace(/\.jpg$/i, "")
+      .replace(/^p/i, "")
+      .replace(/[^0-9]/g, "");
+
+    const fromCodeField = String(player?.code || "")
+      .replace(/[^0-9]/g, "");
+
+    const id = fromPhotoField || fromCodeField;
+    if (!id) return "/images/player-1.png";
+
+    return `https://resources.premierleague.com/premierleague/photos/players/${size}x${size}/p${id}.png`;
+  },
+
+  /**
    * Bootstrap data (players, teams, gameweeks)
    */
   async bootstrap() {
