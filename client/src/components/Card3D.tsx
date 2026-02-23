@@ -1,35 +1,10 @@
-import { useRef, useState, useMemo, useCallback, Component, type ReactNode, useEffect, type RefObject } from "react";
+import { useRef, useState, useMemo, useCallback, Suspense, Component, type ReactNode, useEffect, type RefObject } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { type PlayerCardWithPlayer, type EplPlayer } from "../../../shared/schema";
 import { Shield } from "lucide-react";
 
 type RarityKey = "common" | "rare" | "unique" | "epic" | "legendary";
-
-function normalizeImageUrl(url?: string | null): string | null {
-  if (!url) return null;
-  const value = String(url).trim();
-  if (!value) return null;
-  if (/^(https?:)?\/\//i.test(value) || value.startsWith("data:")) return value;
-  return value.startsWith("/") ? value : `/${value}`;
-}
-
-function lowercaseFilenamePath(url: string): string {
-  const [pathOnly, search = ""] = url.split("?");
-  const parts = pathOnly.split("/");
-  const fileName = parts.pop() || "";
-  const lowerFileName = fileName.toLowerCase();
-  const rebuilt = `${parts.join("/")}/${lowerFileName}`.replace(/\/+/g, "/");
-  return search ? `${rebuilt}?${search}` : rebuilt;
-}
-
-function normalizeRarity(rarity?: string | null): RarityKey {
-  const value = String(rarity || "common").toLowerCase();
-  if (value === "rare" || value === "unique" || value === "epic" || value === "legendary") {
-    return value;
-  }
-  return "common";
-}
 
 const rarityStyles: Record<
   RarityKey,
@@ -100,6 +75,132 @@ class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, { hasError
   }
 }
 
+function EngravedPortrait({ url, hovered }: { url: string; hovered: boolean }) {
+  const fallbackTexture = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const grad = ctx.createLinearGradient(0, 0, 32, 32);
+      grad.addColorStop(0, "#4b5563");
+      grad.addColorStop(1, "#9ca3af");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 32, 32);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  }, []);
+
+  const [processedTexture, setProcessedTexture] = useState<THREE.Texture>(fallbackTexture);
+
+  useEffect(() => {
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.referrerPolicy = "no-referrer";
+
+    img.onload = () => {
+      if (cancelled) return;
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width || 512;
+      canvas.height = img.naturalHeight || img.height || 512;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        setProcessedTexture(fallbackTexture);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
+
+      let removed = 0;
+      const totalPixels = data.length / 4;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const sat = max === 0 ? 0 : (max - min) / max;
+        const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        const likelyWhiteBg = luminance > 246 && sat < 0.1;
+        if (likelyWhiteBg) {
+          data[i + 3] = 0;
+          removed += 1;
+        }
+      }
+
+      if (removed / totalPixels <= 0.65) {
+        ctx.putImageData(imgData, 0, 0);
+      }
+
+      const out = new THREE.CanvasTexture(canvas);
+      out.needsUpdate = true;
+      out.wrapS = THREE.ClampToEdgeWrapping;
+      out.wrapT = THREE.ClampToEdgeWrapping;
+      out.colorSpace = THREE.SRGBColorSpace;
+      setProcessedTexture(out);
+    };
+
+    img.onerror = () => {
+      if (!cancelled) setProcessedTexture(fallbackTexture);
+    };
+
+    img.src = url;
+    return () => {
+      cancelled = true;
+    };
+  }, [url, fallbackTexture]);
+
+  const ref = useRef<THREE.Mesh>(null);
+
+  const portraitMaterial = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        map: processedTexture,
+        alphaMap: processedTexture,
+        bumpMap: processedTexture,
+        bumpScale: 0.09,
+        roughness: 0.3,
+        metalness: 0.7,
+        clearcoat: 0.9,
+        clearcoatRoughness: 0.08,
+        reflectivity: 0.95,
+        emissive: new THREE.Color("#7dd3fc"),
+        emissiveIntensity: 0.06,
+        transparent: true,
+        alphaTest: 0.08,
+        opacity: 0.98,
+      }),
+    [processedTexture],
+  );
+
+  useMemo(() => {
+    processedTexture.wrapS = THREE.ClampToEdgeWrapping;
+    processedTexture.wrapT = THREE.ClampToEdgeWrapping;
+    processedTexture.colorSpace = THREE.SRGBColorSpace;
+  }, [processedTexture]);
+
+  useFrame(() => {
+    if (ref.current) {
+      ref.current.position.x = THREE.MathUtils.lerp(ref.current.position.x, hovered ? 0.04 : 0, 0.1);
+      ref.current.position.y = THREE.MathUtils.lerp(ref.current.position.y, hovered ? 0.015 : 0, 0.1);
+    }
+  });
+
+  return (
+    <mesh ref={ref} position={[0, 0.08, 0.36]}>
+      <planeGeometry args={[1.62, 2.06, 64, 64]} />
+      <primitive object={portraitMaterial} attach="material" />
+    </mesh>
+  );
+}
+
 function ShineLight({ mouse, hovered }: { mouse: RefObject<{ x: number; y: number }>; hovered: boolean }) {
   const lightRef = useRef<THREE.PointLight>(null);
 
@@ -119,10 +220,12 @@ function ShineLight({ mouse, hovered }: { mouse: RefObject<{ x: number; y: numbe
 
 function CardMesh({
   rarity,
+  playerImageUrl,
   hovered,
   mouse,
 }: {
   rarity: RarityKey;
+  playerImageUrl: string;
   hovered: boolean;
   mouse: RefObject<{ x: number; y: number }>;
 }) {
@@ -158,21 +261,27 @@ function CardMesh({
 
   const baseMat = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         color: colors.base,
-        metalness: 0.95,
-        roughness: 0.18,
-        envMapIntensity: 1.5,
+        metalness: 0.98,
+        roughness: 0.06,
+        clearcoat: 1,
+        clearcoatRoughness: 0.02,
+        reflectivity: 1,
+        envMapIntensity: 2.1,
       }),
     [colors.base],
   );
 
   const frameMat = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({
+      new THREE.MeshPhysicalMaterial({
         color: new THREE.Color(colors.base).multiplyScalar(0.35),
-        metalness: 0.85,
-        roughness: 0.15,
+        metalness: 0.95,
+        roughness: 0.08,
+        clearcoat: 1,
+        clearcoatRoughness: 0.03,
+        reflectivity: 1,
       }),
     [colors.base],
   );
@@ -209,11 +318,11 @@ function CardMesh({
       new THREE.MeshPhysicalMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.15,
+        opacity: 0.24,
         metalness: 0.05,
-        roughness: 0.06,
+        roughness: 0.02,
         clearcoat: 1,
-        clearcoatRoughness: 0.02,
+        clearcoatRoughness: 0,
         reflectivity: 1,
       }),
     [],
@@ -223,6 +332,9 @@ function CardMesh({
     <group>
       <mesh geometry={geometry} scale={[1.03, 1.03, 1.03]} material={frameMat} />
       <mesh geometry={geometry} material={baseMat} />
+      <Suspense fallback={null}>
+        <EngravedPortrait url={playerImageUrl} hovered={hovered} />
+      </Suspense>
       <mesh geometry={geometry} renderOrder={1}>
         <primitive object={crystalMat} attach="material" />
       </mesh>
@@ -329,7 +441,6 @@ interface Card3DProps {
   selectable?: boolean;
   onClick?: () => void;
   showPrice?: boolean;
-  showSaleBadge?: boolean;
   sorareImageUrl?: string | null;
 }
 
@@ -340,7 +451,6 @@ export default function Card3D({
   selectable = false,
   onClick,
   showPrice = false,
-  showSaleBadge = true,
   sorareImageUrl,
 }: Card3DProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -350,7 +460,7 @@ export default function Card3D({
   const [rotY, setRotY] = useState(0);
   const rafRef = useRef<number>(0);
 
-  const rarity = normalizeRarity(card.rarity as string | null | undefined);
+  const rarity = (card.rarity as RarityKey) || "common";
   const rs = rarityStyles[rarity];
 
   const sizeMap = { sm: { w: 170, h: 250 }, md: { w: 220, h: 320 }, lg: { w: 270, h: 390 } };
@@ -358,27 +468,12 @@ export default function Card3D({
   const pad = size === "sm" ? "10px 12px 8px" : size === "lg" ? "16px 18px 14px" : "12px 14px 10px";
 
   const imageIndex = ((card.playerId - 1) % 6) + 1;
-  const fallbackImage = `/images/player-${imageIndex}.png`;
-  const primaryImage = normalizeImageUrl(sorareImageUrl) || normalizeImageUrl(card.player?.imageUrl);
-  const imageUrl = primaryImage || fallbackImage;
+  const fallbackImage = card.player?.imageUrl || `/images/player-${imageIndex}.png`;
+  const imageUrl = sorareImageUrl || fallbackImage;
 
   const serialText = card.serialNumber && card.maxSupply ? `#${String(card.serialNumber).padStart(3, "0")}/${card.maxSupply}` : card.serialId || "";
 
   const dsColor = (card.decisiveScore || 35) >= 80 ? "#4ade80" : (card.decisiveScore || 35) >= 60 ? "#facc15" : "#94a3b8";
-  const level = Math.max(1, Number(card.level || 1));
-  const levelPattern =
-    level >= 5
-      ? "repeating-conic-gradient(from 0deg at 50% 50%, rgba(255,255,255,0.10) 0deg 18deg, transparent 18deg 36deg)"
-      : level >= 4
-      ? "repeating-linear-gradient(35deg, rgba(255,255,255,0.10) 0px 2px, transparent 2px 10px)"
-      : level >= 3
-      ? "repeating-linear-gradient(-35deg, rgba(255,255,255,0.08) 0px 2px, transparent 2px 12px)"
-      : level >= 2
-      ? "repeating-linear-gradient(90deg, rgba(255,255,255,0.08) 0px 1px, transparent 1px 8px)"
-      : "none";
-  const levelPatternOpacity = level >= 5 ? 0.7 : level >= 4 ? 0.6 : level >= 3 ? 0.5 : level >= 2 ? 0.4 : 0;
-  const glossX = ((mouseRef.current.x + 1) / 2) * 100;
-  const glossY = ((1 - mouseRef.current.y) / 2) * 100;
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!wrapperRef.current) return;
@@ -427,7 +522,6 @@ export default function Card3D({
         height: s.h,
         perspective: "1000px",
         position: "relative",
-        background: "transparent",
         cursor: selectable ? "pointer" : "default",
       }}
       onClick={onClick}
@@ -446,8 +540,6 @@ export default function Card3D({
           transform: `rotateX(${rotX}deg) rotateY(${rotY}deg)`,
           transition: hovered ? "none" : "transform 0.5s cubic-bezier(0.23, 1, 0.32, 1)",
           borderRadius: 14,
-          overflow: "hidden",
-          background: "transparent",
         }}
       >
         <CanvasErrorBoundary fallback={null}>
@@ -461,7 +553,6 @@ export default function Card3D({
               height: "100%",
               borderRadius: 14,
               pointerEvents: "none",
-              overflow: "hidden",
             }}
             gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
             onCreated={({ gl }) => {
@@ -472,93 +563,26 @@ export default function Card3D({
             <directionalLight position={[5, 5, 5]} intensity={3} />
             <directionalLight position={[-3, 2, 4]} intensity={1} />
             <pointLight position={[0, 0, 4]} intensity={0.5} />
-            <CardMesh rarity={rarity} hovered={hovered} mouse={mouseRef} />
+            <CardMesh rarity={rarity} playerImageUrl={imageUrl} hovered={hovered} mouse={mouseRef} />
           </Canvas>
         </CanvasErrorBoundary>
 
         <div
-          className="frontFace"
+          className="card-content"
           style={{
             position: "absolute",
-            inset: 0,
-            borderRadius: 14,
-            overflow: "hidden",
-            pointerEvents: "none",
+            top: "7%",
+            left: "9%",
+            right: "9%",
+            bottom: "9%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
             zIndex: 10,
-            background: "radial-gradient(circle at 50% 18%, rgba(20,22,30,1) 0%, rgba(6,7,10,1) 55%, rgba(0,0,0,1) 100%)",
-            isolation: "isolate",
-            outline: "none",
-            border: "none",
-            boxShadow: "0 18px 55px rgba(0,0,0,0.55)",
+            pointerEvents: "none",
+            padding: pad,
           }}
         >
-          <div
-            className="photoWindow"
-            style={{
-              position: "absolute",
-              left: "10%",
-              right: "10%",
-              top: "18%",
-              bottom: "22%",
-              background: "transparent",
-              boxShadow: "none",
-              border: "none",
-              backdropFilter: "none",
-              overflow: "hidden",
-              borderRadius: 14,
-              zIndex: 2,
-            }}
-          >
-            <img
-              className="playerPhoto"
-              src={imageUrl}
-              alt=""
-              onError={(e) => {
-                const target = e.currentTarget;
-                const current = target.getAttribute("src") || "";
-                const triedLower = target.dataset.triedLowercase === "1";
-                if (!triedLower && current) {
-                  const lowerPath = lowercaseFilenamePath(current);
-                  if (lowerPath !== current) {
-                    target.dataset.triedLowercase = "1";
-                    target.src = lowerPath;
-                    return;
-                  }
-                }
-                target.onerror = null;
-                target.src = fallbackImage;
-              }}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "contain",
-                objectPosition: "center bottom",
-                transform: "scale(1)",
-                filter: "contrast(1.08) saturate(1.08)",
-                WebkitMaskImage:
-                  "radial-gradient(150% 95% at 50% 118%, #000 60%, transparent 92%), linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%)",
-                maskImage:
-                  "radial-gradient(150% 95% at 50% 118%, #000 60%, transparent 92%), linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%)",
-              }}
-            />
-          </div>
-
-          <div
-            className="card-content"
-            style={{
-              position: "absolute",
-              top: "7%",
-              left: "9%",
-              right: "9%",
-              bottom: "9%",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              zIndex: 6,
-              pointerEvents: "none",
-              padding: pad,
-            }}
-          >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <div
@@ -693,25 +717,9 @@ export default function Card3D({
               {(card.player?.team || "Unknown").substring(0, 20)}
             </div>
           </div>
-          </div>
-
-          <div
-            className="clearCoat"
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "inherit",
-              pointerEvents: "none",
-              zIndex: 10,
-              background: `radial-gradient(420px 280px at ${hovered ? glossX : 50}% ${hovered ? glossY : 20}%, rgba(255,255,255,0.28), rgba(255,255,255,0.07) 40%, rgba(255,255,255,0) 70%)`,
-              mixBlendMode: "screen",
-              opacity: hovered ? 0.8 : 0.4,
-              transition: "opacity 180ms ease",
-            }}
-          />
         </div>
 
-        {(showPrice || (showSaleBadge && card.forSale)) && card.price != null && card.price > 0 && (
+        {(showPrice || card.forSale) && card.price != null && card.price > 0 && (
           <div
             style={{
               position: "absolute",
@@ -741,7 +749,6 @@ export default function Card3D({
             </span>
           </div>
         )}
-
       </div>
 
       {selected && (
