@@ -588,8 +588,6 @@ export default function Card3D({
             </span>
           </div>
         )}
-      </div>
-
       {selected && (
         <div
           style={{
