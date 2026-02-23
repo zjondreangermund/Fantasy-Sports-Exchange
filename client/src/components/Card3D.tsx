@@ -407,19 +407,14 @@ function ShineLight({ mouse, hovered }: { mouse: RefObject<{ x: number; y: numbe
 
 function CardMesh({
   rarity,
-  playerImageUrl,
-  playerId,
   hovered,
   mouse,
 }: {
   rarity: RarityKey;
-  playerImageUrl: string;
-  playerId: number;
   hovered: boolean;
   mouse: RefObject<{ x: number; y: number }>;
 }) {
   const colors = rarityStyles[rarity];
-  const portraitUrls = useMemo(() => buildImageCandidates(playerImageUrl, playerId), [playerImageUrl, playerId]);
 
   const geometry = useMemo(() => {
     const shape = new THREE.Shape();
@@ -526,9 +521,6 @@ function CardMesh({
     <group>
       <mesh geometry={geometry} scale={[1.03, 1.03, 1.03]} material={frameMat} />
       <mesh geometry={geometry} material={baseMat} />
-      <Suspense fallback={null}>
-        <EngravedPortrait urls={portraitUrls} hovered={hovered} />
-      </Suspense>
       <mesh geometry={geometry} renderOrder={1}>
         <primitive object={crystalMat} attach="material" />
       </mesh>
@@ -664,6 +656,13 @@ export default function Card3D({
   const imageIndex = ((card.playerId - 1) % 6) + 1;
   const fallbackImage = normalizeImageUrl(card.player?.imageUrl) || `/images/player-${imageIndex}.png`;
   const imageUrl = normalizeImageUrl(sorareImageUrl) || fallbackImage;
+  const imageCandidates = useMemo(() => buildImageCandidates(imageUrl, card.playerId), [imageUrl, card.playerId]);
+  const [imageCandidateIndex, setImageCandidateIndex] = useState(0);
+  const portraitSrc = imageCandidates[imageCandidateIndex] || `/images/player-${imageIndex}.png`;
+
+  useEffect(() => {
+    setImageCandidateIndex(0);
+  }, [imageCandidates]);
 
   const serialText = card.serialNumber && card.maxSupply ? `#${String(card.serialNumber).padStart(3, "0")}/${card.maxSupply}` : card.serialId || "";
 
@@ -739,7 +738,7 @@ export default function Card3D({
         <CanvasErrorBoundary fallback={null}>
           <Canvas
             camera={{ position: [0, 0, 4.5], fov: 45 }}
-            dpr={[1, 1.5]}
+            dpr={[1, 1]}
             style={{
               position: "absolute",
               inset: 0,
@@ -748,7 +747,7 @@ export default function Card3D({
               borderRadius: 14,
               pointerEvents: "none",
             }}
-            gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
+            gl={{ antialias: false, alpha: true, powerPreference: "low-power" }}
             onCreated={({ gl }) => {
               gl.setClearColor(0x000000, 0);
             }}
@@ -758,9 +757,60 @@ export default function Card3D({
             <directionalLight position={[-3, 2, 4]} intensity={1} />
             <pointLight position={[0, 0, 4]} intensity={0.5} />
             <pointLight position={[0, 2, 3]} intensity={0.45} color="#dbeafe" />
-            <CardMesh rarity={rarity} playerImageUrl={imageUrl} playerId={card.playerId} hovered={hovered} mouse={mouseRef} />
+            <CardMesh rarity={rarity} hovered={hovered} mouse={mouseRef} />
           </Canvas>
         </CanvasErrorBoundary>
+
+        <div
+          style={{
+            position: "absolute",
+            left: "10%",
+            right: "10%",
+            top: "18%",
+            bottom: "22%",
+            pointerEvents: "none",
+            overflow: "hidden",
+            borderRadius: 14,
+            zIndex: 4,
+          }}
+        >
+          <img
+            src={portraitSrc}
+            alt=""
+            onError={() => {
+              setImageCandidateIndex((prev) => {
+                const next = prev + 1;
+                return next < imageCandidates.length ? next : prev;
+              });
+            }}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              objectPosition: "center bottom",
+              filter: "grayscale(0.35) contrast(1.16) saturate(0.82) brightness(1.02)",
+              WebkitMaskImage:
+                "radial-gradient(150% 95% at 50% 118%, #000 60%, transparent 92%), linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%)",
+              maskImage:
+                "radial-gradient(150% 95% at 50% 118%, #000 60%, transparent 92%), linear-gradient(to bottom, #000 0%, #000 68%, transparent 100%)",
+            }}
+          />
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 14,
+            pointerEvents: "none",
+            zIndex: 8,
+            background:
+              "radial-gradient(420px 280px at 50% 20%, rgba(255,255,255,0.22), rgba(255,255,255,0.06) 38%, rgba(255,255,255,0) 70%)",
+            mixBlendMode: "screen",
+            opacity: hovered ? 0.8 : 0.45,
+            transition: "opacity 180ms ease",
+          }}
+        />
 
         <div
           className="card-content"
