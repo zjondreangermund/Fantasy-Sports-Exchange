@@ -25,7 +25,17 @@ import { isUnauthorizedError } from "../lib/auth-utils";
 import RewardPopup from "../components/RewardPopup";
 
 type EnrichedEntry = CompetitionEntry & { userName: string; userImage: string | null };
-type CompetitionWithEntries = Competition & { entries: EnrichedEntry[]; entryCount: number };
+type CompetitionWithEntries = Competition & {
+  entries: EnrichedEntry[];
+  entryCount: number;
+  winner?: {
+    userId: string;
+    userName: string;
+    totalScore: number;
+    prizeAmount: number;
+    prizeCardId: number | null;
+  } | null;
+};
 
 export default function CompetitionsPage() {
   const { toast } = useToast();
@@ -125,6 +135,7 @@ export default function CompetitionsPage() {
   // Filter by status instead of tier
   const liveComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && (c.status === "open" || c.status === "active")) || [];
   const upcomingComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && c.status === "upcoming") || [];
+  const completedComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && c.status === "completed") || [];
   const availableCards = (Array.isArray(myCards) ? myCards : [])?.filter(c => c && !c.forSale) || [];
   const enteredCompetitionIds = new Set(((Array.isArray(myEntries) ? myEntries : []) || []).map((entry) => entry.competitionId));
 
@@ -188,6 +199,7 @@ export default function CompetitionsPage() {
           <TabsList className="mb-4">
             <TabsTrigger value="live">🔴 Live Tournaments</TabsTrigger>
             <TabsTrigger value="upcoming">📅 Upcoming</TabsTrigger>
+            <TabsTrigger value="completed">✅ Completed</TabsTrigger>
           </TabsList>
 
           <TabsContent value="live">
@@ -234,6 +246,30 @@ export default function CompetitionsPage() {
             ) : (
               <Card className="p-8 text-center">
                 <p className="text-muted-foreground">No upcoming tournaments available</p>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="completed">
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}
+              </div>
+            ) : completedComps.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {completedComps.map(comp => (
+                  <CompetitionCard
+                    key={comp.id}
+                    comp={comp}
+                    canViewTeams={enteredCompetitionIds.has(comp.id)}
+                    onViewTeam={handleViewUserTeam}
+                    onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">No completed tournaments yet</p>
               </Card>
             )}
           </TabsContent>
@@ -498,6 +534,34 @@ function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam }: { comp: Com
             <span className="text-yellow-500">1st: 60%</span>
             <span className="text-zinc-400">2nd: 30%</span>
             <span className="text-amber-700">3rd: 10%</span>
+          </div>
+        </div>
+      )}
+
+      {comp.status === "completed" && (
+        <div className="mb-4 p-3 bg-muted/40 rounded-md space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground">Winner & Rewards</p>
+          <div className="text-sm">
+            <span className="font-semibold text-foreground">Winner:</span>{" "}
+            <span className="text-foreground">{comp.winner?.userName || comp.entries?.[0]?.userName || "TBD"}</span>
+            {(comp.winner?.totalScore ?? comp.entries?.[0]?.totalScore) !== undefined && (
+              <span className="text-muted-foreground"> • {Number((comp.winner?.totalScore ?? comp.entries?.[0]?.totalScore) || 0).toFixed(1)} pts</span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            {(Array.isArray(comp.entries) ? comp.entries : [])
+              .filter((entry) => Number(entry.prizeAmount || 0) > 0)
+              .slice(0, 3)
+              .map((entry, index) => (
+                <Badge key={entry.id} variant="outline">
+                  #{index + 1} {entry.userName}: N${Number(entry.prizeAmount || 0).toFixed(2)}
+                </Badge>
+              ))}
+            {comp.prizeCardRarity && (
+              <Badge variant="outline" className="text-green-500 border-green-500">
+                Card Reward: {comp.prizeCardRarity.charAt(0).toUpperCase()}{comp.prizeCardRarity.slice(1)}
+              </Badge>
+            )}
           </div>
         </div>
       )}
