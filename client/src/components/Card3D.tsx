@@ -24,6 +24,9 @@ function lowercaseFilenamePath(url: string): string {
 }
 
 function toSafeImageUrl(url: string): string {
+  if (/^https?:\/\/resources\.premierleague\.com\//i.test(url)) {
+    return url;
+  }
   if (/^https?:\/\//i.test(url)) {
     return `/api/image-proxy?url=${encodeURIComponent(url)}`;
   }
@@ -132,7 +135,7 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
     const canvas = document.createElement("canvas");
     canvas.width = 32;
     canvas.height = 32;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (ctx) {
       ctx.clearRect(0, 0, 32, 32);
     }
@@ -157,7 +160,7 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
       const canvas = document.createElement("canvas");
       canvas.width = img.naturalWidth || img.width || 512;
       canvas.height = img.naturalHeight || img.height || 512;
-      const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (!ctx) {
         setProcessedTexture(fallbackTexture);
         return;
