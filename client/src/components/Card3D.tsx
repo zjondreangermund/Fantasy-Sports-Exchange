@@ -38,10 +38,12 @@ function toSafeImageUrl(url: string): string {
 
 function buildImageCandidates(primaryUrl: string, playerId?: number): string[] {
   const candidates: string[] = [];
+  const isDummyHead = (value: string) => /^\/images\/player-\d+\.png(\?.*)?$/i.test(value);
   const push = (value?: string | null) => {
     if (!value) return;
     const normalized = normalizeImageUrl(value);
     if (!normalized) return;
+    if (isDummyHead(normalized)) return;
     const safe = toSafeImageUrl(normalized);
     if (!candidates.includes(safe)) candidates.push(safe);
   };
@@ -659,14 +661,19 @@ export default function Card3D({
   const s = sizeMap[size];
   const pad = size === "sm" ? "10px 12px 8px" : size === "lg" ? "16px 18px 14px" : "12px 14px 10px";
 
-  const imageIndex = ((card.playerId - 1) % 6) + 1;
   const imageUrl = normalizeImageUrl(sorareImageUrl) || normalizeImageUrl(card.player?.imageUrl) || "";
   const imageCandidates = useMemo(() => buildImageCandidates(imageUrl, card.playerId), [imageUrl, card.playerId]);
   const [imageCandidateIndex, setImageCandidateIndex] = useState(0);
+  const [portraitLoadFailed, setPortraitLoadFailed] = useState(false);
   const portraitSrc = imageCandidates[imageCandidateIndex] || "";
+  const playerName = String(card.player?.name || "Unknown");
+  const nameParts = playerName.split(" ").filter(Boolean);
+  const playerInitials = (nameParts[0]?.[0] || "?") + (nameParts[1]?.[0] || "");
+  const showStickerFallback = !portraitSrc || portraitLoadFailed;
 
   useEffect(() => {
     setImageCandidateIndex(0);
+    setPortraitLoadFailed(false);
   }, [imageCandidates]);
 
   const serialText = card.serialNumber && card.maxSupply ? `#${String(card.serialNumber).padStart(3, "0")}/${card.maxSupply}` : card.serialId || "";
@@ -793,7 +800,7 @@ export default function Card3D({
           />
         )}
 
-        {portraitSrc && (
+        {!showStickerFallback && portraitSrc && (
           <div
             style={{
               position: "absolute",
@@ -813,6 +820,9 @@ export default function Card3D({
               onError={() => {
                 setImageCandidateIndex((prev) => {
                   const next = prev + 1;
+                  if (next >= imageCandidates.length) {
+                    setPortraitLoadFailed(true);
+                  }
                   return next < imageCandidates.length ? next : prev;
                 });
               }}
@@ -829,6 +839,47 @@ export default function Card3D({
                   "radial-gradient(155% 100% at 50% 120%, #000 58%, transparent 90%), linear-gradient(to bottom, #000 0%, #000 66%, transparent 100%)",
               }}
             />
+          </div>
+        )}
+
+        {showStickerFallback && (
+          <div
+            style={{
+              position: "absolute",
+              left: "10%",
+              right: "10%",
+              top: "18%",
+              bottom: "22%",
+              pointerEvents: "none",
+              overflow: "hidden",
+              borderRadius: 14,
+              zIndex: 4,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div
+              style={{
+                width: "76%",
+                aspectRatio: "1 / 1",
+                borderRadius: "50%",
+                border: "2px solid rgba(255,255,255,0.28)",
+                background:
+                  "radial-gradient(circle at 35% 30%, rgba(255,255,255,0.32), rgba(255,255,255,0.08) 40%, rgba(255,255,255,0.02) 70%)",
+                boxShadow: "inset 0 0 28px rgba(255,255,255,0.08), 0 8px 24px rgba(0,0,0,0.35)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#ffffff",
+                textShadow: "0 2px 4px rgba(0,0,0,0.45)",
+              }}
+            >
+              <div style={{ fontSize: size === "sm" ? 26 : size === "lg" ? 38 : 32, fontWeight: 900, letterSpacing: "0.04em" }}>{playerInitials}</div>
+              <div style={{ fontSize: size === "sm" ? 8 : 10, opacity: 0.8, letterSpacing: "0.1em", marginTop: 2 }}>{card.player?.position || "N/A"}</div>
+              <div style={{ fontSize: size === "sm" ? 7 : 8, opacity: 0.65, marginTop: 2 }}>{(card.player?.team || "").substring(0, 12)}</div>
+            </div>
           </div>
         )}
 
