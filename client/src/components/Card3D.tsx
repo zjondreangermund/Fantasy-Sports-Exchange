@@ -161,17 +161,14 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
       try {
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imgData.data;
+        const source = new Uint8ClampedArray(data);
 
         let removed = 0;
         const totalPixels = data.length / 4;
         for (let i = 0; i < data.length; i += 4) {
-          data[i] = Math.min(255, Math.round(data[i] * 1.08 + 8));
-          data[i + 1] = Math.min(255, Math.round(data[i + 1] * 1.08 + 8));
-          data[i + 2] = Math.min(255, Math.round(data[i + 2] * 1.08 + 8));
-
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
+          const r = source[i];
+          const g = source[i + 1];
+          const b = source[i + 2];
           const max = Math.max(r, g, b);
           const min = Math.min(r, g, b);
           const sat = max === 0 ? 0 : (max - min) / max;
@@ -183,9 +180,45 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
           }
         }
 
-        if (removed / totalPixels <= 0.65) {
-          ctx.putImageData(imgData, 0, 0);
+        const shouldApplyBgRemoval = removed / totalPixels <= 0.65;
+
+        const width = canvas.width;
+        const height = canvas.height;
+        const getLuma = (x: number, y: number) => {
+          const cx = Math.max(0, Math.min(width - 1, x));
+          const cy = Math.max(0, Math.min(height - 1, y));
+          const idx = (cy * width + cx) * 4;
+          return 0.2126 * source[idx] + 0.7152 * source[idx + 1] + 0.0722 * source[idx + 2];
+        };
+
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            const i = (y * width + x) * 4;
+            const baseLuma = getLuma(x, y);
+            const right = getLuma(x + 1, y);
+            const left = getLuma(x - 1, y);
+            const down = getLuma(x, y + 1);
+            const up = getLuma(x, y - 1);
+            const edge = Math.min(255, Math.abs(right - left) + Math.abs(down - up));
+
+            const plate = Math.max(0, Math.min(255, baseLuma * 0.9 + 25));
+            const engraved = Math.max(0, Math.min(255, plate * 0.72 + edge * 0.95));
+
+            data[i] = Math.round(engraved * 0.86 + 22);
+            data[i + 1] = Math.round(engraved * 0.93 + 30);
+            data[i + 2] = Math.round(engraved * 1.03 + 44);
+
+            if (shouldApplyBgRemoval && data[i + 3] === 0) {
+              data[i] = 0;
+              data[i + 1] = 0;
+              data[i + 2] = 0;
+            } else {
+              data[i + 3] = Math.max(72, source[i + 3]);
+            }
+          }
         }
+
+        ctx.putImageData(imgData, 0, 0);
 
         const cleaned = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const cleanedData = cleaned.data;
@@ -266,16 +299,16 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
         map: processedTexture,
         alphaMap: processedTexture,
         bumpMap: processedTexture,
-        bumpScale: 0.1,
-        metalness: 0.75,
-        roughness: 0.2,
+        bumpScale: 0.2,
+        metalness: 0.82,
+        roughness: 0.26,
         clearcoat: 1,
-        clearcoatRoughness: 0.06,
+        clearcoatRoughness: 0.1,
         reflectivity: 1,
-        emissive: new THREE.Color("#8ec5ff"),
-        emissiveIntensity: 0.12,
+        emissive: new THREE.Color("#89a8d8"),
+        emissiveIntensity: 0.08,
         transparent: true,
-        alphaTest: 0.32,
+        alphaTest: 0.12,
         depthWrite: true,
         opacity: 1.0,
       }),
