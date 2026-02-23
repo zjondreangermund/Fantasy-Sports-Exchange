@@ -177,6 +177,7 @@ export default function PlayerCard(props: PlayerCardProps) {
                 <div className="text-white/90 text-xs font-extrabold">
                   {serialNumber}/{maxSupply}
                 </div>
+                {/* Price display removed from card */}
               </div>
             </div>
           </>

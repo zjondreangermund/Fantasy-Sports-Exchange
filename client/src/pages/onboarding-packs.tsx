@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import PlayerCard from "../components/PlayerCard";
 import type { PlayerCardWithPlayer } from "../../../shared/schema";
@@ -8,21 +8,42 @@ type Pack = {
   cards: PlayerCardWithPlayer[];
 };
 
-export default function OnboardingPacksScene() {
-  // TEMP mock – later we’ll load from /api/onboarding/offers
-  const packs: Pack[] = useMemo(
-    () => [
-      { title: "PACK 1", cards: [] },
-      { title: "PACK 2", cards: [] },
-      { title: "PACK 3", cards: [] },
-      { title: "PACK 4", cards: [] },
-      { title: "PACK 5", cards: [] },
-    ],
-    [],
-  );
-
+  const [packs, setPacks] = useState<Pack[]>([]);
   const [activePack, setActivePack] = useState<number | null>(null);
   const [openedPacks, setOpenedPacks] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    // Fetch tonight's players
+    fetch("/api/epl/players?today=1")
+      .then((res) => res.json())
+      .then((players) => {
+        // Split into packs of 3
+        const packs: Pack[] = [];
+        for (let i = 0; i < players.length; i += 3) {
+          packs.push({
+            title: `PACK ${packs.length + 1}`,
+            cards: players.slice(i, i + 3).map((p: any) => ({
+              id: p.id,
+              playerId: p.id,
+              ownerId: null,
+              rarity: "common",
+              serialId: null,
+              serialNumber: null,
+              maxSupply: 0,
+              level: 1,
+              xp: 0,
+              decisiveScore: 35,
+              last5Scores: [0, 0, 0, 0, 0],
+              forSale: false,
+              price: 0,
+              acquiredAt: new Date() as any,
+              player: p,
+            })),
+          });
+        }
+        setPacks(packs);
+      });
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#070a10] text-white p-6">
@@ -100,14 +121,13 @@ export default function OnboardingPacksScene() {
                   }
                 />
 
-                {/* Cards reveal tray (placeholder) */}
+                {/* Cards reveal tray */}
                 <div className="mt-6">
-                  <div className="text-sm font-bold text-white/80 mb-3">Cards (3)</div>
+                  <div className="text-sm font-bold text-white/80 mb-3">Cards ({packs[activePack]?.cards.length || 0})</div>
                   <div className="flex flex-wrap gap-4">
-                    {/* We’ll fill these with real players from API next */}
-                    <div className="w-[180px] h-[260px] rounded-xl border border-white/10 bg-white/5" />
-                    <div className="w-[180px] h-[260px] rounded-xl border border-white/10 bg-white/5" />
-                    <div className="w-[180px] h-[260px] rounded-xl border border-white/10 bg-white/5" />
+                    {packs[activePack]?.cards.map((card, idx) => (
+                      <PlayerCard key={card.id} card={card} size="md" />
+                    ))}
                   </div>
                 </div>
               </motion.div>
