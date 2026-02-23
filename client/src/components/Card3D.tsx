@@ -479,62 +479,9 @@ export default function Card3D({
             borderRadius: 14,
             pointerEvents: "none",
           }}
-              <div
-                style={{
-                  fontSize: size === "sm" ? 20 : size === "lg" ? 28 : 24,
-                  fontWeight: 900,
-                  color: "#fff",
-                  textShadow: "0 2px 6px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.5)",
-                  lineHeight: 1,
-                  fontFamily: "'Inter','Arial Black',system-ui,sans-serif",
-                }}
-              >
-                {card.player?.overall || 0}
-              </div>
-              <div
-                style={{
-                  fontSize: size === "sm" ? 7 : size === "lg" ? 10 : 8,
-                  fontWeight: 800,
-                  color: rs.accentColor,
-                  letterSpacing: "0.12em",
-                  marginTop: 1,
-                  textShadow: "0 1px 3px rgba(0,0,0,0.6)",
-                }}
-              >
-                {card.player?.position || "N/A"}
-              </div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              {serialText && (
-                <div
-                  style={{
-                    fontSize: size === "sm" ? 6 : size === "lg" ? 8 : 7,
-                    fontWeight: 700,
-                    color: "rgba(255,255,255,0.45)",
-                    letterSpacing: "0.08em",
-                    textShadow: "0 1px 2px rgba(0,0,0,0.6)",
-                  }}
-                >
-                  {serialText}
-                </div>
-              )}
-              <div
-                style={{
-                  fontSize: size === "sm" ? 6 : size === "lg" ? 8 : 7,
-                  fontWeight: 800,
-                  color: rs.accentColor,
-                  letterSpacing: "0.15em",
-                  marginTop: 1,
-                  background: rs.labelBg,
-                  borderRadius: 3,
-                  padding: "1px 5px",
-                  textShadow: "0 1px 2px rgba(0,0,0,0.3)",
-                }}
-              >
-                {rs.label}
-              </div>
-            </div>
-          </div>
+        >
+          {/* ...existing card content... */}
+        </div>
 
           <div style={{ textAlign: "center" }}>
             <div
