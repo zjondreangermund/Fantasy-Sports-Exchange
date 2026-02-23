@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { Trophy, Users, TrendingUp, Star, Shield, Zap } from "lucide-react";
+import { Trophy, Users, TrendingUp, Star, Shield, Zap, CheckCircle2, BarChart3, Clock3 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function LandingPage() {
@@ -110,6 +110,11 @@ export default function LandingPage() {
                     Get Started Free
                   </Button>
                 </a>
+                <a href="#how-it-works">
+                  <Button size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10">
+                    See How It Works
+                  </Button>
+                </a>
               </div>
 
               <motion.div
@@ -125,12 +130,65 @@ export default function LandingPage() {
                   <Shield className="w-4 h-4" /> No Blockchain Required
                 </span>
               </motion.div>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {[
+                  "Live EPL-linked scoring",
+                  "Fast Google sign-in",
+                  "Clear rarity progression",
+                ].map((chip) => (
+                  <span
+                    key={chip}
+                    className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-white/80"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {chip}
+                  </span>
+                ))}
+              </div>
             </motion.div>
           </div>
         </div>
       </section>
 
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-10 relative z-20">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Card className="p-5 bg-card/95 backdrop-blur border-border/80">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center">
+                <BarChart3 className="w-5 h-5 text-primary" />
+              </div>
+              <p className="text-sm text-muted-foreground">Live Data</p>
+            </div>
+            <p className="text-2xl font-bold text-foreground">EPL Sync</p>
+            <p className="text-sm text-muted-foreground mt-1">Player points update from real match output</p>
+          </Card>
+
+          <Card className="p-5 bg-card/95 backdrop-blur border-border/80">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center">
+                <Clock3 className="w-5 h-5 text-primary" />
+              </div>
+              <p className="text-sm text-muted-foreground">Onboarding</p>
+            </div>
+            <p className="text-2xl font-bold text-foreground">~2 min</p>
+            <p className="text-sm text-muted-foreground mt-1">Get cards, pick a lineup, enter your first contest</p>
+          </Card>
+
+          <Card className="p-5 bg-card/95 backdrop-blur border-border/80">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-primary" />
+              </div>
+              <p className="text-sm text-muted-foreground">Progression</p>
+            </div>
+            <p className="text-2xl font-bold text-foreground">Level + Trade</p>
+            <p className="text-sm text-muted-foreground mt-1">Build value through XP, market timing, and competition results</p>
+          </Card>
+        </div>
+      </section>
+
+      <section id="how-it-works" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <h2 className="text-2xl sm:text-3xl font-bold text-foreground text-center mb-4">
           How It Works
         </h2>
@@ -169,6 +227,18 @@ export default function LandingPage() {
             </p>
           </Card>
         </div>
+      </section>
+
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+        <Card className="p-8 sm:p-10 text-center bg-gradient-to-br from-primary/10 via-background to-primary/5 border-primary/20">
+          <h3 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">Ready for Matchday?</h3>
+          <p className="text-muted-foreground max-w-xl mx-auto mb-6">
+            Join now, lock your lineup, and start climbing the leaderboard before the next kickoff.
+          </p>
+          <a href="/api/auth/google">
+            <Button size="lg" data-testid="button-final-cta">Start Free with Google</Button>
+          </a>
+        </Card>
       </section>
 
       <footer className="border-t border-border py-8">

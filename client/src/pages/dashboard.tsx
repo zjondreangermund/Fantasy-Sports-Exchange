@@ -24,6 +24,8 @@ import {
   ChevronUp,
   Percent,
   DollarSign,
+  CheckCircle2,
+  Circle,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -82,6 +84,16 @@ export default function DashboardPage() {
     const scores = c.last5Scores as number[];
     return sum + (scores?.[scores.length - 1] || 0);
   }, 0) || 0;
+
+  const hasCards = (cards?.length || 0) > 0;
+  const hasLineup = (lineup?.cards?.length || 0) === 5;
+  const hasBalance = (wallet?.balance || 0) > 0;
+
+  const checklist = [
+    { label: "Open starter packs", done: hasCards },
+    { label: "Set your 5-card lineup", done: hasLineup },
+    { label: "Fund wallet for market moves", done: hasBalance },
+  ];
 
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
@@ -153,6 +165,58 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+          <Card className="p-5 lg:col-span-2 border-primary/20 bg-primary/5">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Zap className="w-5 h-5 text-primary" />
+                Matchday Checklist
+              </h2>
+              <Badge variant="secondary" data-testid="badge-checklist-progress">
+                {checklist.filter((step) => step.done).length}/3 complete
+              </Badge>
+            </div>
+
+            <div className="space-y-2.5">
+              {checklist.map((step) => (
+                <div key={step.label} className="flex items-center gap-2 text-sm">
+                  {step.done ? (
+                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Circle className="w-4 h-4 text-muted-foreground" />
+                  )}
+                  <span className={step.done ? "text-foreground" : "text-muted-foreground"}>{step.label}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5 border-border/70">
+            <h3 className="font-semibold text-foreground mb-1">Best Next Action</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              {hasCards && hasLineup
+                ? "Your core setup is done. Improve card quality in the market."
+                : hasCards
+                  ? "You have cards ready — lock your lineup to start competing."
+                  : "Start by opening your packs and selecting your first 5 cards."}
+            </p>
+
+            {!hasCards ? (
+              <Button onClick={() => navigate("/onboarding")} data-testid="button-next-onboarding">
+                Go to Onboarding
+              </Button>
+            ) : !hasLineup ? (
+              <Button onClick={() => navigate("/collection")} data-testid="button-next-lineup">
+                Set Lineup
+              </Button>
+            ) : (
+              <Button onClick={() => navigate("/marketplace")} data-testid="button-next-market">
+                Open Marketplace
+              </Button>
+            )}
           </Card>
         </div>
 
