@@ -8,6 +8,7 @@ type Pack = {
   cards: PlayerCardWithPlayer[];
 };
 
+export default function OnboardingPacksScene() {
   const [packs, setPacks] = useState<Pack[]>([]);
   const [activePack, setActivePack] = useState<number | null>(null);
   const [openedPacks, setOpenedPacks] = useState<Record<number, boolean>>({});
@@ -137,6 +138,7 @@ type Pack = {
       </div>
     </div>
   );
+
 }
 
 function PackOpenAnimation({ opened, onOpen }: { opened: boolean; onOpen: () => void }) {

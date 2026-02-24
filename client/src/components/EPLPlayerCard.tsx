@@ -285,7 +285,7 @@ export default function EPLPlayerCard({
           width: s.w,
           height: s.h,
           borderRadius: s.radius,
-          background: theme.face,
+          background: "transparent",
           boxShadow: `
             ${theme.glow},
             inset 0px 1px 1px rgba(255,255,255,0.4),

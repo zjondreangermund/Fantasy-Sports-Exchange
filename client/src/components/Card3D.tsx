@@ -66,59 +66,18 @@ interface CanvasErrorBoundaryProps {
 
 class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, { hasError: boolean }> {
   state = { hasError: false };
-
-    state = { hasError: false };
-    static getDerivedStateFromError() {
-      return { hasError: true };
-    }
-    componentDidCatch() {
-      this.props.onError?.();
-    }
-    render() {
-      return this.state.hasError ? this.props.fallback : this.props.children;
-    }
-  const fallbackTexture = useMemo(() => {
-        alphaMap: processedTexture,
-        bumpMap: processedTexture,
-        bumpScale: 0.2,
-        metalness: 0.82,
-        roughness: 0.26,
-        clearcoat: 1,
-        clearcoatRoughness: 0.1,
-        reflectivity: 1,
-        emissive: new THREE.Color("#89a8d8"),
-        emissiveIntensity: 0.08,
-        transparent: true,
-        alphaTest: 0.02,
-        depthWrite: true,
-        polygonOffset: true,
-        polygonOffsetFactor: 1,
-        polygonOffsetUnits: 1,
-        opacity: 1.0,
-      }),
-    [processedTexture],
-  );
-
-  useMemo(() => {
-    processedTexture.wrapS = THREE.ClampToEdgeWrapping;
-    processedTexture.wrapT = THREE.ClampToEdgeWrapping;
-    processedTexture.colorSpace = THREE.SRGBColorSpace;
-  }, [processedTexture]);
-
-  useFrame(() => {
-    if (ref.current) {
-      ref.current.position.x = THREE.MathUtils.lerp(ref.current.position.x, hovered ? 0.04 : 0, 0.1);
-      ref.current.position.y = THREE.MathUtils.lerp(ref.current.position.y, hovered ? 0.015 : 0, 0.1);
-    }
-  });
-
-  return (
-    <mesh ref={ref} position={[0, 0.06, 0.385]} renderOrder={10}>
-      <planeGeometry args={[1.86, 2.46, 64, 64]} />
-      <primitive object={portraitMaterial} attach="material" />
-    </mesh>
-  );
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch() {
+    this.props.onError?.();
+  }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
 }
+
+// ...existing code...
 
 function ShineLight({ mouse, hovered }: { mouse: RefObject<{ x: number; y: number }>; hovered: boolean }) {
   const lightRef = useRef<THREE.PointLight>(null);
@@ -502,9 +461,7 @@ export default function Card3D({
               position: "absolute",
               inset: 0,
               borderRadius: 14,
-              background: `radial-gradient(circle at 50% 20%, rgba(255,255,255,0.14), rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.08) 100%), #${rs.base
-                .toString(16)
-                .padStart(6, "0")}`,
+              background: "transparent",
               opacity: 0.9,
               pointerEvents: "none",
             }}

@@ -69,19 +69,20 @@ export default function PlayerCard3D({
 }: PlayerCard3DProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHover] = useState(false);
-
-  // Tilt state
-  const [{ rx, ry }, setRot] = useState({ rx: 0, ry: 0 });
-  const [{ gx, gy }, setGlare] = useState({ gx: 50, gy: 30 }); // percent
-
-  const s = useMemo(() => rarityStyles(rarity), [rarity]);
-
-  function onMove(e: React.MouseEvent) {
-    const el = wrapRef.current;
-    if (!el) return;
-
-    const r = el.getBoundingClientRect();
-    const px = (e.clientX - r.left) / r.width; // 0..1
+      <div
+        className={[
+          "relative h-full w-full rounded-[26px] overflow-hidden",
+          // Removed bg-zinc-950/90 to make background transparent
+          "transform-gpu transition-transform duration-200 will-change-transform",
+          "border border-white/10",
+          s.ring,
+          s.glow,
+        ].join(" ")}
+        style={{
+          transform: `rotateX(${rx}deg) rotateY(${ry}deg) translateZ(0)`,
+          background: "transparent",
+        }}
+      >
     const py = (e.clientY - r.top) / r.height; // 0..1
 
     // Rotate up to ~12deg. Invert Y for natural tilt.

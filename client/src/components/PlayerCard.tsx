@@ -93,7 +93,7 @@ export default function PlayerCard(props: PlayerCardProps) {
       onClick={props.onClick}
       className={`select-none ${props.selectable ? "cursor-pointer" : ""}`}
     >
-      <div className={`${frame} relative rounded-xl overflow-hidden bg-[#0b0f1a] shadow-lg ${props.selected ? "border-0" : "border border-white/10"}`}>
+      <div className={`${frame} relative rounded-xl overflow-hidden shadow-lg ${props.selected ? "border-0" : "border border-white/10"}`} style={{background: "transparent"}}>
         {props.selected ? (
           // ✅ 3D fills the same frame (no layout zoom)
           <div className="absolute inset-0">
@@ -137,7 +137,7 @@ export default function PlayerCard(props: PlayerCardProps) {
                 }}
               />
             ) : (
-              <div className="absolute inset-0 bg-slate-900" />
+              <div className="absolute inset-0" style={{background: "transparent"}} />
             )}
 
             {/* dark fade */}
