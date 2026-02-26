@@ -359,19 +359,18 @@ interface CanvasErrorBoundaryProps {
 class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, { hasError: boolean }> {
   state = { hasError: false };
 
-  state = { hasError: false };
-
- static getDerivedStateFromError() {
+  static getDerivedStateFromError() {
     return { hasError: true };
   }
+
   componentDidCatch() {
     this.props.onError?.();
   }
+
   render() {
     return this.state.hasError ? this.props.fallback : this.props.children;
   }
 }
-
 // ...existing code...
 
 function ShineLight({ mouse, hovered }: { mouse: RefObject<{ x: number; y: number }>; hovered: boolean }) {
@@ -748,10 +747,14 @@ export default function Card3D({
               <pointLight position={[0, 2, 3]} intensity={0.45} color="#dbeafe" />
               <CardMesh rarity={rarity} hovered={hovered} mouse={mouseRef} />
               {/* Use FPL CDN photo directly for best transparency */}
-              <EngravedPortrait
-                hovered={hovered}
-                urls={card.player?.photo ? [fplPhotoToPlCdn(card.player.photo)] : card.player?.imageUrl ? [card.player.imageUrl] : []}
-              />
+              {(() => {
+  const urls = buildImageCandidates(
+    card.player?.imageUrl || "",
+    card.playerId ?? card.player?.id
+  );
+
+  return <EngravedPortrait hovered={hovered} urls={urls} />;
+})()}
 
             </Canvas>
           </CanvasErrorBoundary>
