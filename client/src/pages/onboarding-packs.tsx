@@ -131,8 +131,6 @@ function OnboardingPacks() {
   );
 
 
-export default OnboardingPacks;
-
 function PackOpenAnimation({ opened, onOpen }: { opened: boolean; onOpen: () => void }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6 overflow-hidden relative">
@@ -179,4 +177,5 @@ function PackOpenAnimation({ opened, onOpen }: { opened: boolean; onOpen: () => 
       </div>
     </div>
   );
-}
+
+export default OnboardingPacks;
