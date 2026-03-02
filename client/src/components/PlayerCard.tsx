@@ -36,6 +36,21 @@ function resolvePlayerImageUrl(card: any, player: any, sorareImageUrl?: string |
   return [idPhotoUrl, ...directCandidates].find((value): value is string => Boolean(value)) ?? null;
 }
 
+function fallbackImageCandidates(card: any, player: any) {
+  const seed = Number(card?.playerId ?? player?.id ?? card?.id ?? 1) || 1;
+  const index = ((seed % 6) + 6) % 6;
+  const ordered = [
+    `/images/player-${index + 1}.png`,
+    "/images/player-1.png",
+    "/images/player-2.png",
+    "/images/player-3.png",
+    "/images/player-4.png",
+    "/images/player-5.png",
+    "/images/player-6.png",
+  ];
+  return Array.from(new Set(ordered));
+}
+
 function rarityLabel(rarity?: string) {
   const r = (rarity ?? "common").toLowerCase();
   if (r === "legendary") return "LEGENDARY";
@@ -65,7 +80,7 @@ export default function PlayerCard(props: PlayerCardProps) {
   const player: any = (props.card as any)?.player ?? {};
 
   const playerImageUrl = resolvePlayerImageUrl(props.card, player, props.sorareImageUrl);
-  const fallbackCardBack = "/images/player-1.png";
+  const fallbackImages = fallbackImageCandidates(props.card, player);
 
   const clubLogo =
     player.clubLogo ||
@@ -120,11 +135,29 @@ export default function PlayerCard(props: PlayerCardProps) {
                 className="absolute inset-0 w-full h-full object-cover bg-transparent"
                 data-fallback-step="0"
                 onError={(e) => {
-                  e.currentTarget.src = fallbackCardBack;
+                  const current = Number(e.currentTarget.dataset.fallbackStep || "0");
+                  const next = fallbackImages[current];
+                  if (next) {
+                    e.currentTarget.dataset.fallbackStep = String(current + 1);
+                    e.currentTarget.src = next;
+                  }
                 }}
               />
             ) : (
-              <div className="absolute inset-0" style={{background: "transparent"}} />
+              <img
+                src={fallbackImages[0]}
+                alt={player?.name ?? "Player"}
+                className="absolute inset-0 w-full h-full object-cover bg-transparent"
+                data-fallback-step="1"
+                onError={(e) => {
+                  const current = Number(e.currentTarget.dataset.fallbackStep || "1");
+                  const next = fallbackImages[current];
+                  if (next) {
+                    e.currentTarget.dataset.fallbackStep = String(current + 1);
+                    e.currentTarget.src = next;
+                  }
+                }}
+              />
             )}
 
             {/* dark fade */}

@@ -74,11 +74,11 @@ export class ScoreUpdateService {
     const appearances = Number(element?.starts || element?.appearances || 0);
     const minutes = Number(element?.minutes || 0);
 
-    return goals * 100 + assists * 60 + appearances * 30 + Math.floor(minutes / 10);
+    return goals * 45 + assists * 28 + appearances * 12 + Math.floor(minutes / 20);
   }
 
   private levelFromXp(xp: number) {
-    return Math.max(1, Math.floor(Math.max(0, xp) / 1000) + 1);
+    return Math.max(1, Math.floor(Math.max(0, xp) / 2000) + 1);
   }
 
   private nextLast5Scores(existing: any, nextScore: number) {
