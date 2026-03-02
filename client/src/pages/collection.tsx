@@ -4,8 +4,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 // Fixed: @/components -> ../components
 import Card3D from "../components/Card3D";
-import DisplayCabinet from "../components/DisplayCabinet";
-import LockerRoomScene from "../components/LockerRoomScene";
+import LockerRoomScene from "../components/locker/LockerRoomScene";
+import LockerRoomShelf from "../components/locker/LockerRoomShelf";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -288,24 +288,78 @@ export default function CollectionPage() {
           </div>
         ) : filteredCards && filteredCards.length > 0 ? (
           viewMode === "locker" && LOCKER_ROOM_MODE ? (
-            <div className="relative min-h-[76vh] rounded-2xl border border-primary/20 overflow-hidden">
-              <LockerRoomScene active ambientAudioEnabled={lockerAmbientAudio} />
+            <div className="relative min-h-[calc(100vh-80px)] rounded-2xl overflow-hidden">
+              <LockerRoomScene enabled={LOCKER_ROOM_MODE} />
 
-              <div className="absolute inset-x-0 top-0 h-20 z-[5] pointer-events-none bg-gradient-to-b from-black/45 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 h-44 z-[5] pointer-events-none bg-gradient-to-t from-black/55 via-black/30 to-transparent" />
+              <div className="relative z-10 px-4">
+                <div className="mx-auto max-w-6xl">
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 backdrop-blur-md">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="text-sm text-white/80">Display Cabinet</div>
+                      <div className="text-xs text-white/60">Locker Room Shelf</div>
+                    </div>
 
-              <div className="absolute left-0 right-0 bottom-16 h-8 z-[6] pointer-events-none bg-gradient-to-r from-transparent via-slate-200/20 to-transparent" />
-              <div className="absolute left-0 right-0 bottom-14 h-24 z-[6] pointer-events-none bg-gradient-to-t from-slate-800/40 to-transparent" />
+                    <LockerRoomShelf
+                      items={filteredCards}
+                      getKey={(card) => String(card.id)}
+                      renderCard={(card) => (
+                        <div className="relative">
+                          <Card3D card={card} size="sm" />
+                          <div className="mt-2 rounded-lg border border-border/60 bg-background/75 p-2">
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="text-muted-foreground">Evolution</span>
+                              <span className="font-semibold">Lvl {(card.level || 1) + Math.floor(((card.xp || 0) + (localXpBoost[card.id] || 0)) / 1000)}</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+                                style={{ width: `${Math.min(100, ((((card.xp || 0) + (localXpBoost[card.id] || 0)) % 1000) / 1000) * 100)}%` }}
+                              />
+                            </div>
+                            <div className="mt-2 flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">{((card.xp || 0) + (localXpBoost[card.id] || 0)) % 1000}/1000 XP</span>
+                              {(card.level || 1) + Math.floor(((card.xp || 0) + (localXpBoost[card.id] || 0)) / 1000) >= 10 ? (
+                                <span className="text-amber-400 flex items-center gap-1"><Sparkles className="w-3 h-3" />Alt Art Unlocked</span>
+                              ) : (
+                                <span className="text-muted-foreground">Alt art at Lvl 10</span>
+                              )}
+                            </div>
+                            <div className="mt-2 flex gap-2">
+                              {card.forSale ? (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => cancelListingMutation.mutate(card.id)}
+                                  disabled={cancelListingMutation.isPending}
+                                  className="text-xs flex-1"
+                                >
+                                  Cancel (N${card.price})
+                                </Button>
+                              ) : String(card.rarity || "").toLowerCase() === "common" ? (
+                                <Button size="sm" variant="outline" disabled className="text-xs flex-1">
+                                  Tournament Only
+                                </Button>
+                              ) : (
+                                <Button size="sm" variant="secondary" onClick={() => handleListCard(card)} className="text-xs flex-1">
+                                  <DollarSign className="w-3 h-3 mr-1" />
+                                  Sell
+                                </Button>
+                              )}
+                              <Button size="sm" variant="outline" className="text-xs" onClick={() => trainCard(card.id)}>
+                                Train
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    />
 
-              <DisplayCabinet
-                cards={filteredCards}
-                localXpBoost={localXpBoost}
-                raritySurfaceGlow={raritySurfaceGlow}
-                onTrain={trainCard}
-                onListCard={handleListCard}
-                onCancelListing={(cardId) => cancelListingMutation.mutate(cardId)}
-                cancelListingPending={cancelListingMutation.isPending}
-              />
+                    <div className="mt-3 text-xs text-white/50">
+                      Tap a card to feature it. Long press to toggle rotation (optional).
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="flex flex-wrap gap-8 justify-center preserve-3d" style={{ transformStyle: "preserve-3d" }}>
