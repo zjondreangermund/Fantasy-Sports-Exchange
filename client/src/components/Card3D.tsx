@@ -228,7 +228,6 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
     () =>
       new THREE.MeshPhysicalMaterial({
         map: processedTexture,
-        alphaMap: processedTexture,
         bumpMap: processedTexture,
         bumpScale: 0.2,
         transparent: true,
@@ -242,7 +241,7 @@ function EngravedPortrait({ urls, hovered }: { urls: string[]; hovered: boolean 
         emissive: 0x222222,
         emissiveIntensity: hovered ? 0.12 : 0.08,
         depthWrite: false,
-        alphaTest: 0.5,
+        alphaTest: 0.05,
       }),
     [processedTexture, hovered],
   );
@@ -448,7 +447,7 @@ function CardMesh({
       new THREE.MeshPhysicalMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.24,
+        opacity: 0.08,
         metalness: 0.05,
         roughness: 0.02,
         clearcoat: 1,
@@ -743,9 +742,9 @@ export default function Card3D({
             pointerEvents: "none",
             zIndex: 8,
             background:
-              "radial-gradient(420px 280px at 50% 20%, rgba(255,255,255,0.22), rgba(255,255,255,0.06) 38%, rgba(255,255,255,0) 70%)",
+              "radial-gradient(420px 280px at 50% 20%, rgba(255,255,255,0.10), rgba(255,255,255,0.03) 38%, rgba(255,255,255,0) 70%)",
             mixBlendMode: "screen",
-            opacity: hovered ? 0.8 : 0.45,
+            opacity: hovered ? 0.6 : 0.25,
             transition: "opacity 180ms ease",
           }}
         />
@@ -906,7 +905,7 @@ export default function Card3D({
           <div
             style={{
               position: "absolute",
-              bottom: "11%",
+              bottom: "2%",
               left: "50%",
               transform: "translateX(-50%)",
               background: "linear-gradient(135deg, rgba(0,0,0,0.75), rgba(0,0,0,0.6))",
