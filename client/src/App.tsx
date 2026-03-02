@@ -17,6 +17,7 @@ import LandingPage from "./pages/landing";
 import OnboardingPage from "./pages/onboarding";
 import OnboardingPacksScene from "./pages/onboarding-packs";
 import OnboardingTunnelPage from "./pages/onboarding-tunnel";
+import CardRevealPage from "./pages/card-reveal";
 import DashboardPage from "./pages/dashboard";
 import CollectionPage from "./pages/collection";
 import MarketplacePage from "./pages/marketplace";
@@ -48,6 +49,7 @@ function AuthenticatedRouter() {
         <Route path="/onboarding" component={OnboardingPage} />
         <Route path="/onboarding-packs" component={OnboardingPacksScene} />
         <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
+        <Route path="/card-reveal" component={CardRevealPage} />
         <Route component={OnboardingPage} />
       </Switch>
     );
@@ -60,6 +62,7 @@ function AuthenticatedRouter() {
       <Route path="/onboarding" component={OnboardingPage} />
       <Route path="/onboarding-packs" component={OnboardingPacksScene} />
       <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
+      <Route path="/card-reveal" component={CardRevealPage} />
       <Route path="/competitions" component={CompetitionsPage} />
       <Route path="/premier-league" component={PremierLeaguePage} />
       <Route path="/collection" component={CollectionPage} />
