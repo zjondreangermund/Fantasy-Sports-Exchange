@@ -570,7 +570,7 @@ export function eplPlayerToCard(player: EplPlayer): PlayerCardWithPlayer {
 }
 
 function StatBadge({ label, value, color, size }: { label: string; value: string; color: string; size: "sm" | "md" | "lg" }) {
-  const fs = size === "sm" ? 6 : size === "lg" ? 8 : 7;
+  const fs = size === "sm" ? 7 : size === "lg" ? 10 : 9;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
@@ -764,21 +764,6 @@ export default function Card3D({
         )}
 
         <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            borderRadius: 14,
-            pointerEvents: "none",
-            zIndex: 8,
-            background:
-              "radial-gradient(420px 280px at 50% 20%, rgba(255,255,255,0.22), rgba(255,255,255,0.06) 38%, rgba(255,255,255,0) 70%)",
-            mixBlendMode: "screen",
-            opacity: hovered ? 0.8 : 0.45,
-            transition: "opacity 180ms ease",
-          }}
-        />
-
-        <div
           className="card-content"
           style={{
             position: "absolute",
@@ -788,7 +773,7 @@ export default function Card3D({
             bottom: "9%",
             display: "flex",
             flexDirection: "column",
-            justifyContent: "space-between",
+            justifyContent: "flex-start",
             zIndex: 10,
             pointerEvents: "none",
             padding: pad,
@@ -853,13 +838,13 @@ export default function Card3D({
             </div>
           </div>
 
-          <div style={{ textAlign: "center" }}>
+          <div style={{ textAlign: "center", marginTop: "auto" }}>
             <div
               style={{
                 display: "flex",
                 justifyContent: "center",
-                gap: size === "sm" ? 6 : 10,
-                marginBottom: size === "sm" ? 2 : 3,
+                gap: size === "sm" ? 8 : 14,
+                marginBottom: size === "sm" ? 3 : 5,
               }}
             >
               <StatBadge label="LV" value={String(card.level || 1)} color="#facc15" size={size} />
@@ -930,7 +915,7 @@ export default function Card3D({
           </div>
         </div>
 
-        {(showPrice || card.forSale) && card.price != null && card.price > 0 && (
+        {showPrice && card.price != null && card.price > 0 && (
           <div
             style={{
               position: "absolute",

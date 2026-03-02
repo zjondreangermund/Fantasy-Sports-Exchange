@@ -2591,6 +2591,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: "completed",
       });
 
+      // Reset decisiveScore and last5Scores for all cards used in this competition
+      // XP and level are preserved as they represent long-term card progression
+      const allLineupCardIds = new Set<number>();
+      for (const entry of entries) {
+        for (const cardId of (entry.lineupCardIds || [])) {
+          allLineupCardIds.add(Number(cardId));
+        }
+      }
+      await Promise.all(
+        Array.from(allLineupCardIds).map((cardId) =>
+          storage.updatePlayerCard(cardId, {
+            decisiveScore: 0,
+            last5Scores: [0, 0, 0, 0, 0],
+          })
+        )
+      );
+
       if (winnerPrizeCardId && sortedEntries[0]) {
         await storage.updateCompetitionEntry(sortedEntries[0].id, {
           prizeCardId: winnerPrizeCardId,
