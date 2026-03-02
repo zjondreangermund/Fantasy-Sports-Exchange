@@ -214,7 +214,7 @@ export default function PlayerCard3D({
           className="absolute inset-0 flex items-end justify-center"
           style={{ transform: "translateZ(42px)" }}
         >
-          <div className="relative w-[92%] h-[70%] bg-slate-900 rounded-[18px] overflow-hidden">
+          <div className="relative w-[92%] h-[70%] bg-transparent rounded-[18px] overflow-hidden">
             {imageUrl ? (
               <img
                 src={imageUrl}

@@ -19,6 +19,23 @@ function normalizeImageUrl(url?: string | null): string | null {
   return value.startsWith("/") ? value : `/${value}`;
 }
 
+function resolvePlayerImageUrl(card: any, player: any, sorareImageUrl?: string | null): string | null {
+  const playerId = Number(card?.playerId ?? player?.id);
+  const idPhotoUrl = Number.isFinite(playerId) && playerId > 0 ? `/api/players/${playerId}/photo` : null;
+
+  const directCandidates = [
+    sorareImageUrl,
+    player?.imageUrl,
+    player?.image_url,
+    player?.photo,
+    player?.photoUrl,
+    player?.avatarImageUrl,
+    player?.pictureUrl,
+  ].map((value) => normalizeImageUrl(value));
+
+  return [idPhotoUrl, ...directCandidates].find((value): value is string => Boolean(value)) ?? null;
+}
+
 function rarityLabel(rarity?: string) {
   const r = (rarity ?? "common").toLowerCase();
   if (r === "legendary") return "LEGENDARY";
@@ -37,20 +54,17 @@ function rarityChipClasses(rarity?: string) {
 
 function rarityPatternUrl(rarity?: string) {
   const r = (rarity ?? "common").toLowerCase();
-  if (r === "legendary") return "/assets/patterns/legendary.png";
-  if (r === "unique") return "/assets/patterns/unique.png";
-  if (r === "rare") return "/assets/patterns/rare.png";
-  return "/assets/patterns/common.png";
+  if (r === "legendary") return "/assets/patterns/legendary.svg";
+  if (r === "unique") return "/assets/patterns/unique.svg";
+  if (r === "rare") return "/assets/patterns/rare.svg";
+  return "/assets/patterns/common.svg";
 }
 
 export default function PlayerCard(props: PlayerCardProps) {
   if (!props.card) return null;
   const player: any = (props.card as any)?.player ?? {};
 
-  const playerId = Number((props.card as any)?.playerId ?? player?.id);
-  const playerImageUrl = Number.isFinite(playerId) && playerId > 0
-    ? `/api/players/${playerId}/photo`
-    : null;
+  const playerImageUrl = resolvePlayerImageUrl(props.card, player, props.sorareImageUrl);
   const fallbackCardBack = "/images/player-1.png";
 
   const clubLogo =
@@ -103,7 +117,7 @@ export default function PlayerCard(props: PlayerCardProps) {
               <img
                 src={playerImageUrl}
                 alt={player?.name ?? "Player"}
-                className="absolute inset-0 w-full h-full object-cover bg-slate-900"
+                className="absolute inset-0 w-full h-full object-cover bg-transparent"
                 data-fallback-step="0"
                 onError={(e) => {
                   e.currentTarget.src = fallbackCardBack;

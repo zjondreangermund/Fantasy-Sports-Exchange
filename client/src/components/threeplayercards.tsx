@@ -54,6 +54,31 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
+function normalizeImageUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const value = String(url).trim();
+  if (!value) return null;
+  if (/^(https?:)?\/\//i.test(value) || value.startsWith("data:")) return value;
+  return value.startsWith("/") ? value : `/${value}`;
+}
+
+async function loadFirstImage(urls: Array<string | null | undefined>): Promise<HTMLImageElement | null> {
+  const candidates = urls
+    .map((url) => normalizeImageUrl(url))
+    .filter((url): url is string => Boolean(url));
+
+  for (const url of candidates) {
+    try {
+      const image = await loadImage(url);
+      return image;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 function drawRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -109,7 +134,7 @@ function drawRarityPattern(ctx: CanvasRenderingContext2D, w: number, h: number, 
 
 async function buildFaceTexture(opts: {
   rarity: Rarity;
-  photoUrl?: string | null;
+  photoUrls?: Array<string | null | undefined>;
   clubLogoUrl?: string | null;
   playerName: string;
   clubName?: string;
@@ -156,17 +181,11 @@ async function buildFaceTexture(opts: {
   ctx.fillText(opts.rarity.toUpperCase(), canvas.width - 60, 76);
   ctx.textAlign = "left";
 
-  // photo frame
-  ctx.globalAlpha = 0.22;
-  ctx.fillStyle = pal.a;
-  drawRoundedRect(ctx, 70, 190, 884, 720, 28);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
   // photo
-  if (opts.photoUrl) {
+  if (Array.isArray(opts.photoUrls) && opts.photoUrls.length > 0) {
     try {
-      const img = await loadImage(opts.photoUrl);
+      const img = await loadFirstImage(opts.photoUrls);
+      if (!img) throw new Error("No valid photo source");
       const box = { x: 70, y: 190, w: 884, h: 720 };
       const r = Math.max(box.w / img.width, box.h / img.height);
       const nw = img.width * r;
@@ -440,11 +459,19 @@ function Scene({ card, imageUrl }: { card: PlayerCardWithPlayer; imageUrl?: stri
     (async () => {
       const tex = await buildFaceTexture({
         rarity,
-        photoUrl:
-          imageUrl ??
-          (Number.isFinite(Number((card as any)?.playerId ?? player?.id))
+        photoUrls: [
+          imageUrl,
+          Number.isFinite(Number((card as any)?.playerId ?? player?.id))
             ? `/api/players/${Number((card as any)?.playerId ?? player?.id)}/photo`
-            : null),
+            : null,
+          player?.imageUrl,
+          player?.image_url,
+          player?.photo,
+          player?.photoUrl,
+          player?.avatarImageUrl,
+          player?.pictureUrl,
+          "/images/player-1.png",
+        ],
         clubLogoUrl,
         playerName: player.name ?? "PLAYER",
         clubName,
