@@ -2591,8 +2591,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: "completed",
       });
 
-      // Reset decisiveScore and last5Scores for all cards used in this competition
-      // XP and level are preserved as they represent long-term card progression
+      // Reset decisiveScore (current week points) for all cards used in this competition
+      // last5Scores, XP and level are preserved — last5Scores shows historical match scores
       const allLineupCardIds = new Set<number>();
       for (const entry of entries) {
         for (const cardId of (entry.lineupCardIds || [])) {
@@ -2603,7 +2603,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         Array.from(allLineupCardIds).map((cardId) =>
           storage.updatePlayerCard(cardId, {
             decisiveScore: 0,
-            last5Scores: [0, 0, 0, 0, 0],
           })
         )
       );
