@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 // Fixed: @/hooks -> ../hooks
 import { useAuth } from "../hooks/use-auth";
-// Fixed: @/components -> ../components
-import { AppSidebar } from "../components/app-sidebar";
 import Card3D from "../components/Card3D";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
 // Fixed: @shared -> ../../../shared
 import { type PlayerCardWithPlayer, type Wallet, type Lineup } from "../../../shared/schema";
@@ -41,16 +40,29 @@ type OnboardingConfig = {
   packLabels: string[];
 };
 
+type LiveChatMessage = {
+  id: string;
+  userId: string;
+  userName: string;
+  text: string;
+  createdAt: string;
+};
+
+type LivePointEvent = {
+  id: string;
+  gameId: number;
+  team: string;
+  delta: number;
+  reason: string;
+  createdAt: string;
+};
+
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
-  const [socialFeed, setSocialFeed] = useState<string[]>([
-    "Rafa_MGR just opened a Legendary pull 🔥",
-    "LenaFC reacted WOW to a Portugal striker reveal",
-    "NorthStand joined Spectator Mode",
-  ]);
   const [cheers, setCheers] = useState(182);
+  const [chatInput, setChatInput] = useState("");
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
@@ -85,6 +97,49 @@ export default function DashboardPage() {
 
   const { data: onboardingConfig } = useQuery<OnboardingConfig>({
     queryKey: ["/api/onboarding/config"],
+  });
+
+  const {
+    data: liveChatMessages,
+    refetch: refetchLiveChat,
+    isFetching: liveChatLoading,
+  } = useQuery<LiveChatMessage[]>({
+    queryKey: ["/api/live-chat/messages?limit=40"],
+    queryFn: async () => {
+      const res = await fetch("/api/live-chat/messages?limit=40", { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
+    refetchInterval: 5000,
+  });
+
+  const { data: livePointEvents } = useQuery<LivePointEvent[]>({
+    queryKey: ["/api/live/point-feed?limit=20"],
+    queryFn: async () => {
+      const res = await fetch("/api/live/point-feed?limit=20", { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
+    refetchInterval: 5000,
+  });
+
+  const sendLiveChatMutation = useMutation({
+    mutationFn: async (text: string) => {
+      const res = await fetch("/api/live-chat/messages", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error("Failed to send message");
+      return res.json();
+    },
+    onSuccess: async () => {
+      setChatInput("");
+      await refetchLiveChat();
+    },
   });
 
   useEffect(() => {
@@ -128,22 +183,6 @@ export default function DashboardPage() {
     ],
     [],
   );
-
-  useEffect(() => {
-    const names = ["UltraXI", "GoalForge", "BlueEnd", "CaptainNova", "PitchWizard", "VantaFC"];
-    const events = [
-      "opened an Epic pack 👀",
-      "hit a 92-rated reveal ⚡",
-      "sent 24 cheers in Social Arena",
-      "joined live spectator tunnel",
-      "triggered confetti with a goal card",
-    ];
-    const id = window.setInterval(() => {
-      const next = `${names[Math.floor(Math.random() * names.length)]} ${events[Math.floor(Math.random() * events.length)]}`;
-      setSocialFeed((prev) => [next, ...prev].slice(0, 6));
-    }, 7000);
-    return () => window.clearInterval(id);
-  }, []);
 
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
@@ -370,12 +409,70 @@ export default function DashboardPage() {
                 <Flame className="w-4 h-4 mr-1 text-orange-500" /> Cheer ({cheers})
               </Button>
             </div>
-            <div className="space-y-2">
-              {socialFeed.map((item, idx) => (
-                <div key={`${item}-${idx}`} className="text-sm rounded-md border border-border/60 bg-background/40 px-3 py-2">
-                  {item}
+
+            <div className="mb-3 rounded-md border border-border/60 bg-background/40 px-3 py-2">
+              <p className="text-xs font-medium mb-2 text-muted-foreground">Live Point Dots</p>
+              <div className="space-y-1.5 max-h-24 overflow-auto">
+                {(livePointEvents || []).slice().reverse().slice(0, 8).map((event) => (
+                  <div key={event.id} className="flex items-center gap-2 text-xs">
+                    <span className={`h-2.5 w-2.5 rounded-full ${event.delta >= 0 ? "bg-green-500" : "bg-red-500"}`} />
+                    <span className="text-foreground">{event.team}</span>
+                    <span className={event.delta >= 0 ? "text-green-500" : "text-red-500"}>
+                      {event.delta >= 0 ? `+${event.delta}` : event.delta}
+                    </span>
+                    <span className="text-muted-foreground">{event.reason}</span>
+                  </div>
+                ))}
+                {(!livePointEvents || livePointEvents.length === 0) && (
+                  <p className="text-xs text-muted-foreground">No point events yet.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2 mb-3 max-h-36 overflow-auto">
+              {(liveChatMessages || []).slice().reverse().slice(0, 8).map((message) => (
+                <div key={message.id} className="text-sm rounded-md border border-border/60 bg-background/40 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="font-medium text-xs text-foreground">{message.userName || "Manager"}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-foreground/90">{message.text}</p>
                 </div>
               ))}
+              {(!liveChatMessages || liveChatMessages.length === 0) && (
+                <div className="text-xs rounded-md border border-border/60 bg-background/40 px-3 py-2 text-muted-foreground">
+                  No chat messages yet.
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder={liveChatLoading ? "Refreshing chat..." : "Send a live message"}
+                maxLength={280}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const text = chatInput.trim();
+                    if (!text || sendLiveChatMutation.isPending) return;
+                    sendLiveChatMutation.mutate(text);
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                onClick={() => {
+                  const text = chatInput.trim();
+                  if (!text) return;
+                  sendLiveChatMutation.mutate(text);
+                }}
+                disabled={sendLiveChatMutation.isPending || chatInput.trim().length === 0}
+              >
+                Send
+              </Button>
             </div>
           </Card>
         </div>
