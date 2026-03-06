@@ -10,11 +10,22 @@ export type PlayerCardData = {
   club?: string;
   image?: string;
   rarity: Rarity;
+  serial?: number;
+  maxSupply?: number;
+  form?: number;
 };
 
 type FantasyCardProps = {
   player: PlayerCardData;
   className?: string;
+};
+
+const frameMap: Record<Rarity, string> = {
+  common: "/frames/common.svg",
+  rare: "/frames/rare.svg",
+  unique: "/frames/unique.svg",
+  epic: "/frames/epic.svg",
+  legendary: "/frames/legendary.svg",
 };
 
 const rarityShell: Record<Rarity, string> = {
@@ -50,11 +61,13 @@ const rarityAccent: Record<Rarity, string> = {
 };
 
 export default function FantasyCard({ player, className }: FantasyCardProps) {
+  const rarity = player.rarity;
   return (
     <div
       className={[
-        "group relative isolate aspect-[0.7] w-[240px] overflow-hidden bg-[linear-gradient(180deg,rgba(12,14,20,0.96),rgba(2,3,6,1))] transition duration-200 hover:-translate-y-1",
+        "group card-shell relative isolate aspect-[0.7] w-[240px] overflow-hidden bg-[linear-gradient(180deg,rgba(12,14,20,0.98),rgba(2,3,6,1))] transition duration-200 hover:-translate-y-1",
         rarityShell[player.rarity],
+        `card-aura-${rarity}`,
         className || "",
       ].join(" ")}
     >
@@ -68,30 +81,49 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
 
         <div className={["pointer-events-none absolute inset-x-0 top-0 z-[2] h-28 bg-gradient-to-b", rarityAccent[player.rarity]].join(" ")} />
 
-        <div className="absolute left-4 top-4 z-10">
-          <div className="text-4xl font-black leading-none text-white">{player.rating}</div>
-          <div className="mt-1 text-sm font-semibold text-white/75">{player.position}</div>
-        </div>
+        <div className="pointer-events-none absolute inset-x-[12%] top-[14%] z-[2] h-[52%] rounded-[999px] bg-white/12 blur-3xl" />
 
-        <div className="absolute inset-x-0 top-[16%] bottom-[23%] z-[1]">
+        <img src={frameMap[rarity]} alt="" aria-hidden className="card-frame pointer-events-none absolute inset-0 z-[8] h-full w-full object-cover" />
+
+        <div className="card-player absolute inset-x-[3%] top-[15%] bottom-[24%] z-[1] overflow-hidden">
           {player.image ? (
-            <img src={player.image} alt={player.name} className="h-full w-full object-cover object-top" loading="lazy" />
+            <img
+              src={player.image}
+              alt={player.name}
+              className="h-full w-full object-cover object-[50%_18%] saturate-[1.08] contrast-[1.12] brightness-[0.95]"
+              loading="lazy"
+            />
           ) : (
             <div className="h-full w-full bg-gradient-to-b from-white/10 to-transparent" />
           )}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/45" />
         </div>
 
-        <div className="pointer-events-none absolute inset-0 z-[4] opacity-0 transition duration-500 group-hover:opacity-100">
+        <div className="pointer-events-none absolute inset-0 z-[9] opacity-0 transition duration-500 group-hover:opacity-100">
           <div className="absolute inset-[-20%] -translate-x-[120%] rotate-[8deg] bg-[linear-gradient(115deg,transparent_20%,rgba(255,255,255,0)_35%,rgba(255,255,255,0.18)_48%,rgba(255,255,255,0)_60%,transparent_75%)] group-hover:animate-[shineSweep_1.1s_ease]" />
         </div>
 
-        <div className="absolute inset-x-4 bottom-5 z-10">
-          <div className="text-center text-[11px] uppercase tracking-[0.22em] text-white/55">{player.rarity}</div>
-          <div className="mt-1 text-center text-2xl font-black uppercase leading-none text-white">{player.name}</div>
-          <div className="mt-2 text-center text-xs uppercase tracking-[0.22em] text-white/45">{player.club || "FantasyFC"}</div>
+        <div className="absolute left-4 top-4 z-10">
+          <p className="text-[38px] font-black leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]">{player.rating}</p>
+          <p className="mt-1 text-[12px] font-bold uppercase tracking-[0.22em] text-white/80">{player.position}</p>
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-black via-black/55 to-transparent" />
+        <div className="absolute inset-x-4 bottom-4 z-10">
+          <div className="text-center text-[10px] uppercase tracking-[0.24em] text-white/55">{player.rarity}</div>
+          <div className="mt-1 text-center text-[20px] font-black uppercase leading-tight text-white truncate">{player.name}</div>
+          <div className="mt-1 text-center text-[11px] uppercase tracking-[0.2em] text-white/55">{player.club || "FantasyFC"}</div>
+
+          <div className="mt-2 flex items-center justify-center gap-1.5">
+            <span className="rounded-md border border-white/20 bg-black/45 px-1.5 py-0.5 text-[10px] font-bold text-white/90">
+              #{player.serial || 1}/{player.maxSupply || 100}
+            </span>
+            <span className="rounded-md border border-white/20 bg-black/45 px-1.5 py-0.5 text-[10px] font-bold text-white/90">
+              FORM {Number(player.form || 0)}
+            </span>
+          </div>
+        </div>
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[7] h-44 bg-gradient-to-t from-black via-black/70 to-transparent" />
       </div>
     </div>
   );

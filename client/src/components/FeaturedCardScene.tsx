@@ -16,6 +16,10 @@ function FeaturedCardMesh({ imageUrl, edgeColor }: { imageUrl: string; edgeColor
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 8;
 
+  const frameTexture = useTexture(frameByEdgeColor(edgeColor));
+  frameTexture.colorSpace = THREE.SRGBColorSpace;
+  frameTexture.anisotropy = 8;
+
   const pulseRef = useRef<THREE.Mesh>(null);
   const keyRef = useRef<THREE.PointLight>(null);
 
@@ -49,6 +53,11 @@ function FeaturedCardMesh({ imageUrl, edgeColor }: { imageUrl: string; edgeColor
           <meshStandardMaterial map={texture} roughness={0.35} metalness={0.1} />
         </mesh>
 
+        <mesh position={[0, 0, 0.072]}>
+          <planeGeometry args={[2.15, 3.05]} />
+          <meshStandardMaterial map={frameTexture} transparent opacity={0.96} roughness={0.25} metalness={0.35} />
+        </mesh>
+
         <mesh position={[0, 0.65, 0.066]} rotation={[0, 0, -0.2]}>
           <planeGeometry args={[1.85, 0.65]} />
           <meshStandardMaterial transparent opacity={0.12} color="#ffffff" />
@@ -61,6 +70,14 @@ function FeaturedCardMesh({ imageUrl, edgeColor }: { imageUrl: string; edgeColor
       </group>
     </Float>
   );
+}
+
+function frameByEdgeColor(edgeColor: string): string {
+  if (edgeColor === "#ff9123") return "/frames/legendary.svg";
+  if (edgeColor === "#ffc246") return "/frames/epic.svg";
+  if (edgeColor === "#b154ff") return "/frames/unique.svg";
+  if (edgeColor === "#45a2ff") return "/frames/rare.svg";
+  return "/frames/common.svg";
 }
 
 function rarityEdgeColor(rarity?: string): string {

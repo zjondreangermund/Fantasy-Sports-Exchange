@@ -1,0 +1,10 @@
+<svg width="512" height="732" viewBox="0 0 512 732" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="rareStroke" x1="256" y1="0" x2="256" y2="732" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6BDEFF"/>
+      <stop offset="1" stop-color="#2E8DFF"/>
+    </linearGradient>
+  </defs>
+  <path d="M123 10H389L502 132V600L389 722H123L10 600V132L123 10Z" fill="none" stroke="url(#rareStroke)" stroke-width="20"/>
+  <path d="M132 26H380L486 144V588L380 706H132L26 588V144L132 26Z" fill="none" stroke="rgba(130,210,255,0.30)" stroke-width="3"/>
+</svg>

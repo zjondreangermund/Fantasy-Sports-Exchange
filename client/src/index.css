@@ -646,6 +646,72 @@
     animation: legendaryPulse 0.8s ease-in-out infinite alternate;
   }
 
+  .card-aura-common::after,
+  .card-aura-rare::after,
+  .card-aura-unique::after,
+  .card-aura-epic::after,
+  .card-aura-legendary::after {
+    content: "";
+    position: absolute;
+    inset: -16%;
+    pointer-events: none;
+    z-index: 1;
+    border-radius: 999px;
+    filter: blur(22px);
+    opacity: 0.75;
+  }
+
+  .card-aura-common::after {
+    background: radial-gradient(circle at 50% 34%, rgba(255, 255, 255, 0.12), transparent 64%);
+  }
+
+  .card-aura-rare::after {
+    background: radial-gradient(circle at 50% 34%, rgba(69, 162, 255, 0.2), transparent 64%);
+  }
+
+  .card-aura-unique::after {
+    background: radial-gradient(circle at 50% 34%, rgba(177, 84, 255, 0.24), transparent 64%);
+  }
+
+  .card-aura-epic::after {
+    background: radial-gradient(circle at 50% 34%, rgba(255, 194, 70, 0.24), transparent 64%);
+  }
+
+  .card-aura-legendary::after {
+    background: radial-gradient(circle at 50% 34%, rgba(255, 145, 35, 0.32), transparent 64%);
+    animation: legendaryPulse 0.9s ease-in-out infinite alternate;
+  }
+
+  .card-aura-rare::before,
+  .card-aura-epic::before,
+  .card-aura-legendary::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 7;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+
+  .card-aura-rare:hover::before {
+    opacity: 1;
+    background-image: radial-gradient(circle at 15% 24%, rgba(69, 162, 255, 0.75) 1px, transparent 2px), radial-gradient(circle at 80% 18%, rgba(69, 162, 255, 0.7) 1px, transparent 2px), radial-gradient(circle at 70% 76%, rgba(69, 162, 255, 0.65) 1px, transparent 2px);
+    background-size: 120px 120px, 140px 140px, 160px 160px;
+    animation: atmoFloat 2.2s ease-in-out infinite;
+  }
+
+  .card-aura-epic:hover::before {
+    opacity: 1;
+    background: linear-gradient(140deg, rgba(255, 194, 70, 0.18), transparent 30%), linear-gradient(40deg, rgba(143, 89, 255, 0.16), transparent 34%);
+  }
+
+  .card-aura-legendary:hover::before {
+    opacity: 1;
+    background: linear-gradient(115deg, rgba(255, 145, 35, 0.22), transparent 32%), linear-gradient(65deg, rgba(255, 205, 130, 0.22), transparent 36%);
+    animation: legendaryPulse 0.45s ease-in-out infinite alternate;
+  }
+
   .slot {
     position: relative;
     width: 260px;

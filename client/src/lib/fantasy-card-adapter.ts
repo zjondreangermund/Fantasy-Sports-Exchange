@@ -20,5 +20,8 @@ export function toFantasyCardData(card: PlayerCardWithPlayer): PlayerCardData {
     club: player?.team ? String(player.team) : undefined,
     image: candidates[0],
     rarity: normalizeRarity(card.rarity),
+    serial: Number(card.serialNumber || 1),
+    maxSupply: Number(card.maxSupply || 100),
+    form: Number(card.decisiveScore || 0),
   };
 }
