@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 // Fixed: @/hooks -> ../hooks
 import { useAuth } from "../hooks/use-auth";
 import { queryClient } from "../lib/queryClient";
-import Card3D from "../components/Card3D";
+import CardThumbnail from "../components/CardThumbnail";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -399,7 +399,7 @@ export default function DashboardPage() {
           ) : lineup?.cards && lineup.cards.length > 0 ? (
             <div className="flex flex-wrap gap-4">
               {lineup.cards.map((card) => (
-                <Card3D key={card.id} card={card} size="md" />
+                <CardThumbnail key={card.id} card={card} size="md" />
               ))}
             </div>
           ) : (

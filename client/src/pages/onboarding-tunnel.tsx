@@ -1,193 +1,67 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import Card3D from "../components/Card3D";
-import TunnelCinematicScene from "../components/TunnelCinematicScene";
+import SceneAtmosphere from "../components/SceneAtmosphere";
+import CardThumbnail from "../components/CardThumbnail";
 import { Button } from "../components/ui/button";
 import { Volume2, VolumeX } from "lucide-react";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
+import { useUiSound } from "../hooks/use-ui-sound";
 
 type OnboardingPhase =
   | "start"
-  | "walkout"
-  | "lights-flicker"
-  | "flag-flash"
-  | "rating-reveal"
-  | "card-explode"
+  | "tunnel"
+  | "light"
+  | "pack-appear"
+  | "pack-shake"
+  | "pack-open"
   | "cards-reveal"
   | "complete";
 
-const nationalityFlagMap: Record<string, string> = {
-  england: "🏴",
-  portugal: "🇵🇹",
-  france: "🇫🇷",
-  spain: "🇪🇸",
-  brazil: "🇧🇷",
-  argentina: "🇦🇷",
-  belgium: "🇧🇪",
-  netherlands: "🇳🇱",
-  norway: "🇳🇴",
-  scotland: "🏴",
-  wales: "🏴",
-  ireland: "🇮🇪",
-  germany: "🇩🇪",
-  italy: "🇮🇹",
-  croatia: "🇭🇷",
-  ukraine: "🇺🇦",
-  usa: "🇺🇸",
-};
-
-function flagFromNationality(nationality?: string | null): string {
-  if (!nationality) return "🏳️";
-  const key = nationality.trim().toLowerCase();
-  return nationalityFlagMap[key] || "🏳️";
-}
-
 export default function OnboardingTunnelPage() {
   const [, setLocation] = useLocation();
+  const { play } = useUiSound();
   const [phase, setPhase] = useState<OnboardingPhase>("start");
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [cardsRevealed, setCardsRevealed] = useState(false);
   const [selectedCards, setSelectedCards] = useState<Set<number>>(new Set());
-  const [commentary, setCommentary] = useState("The crowd waits in silence...");
-  const [managerOutfit, setManagerOutfit] = useState("classic");
-  const [managerAura, setManagerAura] = useState("none");
 
-  const crowdAudioRef = useRef<HTMLAudioElement | null>(null);
-  const whooshAudioRef = useRef<HTMLAudioElement | null>(null);
-  const impactAudioRef = useRef<HTMLAudioElement | null>(null);
-  const timelineRef = useRef<number[]>([]);
+  // Detect if mobile/portrait for video selection
+  const isMobile = window.innerWidth < 768 || window.innerHeight > window.innerWidth;
+  const tunnelVideo = isMobile ? "/cinematics/tunnel_9x16.mp4" : "/cinematics/tunnel_16x9.mp4";
 
+  // Fetch user's cards for onboarding
   const { data: cards, isLoading } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/user/cards"],
     enabled: phase !== "start",
   });
 
-  const featuredCard = useMemo(() => cards?.[0], [cards]);
-  const featuredNationality = featuredCard?.player?.nationality || "Unknown";
-  const featuredFlag = flagFromNationality(featuredNationality);
-  const featuredRating = featuredCard?.player?.overall || 0;
-
-  useEffect(() => {
-    crowdAudioRef.current = new Audio("/sfx/crowd_cheer.wav");
-    whooshAudioRef.current = new Audio("/sfx/whoosh.wav");
-    impactAudioRef.current = new Audio("/sfx/pack_open.wav");
-
-    if (crowdAudioRef.current) crowdAudioRef.current.volume = 0.12;
-    if (whooshAudioRef.current) whooshAudioRef.current.volume = 0.35;
-    if (impactAudioRef.current) impactAudioRef.current.volume = 0.6;
-
-    if (crowdAudioRef.current) {
-      crowdAudioRef.current.loop = true;
-    }
-
-    return () => {
-      crowdAudioRef.current?.pause();
-      whooshAudioRef.current?.pause();
-      impactAudioRef.current?.pause();
-
-      timelineRef.current.forEach((timer) => window.clearTimeout(timer));
-      timelineRef.current = [];
-    };
-  }, []);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("managerAvatar");
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as { outfit?: string; aura?: string };
-      if (parsed?.outfit) setManagerOutfit(parsed.outfit);
-      if (parsed?.aura) setManagerAura(parsed.aura);
-    } catch {
-      // ignore malformed local storage
-    }
-  }, []);
-
-  const speak = (line: string) => {
-    if (!audioEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const synth = window.speechSynthesis;
-    synth.cancel();
-    const utterance = new SpeechSynthesisUtterance(line);
-    const commentator = localStorage.getItem("fantasyCommentator") || "hype";
-    if (commentator === "classic") {
-      utterance.rate = 0.93;
-      utterance.pitch = 0.88;
-    } else if (commentator === "calm") {
-      utterance.rate = 0.86;
-      utterance.pitch = 0.95;
-    } else {
-      utterance.rate = 1.03;
-      utterance.pitch = 1.12;
-    }
-    utterance.volume = 0.92;
-    synth.speak(utterance);
-  };
-
-  useEffect(() => {
-    const lines: Record<OnboardingPhase, string> = {
-      start: "The tunnel is ready.",
-      walkout: "Manager enters the tunnel.",
-      "lights-flicker": "Lights are flickering. This feels huge.",
-      "flag-flash": `${featuredNationality}... the flag is up!`,
-      "rating-reveal": `Overall rating... ${featuredRating || "unknown"}.`,
-      "card-explode": "Here we go... card reveal!",
-      "cards-reveal": "Pick your five starters.",
-      complete: "Build your lineup and dominate matchday.",
-    };
-    const next = lines[phase];
-    setCommentary(next);
-    if (phase !== "start") speak(next);
-  }, [phase, audioEnabled, featuredNationality, featuredRating]);
-
-  const playAudio = (audioRef: React.MutableRefObject<HTMLAudioElement | null>, force = false) => {
-    if ((audioEnabled || force) && audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch((e) => console.log("Audio play failed:", e));
-    }
-  };
-
-  const schedule = (delay: number, action: () => void) => {
-    const id = window.setTimeout(action, delay);
-    timelineRef.current.push(id);
-  };
-
+  // Start the cinematic sequence
   const startSequence = () => {
-    timelineRef.current.forEach((timer) => window.clearTimeout(timer));
-    timelineRef.current = [];
-
     setAudioEnabled(true);
-    setPhase("walkout");
-    setCardsRevealed(false);
+    setPhase("tunnel");
+    play("reveal");
 
-    playAudio(crowdAudioRef, true);
-
-    const crowdRamp = window.setInterval(() => {
-      if (!crowdAudioRef.current) return;
-      crowdAudioRef.current.volume = Math.min(0.35, crowdAudioRef.current.volume + 0.02);
-      if (crowdAudioRef.current.volume >= 0.35) {
-        window.clearInterval(crowdRamp);
-      }
-    }, 350);
-    timelineRef.current.push(crowdRamp as unknown as number);
-
-    schedule(2100, () => setPhase("lights-flicker"));
-    schedule(3000, () => {
-      setPhase("flag-flash");
-      playAudio(whooshAudioRef);
-    });
-    schedule(4000, () => setPhase("rating-reveal"));
-    schedule(5100, () => {
-      setPhase("card-explode");
-      playAudio(impactAudioRef);
-    });
-    schedule(5700, () => {
+    // Timeline orchestration
+    setTimeout(() => setPhase("light"), 3000); // 3s: brighten
+    setTimeout(() => setPhase("pack-appear"), 3000); // 3s: pack appears
+    setTimeout(() => {
+      setPhase("pack-shake");
+      if (audioEnabled) play("click");
+    }, 3500); // 3.5s: pack shakes
+    setTimeout(() => {
+      setPhase("pack-open");
+      if (audioEnabled) play("reveal");
+    }, 4000); // 4s: pack opens
+    setTimeout(() => {
       setPhase("cards-reveal");
       setCardsRevealed(true);
-    });
-    schedule(6800, () => setPhase("complete"));
+    }, 4200); // 4.2s: cards fly out
+    setTimeout(() => setPhase("complete"), 5000); // 5s: UI appears
   };
 
+  // Toggle card selection
   const toggleCard = (cardId: number) => {
     if (!cardsRevealed || phase !== "complete") return;
 
@@ -202,38 +76,26 @@ export default function OnboardingTunnelPage() {
     });
   };
 
+  // Complete onboarding
   const completeOnboarding = () => {
     if (selectedCards.size !== 5) return;
+    // Navigate to dashboard
     setLocation("/dashboard");
   };
 
   const displayCards = cards?.slice(0, 9) || [];
   const canProceed = selectedCards.size === 5;
-  const phaseIntensity =
-    phase === "start"
-      ? 0
-      : phase === "walkout"
-      ? 0.25
-      : phase === "lights-flicker"
-      ? 0.45
-      : phase === "flag-flash"
-      ? 0.6
-      : phase === "rating-reveal"
-      ? 0.72
-      : 0.9;
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black">
-      {phase !== "start" && (
-        <TunnelCinematicScene
-          phaseIntensity={phaseIntensity}
-          flicker={phase === "lights-flicker"}
-          showBeam={phase !== "walkout"}
-        />
-      )}
+      <SceneAtmosphere
+        variant="tunnel"
+        videoSrc={phase === "tunnel" ? tunnelVideo : undefined}
+        videoPoster="/cinematics/tunnel.png"
+        fallbackImage="/cinematics/tunnel.png"
+      />
 
-      <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-black/75 z-[2]" />
-
+      {/* Audio Toggle (top right) */}
       {phase !== "start" && (
         <motion.button
           initial={{ opacity: 0 }}
@@ -250,6 +112,7 @@ export default function OnboardingTunnelPage() {
         </motion.button>
       )}
 
+      {/* Start Screen */}
       {phase === "start" && (
         <motion.div
           className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-gradient-to-b from-black via-zinc-900 to-black"
@@ -278,127 +141,86 @@ export default function OnboardingTunnelPage() {
         </motion.div>
       )}
 
-      {phase === "walkout" && (
-        <motion.div
-          className="absolute inset-0 z-20 flex items-end justify-center pointer-events-none"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
+      {/* "Crowd Cheering" Text */}
+      {phase === "tunnel" && (
+        <>
+          {/* Text Overlay */}
           <motion.div
-            initial={{ y: 260, scale: 0.8, opacity: 0.2 }}
-            animate={{ y: 20, scale: 1.02, opacity: 0.85 }}
-            transition={{ duration: 1.9, ease: [0.22, 1, 0.36, 1] }}
-            className="h-[50vh] w-[18vh] rounded-[999px] blur-[1px]"
-            style={{
-              background:
-                managerOutfit === "elite"
-                  ? "linear-gradient(to top, rgba(3,7,18,0.95), rgba(30,41,59,0.7), rgba(148,163,184,0.45))"
-                  : managerOutfit === "street"
-                  ? "linear-gradient(to top, rgba(9,9,11,0.95), rgba(39,39,42,0.7), rgba(212,212,216,0.35))"
-                  : "linear-gradient(to top, rgba(0,0,0,0.96), rgba(63,63,70,0.7), rgba(212,212,216,0.35))",
-              boxShadow:
-                managerAura === "gold"
-                  ? "0 0 36px rgba(250,204,21,0.45)"
-                  : managerAura === "neon"
-                  ? "0 0 36px rgba(56,189,248,0.42)"
-                  : managerAura === "royal"
-                  ? "0 0 36px rgba(168,85,247,0.45)"
-                  : "0 0 12px rgba(255,255,255,0.18)",
-            }}
-          />
-          <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="absolute bottom-14 text-2xl md:text-3xl font-black text-white/85 tracking-wider"
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1, delay: 1 }}
+            className="absolute inset-0 flex items-center justify-center z-10"
           >
-            PLAYER WALKOUT
-          </motion.p>
-        </motion.div>
+            <p className="text-3xl font-bold text-white/80 tracking-wider drop-shadow-lg">
+              THE CROWD ROARS...
+            </p>
+          </motion.div>
+        </>
       )}
 
-      {phase !== "start" && (
+      {/* Bloom/Light Effect */}
+      {phase === "light" && (
         <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
-        >
-          <div className="px-4 py-2 rounded-full border border-white/20 bg-black/55 backdrop-blur-md text-white/90 text-sm tracking-wide">
-            {commentary}
-          </div>
-        </motion.div>
-      )}
-
-      {phase === "lights-flicker" && (
-        <motion.div
-          className="absolute inset-0 z-20 pointer-events-none"
           initial={{ opacity: 0 }}
-          animate={{ opacity: [0.1, 0.45, 0.12, 0.5, 0.18] }}
-          transition={{ duration: 1.1, times: [0, 0.2, 0.45, 0.7, 1] }}
-          style={{ background: "radial-gradient(circle at 50% 25%, rgba(255,255,255,0.55), transparent 50%)" }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.5 }}
+          className="absolute inset-0 bg-white/20 z-10 backdrop-blur-sm"
         />
       )}
 
-      {phase === "flag-flash" && (
+      {/* Pack Appear/Shake/Open */}
+      {(phase === "pack-appear" || phase === "pack-shake" || phase === "pack-open") && (
         <motion.div
-          className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: [0, 1, 0.35], scale: [0.8, 1.2, 1] }}
-          transition={{ duration: 1.2, times: [0, 0.4, 1] }}
+          initial={{ scale: 0, opacity: 0, rotateY: 0 }}
+          animate={{
+            scale: phase === "pack-shake" ? [1, 1.1, 0.9, 1.05, 1] : 1,
+            opacity: 1,
+            rotateY: phase === "pack-shake" ? [0, -10, 10, -5, 0] : 0,
+          }}
+          exit={{ scale: 1.5, opacity: 0 }}
+          transition={{
+            duration: phase === "pack-shake" ? 0.5 : 0.6,
+            ease: "easeOut",
+          }}
+          className="absolute inset-0 flex items-center justify-center z-20"
+          style={{ perspective: "1000px" }}
         >
-          <div className="rounded-2xl px-8 py-6 bg-black/45 border border-white/30 backdrop-blur-md text-center">
-            <div className="text-6xl md:text-7xl mb-2">{featuredFlag}</div>
-            <div className="text-sm text-white/70 tracking-[0.25em] uppercase">Nationality</div>
-            <div className="text-xl md:text-2xl font-black text-white mt-1">{featuredNationality}</div>
+          {/* Pack representation (glow + border) */}
+          <div className="relative">
+            {/* Glow effect */}
+            <div className="absolute inset-0 bg-gradient-radial from-purple-500/50 via-purple-600/30 to-transparent rounded-3xl blur-3xl scale-150" />
+
+            {/* Pack card */}
+            <div
+              className="relative w-64 h-80 rounded-2xl bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700 flex items-center justify-center shadow-2xl"
+              style={{
+                boxShadow: "0 0 60px rgba(147, 51, 234, 0.6)",
+                transform: phase === "pack-open" ? "rotateY(180deg)" : "rotateY(0deg)",
+                transition: "transform 0.4s ease-out",
+              }}
+            >
+              <div className="text-center">
+                <div className="text-6xl mb-4">🎴</div>
+                <p className="text-white font-bold text-xl">STARTER PACK</p>
+                <p className="text-white/60 text-sm mt-2">9 Cards</p>
+              </div>
+            </div>
           </div>
         </motion.div>
       )}
 
-      {phase === "rating-reveal" && (
-        <motion.div
-          className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          <motion.div
-            initial={{ scale: 0.6, y: 20 }}
-            animate={{ scale: [0.6, 1.08, 1], y: [20, 0, 0] }}
-            transition={{ duration: 1.05, times: [0, 0.65, 1], ease: "easeOut" }}
-            className="text-center"
-          >
-            <p className="text-xs md:text-sm uppercase tracking-[0.45em] text-white/70">Overall Rating</p>
-            <p className="text-7xl md:text-8xl font-black text-white drop-shadow-[0_0_24px_rgba(255,255,255,0.6)]">
-              {featuredRating || "--"}
-            </p>
-          </motion.div>
-        </motion.div>
-      )}
-
-      {phase === "card-explode" && featuredCard && (
-        <motion.div
-          className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          <motion.div
-            initial={{ scale: 0.2, rotateY: -65, y: 90, opacity: 0 }}
-            animate={{ scale: 1.15, rotateY: [35, 0, -10], y: [90, 0, -8], opacity: 1 }}
-            transition={{ duration: 0.95, ease: [0.19, 1, 0.22, 1] }}
-            style={{ transformStyle: "preserve-3d", perspective: "1200px" }}
-          >
-            <Card3D card={featuredCard} size="lg" />
-          </motion.div>
-        </motion.div>
-      )}
-
+      {/* Cards Reveal */}
       <AnimatePresence>
         {phase === "cards-reveal" || phase === "complete" ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="absolute inset-0 flex items-center justify-center z-40 p-4 overflow-y-auto"
+            className="absolute inset-0 flex items-center justify-center z-30 p-4 overflow-y-auto"
           >
             <div className="w-full max-w-6xl my-auto">
+              {/* Cards Grid */}
               {isLoading ? (
                 <div className="text-white text-center text-xl">Loading cards...</div>
               ) : (
@@ -439,7 +261,7 @@ export default function OnboardingTunnelPage() {
                             : "hover:scale-105"
                         }`}
                       >
-                        <Card3D
+                        <CardThumbnail
                           card={card}
                           size="sm"
                           selected={selectedCards.has(card.id)}
@@ -455,12 +277,13 @@ export default function OnboardingTunnelPage() {
         ) : null}
       </AnimatePresence>
 
+      {/* UI Controls (after complete) */}
       {phase === "complete" && (
         <motion.div
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="fixed bottom-8 left-0 right-0 flex flex-col items-center gap-4 z-50"
+          className="fixed bottom-8 left-0 right-0 flex flex-col items-center gap-4 z-40"
         >
           <div className="bg-black/80 backdrop-blur-sm px-6 py-4 rounded-full">
             <p className="text-white font-semibold text-center">

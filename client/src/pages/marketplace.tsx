@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 // IMPORT YOUR 3D CARD COMPONENT HERE
-import Card3D from "../components/Card3D";
+import CardThumbnail from "../components/CardThumbnail";
+import CardShowcase from "../components/CardShowcase";
+import SceneAtmosphere from "../components/SceneAtmosphere";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -27,9 +29,12 @@ import { type PlayerCardWithPlayer, type Wallet, SITE_FEE_RATE } from "../../../
 import { Search, Filter, ShoppingCart, Tag, DollarSign, ArrowLeftRight, TrendingUp } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
+import { useUiSound } from "../hooks/use-ui-sound";
 
 export default function MarketplacePage() {
   const { toast } = useToast();
+  const { play } = useUiSound();
+  const previousBuyCardId = useRef<number | null>(null);
   const [search, setSearch] = useState("");
   const [rarityFilter, setRarityFilter] = useState("all");
   const [buyCard, setBuyCard] = useState<PlayerCardWithPlayer | null>(null);
@@ -112,8 +117,22 @@ export default function MarketplacePage() {
   // Filter user's listed cards
   const myListedCards = myCards?.filter(card => card.forSale);
 
+  useEffect(() => {
+    const currentId = buyCard?.id ?? null;
+    if (currentId && previousBuyCardId.current !== currentId) {
+      play("reveal");
+    }
+    previousBuyCardId.current = currentId;
+  }, [buyCard?.id, play]);
+
+  const handleOpenBuyCard = (card: PlayerCardWithPlayer) => {
+    play("click");
+    setBuyCard(card);
+  };
+
   return (
-    <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+    <div className="relative flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+      <SceneAtmosphere variant="cabinet" />
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div>
@@ -174,12 +193,11 @@ export default function MarketplacePage() {
                     }}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <Card3D
+                      <CardThumbnail
                         card={card}
                         size="md"
-                        showSaleBadge={false}
                         selectable
-                        onClick={() => setBuyCard(card)}
+                        onClick={() => handleOpenBuyCard(card)}
                       />
                       <p className="text-xs text-muted-foreground">
                         Seller: {card.ownerUsername || card.ownerName || "FantasyFC"}
@@ -218,10 +236,9 @@ export default function MarketplacePage() {
                     }}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <Card3D
+                      <CardThumbnail
                         card={card}
                         size="md"
-                        showSaleBadge={false}
                       />
                       <p className="text-sm font-semibold text-green-500">
                         N${(card.price || 0).toFixed(2)}
@@ -246,12 +263,22 @@ export default function MarketplacePage() {
       </div>
 
       {/* Buy Dialog */}
-      <Dialog open={!!buyCard} onOpenChange={() => setBuyCard(null)}>
+      <Dialog
+        open={!!buyCard}
+        onOpenChange={(open) => {
+          if (!open) setBuyCard(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirm Purchase</DialogTitle>
           </DialogHeader>
           <div className="py-4">
+            {buyCard && (
+              <div className="mb-4 flex justify-center">
+                <CardShowcase card={buyCard} size="sm" />
+              </div>
+            )}
             <p>Are you sure you want to buy <strong>{buyCard?.player?.name}</strong> for N${buyCard?.price}?</p>
             <p className="text-sm text-muted-foreground mt-1">
               Seller: {buyCard?.ownerUsername || buyCard?.ownerName || "FantasyFC"}
@@ -259,9 +286,21 @@ export default function MarketplacePage() {
             <p className="text-sm text-muted-foreground mt-2">Your Balance: N${wallet?.balance || 0}</p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBuyCard(null)}>Cancel</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                play("click");
+                setBuyCard(null);
+              }}
+            >
+              Cancel
+            </Button>
             <Button 
-              onClick={() => buyCard && buyMutation.mutate(buyCard.id)}
+              onClick={() => {
+                if (!buyCard) return;
+                play("click");
+                buyMutation.mutate(buyCard.id);
+              }}
               disabled={buyMutation.isPending || (wallet?.balance || 0) < (buyCard?.price || 0)}
             >
               {buyMutation.isPending ? "Processing..." : "Confirm Purchase"}

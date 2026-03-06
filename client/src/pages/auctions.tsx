@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import Card3D from "@/components/Card3D";
+import CardThumbnail from "@/components/CardThumbnail";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -223,7 +223,7 @@ export default function AuctionsPage() {
                   {/* Card Preview */}
                   <div className="flex justify-center">
                     <div className="w-48">
-                      <Card3D card={auction.card} />
+                      <CardThumbnail card={auction.card} />
                     </div>
                   </div>
 

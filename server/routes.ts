@@ -36,72 +36,6 @@ const useMockAuth =
 
 const CURRENCY_SYMBOL = "N$";
 
-type OnboardingAdminConfig = {
-  signupPacksEnabled: boolean;
-  requireTeamName: boolean;
-  teamNameMinLength: number;
-  onboardingEntryPath: string;
-  starterChecklistLabel: string;
-  packLabels: string[];
-};
-
-const DEFAULT_ONBOARDING_ADMIN_CONFIG: OnboardingAdminConfig = {
-  signupPacksEnabled: true,
-  requireTeamName: true,
-  teamNameMinLength: 3,
-  onboardingEntryPath: "/onboarding",
-  starterChecklistLabel: "Open starter packs",
-  packLabels: ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"],
-};
-
-let onboardingAdminConfig: OnboardingAdminConfig = { ...DEFAULT_ONBOARDING_ADMIN_CONFIG };
-
-function getOnboardingAdminConfig(): OnboardingAdminConfig {
-  return {
-    ...onboardingAdminConfig,
-    packLabels: [...(onboardingAdminConfig.packLabels || DEFAULT_ONBOARDING_ADMIN_CONFIG.packLabels)],
-  };
-}
-
-function sanitizeOnboardingAdminConfigPatch(payload: any): Partial<OnboardingAdminConfig> {
-  const next: Partial<OnboardingAdminConfig> = {};
-
-  if (payload?.signupPacksEnabled !== undefined) {
-    next.signupPacksEnabled = Boolean(payload.signupPacksEnabled);
-  }
-  if (payload?.requireTeamName !== undefined) {
-    next.requireTeamName = Boolean(payload.requireTeamName);
-  }
-  if (payload?.teamNameMinLength !== undefined) {
-    const value = Number(payload.teamNameMinLength);
-    if (Number.isFinite(value)) {
-      next.teamNameMinLength = Math.max(2, Math.min(30, Math.floor(value)));
-    }
-  }
-  if (payload?.onboardingEntryPath !== undefined) {
-    const rawPath = String(payload.onboardingEntryPath || "").trim();
-    if (rawPath) {
-      next.onboardingEntryPath = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
-    }
-  }
-  if (payload?.starterChecklistLabel !== undefined) {
-    const label = String(payload.starterChecklistLabel || "").trim();
-    if (label) next.starterChecklistLabel = label.slice(0, 80);
-  }
-  if (payload?.packLabels !== undefined) {
-    const labels = Array.isArray(payload.packLabels) ? payload.packLabels : [];
-    const normalized = labels
-      .map((value: unknown) => String(value || "").trim())
-      .filter(Boolean)
-      .slice(0, 5);
-    if (normalized.length === 5) {
-      next.packLabels = normalized;
-    }
-  }
-
-  return next;
-}
-
 function toMoney(amount: unknown): number {
   const value = Number(amount);
   if (!Number.isFinite(value)) return 0;
@@ -324,6 +258,68 @@ function parseMaxAge(cacheControl?: string | null): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+type ImageOutputFormat = "webp" | "png" | "jpeg";
+
+function parseImageFormat(value: unknown): ImageOutputFormat | null {
+  const format = String(value || "").toLowerCase().trim();
+  if (format === "webp") return "webp";
+  if (format === "png") return "png";
+  if (format === "jpeg" || format === "jpg") return "jpeg";
+  return null;
+}
+
+function parseImageWidth(value: unknown): number | null {
+  const width = Number(value);
+  if (!Number.isFinite(width)) return null;
+  return Math.max(96, Math.min(1024, Math.round(width)));
+}
+
+async function transformImageBuffer(
+  input: Buffer,
+  contentType: string,
+  options: { width?: number | null; format?: ImageOutputFormat | null },
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const requestedWidth = options.width ?? null;
+  const requestedFormat = options.format ?? null;
+  if (!requestedWidth && !requestedFormat) {
+    return { buffer: input, contentType };
+  }
+
+  try {
+    const runtimeImport = new Function("m", "return import(m)") as (moduleName: string) => Promise<any>;
+    const sharpModule = await runtimeImport("sharp");
+    const sharpFactory = (sharpModule as any).default || sharpModule;
+    let pipeline = sharpFactory(input, { failOn: "none" });
+
+    if (requestedWidth) {
+      pipeline = pipeline.resize({
+        width: requestedWidth,
+        fit: "cover",
+        position: "attention",
+        withoutEnlargement: true,
+      });
+    }
+
+    if (requestedFormat === "webp") {
+      pipeline = pipeline.webp({ quality: 78, effort: 4 });
+      return { buffer: await pipeline.toBuffer(), contentType: "image/webp" };
+    }
+    if (requestedFormat === "png") {
+      pipeline = pipeline.png({ compressionLevel: 9, adaptiveFiltering: true });
+      return { buffer: await pipeline.toBuffer(), contentType: "image/png" };
+    }
+    if (requestedFormat === "jpeg") {
+      pipeline = pipeline.jpeg({ quality: 82, mozjpeg: true });
+      return { buffer: await pipeline.toBuffer(), contentType: "image/jpeg" };
+    }
+
+    return { buffer: await pipeline.toBuffer(), contentType };
+  } catch {
+    // Keep passthrough behavior when image processing is unavailable.
+    return { buffer: input, contentType };
+  }
+}
+
 function normalizeLookupText(value: string): string {
   return String(value || "")
     .toLowerCase()
@@ -341,7 +337,7 @@ function extractPhotoCode(value: string): string {
   const fromJpg = raw.match(/^(\d+)\.jpg$/i);
   if (fromJpg?.[1]) return fromJpg[1];
   const digitsOnly = raw.replace(/[^0-9]/g, "");
-  return digitsOnly.length >= 5 ? digitsOnly : "";
+  return digitsOnly;
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -368,7 +364,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ----------------
 
   registerCardsRoutes(app, { requireAuth, storage });
-  registerOnboardingRoutes(app, { requireAuth, storage, fplApi, getOnboardingConfig: getOnboardingAdminConfig });
+  registerOnboardingRoutes(app, { requireAuth, storage, fplApi });
   registerMarketplaceRoutes(app, { requireAuth });
   registerAdminRoutes(app, {
     requireAuth,
@@ -383,22 +379,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     try {
-      const isPremierLeagueCdn = /resources\.premierleague\.com/i.test(rawUrl);
-      const fetchHeaders: Record<string, string> = {
-        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        "User-Agent": isPremierLeagueCdn
-          ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-          : "FantasyFC-ImageProxy/1.0",
-      };
-      if (isPremierLeagueCdn) {
-        fetchHeaders["Referer"] = "https://www.premierleague.com/";
-        fetchHeaders["Origin"] = "https://www.premierleague.com";
-      }
-
       const upstream = await fetch(rawUrl, {
         method: "GET",
         redirect: "follow",
-        headers: fetchHeaders,
+        headers: {
+          Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+          "User-Agent": "FantasyFC-ImageProxy/1.0",
+        },
       });
 
       if (!upstream.ok) {
@@ -438,47 +425,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     userId?: string;
   }> = [];
   const userLastSeen = new Map<string, number>();
-
-  const liveChatMessages: Array<{
-    id: string;
-    userId: string;
-    userName: string;
-    text: string;
-    replyToMessageId?: string;
-    replyToUserId?: string;
-    replyToUserName?: string;
-    replyToText?: string;
-    createdAt: string;
-  }> = [];
-  const livePointEvents: Array<{
-    id: string;
-    gameId: number;
-    team: string;
-    delta: number;
-    reason: string;
-    createdAt: string;
-  }> = [];
-  const liveGameSnapshot = new Map<number, { homeScore: number; awayScore: number; homeAssists: number; awayAssists: number; homeCards: number; awayCards: number }>();
-
-  const MAX_CHAT_MESSAGES = 120;
-  const MAX_POINT_EVENTS = 200;
-
-  const trimCollection = <T,>(items: T[], max: number) => {
-    if (items.length <= max) return;
-    items.splice(0, items.length - max);
-  };
-
-  const pushPointEvent = (event: { gameId: number; team: string; delta: number; reason: string }) => {
-    livePointEvents.push({
-      id: randomUUID(),
-      gameId: event.gameId,
-      team: event.team,
-      delta: event.delta,
-      reason: event.reason,
-      createdAt: new Date().toISOString(),
-    });
-    trimCollection(livePointEvents, MAX_POINT_EVENTS);
-  };
 
   const normalizeTrafficPath = (path: string) =>
     String(path || "")
@@ -647,17 +593,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS ban_reason text`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS banned_at timestamp`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS banned_by varchar(255)`);
-
-      await db.execute(sql`
-        CREATE TABLE IF NOT EXISTS app.tournament_reward_claims (
-          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-          entry_id integer NOT NULL REFERENCES app.competition_entries(id),
-          user_id varchar(255) NOT NULL REFERENCES app.users(id),
-          card_id integer REFERENCES app.player_cards(id),
-          created_at timestamp DEFAULT now(),
-          UNIQUE(entry_id)
-        )
-      `);
     } catch (error) {
       console.warn("Runtime schema ensure failed:", error);
     }
@@ -679,119 +614,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       console.error("Get user:", e);
       res.status(500).json({ message: e?.message || "Failed to get user" });
-    }
-  });
-
-  app.get("/api/rewards/tournament-status", requireAuth, async (req: any, res) => {
-    try {
-      const userId = String(req.authUserId || "").trim();
-      if (!userId) return res.status(401).json({ message: "Unauthorized" });
-
-      const { db } = await import("./db.js");
-      const { sql } = await import("drizzle-orm");
-
-      const statusResult = await db.execute(sql`
-        SELECT
-          ce.id AS entry_id,
-          ce.competition_id,
-          c.name AS competition_name,
-          ce.prize_card_id AS card_id,
-          lower(coalesce(pc.rarity, 'rare')) AS rarity
-        FROM app.competition_entries ce
-        JOIN app.competitions c ON c.id = ce.competition_id
-        LEFT JOIN app.player_cards pc ON pc.id = ce.prize_card_id
-        LEFT JOIN app.tournament_reward_claims trc ON trc.entry_id = ce.id
-        WHERE ce.user_id = ${userId}
-          AND ce.prize_card_id IS NOT NULL
-          AND trc.entry_id IS NULL
-        ORDER BY coalesce(c.end_date, c.start_date, ce.joined_at) DESC, ce.id DESC
-        LIMIT 1
-      `);
-      const rows = (statusResult as any)?.rows || [];
-      const row = rows[0] as any;
-      const hasReward = Boolean(row?.entry_id && row?.card_id);
-      return res.json({
-        available: hasReward,
-        claimed: false,
-        rarity: String(row?.rarity || "rare"),
-        cardId: row?.card_id ? Number(row.card_id) : null,
-        entryId: row?.entry_id ? Number(row.entry_id) : null,
-        competitionId: row?.competition_id ? Number(row.competition_id) : null,
-        competitionName: String(row?.competition_name || ""),
-      });
-    } catch (error: any) {
-      console.error("Failed to fetch tournament reward status:", error);
-      return res.status(500).json({ message: "Failed to fetch tournament reward status" });
-    }
-  });
-
-  app.post("/api/rewards/tournament-claim", requireAuth, async (req: any, res) => {
-    try {
-      const userId = String(req.authUserId || "").trim();
-      if (!userId) return res.status(401).json({ message: "Unauthorized" });
-
-      const { db } = await import("./db.js");
-      const { sql } = await import("drizzle-orm");
-
-      const result = await db.transaction(async (tx: any) => {
-        const lockResult = await tx.execute(sql`
-          SELECT
-            ce.id AS entry_id,
-            ce.competition_id,
-            c.name AS competition_name,
-            ce.prize_card_id AS card_id,
-            lower(coalesce(pc.rarity, 'rare')) AS rarity,
-            pc.player_id AS player_id
-          FROM app.competition_entries ce
-          JOIN app.competitions c ON c.id = ce.competition_id
-          LEFT JOIN app.player_cards pc ON pc.id = ce.prize_card_id
-          LEFT JOIN app.tournament_reward_claims trc ON trc.entry_id = ce.id
-          WHERE ce.user_id = ${userId}
-            AND ce.prize_card_id IS NOT NULL
-            AND trc.entry_id IS NULL
-          ORDER BY coalesce(c.end_date, c.start_date, ce.joined_at) DESC, ce.id DESC
-          LIMIT 1
-          FOR UPDATE
-        `);
-        const rows = (lockResult as any)?.rows || [];
-        const row = rows[0] as any;
-
-        if (!row?.entry_id || !row?.card_id) {
-          throw new Error("No tournament reward available to claim");
-        }
-
-        await tx.execute(sql`
-          INSERT INTO app.tournament_reward_claims (entry_id, user_id, card_id)
-          VALUES (${Number(row.entry_id)}, ${userId}, ${Number(row.card_id)})
-          ON CONFLICT (entry_id) DO NOTHING
-        `);
-
-        return {
-          rarity: String(row.rarity || "rare"),
-          cardId: Number(row.card_id),
-          playerId: row.player_id ? Number(row.player_id) : 0,
-          entryId: Number(row.entry_id),
-          competitionId: Number(row.competition_id),
-          competitionName: String(row.competition_name || ""),
-        };
-      });
-
-      const player = await storage.getPlayer(Number(result.playerId || 0));
-      return res.json({
-        success: true,
-        rarity: result.rarity,
-        cardId: result.cardId,
-        player,
-        entryId: result.entryId,
-        competitionId: result.competitionId,
-        competitionName: result.competitionName,
-      });
-    } catch (error: any) {
-      if (String(error?.message || "").includes("No tournament reward available")) {
-        return res.status(400).json({ message: "No tournament reward available to claim" });
-      }
-      console.error("Failed to claim tournament reward:", error);
-      return res.status(500).json({ message: "Failed to claim tournament reward" });
     }
   });
 
@@ -1200,127 +1022,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/epl/live-games", async (_req, res) => {
     try {
       const liveGames = await fplApi.getLiveGames();
-
-      for (const game of Array.isArray(liveGames) ? liveGames : []) {
-        const gameId = Number(game?.id || 0);
-        if (!gameId) continue;
-
-        const homeTeamName = String(game?.homeTeam?.shortName || game?.homeTeam?.name || "HOME");
-        const awayTeamName = String(game?.awayTeam?.shortName || game?.awayTeam?.name || "AWAY");
-
-        const homeScore = Number(game?.homeTeam?.score || 0);
-        const awayScore = Number(game?.awayTeam?.score || 0);
-        const homeAssists = Number(game?.statsSummary?.assists?.home || 0);
-        const awayAssists = Number(game?.statsSummary?.assists?.away || 0);
-        const homeCards = Number(game?.statsSummary?.cards?.home || 0);
-        const awayCards = Number(game?.statsSummary?.cards?.away || 0);
-
-        const previous = liveGameSnapshot.get(gameId);
-        if (previous) {
-          const homeGoalDelta = Math.max(0, homeScore - previous.homeScore);
-          const awayGoalDelta = Math.max(0, awayScore - previous.awayScore);
-          const homeAssistDelta = Math.max(0, homeAssists - previous.homeAssists);
-          const awayAssistDelta = Math.max(0, awayAssists - previous.awayAssists);
-          const homeCardDelta = Math.max(0, homeCards - previous.homeCards);
-          const awayCardDelta = Math.max(0, awayCards - previous.awayCards);
-
-          if (homeGoalDelta > 0) pushPointEvent({ gameId, team: homeTeamName, delta: homeGoalDelta * 8, reason: "Goal" });
-          if (awayGoalDelta > 0) pushPointEvent({ gameId, team: awayTeamName, delta: awayGoalDelta * 8, reason: "Goal" });
-          if (homeAssistDelta > 0) pushPointEvent({ gameId, team: homeTeamName, delta: homeAssistDelta * 3, reason: "Assist" });
-          if (awayAssistDelta > 0) pushPointEvent({ gameId, team: awayTeamName, delta: awayAssistDelta * 3, reason: "Assist" });
-          if (homeCardDelta > 0) pushPointEvent({ gameId, team: homeTeamName, delta: homeCardDelta * -2, reason: "Card" });
-          if (awayCardDelta > 0) pushPointEvent({ gameId, team: awayTeamName, delta: awayCardDelta * -2, reason: "Card" });
-        }
-
-        liveGameSnapshot.set(gameId, {
-          homeScore,
-          awayScore,
-          homeAssists,
-          awayAssists,
-          homeCards,
-          awayCards,
-        });
-      }
-
       res.json(liveGames);
     } catch (e: any) {
       console.error("EPL live games:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch live games" });
     }
-  });
-
-  app.get("/api/live/point-feed", async (req, res) => {
-    const limit = Math.max(5, Math.min(80, Number(req.query.limit || 25)));
-    const since = String(req.query.since || "").trim();
-    const sinceTs = since ? new Date(since).getTime() : 0;
-
-    const base = Number.isFinite(sinceTs) && sinceTs > 0
-      ? livePointEvents.filter((item) => new Date(item.createdAt).getTime() > sinceTs)
-      : livePointEvents;
-
-    res.json(base.slice(-limit));
-  });
-
-  app.get("/api/live-chat/messages", requireAuth, async (req: any, res) => {
-    const limit = Math.max(10, Math.min(120, Number(req.query.limit || 60)));
-    const since = String(req.query.since || "").trim();
-    const sinceTs = since ? new Date(since).getTime() : 0;
-
-    const base = Number.isFinite(sinceTs) && sinceTs > 0
-      ? liveChatMessages.filter((item) => new Date(item.createdAt).getTime() > sinceTs)
-      : liveChatMessages;
-
-    res.json(base.slice(-limit));
-  });
-
-  app.post("/api/live-chat/messages", requireAuth, async (req: any, res) => {
-    const userId = String(req.authUserId || "");
-    if (!userId) return res.status(401).json({ message: "Unauthorized" });
-
-    const rawText = String(req.body?.text || "").trim();
-    if (!rawText) return res.status(400).json({ message: "Message is required" });
-    const text = rawText.slice(0, 280);
-    const rawReplyToMessageId = String(req.body?.replyToMessageId || "").trim();
-
-    let replyToMessage: {
-      id: string;
-      userId: string;
-      userName: string;
-      text: string;
-      createdAt: string;
-    } | null = null;
-    if (rawReplyToMessageId) {
-      const found = liveChatMessages.find((item) => item.id === rawReplyToMessageId);
-      if (found) {
-        replyToMessage = found;
-      }
-    }
-
-    let userName = String(req.user?.firstName || req.user?.name || req.user?.claims?.email || "Manager").trim();
-    if (!userName || userName === "Manager") {
-      try {
-        const user = await storage.getUser(userId);
-        userName = String(user?.name || user?.email || "Manager").trim();
-      } catch {
-        userName = "Manager";
-      }
-    }
-
-    const message = {
-      id: randomUUID(),
-      userId,
-      userName,
-      text,
-      replyToMessageId: replyToMessage?.id,
-      replyToUserId: replyToMessage?.userId,
-      replyToUserName: replyToMessage?.userName,
-      replyToText: replyToMessage?.text ? String(replyToMessage.text).slice(0, 140) : undefined,
-      createdAt: new Date().toISOString(),
-    };
-    liveChatMessages.push(message);
-    trimCollection(liveChatMessages, MAX_CHAT_MESSAGES);
-
-    res.status(201).json(message);
   });
 
   app.get("/api/sorare/player", async (req, res) => {
@@ -1410,6 +1116,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Invalid player id" });
       }
 
+      const variant = String(req.query.variant || "").toLowerCase().trim();
+      const requestedWidth = parseImageWidth(req.query.w || req.query.width) || (variant === "thumb" ? 256 : null);
+      const requestedFormat = parseImageFormat(req.query.format) || (variant === "thumb" ? "webp" : null);
+
       const player = await storage.getPlayer(playerId);
       if (!player) return res.status(404).json({ message: "Player not found" });
 
@@ -1446,17 +1156,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
-      if (imageUrl.startsWith("/player-cache/") || imageUrl.startsWith("/images/")) {
-        return res.redirect(302, imageUrl);
+      if (imageUrl.startsWith("/player-cache/")) {
+        if (!requestedWidth && !requestedFormat) {
+          return res.redirect(302, imageUrl);
+        }
+
+        const cacheRelativePath = imageUrl.replace(/^\/+/, "");
+        const distPath = path.resolve(process.cwd(), "dist", "public", cacheRelativePath);
+        const clientPath = path.resolve(process.cwd(), "client", "public", cacheRelativePath);
+
+        const localFilePath = await fs
+          .access(distPath)
+          .then(() => distPath)
+          .catch(async () => {
+            await fs.access(clientPath);
+            return clientPath;
+          });
+
+        const localBuffer = await fs.readFile(localFilePath);
+        const sourceType = localFilePath.toLowerCase().endsWith(".webp")
+          ? "image/webp"
+          : localFilePath.toLowerCase().endsWith(".jpg") || localFilePath.toLowerCase().endsWith(".jpeg")
+            ? "image/jpeg"
+            : "image/png";
+
+        const transformedLocal = await transformImageBuffer(localBuffer, sourceType, {
+          width: requestedWidth,
+          format: requestedFormat,
+        });
+
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        res.setHeader("Cache-Control", variant === "thumb" ? "public, max-age=604800" : "public, max-age=21600");
+        res.setHeader("Content-Type", transformedLocal.contentType);
+        return res.status(200).send(transformedLocal.buffer);
       }
 
-      const isPremierLeague = normalizeLookupText(String(player.league || "")) === "premier league";
       const candidateUrls = [
-        isHttpImageUrl(imageUrl) ? imageUrl : null,
-        photoCode ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoCode}.png` : null,
-        photoCode ? `https://resources.premierleague.com/premierleague/photos/players/110x140/p${photoCode}.png` : null,
-        // Official PL placeholder for players without a headshot photo
-        isPremierLeague ? "https://resources.premierleague.com/premierleague/photos/players/250x250/Photo-Missing.png" : null,
+        photoCode ? `https://media.api-sports.io/football/players/${photoCode}.png` : null,
+        imageUrl && /^https?:\/\//i.test(imageUrl) ? imageUrl : null,
       ].filter(Boolean) as string[];
 
       for (const sourceUrl of candidateUrls) {
@@ -1466,13 +1204,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             redirect: "follow",
             headers: {
               Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-              Referer: "https://www.premierleague.com/",
-              Origin: "https://www.premierleague.com",
-              "Accept-Language": "en-GB,en;q=0.9",
-              "Cache-Control": "no-cache",
-              Pragma: "no-cache",
+              "User-Agent": "FantasyFC-PlayerPhoto/1.0",
             },
           });
 
@@ -1482,20 +1214,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
           res.setHeader("Access-Control-Allow-Origin", "*");
           res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-          res.setHeader("Content-Type", contentType);
-          res.setHeader("Cache-Control", "public, max-age=21600");
+          res.setHeader("Cache-Control", variant === "thumb" ? "public, max-age=604800" : "public, max-age=21600");
 
           const data = Buffer.from(await upstream.arrayBuffer());
-          return res.status(200).send(data);
+          const transformed = await transformImageBuffer(data, contentType, {
+            width: requestedWidth,
+            format: requestedFormat,
+          });
+
+          res.setHeader("Content-Type", transformed.contentType);
+          return res.status(200).send(transformed.buffer);
         } catch {
           continue;
         }
       }
 
-      return res.status(404).json({ message: "No real player photo available" });
+      return res.redirect(302, "/images/player-1.png");
     } catch (error: any) {
       console.error("Error serving player photo:", error);
-      return res.status(500).json({ message: "Error serving player photo" });
+      return res.redirect(302, "/images/player-1.png");
     }
   });
 
@@ -1883,9 +1620,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const ownerId = req.query.ownerId ? String(req.query.ownerId) : undefined;
       
       let listings = await storage.getMarketplaceListings();
-
-      // Common cards are tournament-only and must never appear in marketplace listings
-      listings = listings.filter((card) => String(card.rarity || "").toLowerCase() !== "common");
       
       // Apply filters
       if (rarity) {
@@ -1935,13 +1669,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Check if already listed
       if (card.forSale) {
         return res.status(400).json({ message: "Card is already listed for sale" });
-      }
-
-      // Common cards are tournament-only and cannot be sold
-      if (String(card.rarity || "").toLowerCase() === "common") {
-        return res.status(400).json({
-          message: "Common cards are tournament-only and cannot be listed for sale.",
-        });
       }
 
       // Disallow listing cards used in any active/open competition lineup
@@ -2015,12 +1742,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Verify ownership
       if (card.ownerId !== userId) {
         return res.status(403).json({ message: "You don't own this card" });
-      }
-
-      if (String(card.rarity || "").toLowerCase() === "common") {
-        return res.status(400).json({
-          message: "Common cards are tournament-only and cannot be listed for sale.",
-        });
       }
       
       // Check if listed
@@ -2229,12 +1950,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Check if already listed for sale
       if (card.forSale) {
         return res.status(400).json({ message: "Card is already listed for sale. Cancel the listing first." });
-      }
-
-      if (String(card.rarity || "").toLowerCase() === "common") {
-        return res.status(400).json({
-          message: "Common cards are tournament-only and cannot be auctioned.",
-        });
       }
       
       // Set auction times
@@ -3078,191 +2793,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/api/rewards/tournament-claims", requireAuth, async (req: any, res) => {
-    try {
-      const userId = String(req.authUserId || "").trim();
-      if (!userId) return res.status(401).json({ message: "Unauthorized" });
-
-      const limit = Math.max(1, Math.min(100, Number(req.query.limit || 25)));
-      const { db } = await import("./db.js");
-      const { sql } = await import("drizzle-orm");
-
-      const result = await db.execute(sql`
-        SELECT
-          trc.id AS claim_id,
-          trc.entry_id,
-          trc.user_id,
-          trc.card_id,
-          trc.created_at AS claimed_at,
-          ce.competition_id,
-          c.name AS competition_name,
-          ce.rank,
-          ce.prize_amount,
-          lower(coalesce(pc.rarity, 'rare')) AS rarity,
-          p.id AS player_id,
-          p.name AS player_name,
-          p.team AS player_team
-        FROM app.tournament_reward_claims trc
-        JOIN app.competition_entries ce ON ce.id = trc.entry_id
-        LEFT JOIN app.competitions c ON c.id = ce.competition_id
-        LEFT JOIN app.player_cards pc ON pc.id = trc.card_id
-        LEFT JOIN app.players p ON p.id = pc.player_id
-        WHERE trc.user_id = ${userId}
-        ORDER BY trc.created_at DESC, trc.id DESC
-        LIMIT ${limit}
-      `);
-
-      const rows = ((result as any)?.rows || []).map((row: any) => ({
-        claimId: Number(row.claim_id),
-        entryId: Number(row.entry_id),
-        userId: String(row.user_id),
-        cardId: Number(row.card_id),
-        claimedAt: row.claimed_at,
-        competitionId: row.competition_id ? Number(row.competition_id) : null,
-        competitionName: String(row.competition_name || ""),
-        rank: row.rank ? Number(row.rank) : null,
-        prizeAmount: row.prize_amount !== null && row.prize_amount !== undefined ? Number(row.prize_amount) : null,
-        rarity: String(row.rarity || "rare"),
-        player: row.player_id
-          ? {
-              id: Number(row.player_id),
-              name: String(row.player_name || ""),
-              team: String(row.player_team || ""),
-            }
-          : null,
-      }));
-
-      return res.json({ claims: rows });
-    } catch (error: any) {
-      console.error("Failed to fetch tournament reward claims:", error);
-      return res.status(500).json({ message: "Failed to fetch tournament reward claims" });
-    }
-  });
-
   // -------------------------
   // ADMIN ENDPOINTS
   // -------------------------
-
-  app.get("/api/admin/rewards/tournament-claims", requireAuth, isAdmin, async (req: any, res) => {
-    try {
-      const limit = Math.max(1, Math.min(200, Number(req.query.limit || 100)));
-      const userIdFilterRaw = String(req.query.userId || "").trim();
-      const competitionIdRaw = Number(req.query.competitionId || 0);
-      const userIdFilter = userIdFilterRaw || null;
-      const competitionIdFilter = Number.isFinite(competitionIdRaw) && competitionIdRaw > 0 ? competitionIdRaw : null;
-
-      const { db } = await import("./db.js");
-      const { sql } = await import("drizzle-orm");
-
-      const result = await db.execute(sql`
-        SELECT
-          trc.id AS claim_id,
-          trc.entry_id,
-          trc.user_id,
-          trc.card_id,
-          trc.created_at AS claimed_at,
-          u.email AS user_email,
-          u.name AS user_name,
-          ce.competition_id,
-          c.name AS competition_name,
-          ce.rank,
-          ce.prize_amount,
-          lower(coalesce(pc.rarity, 'rare')) AS rarity,
-          p.id AS player_id,
-          p.name AS player_name,
-          p.team AS player_team
-        FROM app.tournament_reward_claims trc
-        JOIN app.competition_entries ce ON ce.id = trc.entry_id
-        LEFT JOIN app.users u ON u.id = trc.user_id
-        LEFT JOIN app.competitions c ON c.id = ce.competition_id
-        LEFT JOIN app.player_cards pc ON pc.id = trc.card_id
-        LEFT JOIN app.players p ON p.id = pc.player_id
-        WHERE (${userIdFilter}::text IS NULL OR trc.user_id = ${userIdFilter})
-          AND (${competitionIdFilter}::int IS NULL OR ce.competition_id = ${competitionIdFilter}::int)
-        ORDER BY trc.created_at DESC, trc.id DESC
-        LIMIT ${limit}
-      `);
-
-      const rows = ((result as any)?.rows || []).map((row: any) => ({
-        claimId: Number(row.claim_id),
-        entryId: Number(row.entry_id),
-        userId: String(row.user_id),
-        userEmail: String(row.user_email || ""),
-        userName: String(row.user_name || ""),
-        cardId: Number(row.card_id),
-        claimedAt: row.claimed_at,
-        competitionId: row.competition_id ? Number(row.competition_id) : null,
-        competitionName: String(row.competition_name || ""),
-        rank: row.rank ? Number(row.rank) : null,
-        prizeAmount: row.prize_amount !== null && row.prize_amount !== undefined ? Number(row.prize_amount) : null,
-        rarity: String(row.rarity || "rare"),
-        player: row.player_id
-          ? {
-              id: Number(row.player_id),
-              name: String(row.player_name || ""),
-              team: String(row.player_team || ""),
-            }
-          : null,
-      }));
-
-      return res.json({ claims: rows, filters: { userId: userIdFilter, competitionId: competitionIdFilter } });
-    } catch (error: any) {
-      console.error("Failed to fetch admin tournament reward claims:", error);
-      return res.status(500).json({ message: "Failed to fetch tournament reward claim history" });
-    }
-  });
-
-  app.post("/api/admin/rewards/tournament-claims/:claimId/reopen", requireAuth, isAdmin, async (req: any, res) => {
-    try {
-      const claimId = Number(req.params.claimId || 0);
-      if (!Number.isFinite(claimId) || claimId <= 0) {
-        return res.status(400).json({ message: "Invalid claim id" });
-      }
-
-      const actorUserId = String(req.authUserId || "");
-      const reason = String(req.body?.reason || "").trim();
-
-      const { db } = await import("./db.js");
-      const { sql } = await import("drizzle-orm");
-
-      const claimResult = await db.execute(sql`
-        SELECT id, entry_id, user_id, card_id, created_at
-        FROM app.tournament_reward_claims
-        WHERE id = ${claimId}
-        LIMIT 1
-      `);
-      const claimRows = (claimResult as any)?.rows || [];
-      const claim = claimRows[0] as any;
-      if (!claim?.id) {
-        return res.status(404).json({ message: "Claim not found" });
-      }
-
-      await db.execute(sql`
-        DELETE FROM app.tournament_reward_claims
-        WHERE id = ${claimId}
-      `);
-
-      await writeAuditLog(actorUserId, "admin.rewards.tournament_claim.reopen", {
-        claimId,
-        entryId: Number(claim.entry_id),
-        userId: String(claim.user_id || ""),
-        cardId: claim.card_id ? Number(claim.card_id) : null,
-        reason: reason || null,
-        ip: getClientIp(req),
-      });
-
-      return res.json({
-        success: true,
-        message: "Tournament reward claim reopened",
-        claimId,
-        entryId: Number(claim.entry_id),
-        userId: String(claim.user_id || ""),
-      });
-    } catch (error: any) {
-      console.error("Failed to reopen tournament reward claim:", error);
-      return res.status(500).json({ message: "Failed to reopen tournament reward claim" });
-    }
-  });
 
   app.post("/api/admin/players/backfill-fpl-photos", requireAuth, isAdmin, async (req: any, res) => {
     try {
@@ -3738,37 +3271,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Failed to fetch stats:", error);
       res.status(500).json({ message: "Failed to fetch stats" });
-    }
-  });
-
-  app.get("/api/admin/onboarding-config", requireAuth, isAdmin, async (_req: any, res) => {
-    return res.json(getOnboardingAdminConfig());
-  });
-
-  app.patch("/api/admin/onboarding-config", requireAuth, isAdmin, async (req: any, res) => {
-    try {
-      const patch = sanitizeOnboardingAdminConfigPatch(req.body || {});
-      onboardingAdminConfig = {
-        ...onboardingAdminConfig,
-        ...patch,
-      };
-      if (!Array.isArray(onboardingAdminConfig.packLabels) || onboardingAdminConfig.packLabels.length !== 5) {
-        onboardingAdminConfig.packLabels = [...DEFAULT_ONBOARDING_ADMIN_CONFIG.packLabels];
-      }
-      if (!onboardingAdminConfig.onboardingEntryPath) {
-        onboardingAdminConfig.onboardingEntryPath = DEFAULT_ONBOARDING_ADMIN_CONFIG.onboardingEntryPath;
-      }
-      if (!onboardingAdminConfig.starterChecklistLabel) {
-        onboardingAdminConfig.starterChecklistLabel = DEFAULT_ONBOARDING_ADMIN_CONFIG.starterChecklistLabel;
-      }
-      if (!Number.isFinite(onboardingAdminConfig.teamNameMinLength)) {
-        onboardingAdminConfig.teamNameMinLength = DEFAULT_ONBOARDING_ADMIN_CONFIG.teamNameMinLength;
-      }
-
-      return res.json(getOnboardingAdminConfig());
-    } catch (error: any) {
-      console.error("Failed to update onboarding config:", error);
-      return res.status(500).json({ message: "Failed to update onboarding config" });
     }
   });
 
@@ -4511,15 +4013,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           message: `Can only trade same rarity cards (${offeredCard.rarity} ≠ ${requestedCard.rarity})` 
         });
       }
-
-      if (
-        String(offeredCard.rarity || "").toLowerCase() === "common" ||
-        String(requestedCard.rarity || "").toLowerCase() === "common"
-      ) {
-        return res.status(400).json({
-          message: "Common cards are tournament-only and cannot be traded.",
-        });
-      }
       
       // Can't trade cards that are for sale
       if (offeredCard.forSale || requestedCard.forSale) {
@@ -4582,13 +4075,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         if (!offeredCard || !requestedCard) {
           throw new Error("One or both cards no longer exist");
-        }
-
-        if (
-          String(offeredCard.rarity || "").toLowerCase() === "common" ||
-          String(requestedCard.rarity || "").toLowerCase() === "common"
-        ) {
-          throw new Error("Common cards are tournament-only and cannot be traded");
         }
         
         // Calculate fee based on lowest market price for this rarity

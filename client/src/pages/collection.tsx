@@ -1,14 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 // Fixed: @/lib -> ../lib
 import { apiRequest, queryClient } from "../lib/queryClient";
 // Fixed: @/components -> ../components
-import Card3D from "../components/Card3D";
-import LockerRoomScene from "../components/locker/LockerRoomScene";
-import PlayerCard from "../components/PlayerCard";
-import CardVaultUnlock from "../components/scenes/CardVaultUnlock";
-import FeaturedCard3D from "../components/cards/FeaturedCard3D";
-import CardTile2D from "../components/cards/CardTile2D";
+import CardThumbnail from "../components/CardThumbnail";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -24,8 +19,7 @@ import {
 } from "../components/ui/dialog";
 // Fixed: @shared -> ../../../shared
 import { type PlayerCardWithPlayer, type Lineup } from "../../../shared/schema";
-import { Filter, DollarSign } from "lucide-react";
-import { LOCKER_ROOM_MODE } from "../lib/featureFlags";
+import { Filter, Save, Check, DollarSign } from "lucide-react";
 // Fixed: @/hooks -> ../hooks
 import { useToast } from "../hooks/use-toast";
 
@@ -38,37 +32,9 @@ export default function CollectionPage() {
   );
   const [listCard, setListCard] = useState<PlayerCardWithPlayer | null>(null);
   const [listPrice, setListPrice] = useState("");
-  const [viewMode, setViewMode] = useState<"grid" | "locker">("grid");
-  const [lockerAmbientAudio, setLockerAmbientAudio] = useState(false);
-  const [vaultUnlockOpen, setVaultUnlockOpen] = useState(false);
-  const [vaultUnlocked, setVaultUnlocked] = useState(false);
-  const [featuredCardId, setFeaturedCardId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("lockerAmbientAudio");
-    if (saved === "true") {
-      setLockerAmbientAudio(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("lockerAmbientAudio", lockerAmbientAudio ? "true" : "false");
-  }, [lockerAmbientAudio]);
-
-  useEffect(() => {
-    if (!LOCKER_ROOM_MODE) return;
-    try {
-      const unlocked = localStorage.getItem("collectionVaultUnlocked") === "true";
-      setVaultUnlocked(unlocked);
-      if (!unlocked) {
-        setVaultUnlockOpen(true);
-      }
-    } catch {
-      setVaultUnlockOpen(true);
-    }
-  }, []);
 
   const BASE_PRICES: Record<string, number> = {
+    common: 10,
     rare: 100,
     unique: 250,
     legendary: 500,
@@ -190,22 +156,6 @@ export default function CollectionPage() {
     return c.rarity === filter;
   });
 
-  useEffect(() => {
-    if (!filteredCards?.length) {
-      setFeaturedCardId(null);
-      return;
-    }
-
-    if (!featuredCardId || !filteredCards.some((c) => String(c.id) === featuredCardId)) {
-      setFeaturedCardId(String(filteredCards[0].id));
-    }
-  }, [filteredCards, featuredCardId]);
-
-  const featuredCard = useMemo(() => {
-    if (!filteredCards?.length) return null;
-    return filteredCards.find((c) => String(c.id) === featuredCardId) || filteredCards[0] || null;
-  }, [filteredCards, featuredCardId]);
-
   const startEditLineup = () => {
     setEditingLineup(true);
     if (lineupData?.lineup?.cardIds) {
@@ -233,33 +183,8 @@ export default function CollectionPage() {
     { value: "legendary", label: "Legendary" },
   ];
 
-  const lastFivePoints = (card: PlayerCardWithPlayer) => {
-    const scores = Array.isArray(card.last5Scores)
-      ? card.last5Scores.map((value) => Number(value || 0)).slice(-5)
-      : [];
-    while (scores.length < 5) scores.unshift(0);
-    return scores;
-  };
-
-  const raritySurfaceGlow: Record<string, string> = {
-    common: "rgba(203,213,225,0.22)",
-    rare: "rgba(248,113,113,0.26)",
-    unique: "rgba(216,180,254,0.28)",
-    epic: "rgba(165,180,252,0.24)",
-    legendary: "rgba(251,191,36,0.3)",
-  };
-
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
-      <CardVaultUnlock
-        open={vaultUnlockOpen}
-        onClose={() => setVaultUnlockOpen(false)}
-        onUnlocked={() => {
-          setVaultUnlocked(true);
-          localStorage.setItem("collectionVaultUnlocked", "true");
-        }}
-      />
-
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div>
@@ -267,43 +192,6 @@ export default function CollectionPage() {
             <p className="text-muted-foreground text-sm">
               {cards?.length || 0} cards in your collection
             </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant={viewMode === "grid" ? "default" : "outline"}
-              onClick={() => setViewMode("grid")}
-            >
-              Grid
-            </Button>
-            <Button
-              size="sm"
-              variant={viewMode === "locker" ? "default" : "outline"}
-              onClick={() => setViewMode("locker")}
-              disabled={!LOCKER_ROOM_MODE}
-            >
-              Locker Room Scene
-            </Button>
-            {viewMode === "locker" && LOCKER_ROOM_MODE && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setVaultUnlockOpen(true)}
-              >
-                {vaultUnlocked ? "Unlock Vault (Replay)" : "Unlock Vault"}
-              </Button>
-            )}
-            {viewMode === "locker" && LOCKER_ROOM_MODE && (
-              <Button
-                size="sm"
-                variant={lockerAmbientAudio ? "default" : "outline"}
-                onClick={() => setLockerAmbientAudio((prev) => !prev)}
-              >
-                Ambient Audio {lockerAmbientAudio ? "On" : "Off"}
-              </Button>
-            )}
-            {!LOCKER_ROOM_MODE && <Badge variant="outline">LOCKER_ROOM_MODE=false</Badge>}
-            {LOCKER_ROOM_MODE && <Badge variant="secondary">LOCKER_ROOM_MODE=true</Badge>}
           </div>
         </div>
 
@@ -329,130 +217,54 @@ export default function CollectionPage() {
             ))}
           </div>
         ) : filteredCards && filteredCards.length > 0 ? (
-          viewMode === "locker" && LOCKER_ROOM_MODE ? (
-            <div className="relative min-h-[calc(100vh-80px)] rounded-2xl overflow-hidden">
-              <LockerRoomScene enabled={LOCKER_ROOM_MODE} />
-
-              <div className="relative z-10 px-4">
-                <div className="mx-auto max-w-6xl">
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 backdrop-blur-md">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="text-sm text-white/80">Display Cabinet</div>
-                      <div className="text-xs text-white/60">Locker Room Shelf</div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-[320px_1fr]">
-                      <div className="flex justify-center">
-                        {featuredCard ? <FeaturedCard3D card={featuredCard} /> : null}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                        {filteredCards.map((card) => {
-                          return (
-                            <CardTile2D
-                              key={card.id}
-                              selected={String(card.id) === String(featuredCard?.id || "")}
-                              onClick={() => setFeaturedCardId(String(card.id))}
-                            >
-                              <PlayerCard card={card} size="sm" />
-                              <div className="mt-2 rounded-lg border border-border/60 bg-background/75 p-2">
-                                <div className="mb-2">
-                                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Last 5 Games</div>
-                                  <div className="mt-1 flex items-center gap-1">
-                                    {lastFivePoints(card).map((value, idx) => (
-                                      <span
-                                        key={`${card.id}-l5-${idx}`}
-                                        className="min-w-[26px] rounded-md border border-white/10 bg-black/20 px-1.5 py-0.5 text-center text-[10px] font-semibold text-white/85"
-                                      >
-                                        {value}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                                {card.forSale ? (
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => cancelListingMutation.mutate(card.id)}
-                                    disabled={cancelListingMutation.isPending}
-                                    className="text-xs w-full"
-                                  >
-                                    Cancel (N${card.price})
-                                  </Button>
-                                ) : String(card.rarity || "").toLowerCase() === "common" ? (
-                                  <Button size="sm" variant="outline" disabled className="text-xs w-full">
-                                    Tournament Only
-                                  </Button>
-                                ) : (
-                                  <Button size="sm" variant="secondary" onClick={() => handleListCard(card)} className="text-xs w-full">
-                                    <DollarSign className="w-3 h-3 mr-1" />
-                                    Sell
-                                  </Button>
-                                )}
-                              </div>
-                            </CardTile2D>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 text-xs text-white/50">
-                      Tap a card to feature it. Long press to toggle rotation (optional).
-                    </div>
+          <div 
+            className="flex flex-wrap gap-8 justify-center preserve-3d"
+            style={{ transformStyle: "preserve-3d" }}
+          >
+            {filteredCards.map((card) => {
+              const isInLineup = lineupData?.lineup?.cardIds?.includes(card.id);
+              return (
+                <div 
+                  key={card.id} 
+                  className="card-3d-container bg-transparent shadow-none p-0" 
+                  style={{ 
+                    transformStyle: "preserve-3d",
+                    minHeight: "380px",
+                    position: "relative"
+                  }}
+                >
+                  <CardThumbnail card={card} />
+                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
+                    {card.forSale ? (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => cancelListingMutation.mutate(card.id)}
+                        disabled={cancelListingMutation.isPending}
+                        className="text-xs"
+                      >
+                        Cancel (N${card.price})
+                      </Button>
+                    ) : String(card.rarity || "").toLowerCase() === "common" ? (
+                      <Button size="sm" variant="outline" disabled className="text-xs">
+                        Tournament Only
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleListCard(card)}
+                        className="text-xs"
+                      >
+                        <DollarSign className="w-3 h-3 mr-1" />
+                        Sell
+                      </Button>
+                    )}
                   </div>
                 </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-8 justify-center preserve-3d" style={{ transformStyle: "preserve-3d" }}>
-              {filteredCards.map((card) => {
-                return (
-                  <div
-                    key={card.id}
-                    className="card-3d-container bg-transparent shadow-none p-0"
-                    style={{ transformStyle: "preserve-3d", minHeight: "380px", position: "relative" }}
-                  >
-                    <PlayerCard card={card} size="md" />
-                    <div className="mt-2 rounded-lg border border-border/60 bg-background/80 p-2 relative z-20">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Last 5 Games</div>
-                      <div className="mt-1 flex items-center gap-1">
-                        {lastFivePoints(card).map((value, idx) => (
-                          <span
-                            key={`${card.id}-grid-l5-${idx}`}
-                            className="min-w-[30px] rounded-md border border-white/10 bg-black/20 px-1.5 py-0.5 text-center text-[10px] font-semibold text-white/85"
-                          >
-                            {value}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="mt-2 flex justify-center gap-2">
-                      {card.forSale ? (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => cancelListingMutation.mutate(card.id)}
-                          disabled={cancelListingMutation.isPending}
-                          className="text-xs"
-                        >
-                          Cancel (N${card.price})
-                        </Button>
-                      ) : String(card.rarity || "").toLowerCase() === "common" ? (
-                        <Button size="sm" variant="outline" disabled className="text-xs">
-                          Tournament Only
-                        </Button>
-                      ) : (
-                        <Button size="sm" variant="secondary" onClick={() => handleListCard(card)} className="text-xs">
-                          <DollarSign className="w-3 h-3 mr-1" />
-                          Sell
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )
+              );
+            })}
+          </div>
         ) : (
           <Card className="p-8 text-center">
             <p className="text-muted-foreground">

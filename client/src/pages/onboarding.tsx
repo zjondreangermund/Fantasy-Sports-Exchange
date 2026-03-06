@@ -3,17 +3,24 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import Card3D from "../components/Card3D";
+import CardThumbnail from "../components/CardThumbnail";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
-import { ChevronRight, Sparkles } from "lucide-react";
+import { Package, ChevronRight, Check, Sparkles, Shield, Swords, Zap, Target, Flame } from "lucide-react";
 import { motion } from "framer-motion";
 import { Skeleton } from "../components/ui/skeleton";
 import { useLocation } from "wouter";
-import WalkoutTunnelSignup from "../components/scenes/WalkoutTunnelSignup";
-import type { Pack, PlayerLike } from "../lib/starterPacks";
 
 type OnboardingStep = "teamName" | "packs" | "select" | "done";
 
+// ✅ 5 packs now
+const packIcons = [Shield, Target, Swords, Zap, Flame];
+const packColors = [
+  "from-green-600/30 to-green-900/50",
+  "from-blue-600/30 to-blue-900/50",
+  "from-purple-600/30 to-purple-900/50",
+  "from-yellow-600/30 to-yellow-900/50",
+  "from-red-600/30 to-red-900/50",
+];
 const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"];
 
 type OnboardingConfig = {
@@ -29,6 +36,9 @@ export default function OnboardingPage() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState<OnboardingStep>("teamName");
   const [teamName, setTeamName] = useState("");
+  const [currentPack, setCurrentPack] = useState(0);
+  const [revealedPacks, setRevealedPacks] = useState<Set<number>>(new Set());
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<number>>(new Set());
 
   const { data: onboardingConfig } = useQuery<OnboardingConfig>({
     queryKey: ["/api/onboarding/config"],
@@ -74,7 +84,7 @@ export default function OnboardingPage() {
     }
   }, [onboardingConfig?.requireTeamName]);
 
-  // Turn players into "fake cards" so your existing <PlayerCard /> can render them
+  // Turn players into "fake cards" so CardThumbnail can render them
   const cardsByPlayerId = useMemo(() => {
     const map = new Map<number, PlayerCardWithPlayer>();
     const players = onboardingData?.players || [];
@@ -147,78 +157,52 @@ export default function OnboardingPage() {
     },
   });
 
-  const packLabels =
-    Array.isArray(onboardingConfig?.packLabels) && onboardingConfig.packLabels.length === 5
-      ? onboardingConfig.packLabels
-      : defaultPackLabels;
+  const revealPack = (index: number) => {
+    setCurrentPack(index);
 
-  const handleConfirmPick5 = useCallback((pickedPlayers: PlayerLike[]) => {
-    const ids = pickedPlayers
-      .map((player) => Number(player.id))
-      .filter((id) => Number.isFinite(id));
+    setRevealedPacks((prev) => {
+      const next = new Set(prev);
+      next.add(index);
 
+      // When all 5 packs revealed, move to selection step
+      if (next.size >= 5) {
+        setTimeout(() => setStep("select"), 500);
+      }
+
+      return next;
+    });
+  };
+
+  const toggleSelect = (playerId: number, packIndex: number) => {
+    setSelectedPlayerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(playerId)) {
+        next.delete(playerId);
+        return next;
+      }
+
+      const selectedInPack = packs[packIndex]?.find((card) => next.has(card.playerId));
+      if (selectedInPack) {
+        next.delete(selectedInPack.playerId);
+      }
+
+      if (next.size >= packs.length) return next;
+      next.add(playerId);
+      return next;
+    });
+  };
+
+  const handleConfirm = useCallback(() => {
+    const ids = Array.from(selectedPlayerIds);
     if (ids.length !== 5) return;
 
     chooseMutation.mutate(ids, {
       onSuccess: () => {
-        setStep("done");
+        // Redirect to tunnel animation
+        setLocation("/onboarding-tunnel");
       },
     });
-  }, [chooseMutation]);
-
-  const onboardingPacks = useMemo<Pack[]>(() => {
-    if (!packs.length) return [];
-
-    return packs.map((pack, index) => ({
-      id: `onboarding-pack-${index + 1}`,
-      label: packLabels[index] || `Pack ${index + 1}`,
-      cards: pack.map((card) => {
-        const player = card.player as any;
-        return {
-          id: card.playerId,
-          name: player?.name,
-          position: player?.position,
-          team: player?.team,
-          imageUrl: player?.imageUrl,
-          rarity: (card.rarity || "common") as any,
-          card,
-        } satisfies PlayerLike;
-      }),
-    }));
-  }, [packs, packLabels]);
-
-  const renderStarterCard = useCallback((player: PlayerLike) => {
-    const raw = (player as any).card as PlayerCardWithPlayer | undefined;
-    if (raw) {
-      return <Card3D card={raw} size="sm" />;
-    }
-
-    const fallback = {
-      id: Number(player.id),
-      playerId: Number(player.id),
-      ownerId: null,
-      rarity: (player.rarity || "common") as any,
-      serialId: null,
-      serialNumber: null,
-      maxSupply: 0,
-      level: 1,
-      xp: 0,
-      decisiveScore: 35,
-      last5Scores: [0, 0, 0, 0, 0],
-      forSale: false,
-      price: 0,
-      acquiredAt: new Date() as any,
-      player: {
-        id: Number(player.id),
-        name: player.name || "Unknown Player",
-        position: player.position || "MID",
-        team: player.team || "",
-        imageUrl: player.imageUrl,
-      },
-    } as any as PlayerCardWithPlayer;
-
-    return <Card3D card={fallback} size="sm" />;
-  }, []);
+  }, [selectedPlayerIds, chooseMutation, setLocation]);
 
   const handleContinueAfterTeamName = async () => {
     const trimmedName = teamName.trim();
@@ -262,6 +246,11 @@ export default function OnboardingPage() {
   }
 
   if (!onboardingData) return null;
+
+  const packLabels =
+    Array.isArray(onboardingConfig?.packLabels) && onboardingConfig.packLabels.length === 5
+      ? onboardingConfig.packLabels
+      : defaultPackLabels;
 
   if (step === "teamName") {
     if (onboardingConfig?.requireTeamName === false) {
@@ -322,12 +311,32 @@ export default function OnboardingPage() {
     );
   }
 
-  if (step === "packs" || step === "select") {
-    const packsReady = onboardingPacks.length === 5 && onboardingPacks.every((pack) => pack.cards.length === 3);
+  if (step === "packs") {
+    const packsReady = packs.length === 5 && packs.every((pack) => pack.length === 3);
 
-    if (!packsReady) {
-      return (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8">
+    return (
+      <div className="flex-1 flex flex-col items-center p-4 sm:p-8 overflow-y-auto">
+        <div className="w-full max-w-5xl text-center mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
+            Welcome to FantasyFC
+          </h1>
+          <p className="text-muted-foreground">
+            Open your 5 starter packs: 15 players total, then choose your top 5.
+          </p>
+
+          <div className="flex items-center justify-center gap-2 mt-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                  revealedPacks.has(i) ? "bg-primary scale-110" : "bg-muted"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+
+        {!packsReady ? (
           <div className="w-full max-w-2xl rounded-xl border border-white/10 bg-card/40 p-6 text-center space-y-4">
             <p className="text-sm text-muted-foreground">Preparing your position packs...</p>
             <Button
@@ -344,18 +353,128 @@ export default function OnboardingPage() {
               {createOfferMutation.isPending ? "Loading..." : "Retry Load Packs"}
             </Button>
           </div>
+        ) : (
+        <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mb-6 w-full max-w-5xl">
+          {packs.map((pack, i) => {
+            const PackIcon = packIcons[i] || Zap;
+            const isRevealed = revealedPacks.has(i);
+
+            if (isRevealed) {
+              return (
+                <div
+                  key={i}
+                  className={`flex flex-col items-center gap-3 p-4 rounded-xl bg-gradient-to-b ${packColors[i]} border border-white/10 transition-all duration-500 animate-in fade-in slide-in-from-bottom-4`}
+                >
+                  <span className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-1">
+                    <PackIcon className="w-3 h-3" />
+                    {packLabels[i]}
+                  </span>
+                  <div className="flex gap-2">
+                    {pack.map((card) => (
+                      <div key={card.id} className="transition-all duration-300">
+                        <CardThumbnail card={card} size="sm" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <motion.button
+                key={i}
+                onClick={() => revealPack(i)}
+                className={`w-36 h-52 rounded-xl border-2 border-dashed border-primary/40 bg-gradient-to-b ${packColors[i]} flex flex-col items-center justify-center gap-3 hover:scale-105 hover:border-primary/70 active:scale-95 transition-all duration-300`}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: i * 0.06 }}
+              >
+                <Package className="w-10 h-10 text-primary" />
+                <span className="text-sm font-bold text-foreground">{packLabels[i]}</span>
+                <span className="text-xs text-muted-foreground">3 Players</span>
+              </motion.button>
+            );
+          })}
         </div>
-      );
-    }
+        )}
+
+        <p className="text-xs text-muted-foreground">Open all packs to continue</p>
+      </div>
+    );
+  }
+
+  if (step === "select") {
+    const selectedCount = selectedPlayerIds.size;
+    const requiredSelections = packs.length;
 
     return (
-      <WalkoutTunnelSignup
-        open
-        onClose={() => setLocation("/")}
-        packs={onboardingPacks}
-        renderCard={renderStarterCard}
-        onFinishPick5={handleConfirmPick5}
-      />
+      <div className="flex-1 flex flex-col items-center p-4 sm:p-8 overflow-y-auto">
+        <div className="w-full max-w-6xl text-center mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
+            Choose Your Top 5
+          </h1>
+          <p className="text-muted-foreground">Pick 1 player from each row (3 options per position pack).</p>
+          <p className="text-sm mt-2">
+            Selected: <span className="font-bold text-primary">{selectedCount}/{requiredSelections}</span>
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-6 mb-6 w-full max-w-6xl">
+          {packs.map((pack, packIndex) => {
+            const PackIcon = packIcons[packIndex] || Zap;
+            const hasSelectionInPack = pack.some((card) => selectedPlayerIds.has(card.playerId));
+
+            return (
+              <div key={packIndex} className="rounded-xl border border-white/10 bg-card/40 p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <PackIcon className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm sm:text-base font-semibold text-foreground">{packLabels[packIndex] || `Pack ${packIndex + 1}`}</h3>
+                  </div>
+                  <span className={`text-xs font-semibold ${hasSelectionInPack ? "text-primary" : "text-muted-foreground"}`}>
+                    {hasSelectionInPack ? "1 selected" : "0 selected"}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap justify-center sm:justify-start gap-4">
+                  {pack.map((card) => {
+                    const isSelected = selectedPlayerIds.has(card.playerId);
+
+                    return (
+                      <div
+                        key={card.playerId}
+                        className={`cursor-pointer transition-all duration-200 ${
+                          isSelected
+                            ? "ring-2 ring-primary ring-offset-2 ring-offset-background rounded-xl scale-[1.02]"
+                            : "hover:scale-[1.02]"
+                        }`}
+                        onClick={() => toggleSelect(card.playerId, packIndex)}
+                      >
+                        <CardThumbnail card={card} size="md" selected={isSelected} selectable />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <Button
+          onClick={handleConfirm}
+          disabled={selectedCount !== requiredSelections || chooseMutation.isPending}
+          size="lg"
+          className="text-lg px-8"
+        >
+          {chooseMutation.isPending ? (
+            "Building your squad..."
+          ) : (
+            <>
+              Confirm Squad <Check className="w-5 h-5 ml-2" />
+            </>
+          )}
+        </Button>
+      </div>
     );
   }
 

@@ -16,7 +16,6 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { type EplPlayer, type EplFixture, type EplInjury, type EplStanding } from "../../../shared/schema";
-import Card3D from "../components/Card3D";
 import LiveGames from "../components/LiveGames";
 import {
   Trophy, Calendar, Users, AlertTriangle, Search, RefreshCw,

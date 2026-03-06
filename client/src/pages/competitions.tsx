@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 // Fixed: @/lib -> ../lib
 import { apiRequest, queryClient } from "../lib/queryClient";
 // Fixed: @/components -> ../components
-import Card3D from "../components/Card3D";
+import CardThumbnail from "../components/CardThumbnail";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -328,7 +328,7 @@ export default function CompetitionsPage() {
                       minHeight: "300px"
                     }}
                   >
-                    <Card3D
+                    <CardThumbnail
                       card={card}
                       size="sm"
                       selected={selectedCards.includes(card.id)}
@@ -393,7 +393,7 @@ export default function CompetitionsPage() {
               <div className="flex flex-wrap gap-4 justify-center">
                 {(viewTeamData?.cards || []).map((card: any) => (
                   <div key={card.id} className="flex flex-col items-center gap-1 max-w-[180px]">
-                    <Card3D card={card} size="sm" selected={viewTeamData?.captainId === card.id} />
+                    <CardThumbnail card={card} size="sm" selected={viewTeamData?.captainId === card.id} />
                     <Badge variant="outline" className="text-xs">
                       {Number(card.points || 0).toFixed(1)} pts
                       {viewTeamData?.captainId === card.id ? ` (C +${Number(card.captainBonus || 0).toFixed(1)})` : ""}

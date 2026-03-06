@@ -298,6 +298,59 @@
 }
 
 @layer components {
+  @keyframes atmoFloat {
+    0% {
+      transform: translateY(0px) translateX(0px);
+      opacity: 0.15;
+    }
+    50% {
+      transform: translateY(-8px) translateX(3px);
+      opacity: 0.32;
+    }
+    100% {
+      transform: translateY(0px) translateX(0px);
+      opacity: 0.15;
+    }
+  }
+
+  @keyframes spotlightPulse {
+    0% {
+      opacity: 0.2;
+      transform: translate(-50%, -50%) scale(0.94);
+    }
+    50% {
+      opacity: 0.36;
+      transform: translate(-50%, -50%) scale(1.05);
+    }
+    100% {
+      opacity: 0.2;
+      transform: translate(-50%, -50%) scale(0.94);
+    }
+  }
+
+  .atmo-particles {
+    background-image:
+      radial-gradient(circle at 18% 32%, rgba(255,255,255,0.22) 1px, transparent 1.4px),
+      radial-gradient(circle at 64% 18%, rgba(148, 163, 184, 0.25) 1px, transparent 1.5px),
+      radial-gradient(circle at 84% 56%, rgba(255,255,255,0.2) 1px, transparent 1.3px),
+      radial-gradient(circle at 30% 78%, rgba(148, 163, 184, 0.22) 1px, transparent 1.3px);
+    background-size: 220px 220px, 260px 260px, 200px 200px, 240px 240px;
+    animation: atmoFloat 8s ease-in-out infinite;
+  }
+
+  .showcase-spotlight {
+    animation: spotlightPulse 2.8s ease-in-out infinite;
+  }
+
+  @keyframes cardShine {
+    0% {
+      transform: translateX(-140%) skewX(-12deg);
+    }
+    100% {
+      transform: translateX(260%) skewX(-12deg);
+    }
+  }
+
   /* 3D Card System - preserve 3D transforms throughout the chain */
   .preserve-3d {
     transform-style: preserve-3d !important;

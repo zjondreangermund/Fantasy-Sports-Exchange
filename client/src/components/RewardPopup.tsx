@@ -2,8 +2,7 @@
 import { Dialog, DialogContent } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-// Fixed: PlayerCard is a neighbor in the same /components/ folder
-import PlayerCard from "./PlayerCard";
+import CardThumbnail from "./CardThumbnail";
 import { Trophy, Gift, DollarSign, Star } from "lucide-react";
 
 interface RewardPopupProps {
@@ -54,7 +53,7 @@ export default function RewardPopup({ rewards, onClose }: RewardPopupProps) {
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <Gift className="w-4 h-4" /> Card Prize
                       </div>
-                      <PlayerCard card={reward.prizeCard} size="sm" />
+                      <CardThumbnail card={reward.prizeCard} size="sm" />
                     </div>
                   )}
                 </div>
