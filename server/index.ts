@@ -4,6 +4,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes.js";
 import { serveStatic } from "./static.js";
 import { createServer } from "http";
+import fs from "fs";
+import path from "path";
 
 
 // ✅ Google Auth / Sessions
@@ -231,12 +233,15 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // Setup vite/static after routes
-  if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-  } else {
+  // Prefer static build assets whenever they exist (deployed/built runtime).
+  const builtClientIndex = path.resolve(process.cwd(), "dist", "public", "index.html");
+  const hasBuiltClient = fs.existsSync(builtClientIndex);
+
+  if (process.env.NODE_ENV === "development" && !hasBuiltClient) {
     const { setupVite } = await import("./vite.js");
     await setupVite(httpServer, app);
+  } else {
+    serveStatic(app);
   }
 
   const port = parseInt(process.env.PORT || "5000", 10);

@@ -12,7 +12,7 @@
     "build:client": "vite build",
     "build:web": "CAPACITOR_BUILD=true vite build",
     "build:server": "tsc --project tsconfig.server.json",
-    "start": "node dist/server/index.js",
+    "start": "node dist/server/server/index.js",
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "cap:sync": "npm run build:web && npx cap sync",
