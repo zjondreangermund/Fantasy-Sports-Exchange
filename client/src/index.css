@@ -298,6 +298,15 @@
 }
 
 @layer components {
+  :root {
+    --common-bg: linear-gradient(135deg, #3a3f44, #1c1e21);
+    --rare-bg: linear-gradient(135deg, #0047ab, #002366);
+    --unique-bg: linear-gradient(135deg, #b76e79, #723a33);
+    --epic-bg: linear-gradient(135deg, #3a1457, #180a2e);
+    --legendary-bg: linear-gradient(135deg, #4b0082, #000000, #ffd700);
+    --shine: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.4) 50%, transparent 60%);
+  }
+
   @keyframes atmoFloat {
     0% {
       transform: translateY(0px) translateX(0px);
@@ -415,6 +424,25 @@
     background:
       radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.1), transparent 35%),
       linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.28));
+  }
+
+  .card-thumbnail-shell {
+    background: var(--tier-bg, linear-gradient(180deg, rgba(12, 14, 20, 0.96), rgba(2, 3, 6, 1)));
+    box-shadow:
+      1px 1px 0 rgba(255, 255, 255, 0.2),
+      6px 8px 20px rgba(0, 0, 0, 0.52),
+      inset 2px 2px 5px rgba(255, 255, 255, 0.1);
+  }
+
+  .thumb-holo-legendary {
+    background:
+      radial-gradient(circle at 42% 38%, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.08) 24%, rgba(255, 255, 255, 0) 48%),
+      linear-gradient(45deg, rgba(255, 0, 0, 0.18), rgba(0, 255, 0, 0.12) 50%, rgba(0, 0, 255, 0.18));
+    background-size: 100% 100%, 220% 220%;
+    background-position: center center, 0% 50%;
+    mix-blend-mode: overlay;
+    opacity: 0.62;
+    animation: legendaryOverlayShift 16s linear infinite;
   }
 
   /* Rarity shape system for flat thumbnail cards */
@@ -557,9 +585,9 @@
 
   .card-surface-legendary {
     background-image:
-      radial-gradient(circle at 20% 18%, rgba(251, 191, 36, 0.22), transparent 34%),
-      linear-gradient(165deg, rgba(251, 146, 60, 0.22), transparent 44%),
-      linear-gradient(20deg, rgba(251, 191, 36, 0.14), transparent 46%);
+      linear-gradient(45deg, rgba(255, 0, 0, 0.2), rgba(0, 255, 0, 0.14) 50%, rgba(0, 0, 255, 0.2)),
+      radial-gradient(circle at 20% 18%, rgba(255, 215, 0, 0.22), transparent 34%),
+      linear-gradient(20deg, rgba(255, 215, 0, 0.14), transparent 46%);
     opacity: 0.62;
   }
 
@@ -762,6 +790,7 @@
   /* Premium fantasy card materials */
   .luxury-card-shell {
     transform-style: preserve-3d;
+    background: var(--tier-bg, linear-gradient(180deg, #171c23 0%, #232a34 56%, #2b313a 100%));
     border: 1px solid rgba(255, 255, 255, 0.16);
     box-shadow:
       0 28px 52px rgba(0, 0, 0, 0.56),
@@ -800,14 +829,16 @@
 
   .card-slab-wrap {
     transform-style: preserve-3d;
+    transform: perspective(1000px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+    transition: transform 120ms ease-out;
   }
 
   .card-slab-wrap:hover {
-    transform: translateY(-6px) rotateX(4deg) rotateY(-4deg);
+    transform: perspective(1000px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
   }
 
   .card-slab-back {
-    background: linear-gradient(160deg, rgba(31, 35, 42, 0.95), rgba(15, 17, 21, 1));
+    background: var(--tier-bg, linear-gradient(160deg, rgba(31, 35, 42, 0.95), rgba(15, 17, 21, 1)));
     box-shadow:
       1px 1px 0 rgba(255, 255, 255, 0.22),
       5px 5px 15px rgba(0, 0, 0, 0.66),
@@ -1060,9 +1091,29 @@
   }
 
   .luxury-shine {
-    background: linear-gradient(112deg, transparent 24%, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, 0.16) 49%, rgba(255, 255, 255, 0) 60%, transparent 75%);
+    background: var(--shine);
     transform: translateX(-130%) rotate(8deg);
     animation: luxuryShineSweep 1.2s ease;
+  }
+
+  .card-rarity-common {
+    --tier-bg: var(--common-bg);
+  }
+
+  .card-rarity-rare {
+    --tier-bg: var(--rare-bg);
+  }
+
+  .card-rarity-unique {
+    --tier-bg: var(--unique-bg);
+  }
+
+  .card-rarity-epic {
+    --tier-bg: var(--epic-bg);
+  }
+
+  .card-rarity-legendary {
+    --tier-bg: var(--legendary-bg);
   }
 
   @keyframes luxuryShineSweep {

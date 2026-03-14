@@ -23,6 +23,7 @@ import {
   Wallet,
   Trophy,
   Activity,
+  Gem,
   LogOut,
   Shield,
   Gavel,
@@ -38,6 +39,7 @@ const menuItems = [
   { title: "Auctions", href: "/auctions", icon: Gavel },
   { title: "Wallet", href: "/wallet", icon: Wallet },
   { title: "Account", href: "/account", icon: Bell },
+  { title: "Card Lab", href: "/card-lab", icon: Gem },
 ];
 
 export function AppSidebar() {

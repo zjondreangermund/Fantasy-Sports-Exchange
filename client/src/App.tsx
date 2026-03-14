@@ -27,6 +27,7 @@ import AccountPage from "./pages/account";
 import CompetitionsPage from "./pages/competitions";
 import PremierLeaguePage from "./pages/premier-league";
 import AdminPage from "./pages/admin";
+import CardLabPage from "./pages/card-lab";
 
 function AuthenticatedRouter() {
   // ✅ Use /status (doesn't 404 when offers not created yet)
@@ -65,6 +66,7 @@ function AuthenticatedRouter() {
       <Route path="/card-reveal" component={CardRevealPage} />
       <Route path="/competitions" component={CompetitionsPage} />
       <Route path="/premier-league" component={PremierLeaguePage} />
+      <Route path="/card-lab" component={CardLabPage} />
       <Route path="/collection" component={CollectionPage} />
       <Route path="/marketplace" component={MarketplacePage} />
       <Route path="/auctions" component={AuctionsPage} />

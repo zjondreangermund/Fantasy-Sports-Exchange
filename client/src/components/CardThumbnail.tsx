@@ -13,11 +13,11 @@ type CardThumbnailProps = {
 };
 
 const rarityShell: Record<string, string> = {
-  common: "rounded-[22px] border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]",
-  rare: "border-2 border-[#45a2ff]/90 shadow-[0_0_24px_rgba(69,162,255,0.28),0_18px_42px_rgba(0,0,0,0.42)] [clip-path:polygon(24%_0%,76%_0%,100%_18%,100%_82%,76%_100%,24%_100%,0%_82%,0%_18%)]",
-  unique: "border-2 border-[#b154ff]/90 shadow-[0_0_28px_rgba(177,84,255,0.28),0_18px_42px_rgba(0,0,0,0.42)] [clip-path:polygon(50%_0%,92%_14%,92%_70%,50%_100%,8%_70%,8%_14%)]",
-  epic: "border-2 border-[#ffc246]/95 shadow-[0_0_30px_rgba(255,194,70,0.30),0_18px_46px_rgba(0,0,0,0.46)] [clip-path:polygon(50%_0%,94%_16%,84%_100%,16%_100%,6%_16%)]",
-  legendary: "border-2 border-[#ff9123]/95 shadow-[0_0_36px_rgba(255,145,35,0.34),0_18px_52px_rgba(0,0,0,0.48)] [clip-path:polygon(10%_10%,20%_0%,34%_10%,50%_0%,66%_10%,80%_0%,90%_10%,100%_24%,100%_100%,0%_100%,0%_24%)]",
+  common: "rounded-[22px] border border-[#7a7c80]/45 shadow-[0_10px_30px_rgba(0,0,0,0.42)]",
+  rare: "border-2 border-[#E2E8F0]/90 shadow-[0_0_24px_rgba(0,71,171,0.32),0_18px_42px_rgba(0,0,0,0.42)] [clip-path:polygon(24%_0%,76%_0%,100%_18%,100%_82%,76%_100%,24%_100%,0%_82%,0%_18%)]",
+  unique: "border-2 border-[#FF007F]/85 shadow-[0_0_24px_rgba(183,110,121,0.3),0_18px_42px_rgba(0,0,0,0.42)] [clip-path:polygon(50%_0%,92%_14%,92%_70%,50%_100%,8%_70%,8%_14%)]",
+  epic: "border-2 border-[#d14dff]/95 shadow-[0_0_30px_rgba(209,77,255,0.30),0_18px_46px_rgba(0,0,0,0.46)] [clip-path:polygon(50%_0%,94%_16%,84%_100%,16%_100%,6%_16%)]",
+  legendary: "border-2 border-[#FFD700]/95 shadow-[0_0_36px_rgba(255,215,0,0.34),0_18px_52px_rgba(0,0,0,0.48)] [clip-path:polygon(10%_10%,20%_0%,34%_10%,50%_0%,66%_10%,80%_0%,90%_10%,100%_24%,100%_100%,0%_100%,0%_24%)]",
 };
 
 const rarityInner: Record<string, string> = {
@@ -30,26 +30,58 @@ const rarityInner: Record<string, string> = {
 
 const rarityGlow: Record<string, string> = {
   common: "shadow-[inset_0_0_40px_rgba(255,255,255,0.10)]",
-  rare: "shadow-[inset_0_0_40px_rgba(69,162,255,0.35)]",
-  unique: "shadow-[inset_0_0_40px_rgba(177,84,255,0.35)]",
+  rare: "shadow-[inset_0_0_40px_rgba(0,71,171,0.35)]",
+  unique: "shadow-[inset_0_0_40px_rgba(183,110,121,0.34)]",
   epic: "shadow-[inset_0_0_40px_rgba(255,194,70,0.38)]",
-  legendary: "shadow-[inset_0_0_48px_rgba(255,145,35,0.50)]",
+  legendary: "shadow-[inset_0_0_48px_rgba(255,215,0,0.50)]",
 };
 
 const rarityAccent: Record<string, string> = {
   common: "from-white/10 via-white/5 to-transparent",
-  rare: "from-[#45a2ff]/20 via-[#45a2ff]/5 to-transparent",
-  unique: "from-[#b154ff]/20 via-[#b154ff]/5 to-transparent",
+  rare: "from-[#0047AB]/24 via-[#0047AB]/8 to-transparent",
+  unique: "from-[#B76E79]/24 via-[#B76E79]/8 to-transparent",
   epic: "from-[#ffc246]/20 via-[#ffc246]/5 to-transparent",
-  legendary: "from-[#ff9123]/25 via-[#ff9123]/5 to-transparent",
+  legendary: "from-[#FFD700]/25 via-[#FFD700]/5 to-transparent",
 };
 
 const rarityChip: Record<string, string> = {
-  common: "bg-white/10 border-white/20 text-white",
-  rare: "bg-[#45a2ff]/20 border-[#45a2ff]/40 text-[#d7eeff]",
-  unique: "bg-[#b154ff]/20 border-[#b154ff]/40 text-[#f1dcff]",
+  common: "bg-[#7A7C80]/20 border-[#7A7C80]/35 text-[#d8dadd]",
+  rare: "bg-[#0047AB]/28 border-[#E2E8F0]/42 text-[#eaf3ff]",
+  unique: "bg-[#FF007F]/16 border-[#FF007F]/38 text-[#ffd8ec]",
   epic: "bg-[#ffc246]/20 border-[#ffc246]/45 text-[#fff3d6]",
-  legendary: "bg-[#ff9123]/25 border-[#ff9123]/50 text-[#ffe5cc]",
+  legendary: "bg-[#FFD700]/25 border-[#FFD700]/50 text-[#fff6bf]",
+};
+
+const rarityTone: Record<string, string> = {
+  common: "card-rarity-common",
+  rare: "card-rarity-rare",
+  unique: "card-rarity-unique",
+  epic: "card-rarity-epic",
+  legendary: "card-rarity-legendary",
+};
+
+const raritySurface: Record<string, string> = {
+  common: "card-surface-common",
+  rare: "card-surface-rare",
+  unique: "card-surface-unique",
+  epic: "card-surface-epic",
+  legendary: "card-surface-legendary",
+};
+
+const rarityPortrait: Record<string, string> = {
+  common: "portrait-common",
+  rare: "portrait-rare",
+  unique: "portrait-unique",
+  epic: "portrait-epic",
+  legendary: "portrait-legendary",
+};
+
+const rarityOverlayFx: Record<string, string> = {
+  common: "",
+  rare: "",
+  unique: "",
+  epic: "",
+  legendary: "thumb-holo-legendary",
 };
 
 const rarityMotion: Record<string, string> = {
@@ -90,6 +122,10 @@ function CardThumbnailBase({
   const glow = rarityGlow[rarity] || rarityGlow.common;
   const accent = rarityAccent[rarity] || rarityAccent.common;
   const chip = rarityChip[rarity] || rarityChip.common;
+  const tone = rarityTone[rarity] || rarityTone.common;
+  const surface = raritySurface[rarity] || raritySurface.common;
+  const portrait = rarityPortrait[rarity] || rarityPortrait.common;
+  const overlayFx = rarityOverlayFx[rarity] || "";
   const motion = rarityMotion[rarity] || rarityMotion.common;
   const shine = rarityShine[rarity] || rarityShine.common;
   const selectedRing = raritySelectedRing[rarity] || raritySelectedRing.common;
@@ -109,18 +145,19 @@ function CardThumbnailBase({
     <button
       type="button"
       onClick={onClick}
-      className={`group relative isolate aspect-[0.7] ${frame} overflow-hidden bg-[linear-gradient(180deg,rgba(12,14,20,0.96),rgba(2,3,6,1))] text-left transition duration-200 hover:-translate-y-1 ${shell} ${motion} ${
+      className={`group card-thumbnail-shell relative isolate aspect-[0.7] ${frame} overflow-hidden text-left transition duration-200 hover:-translate-y-1 ${shell} ${tone} ${motion} ${
         selectable ? "cursor-pointer" : "cursor-default"
       } ${selected ? `ring-2 ${selectedRing}` : ""}`}
       data-testid={`card-thumbnail-${card.id}`}
     >
       <div className={`absolute inset-[2px] overflow-hidden bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.10),transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.28))] ${inner}`}>
+        <div className={`pointer-events-none absolute inset-0 z-[1] ${surface}`} />
         <div className={`pointer-events-none absolute inset-0 z-[3] ${glow}`} />
 
         <div className={`pointer-events-none absolute inset-x-0 top-0 z-[2] h-28 bg-gradient-to-b ${accent}`} />
 
         <div className="absolute inset-x-0 top-[16%] bottom-[23%] z-[1]">
-          <CardPlayerImage card={card} alt={player?.name || "Player"} thumb className="h-full w-full object-cover object-top" />
+          <CardPlayerImage card={card} alt={player?.name || "Player"} thumb className={`h-full w-full object-cover object-top ${portrait}`} />
         </div>
 
         <div className="absolute left-2 right-2 top-2 z-10 flex items-center justify-between">
@@ -142,6 +179,7 @@ function CardThumbnailBase({
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-black via-black/55 to-transparent" />
+        {overlayFx ? <div className={`pointer-events-none absolute inset-0 z-[4] ${overlayFx}`} /> : null}
       </div>
 
       <div className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100">

@@ -115,6 +115,14 @@ const rarityShapeClass: Record<Rarity, string> = {
   unique: "slab-shape-unique",
 };
 
+const rarityToneClass: Record<Rarity, string> = {
+  common: "card-rarity-common",
+  rare: "card-rarity-rare",
+  epic: "card-rarity-epic",
+  legendary: "card-rarity-legendary",
+  unique: "card-rarity-unique",
+};
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -141,26 +149,32 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
   const rarity = player.rarity;
   const meta = rarityMeta[rarity];
   const stats = computeStats(player);
-  const [holoPos, setHoloPos] = React.useState({ x: 50, y: 50 });
+  const [pointerFx, setPointerFx] = React.useState({ x: 50, y: 50, tiltX: 0, tiltY: 0 });
   const isLegendary = rarity === "legendary";
 
   const handlePointerMove = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isLegendary) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const x = clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100);
     const y = clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100);
-    setHoloPos({ x, y });
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const localX = event.clientX - rect.left;
+    const localY = event.clientY - rect.top;
+
+    const tiltX = clamp((localY - centerY) / 10, -10, 10);
+    const tiltY = clamp((centerX - localX) / 10, -10, 10);
+
+    setPointerFx({ x, y, tiltX, tiltY });
   };
 
   const resetPointer = () => {
-    if (!isLegendary) return;
-    setHoloPos({ x: 50, y: 50 });
+    setPointerFx({ x: 50, y: 50, tiltX: 0, tiltY: 0 });
   };
 
   return (
     <div
       className={[
-        "group card-slab-wrap relative isolate aspect-[2.5/3.5] w-[260px] overflow-visible transition duration-300 hover:-translate-y-1",
+        "group card-slab-wrap relative isolate aspect-[2.5/3.5] w-[260px] overflow-visible transition duration-300",
         className || "",
       ].join(" ")}
       onMouseMove={handlePointerMove}
@@ -168,21 +182,21 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
       style={{
         ["--card-accent" as string]: meta.accent,
         ["--card-accent-soft" as string]: meta.accentSoft,
-        ["--holo-x" as string]: `${holoPos.x}%`,
-        ["--holo-y" as string]: `${holoPos.y}%`,
+        ["--holo-x" as string]: `${pointerFx.x}%`,
+        ["--holo-y" as string]: `${pointerFx.y}%`,
+        ["--tilt-x" as string]: `${pointerFx.tiltX}deg`,
+        ["--tilt-y" as string]: `${pointerFx.tiltY}deg`,
       }}
     >
-      <div className={["card-slab-back absolute inset-[1.6%] z-0 rounded-[26px]", rarityShapeClass[rarity]].join(" ")} />
+      <div className={["card-slab-back absolute inset-[1.6%] z-0 rounded-[26px]", rarityShapeClass[rarity], rarityToneClass[rarity]].join(" ")} />
 
       <div
         className={[
           "luxury-card-shell absolute inset-0 overflow-hidden rounded-[24px]",
           rarityEdgeClass[rarity],
           rarityShapeClass[rarity],
+          rarityToneClass[rarity],
         ].join(" ")}
-        style={{
-          background: `linear-gradient(180deg, ${meta.baseTop} 0%, ${meta.baseMid} 56%, ${meta.baseBottom} 100%)`,
-        }}
       >
         <div className={["slab-face-plate absolute inset-[10px] z-[0.5] rounded-[18px]", `material-${rarity}`].join(" ")} />
 
