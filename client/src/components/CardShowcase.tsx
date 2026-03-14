@@ -1,6 +1,7 @@
 import { memo } from "react";
-import FeaturedCardScene from "./FeaturedCardScene";
-import CabinetSlot from "./CabinetSlot";
+import FantasyCard from "./FantasyCard";
+import FantasyCardFan from "./FantasyCardFan";
+import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
 type CardShowcaseProps = {
@@ -16,7 +17,9 @@ type CardShowcaseProps = {
 
 function CardShowcaseBase({ withSpotlight = true, card, onClick }: CardShowcaseProps) {
   const player = card.player;
-  const rarity = String(card.rarity || "common").toLowerCase();
+  const mainCard = toFantasyCardData(card);
+  const fanCards = [mainCard, { ...mainCard, id: `${mainCard.id}-alt-1` }, { ...mainCard, id: `${mainCard.id}-alt-2` }];
+
   return (
     <div className="relative inline-flex flex-col items-center justify-center px-2 pb-8 pt-6" onClick={onClick}>
       {withSpotlight && (
@@ -25,9 +28,15 @@ function CardShowcaseBase({ withSpotlight = true, card, onClick }: CardShowcaseP
           <div className="showcase-spotlight absolute left-1/2 top-[42%] h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-200/14 blur-3xl" />
         </>
       )}
-      <CabinetSlot rarity={rarity} className={`slot-featured slot-3d-${rarity} h-[340px] w-[240px] p-2`}>
-        <FeaturedCardScene card={card} className="h-full w-full" />
-      </CabinetSlot>
+
+      {withSpotlight ? (
+        <FantasyCardFan cards={fanCards} className="w-[320px]" maxCards={3} />
+      ) : (
+        <button type="button" onClick={onClick} className="text-left">
+          <FantasyCard player={mainCard} className="!w-[230px]" />
+        </button>
+      )}
+
       <div className="relative z-10 mt-2 rounded-lg border border-white/15 bg-black/45 px-3 py-2 text-center backdrop-blur-sm">
         <p className="text-xs font-bold tracking-[0.12em] text-white/80">{String(card.rarity || "common").toUpperCase()}</p>
         <p className="max-w-[200px] truncate text-sm font-extrabold text-white">{player?.name || "Unknown Player"}</p>
