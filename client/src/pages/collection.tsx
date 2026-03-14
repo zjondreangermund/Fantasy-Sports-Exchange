@@ -85,6 +85,7 @@ export default function CollectionPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
       setListCard(null);
       setListPrice("");
       toast({ title: "Card listed for sale!" });
@@ -105,6 +106,7 @@ export default function CollectionPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
       toast({ title: "Listing cancelled" });
     },
     onError: (error: any) => {
