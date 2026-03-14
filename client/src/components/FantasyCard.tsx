@@ -57,23 +57,23 @@ const rarityMeta: Record<
     label: "Rare",
     textureClass: "luxury-texture-rare",
     spotlightClass: "luxury-spotlight-rare",
-    accent: "#E2E8F0",
-    accentSoft: "rgba(226,232,240,0.34)",
-    baseTop: "#003399",
-    baseMid: "#0047AB",
-    baseBottom: "#002366",
-    rarityBadgeClass: "border-[#E2E8F0]/50 bg-[#0047AB]/34 text-[#eaf3ff]",
+    accent: "#ff2b2b",
+    accentSoft: "rgba(255,43,43,0.32)",
+    baseTop: "#ff3838",
+    baseMid: "#d31818",
+    baseBottom: "#a30000",
+    rarityBadgeClass: "border-[#ff2b2b]/52 bg-[#ff2b2b]/18 text-[#ffd8d8]",
   },
   epic: {
     label: "Epic",
     textureClass: "luxury-texture-epic",
     spotlightClass: "luxury-spotlight-epic",
-    accent: "#d14dff",
-    accentSoft: "rgba(209,77,255,0.34)",
-    baseTop: "#120a1f",
-    baseMid: "#2a1246",
-    baseBottom: "#1a0d2e",
-    rarityBadgeClass: "border-[#d14dff]/50 bg-[#7a3cff]/25 text-[#f0ccff]",
+    accent: "#a12fff",
+    accentSoft: "rgba(161,47,255,0.34)",
+    baseTop: "#a12fff",
+    baseMid: "#6f16b8",
+    baseBottom: "#40024c",
+    rarityBadgeClass: "border-[#a12fff]/50 bg-[#a12fff]/24 text-[#f3d8ff]",
   },
   legendary: {
     label: "Legendary",
@@ -81,21 +81,21 @@ const rarityMeta: Record<
     spotlightClass: "luxury-spotlight-legendary",
     accent: "#FFD700",
     accentSoft: "rgba(255,215,0,0.36)",
-    baseTop: "#FFD700",
-    baseMid: "#00F2FF",
-    baseBottom: "#7000FF",
-    rarityBadgeClass: "border-[#FFD700]/65 bg-[#FFD700]/26 text-[#fff6bf]",
+    baseTop: "#ffd36a",
+    baseMid: "#d39a24",
+    baseBottom: "#a36b00",
+    rarityBadgeClass: "border-[#FFD700]/62 bg-[#FFD700]/30 text-[#fff4bc]",
   },
   unique: {
     label: "Unique",
     textureClass: "luxury-texture-unique",
     spotlightClass: "luxury-spotlight-unique",
-    accent: "#FF007F",
-    accentSoft: "rgba(255,0,127,0.30)",
-    baseTop: "#E6BE8A",
-    baseMid: "#B87333",
-    baseBottom: "#8E443D",
-    rarityBadgeClass: "border-[#FF007F]/50 bg-[#FF007F]/14 text-[#ffd7ec]",
+    accent: "#0f6eff",
+    accentSoft: "rgba(15,110,255,0.30)",
+    baseTop: "#0f6eff",
+    baseMid: "#0b3daf",
+    baseBottom: "#041a67",
+    rarityBadgeClass: "border-[#0f6eff]/50 bg-[#0f6eff]/20 text-[#dcedff]",
   },
 };
 
@@ -145,6 +145,50 @@ function computeStats(player: PlayerCardData) {
   ];
 }
 
+type ResponsivePortrait = {
+  fallbackSrc: string;
+  webpSrcSet?: string;
+  jpegSrcSet?: string;
+};
+
+function buildResponsivePortrait(src?: string): ResponsivePortrait | null {
+  if (!src) return null;
+  if (!src.includes("/api/players/")) {
+    return { fallbackSrc: src };
+  }
+
+  const sizes = [320, 512, 800];
+
+  try {
+    const isAbsolute = /^https?:\/\//.test(src);
+    const base = new URL(src, "http://localhost");
+
+    const toSrc = (url: URL) => (isAbsolute ? url.toString() : `${url.pathname}${url.search}${url.hash}`);
+
+    const buildSet = (format: "webp" | "jpeg") =>
+      sizes
+        .map((width) => {
+          const next = new URL(base.toString());
+          next.searchParams.set("w", String(width));
+          next.searchParams.set("format", format);
+          return `${toSrc(next)} ${width}w`;
+        })
+        .join(", ");
+
+    const fallback = new URL(base.toString());
+    fallback.searchParams.set("w", "800");
+    fallback.searchParams.set("format", "webp");
+
+    return {
+      fallbackSrc: toSrc(fallback),
+      webpSrcSet: buildSet("webp"),
+      jpegSrcSet: buildSet("jpeg"),
+    };
+  } catch {
+    return { fallbackSrc: src };
+  }
+}
+
 export default function FantasyCard({ player, className }: FantasyCardProps) {
   const rarity = player.rarity;
   const meta = rarityMeta[rarity];
@@ -154,6 +198,7 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
   const canTiltRef = React.useRef(true);
   const pointerFxRef = React.useRef({ x: 50, y: 50, tiltX: 0, tiltY: 0 });
   const isLegendary = rarity === "legendary";
+  const portrait = React.useMemo(() => buildResponsivePortrait(player.image), [player.image]);
 
   const commitPointerFx = React.useCallback(() => {
     rafRef.current = null;
@@ -259,20 +304,24 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
           <div className="pointer-events-none absolute inset-x-0 top-0 z-[2] h-20 bg-gradient-to-b from-white/10 via-white/[0.02] to-transparent" />
 
           <div className="player-chamber absolute inset-x-[3.8%] top-[15.5%] bottom-[30%] z-[3] overflow-hidden rounded-[18px]">
-            {player.image ? (
-              <img
-                src={player.image}
-                alt={player.name}
-                className={[
-                  "h-full w-full object-cover object-[50%_15%] transition-transform duration-500 group-hover:scale-[1.03]",
-                  `portrait-${rarity}`,
-                ].join(" ")}
-                loading="lazy"
-                decoding="async"
-                width={800}
-                height={1000}
-                sizes="(max-width: 640px) 42vw, 260px"
-              />
+            {portrait ? (
+              <picture>
+                {portrait.webpSrcSet ? <source type="image/webp" srcSet={portrait.webpSrcSet} sizes="(max-width: 640px) 42vw, 260px" /> : null}
+                {portrait.jpegSrcSet ? <source type="image/jpeg" srcSet={portrait.jpegSrcSet} sizes="(max-width: 640px) 42vw, 260px" /> : null}
+                <img
+                  src={portrait.fallbackSrc}
+                  alt={player.name}
+                  className={[
+                    "h-full w-full object-cover object-[50%_15%] transition-transform duration-500 group-hover:scale-[1.03]",
+                    `portrait-${rarity}`,
+                  ].join(" ")}
+                  loading="lazy"
+                  decoding="async"
+                  width={800}
+                  height={1000}
+                  sizes="(max-width: 640px) 42vw, 260px"
+                />
+              </picture>
             ) : (
               <div className="h-full w-full bg-gradient-to-b from-white/10 to-transparent" />
             )}
