@@ -195,7 +195,7 @@ export default function MarketplacePage() {
                     }}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <CabinetSlot rarity={card.rarity} className="h-[286px] w-[198px] p-1.5">
+                      <CabinetSlot rarity={card.rarity} className="h-[320px] w-[220px] p-2 overflow-visible">
                         <button type="button" className="w-full text-left" onClick={() => handleOpenBuyCard(card)}>
                           <FantasyCard player={toFantasyCardData(card)} className="!w-full" />
                         </button>
@@ -237,7 +237,7 @@ export default function MarketplacePage() {
                     }}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <CabinetSlot rarity={card.rarity} className="h-[286px] w-[198px] p-1.5">
+                      <CabinetSlot rarity={card.rarity} className="h-[320px] w-[220px] p-2 overflow-visible">
                         <FantasyCard player={toFantasyCardData(card)} className="!w-full" />
                       </CabinetSlot>
                       <p className="text-sm font-semibold text-green-500">

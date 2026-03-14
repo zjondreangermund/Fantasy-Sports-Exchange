@@ -398,7 +398,7 @@
 
   .card-shell {
     position: relative;
-    overflow: hidden;
+    overflow: visible;
     isolation: isolate;
     background: linear-gradient(180deg, rgba(12, 14, 20, 0.96), rgba(2, 3, 6, 1));
     transition: transform 220ms ease, box-shadow 220ms ease;
@@ -757,6 +757,183 @@
   /* 3D Card System - preserve 3D transforms throughout the chain */
   .preserve-3d {
     transform-style: preserve-3d !important;
+  }
+
+  /* Premium fantasy card materials */
+  .luxury-card-shell {
+    transform-style: preserve-3d;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow:
+      0 20px 46px rgba(0, 0, 0, 0.52),
+      0 0 0 1px rgba(255, 255, 255, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.24),
+      inset 0 -9px 16px rgba(0, 0, 0, 0.45);
+  }
+
+  .luxury-card-shell::before {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border-radius: 18px;
+    pointer-events: none;
+    border: 1px solid rgba(255, 255, 255, 0.17);
+    box-shadow: inset 0 0 26px color-mix(in srgb, var(--card-accent-soft) 48%, transparent);
+    z-index: 7;
+  }
+
+  .luxury-card-shell::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 4px;
+    height: 9px;
+    border-radius: 999px;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.04));
+    filter: blur(0.2px);
+    z-index: 10;
+  }
+
+  .luxury-edge-common {
+    box-shadow:
+      0 20px 46px rgba(0, 0, 0, 0.52),
+      0 0 0 1px rgba(199, 206, 216, 0.12),
+      0 0 22px rgba(199, 206, 216, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.24),
+      inset 0 -9px 16px rgba(0, 0, 0, 0.45);
+  }
+
+  .luxury-edge-rare {
+    box-shadow:
+      0 20px 46px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(119, 184, 255, 0.26),
+      0 0 28px rgba(71, 149, 255, 0.26),
+      inset 0 1px 0 rgba(199, 228, 255, 0.28),
+      inset 0 -10px 16px rgba(1, 7, 20, 0.55);
+  }
+
+  .luxury-edge-epic {
+    box-shadow:
+      0 20px 46px rgba(0, 0, 0, 0.56),
+      0 0 0 1px rgba(209, 77, 255, 0.3),
+      0 0 30px rgba(202, 99, 255, 0.29),
+      inset 0 1px 0 rgba(238, 191, 255, 0.27),
+      inset 0 -10px 16px rgba(15, 6, 26, 0.55);
+  }
+
+  .luxury-edge-legendary {
+    box-shadow:
+      0 20px 46px rgba(0, 0, 0, 0.56),
+      0 0 0 1px rgba(255, 217, 120, 0.34),
+      0 0 32px rgba(255, 217, 120, 0.28),
+      inset 0 1px 0 rgba(255, 236, 178, 0.28),
+      inset 0 -10px 16px rgba(36, 24, 4, 0.56);
+  }
+
+  .luxury-edge-unique {
+    box-shadow:
+      0 20px 46px rgba(0, 0, 0, 0.62),
+      0 0 0 1px rgba(124, 247, 255, 0.3),
+      0 0 34px rgba(124, 247, 255, 0.24),
+      inset 0 1px 0 rgba(224, 252, 255, 0.24),
+      inset 0 -10px 16px rgba(5, 5, 10, 0.64);
+  }
+
+  .luxury-edge-unique::before {
+    background:
+      linear-gradient(125deg, rgba(124, 247, 255, 0.19), rgba(255, 102, 214, 0.12) 42%, rgba(179, 136, 255, 0.2) 68%, rgba(124, 247, 255, 0.14));
+    animation: mythicEdgeShift 4.8s linear infinite;
+  }
+
+  .luxury-texture-common {
+    background:
+      repeating-linear-gradient(102deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 6px),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0));
+  }
+
+  .luxury-texture-rare {
+    background:
+      repeating-linear-gradient(135deg, rgba(119, 184, 255, 0.14) 0 2px, transparent 2px 10px),
+      radial-gradient(circle at 20% 20%, rgba(119, 184, 255, 0.16), transparent 44%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 50%);
+  }
+
+  .luxury-texture-epic {
+    background:
+      radial-gradient(circle at 14% 22%, rgba(209, 77, 255, 0.2) 1px, transparent 2px),
+      radial-gradient(circle at 72% 18%, rgba(184, 129, 255, 0.16) 1px, transparent 2px),
+      radial-gradient(circle at 56% 74%, rgba(209, 77, 255, 0.14) 1px, transparent 2px),
+      linear-gradient(145deg, rgba(122, 60, 255, 0.16), transparent 48%);
+    background-size: 150px 150px, 190px 190px, 170px 170px, auto;
+  }
+
+  .luxury-texture-legendary {
+    background:
+      radial-gradient(circle at 16% 14%, rgba(255, 217, 120, 0.15) 1px, transparent 2px),
+      linear-gradient(135deg, rgba(255, 217, 120, 0.08), transparent 44%),
+      repeating-linear-gradient(35deg, rgba(255, 217, 120, 0.08) 0 2px, transparent 2px 12px);
+    background-size: 180px 180px, auto, auto;
+  }
+
+  .luxury-texture-unique {
+    background:
+      linear-gradient(118deg, rgba(124, 247, 255, 0.16), rgba(255, 102, 214, 0.13) 42%, rgba(179, 136, 255, 0.16) 70%, rgba(124, 247, 255, 0.14)),
+      repeating-linear-gradient(145deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 12px);
+    animation: mythicPrism 6s linear infinite;
+  }
+
+  .luxury-spotlight-common {
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.2), transparent 68%);
+  }
+
+  .luxury-spotlight-rare {
+    background: radial-gradient(circle, rgba(119, 184, 255, 0.3), transparent 70%);
+  }
+
+  .luxury-spotlight-epic {
+    background: radial-gradient(circle, rgba(209, 77, 255, 0.32), transparent 70%);
+  }
+
+  .luxury-spotlight-legendary {
+    background: radial-gradient(circle, rgba(255, 217, 120, 0.34), transparent 70%);
+  }
+
+  .luxury-spotlight-unique {
+    background: radial-gradient(circle, rgba(124, 247, 255, 0.32), transparent 70%);
+  }
+
+  .luxury-shine {
+    background: linear-gradient(112deg, transparent 24%, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, 0.2) 49%, rgba(255, 255, 255, 0) 60%, transparent 75%);
+    transform: translateX(-130%) rotate(8deg);
+    animation: luxuryShineSweep 1.2s ease;
+  }
+
+  @keyframes luxuryShineSweep {
+    0% {
+      transform: translateX(-130%) rotate(8deg);
+    }
+    100% {
+      transform: translateX(130%) rotate(8deg);
+    }
+  }
+
+  @keyframes mythicEdgeShift {
+    0% {
+      filter: hue-rotate(0deg);
+    }
+    100% {
+      filter: hue-rotate(360deg);
+    }
+  }
+
+  @keyframes mythicPrism {
+    0% {
+      background-position: 0% 50%, 0% 0%;
+    }
+    100% {
+      background-position: 220% 50%, 0% 0%;
+    }
   }
 
   .perspective-wrapper {

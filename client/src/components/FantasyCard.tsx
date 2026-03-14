@@ -28,102 +28,202 @@ const frameMap: Record<Rarity, string> = {
   legendary: "/frames/legendary.svg",
 };
 
-const rarityShell: Record<Rarity, string> = {
-  common: "rounded-[22px] border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]",
-  rare: "border-2 border-[#45a2ff]/90 shadow-[0_0_24px_rgba(69,162,255,0.28),0_18px_42px_rgba(0,0,0,0.42)] [clip-path:polygon(24%_0%,76%_0%,100%_18%,100%_82%,76%_100%,24%_100%,0%_82%,0%_18%)]",
-  unique: "border-2 border-[#b154ff]/90 shadow-[0_0_28px_rgba(177,84,255,0.28),0_18px_42px_rgba(0,0,0,0.42)] [clip-path:polygon(50%_0%,92%_14%,92%_70%,50%_100%,8%_70%,8%_14%)]",
-  epic: "border-2 border-[#ffc246]/95 shadow-[0_0_30px_rgba(255,194,70,0.30),0_18px_46px_rgba(0,0,0,0.46)] [clip-path:polygon(50%_0%,94%_16%,84%_100%,16%_100%,6%_16%)]",
-  legendary: "border-2 border-[#ff9123]/95 shadow-[0_0_36px_rgba(255,145,35,0.34),0_18px_52px_rgba(0,0,0,0.48)] [clip-path:polygon(10%_10%,20%_0%,34%_10%,50%_0%,66%_10%,80%_0%,90%_10%,100%_24%,100%_100%,0%_100%,0%_24%)]",
+const rarityMeta: Record<
+  Rarity,
+  {
+    label: string;
+    textureClass: string;
+    spotlightClass: string;
+    accent: string;
+    accentSoft: string;
+    baseTop: string;
+    baseMid: string;
+    baseBottom: string;
+    rarityBadgeClass: string;
+  }
+> = {
+  common: {
+    label: "Common",
+    textureClass: "luxury-texture-common",
+    spotlightClass: "luxury-spotlight-common",
+    accent: "#c7ced8",
+    accentSoft: "rgba(199,206,216,0.30)",
+    baseTop: "#171c23",
+    baseMid: "#232a34",
+    baseBottom: "#2b313a",
+    rarityBadgeClass: "border-[#c7ced8]/45 bg-[#c7ced8]/10 text-[#e4e9ef]",
+  },
+  rare: {
+    label: "Rare",
+    textureClass: "luxury-texture-rare",
+    spotlightClass: "luxury-spotlight-rare",
+    accent: "#77b8ff",
+    accentSoft: "rgba(119,184,255,0.34)",
+    baseTop: "#091127",
+    baseMid: "#102650",
+    baseBottom: "#0d1b3d",
+    rarityBadgeClass: "border-[#77b8ff]/45 bg-[#2f6bff]/22 text-[#c7e4ff]",
+  },
+  epic: {
+    label: "Epic",
+    textureClass: "luxury-texture-epic",
+    spotlightClass: "luxury-spotlight-epic",
+    accent: "#d14dff",
+    accentSoft: "rgba(209,77,255,0.34)",
+    baseTop: "#120a1f",
+    baseMid: "#2a1246",
+    baseBottom: "#1a0d2e",
+    rarityBadgeClass: "border-[#d14dff]/50 bg-[#7a3cff]/25 text-[#f0ccff]",
+  },
+  legendary: {
+    label: "Legendary",
+    textureClass: "luxury-texture-legendary",
+    spotlightClass: "luxury-spotlight-legendary",
+    accent: "#ffd978",
+    accentSoft: "rgba(255,217,120,0.36)",
+    baseTop: "#211604",
+    baseMid: "#3c2a09",
+    baseBottom: "#4a3510",
+    rarityBadgeClass: "border-[#ffd978]/55 bg-[#f2c14e]/22 text-[#ffe9b5]",
+  },
+  unique: {
+    label: "Mythic",
+    textureClass: "luxury-texture-unique",
+    spotlightClass: "luxury-spotlight-unique",
+    accent: "#7cf7ff",
+    accentSoft: "rgba(124,247,255,0.34)",
+    baseTop: "#05060a",
+    baseMid: "#0d1016",
+    baseBottom: "#11131a",
+    rarityBadgeClass: "border-[#7cf7ff]/55 bg-[#7cf7ff]/14 text-[#dffcff]",
+  },
 };
 
-const rarityInner: Record<Rarity, string> = {
-  common: "rounded-[20px]",
-  rare: "[clip-path:polygon(24.5%_1%,75.5%_1%,99%_18.5%,99%_81.5%,75.5%_99%,24.5%_99%,1%_81.5%,1%_18.5%)]",
-  unique: "[clip-path:polygon(50%_1.5%,90.5%_15%,90.5%_69.5%,50%_98.5%,9.5%_69.5%,9.5%_15%)]",
-  epic: "[clip-path:polygon(50%_1%,92.5%_16.5%,82.8%_98.5%,17.2%_98.5%,7.5%_16.5%)]",
-  legendary: "[clip-path:polygon(10.5%_11%,20.2%_1.8%,34%_11%,50%_1.8%,66%_11%,79.8%_1.8%,89.5%_11%,98.5%_24.5%,98.5%_98.5%,1.5%_98.5%,1.5%_24.5%)]",
+const rarityEdgeClass: Record<Rarity, string> = {
+  common: "luxury-edge-common",
+  rare: "luxury-edge-rare",
+  epic: "luxury-edge-epic",
+  legendary: "luxury-edge-legendary",
+  unique: "luxury-edge-unique",
 };
 
-const rarityGlow: Record<Rarity, string> = {
-  common: "shadow-[inset_0_0_40px_rgba(255,255,255,0.10)]",
-  rare: "shadow-[inset_0_0_40px_rgba(69,162,255,0.35)]",
-  unique: "shadow-[inset_0_0_40px_rgba(177,84,255,0.35)]",
-  epic: "shadow-[inset_0_0_40px_rgba(255,194,70,0.38)]",
-  legendary: "shadow-[inset_0_0_48px_rgba(255,145,35,0.50)]",
-};
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
 
-const rarityAccent: Record<Rarity, string> = {
-  common: "from-white/10 via-white/5 to-transparent",
-  rare: "from-[#45a2ff]/20 via-[#45a2ff]/5 to-transparent",
-  unique: "from-[#b154ff]/20 via-[#b154ff]/5 to-transparent",
-  epic: "from-[#ffc246]/20 via-[#ffc246]/5 to-transparent",
-  legendary: "from-[#ff9123]/25 via-[#ff9123]/5 to-transparent",
-};
+function computeStats(player: PlayerCardData) {
+  const rating = clamp(Number(player.rating) || 70, 45, 99);
+  const form = clamp(Number(player.form) || 72, 40, 99);
+  const pos = String(player.position || "").toUpperCase();
+
+  const atkBias = pos.includes("ST") || pos.includes("FW") ? 8 : pos.includes("MID") ? 4 : -2;
+  const defBias = pos.includes("GK") || pos.includes("DEF") ? 9 : pos.includes("MID") ? 3 : -4;
+
+  return [
+    { key: "ATK", value: clamp(rating + atkBias, 40, 99) },
+    { key: "VIS", value: clamp(Math.round(rating * 0.9 + form * 0.12), 38, 99) },
+    { key: "CTL", value: clamp(Math.round(rating * 0.94 + 2), 38, 99) },
+    { key: "DEF", value: clamp(rating + defBias, 35, 99) },
+    { key: "ENG", value: clamp(Math.round(form * 0.92 + 8), 40, 99) },
+    { key: "FRM", value: form },
+  ];
+}
 
 export default function FantasyCard({ player, className }: FantasyCardProps) {
   const rarity = player.rarity;
+  const meta = rarityMeta[rarity];
+  const stats = computeStats(player);
+
   return (
     <div
       className={[
-        "group card-shell relative isolate aspect-[0.7] w-[240px] overflow-hidden bg-[linear-gradient(180deg,rgba(12,14,20,0.98),rgba(2,3,6,1))] transition duration-200 hover:-translate-y-1",
-        rarityShell[player.rarity],
-        `card-aura-${rarity}`,
+        "group relative isolate aspect-[2.5/3.5] w-[260px] overflow-visible transition duration-300 hover:-translate-y-1",
         className || "",
       ].join(" ")}
+      style={{
+        ["--card-accent" as string]: meta.accent,
+        ["--card-accent-soft" as string]: meta.accentSoft,
+      }}
     >
       <div
         className={[
-          "absolute inset-[2px] overflow-hidden bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.10),transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.28))]",
-          rarityInner[player.rarity],
+          "luxury-card-shell absolute inset-0 overflow-hidden rounded-[24px]",
+          rarityEdgeClass[rarity],
         ].join(" ")}
+        style={{
+          background: `linear-gradient(180deg, ${meta.baseTop} 0%, ${meta.baseMid} 56%, ${meta.baseBottom} 100%)`,
+        }}
       >
-        <div className={["pointer-events-none absolute inset-0 z-[3]", rarityGlow[player.rarity]].join(" ")} />
+        <div className={["pointer-events-none absolute inset-0 z-[1] opacity-[0.92]", meta.textureClass].join(" ")} />
 
-        <div className={["pointer-events-none absolute inset-x-0 top-0 z-[2] h-28 bg-gradient-to-b", rarityAccent[player.rarity]].join(" ")} />
+        <div className={["pointer-events-none absolute inset-x-[7%] top-[17%] z-[2] h-[42%] rounded-[999px] blur-3xl", meta.spotlightClass].join(" ")} />
 
-        <div className="pointer-events-none absolute inset-x-[12%] top-[14%] z-[2] h-[52%] rounded-[999px] bg-white/12 blur-3xl" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[2] h-20 bg-gradient-to-b from-white/10 via-white/[0.02] to-transparent" />
 
-        <img src={frameMap[rarity]} alt="" aria-hidden className="card-frame pointer-events-none absolute inset-0 z-[8] h-full w-full object-cover" />
-
-        <div className="card-player absolute inset-x-[3%] top-[15%] bottom-[24%] z-[1] overflow-hidden">
+        <div className="absolute inset-x-[3.8%] top-[15.5%] bottom-[30%] z-[3] overflow-hidden rounded-[18px]">
           {player.image ? (
             <img
               src={player.image}
               alt={player.name}
-              className="h-full w-full object-cover object-[50%_18%] saturate-[1.08] contrast-[1.12] brightness-[0.95]"
+              className="h-full w-full object-cover object-[50%_15%] saturate-[1.06] contrast-[1.08] brightness-[0.96] transition-transform duration-500 group-hover:scale-[1.03]"
               loading="lazy"
             />
           ) : (
             <div className="h-full w-full bg-gradient-to-b from-white/10 to-transparent" />
           )}
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/5 via-transparent to-black/45" />
+
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.15),transparent_42%),linear-gradient(180deg,rgba(0,0,0,0)_40%,rgba(0,0,0,0.62)_100%)]" />
         </div>
 
-        <div className="pointer-events-none absolute inset-0 z-[9] opacity-0 transition duration-500 group-hover:opacity-100">
-          <div className="absolute inset-[-20%] -translate-x-[120%] rotate-[8deg] bg-[linear-gradient(115deg,transparent_20%,rgba(255,255,255,0)_35%,rgba(255,255,255,0.18)_48%,rgba(255,255,255,0)_60%,transparent_75%)] group-hover:animate-[shineSweep_1.1s_ease]" />
-        </div>
+        <img
+          src={frameMap[rarity]}
+          alt=""
+          aria-hidden
+          className="pointer-events-none absolute inset-[1.2%] z-[6] h-[97.6%] w-[97.6%] object-cover opacity-55"
+        />
 
-        <div className="absolute left-4 top-4 z-10">
-          <p className="text-[38px] font-black leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]">{player.rating}</p>
-          <p className="mt-1 text-[12px] font-bold uppercase tracking-[0.22em] text-white/80">{player.position}</p>
-        </div>
+        <div className="absolute left-4 right-4 top-4 z-10 flex items-start justify-between">
+          <div>
+            <p className="font-[Outfit] text-[42px] font-extrabold leading-none tracking-tight text-white drop-shadow-[0_4px_14px_rgba(0,0,0,0.5)]">{player.rating}</p>
+            <p className="mt-0.5 font-[Inter] text-[10px] font-semibold uppercase tracking-[0.24em] text-white/72">OVR</p>
+          </div>
 
-        <div className="absolute inset-x-4 bottom-4 z-10">
-          <div className="text-center text-[10px] uppercase tracking-[0.24em] text-white/55">{player.rarity}</div>
-          <div className="mt-1 text-center text-[20px] font-black uppercase leading-tight text-white truncate">{player.name}</div>
-          <div className="mt-1 text-center text-[11px] uppercase tracking-[0.2em] text-white/55">{player.club || "FantasyFC"}</div>
-
-          <div className="mt-2 flex items-center justify-center gap-1.5">
-            <span className="rounded-md border border-white/20 bg-black/45 px-1.5 py-0.5 text-[10px] font-bold text-white/90">
-              #{player.serial || 1}/{player.maxSupply || 100}
-            </span>
-            <span className="rounded-md border border-white/20 bg-black/45 px-1.5 py-0.5 text-[10px] font-bold text-white/90">
-              FORM {Number(player.form || 0)}
+          <div className="text-right">
+            <p className="font-[Outfit] text-[17px] font-black uppercase tracking-[0.11em] text-white">{player.position}</p>
+            <span className={["mt-1 inline-flex rounded-full border px-2 py-0.5 font-[Inter] text-[9px] font-semibold uppercase tracking-[0.16em]", meta.rarityBadgeClass].join(" ")}>
+              {meta.label}
             </span>
           </div>
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[7] h-44 bg-gradient-to-t from-black via-black/70 to-transparent" />
+        <div className="absolute inset-x-3.5 bottom-3.5 z-20 rounded-[16px] border border-white/14 bg-black/35 px-3.5 pb-2.5 pt-2.5 backdrop-blur-md shadow-[0_12px_28px_rgba(0,0,0,0.42)]">
+          <p className="truncate text-center font-[Outfit] text-[20px] font-extrabold uppercase leading-tight tracking-[0.02em] text-white">{player.name}</p>
+          <p className="mt-0.5 truncate text-center font-[Inter] text-[10px] font-medium uppercase tracking-[0.15em] text-white/66">{player.club || "FantasyFC"} • EPL</p>
+
+          <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1.5">
+            {stats.map((stat) => (
+              <div key={stat.key} className="rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-1 text-center">
+                <div className="font-[Inter] text-[8px] font-semibold uppercase tracking-[0.15em] text-white/58">{stat.key}</div>
+                <div className="font-[Outfit] text-[13px] font-bold leading-tight text-white">{stat.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-2.5 flex items-center justify-between font-[Inter] text-[9px] font-semibold uppercase tracking-[0.14em] text-white/62">
+            <span>S26</span>
+            <span>
+              #{String(player.serial || 1).padStart(3, "0")} / {player.maxSupply || 500}
+            </span>
+          </div>
+        </div>
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[8] h-[13px] bg-gradient-to-b from-white/[0.10] via-white/[0.03] to-transparent" />
+
+        <div className="pointer-events-none absolute inset-0 z-[11] opacity-0 transition duration-500 group-hover:opacity-100">
+          <div className="luxury-shine absolute inset-[-22%]" />
+        </div>
+
+        <div className="pointer-events-none absolute inset-0 z-[9] rounded-[24px] border border-white/12" />
       </div>
     </div>
   );
