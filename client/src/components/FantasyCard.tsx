@@ -46,23 +46,23 @@ const rarityMeta: Record<
     label: "Common",
     textureClass: "luxury-texture-common",
     spotlightClass: "luxury-spotlight-common",
-    accent: "#c7ced8",
-    accentSoft: "rgba(199,206,216,0.30)",
-    baseTop: "#171c23",
-    baseMid: "#232a34",
-    baseBottom: "#2b313a",
-    rarityBadgeClass: "border-[#c7ced8]/45 bg-[#c7ced8]/10 text-[#e4e9ef]",
+    accent: "#7A7C80",
+    accentSoft: "rgba(122,124,128,0.30)",
+    baseTop: "#3A3F44",
+    baseMid: "#2B2D31",
+    baseBottom: "#1C1E21",
+    rarityBadgeClass: "border-[#7A7C80]/45 bg-[#7A7C80]/12 text-[#d8dadd]",
   },
   rare: {
     label: "Rare",
     textureClass: "luxury-texture-rare",
     spotlightClass: "luxury-spotlight-rare",
-    accent: "#77b8ff",
-    accentSoft: "rgba(119,184,255,0.34)",
-    baseTop: "#091127",
-    baseMid: "#102650",
-    baseBottom: "#0d1b3d",
-    rarityBadgeClass: "border-[#77b8ff]/45 bg-[#2f6bff]/22 text-[#c7e4ff]",
+    accent: "#E2E8F0",
+    accentSoft: "rgba(226,232,240,0.34)",
+    baseTop: "#003399",
+    baseMid: "#0047AB",
+    baseBottom: "#002366",
+    rarityBadgeClass: "border-[#E2E8F0]/50 bg-[#0047AB]/34 text-[#eaf3ff]",
   },
   epic: {
     label: "Epic",
@@ -79,23 +79,23 @@ const rarityMeta: Record<
     label: "Legendary",
     textureClass: "luxury-texture-legendary",
     spotlightClass: "luxury-spotlight-legendary",
-    accent: "#ffd978",
-    accentSoft: "rgba(255,217,120,0.36)",
-    baseTop: "#211604",
-    baseMid: "#3c2a09",
-    baseBottom: "#4a3510",
-    rarityBadgeClass: "border-[#ffd978]/55 bg-[#f2c14e]/22 text-[#ffe9b5]",
+    accent: "#FFD700",
+    accentSoft: "rgba(255,215,0,0.36)",
+    baseTop: "#FFD700",
+    baseMid: "#00F2FF",
+    baseBottom: "#7000FF",
+    rarityBadgeClass: "border-[#FFD700]/65 bg-[#FFD700]/26 text-[#fff6bf]",
   },
   unique: {
-    label: "Mythic",
+    label: "Unique",
     textureClass: "luxury-texture-unique",
     spotlightClass: "luxury-spotlight-unique",
-    accent: "#7cf7ff",
-    accentSoft: "rgba(124,247,255,0.34)",
-    baseTop: "#05060a",
-    baseMid: "#0d1016",
-    baseBottom: "#11131a",
-    rarityBadgeClass: "border-[#7cf7ff]/55 bg-[#7cf7ff]/14 text-[#dffcff]",
+    accent: "#FF007F",
+    accentSoft: "rgba(255,0,127,0.30)",
+    baseTop: "#E6BE8A",
+    baseMid: "#B87333",
+    baseBottom: "#8E443D",
+    rarityBadgeClass: "border-[#FF007F]/50 bg-[#FF007F]/14 text-[#ffd7ec]",
   },
 };
 
@@ -141,6 +141,21 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
   const rarity = player.rarity;
   const meta = rarityMeta[rarity];
   const stats = computeStats(player);
+  const [holoPos, setHoloPos] = React.useState({ x: 50, y: 50 });
+  const isLegendary = rarity === "legendary";
+
+  const handlePointerMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isLegendary) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = clamp(((event.clientX - rect.left) / rect.width) * 100, 0, 100);
+    const y = clamp(((event.clientY - rect.top) / rect.height) * 100, 0, 100);
+    setHoloPos({ x, y });
+  };
+
+  const resetPointer = () => {
+    if (!isLegendary) return;
+    setHoloPos({ x: 50, y: 50 });
+  };
 
   return (
     <div
@@ -148,9 +163,13 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
         "group card-slab-wrap relative isolate aspect-[2.5/3.5] w-[260px] overflow-visible transition duration-300 hover:-translate-y-1",
         className || "",
       ].join(" ")}
+      onMouseMove={handlePointerMove}
+      onMouseLeave={resetPointer}
       style={{
         ["--card-accent" as string]: meta.accent,
         ["--card-accent-soft" as string]: meta.accentSoft,
+        ["--holo-x" as string]: `${holoPos.x}%`,
+        ["--holo-y" as string]: `${holoPos.y}%`,
       }}
     >
       <div className={["card-slab-back absolute inset-[1.6%] z-0 rounded-[26px]", rarityShapeClass[rarity]].join(" ")} />
@@ -165,7 +184,7 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
           background: `linear-gradient(180deg, ${meta.baseTop} 0%, ${meta.baseMid} 56%, ${meta.baseBottom} 100%)`,
         }}
       >
-        <div className="slab-face-plate absolute inset-[10px] z-[0.5] rounded-[18px]" />
+        <div className={["slab-face-plate absolute inset-[10px] z-[0.5] rounded-[18px]", `material-${rarity}`].join(" ")} />
 
         <div className={["pointer-events-none absolute inset-0 z-[1] opacity-[0.92]", meta.textureClass].join(" ")} />
 
@@ -178,7 +197,10 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
             <img
               src={player.image}
               alt={player.name}
-              className="h-full w-full object-cover object-[50%_15%] saturate-[1.06] contrast-[1.08] brightness-[0.96] transition-transform duration-500 group-hover:scale-[1.03]"
+              className={[
+                "h-full w-full object-cover object-[50%_15%] transition-transform duration-500 group-hover:scale-[1.03]",
+                `portrait-${rarity}`,
+              ].join(" ")}
               loading="lazy"
             />
           ) : (
@@ -231,6 +253,8 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[8] h-[13px] bg-gradient-to-b from-white/[0.10] via-white/[0.03] to-transparent" />
+
+        {isLegendary ? <div className="legendary-holo-overlay pointer-events-none absolute inset-[10px] z-[8] rounded-[18px]" /> : null}
 
         <div className="pointer-events-none absolute inset-0 z-[11] opacity-0 transition duration-500 group-hover:opacity-100">
           <div className="luxury-shine absolute inset-[-22%]" />
