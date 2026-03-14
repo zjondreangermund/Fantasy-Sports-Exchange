@@ -34,6 +34,7 @@ const rarityMeta: Record<
     label: string;
     textureClass: string;
     spotlightClass: string;
+    geoTextureClass: string;
     accent: string;
     accentSoft: string;
     baseTop: string;
@@ -46,6 +47,7 @@ const rarityMeta: Record<
     label: "Common",
     textureClass: "luxury-texture-common",
     spotlightClass: "luxury-spotlight-common",
+    geoTextureClass: "card-geo-common",
     accent: "#7A7C80",
     accentSoft: "rgba(122,124,128,0.30)",
     baseTop: "#3A3F44",
@@ -57,6 +59,7 @@ const rarityMeta: Record<
     label: "Rare",
     textureClass: "luxury-texture-rare",
     spotlightClass: "luxury-spotlight-rare",
+    geoTextureClass: "card-geo-rare",
     accent: "#ff2b2b",
     accentSoft: "rgba(255,43,43,0.32)",
     baseTop: "#ff3838",
@@ -68,6 +71,7 @@ const rarityMeta: Record<
     label: "Epic",
     textureClass: "luxury-texture-epic",
     spotlightClass: "luxury-spotlight-epic",
+    geoTextureClass: "card-geo-epic",
     accent: "#a12fff",
     accentSoft: "rgba(161,47,255,0.34)",
     baseTop: "#a12fff",
@@ -79,6 +83,7 @@ const rarityMeta: Record<
     label: "Legendary",
     textureClass: "luxury-texture-legendary",
     spotlightClass: "luxury-spotlight-legendary",
+    geoTextureClass: "card-geo-legendary",
     accent: "#FFD700",
     accentSoft: "rgba(255,215,0,0.36)",
     baseTop: "#ffd36a",
@@ -90,6 +95,7 @@ const rarityMeta: Record<
     label: "Unique",
     textureClass: "luxury-texture-unique",
     spotlightClass: "luxury-spotlight-unique",
+    geoTextureClass: "card-geo-unique",
     accent: "#0f6eff",
     accentSoft: "rgba(15,110,255,0.30)",
     baseTop: "#0f6eff",
@@ -199,6 +205,7 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
   const pointerFxRef = React.useRef({ x: 50, y: 50, tiltX: 0, tiltY: 0 });
   const isLegendary = rarity === "legendary";
   const portrait = React.useMemo(() => buildResponsivePortrait(player.image), [player.image]);
+  const seasonLabel = "2025-26";
 
   const commitPointerFx = React.useCallback(() => {
     rafRef.current = null;
@@ -269,7 +276,7 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
       <article
         ref={cardRef}
         className={[
-          "group card-slab-wrap relative isolate aspect-[2.5/3.5] w-[260px] overflow-visible transition duration-300",
+          "group card-slab-wrap card-slab--hero relative isolate aspect-[2.5/3.5] w-[260px] overflow-visible transition duration-300",
           className || "",
         ].join(" ")}
         data-tilt-card
@@ -289,21 +296,29 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
 
         <div
           className={[
-            "luxury-card-shell absolute inset-0 overflow-hidden rounded-[24px]",
+            "luxury-card-shell absolute inset-0 overflow-hidden rounded-[28px]",
             rarityEdgeClass[rarity],
             rarityShapeClass[rarity],
             rarityToneClass[rarity],
           ].join(" ")}
         >
-          <div className={["slab-face-plate absolute inset-[10px] z-[0.5] rounded-[18px]", `material-${rarity}`].join(" ")} />
+          <div className={["slab-face-plate absolute inset-[9px] z-[0.5] rounded-[20px]", `material-${rarity}`].join(" ")} />
+
+          <div
+            className={[
+              "pointer-events-none absolute inset-x-[4%] top-[11.8%] bottom-[31.3%] z-[2] rounded-[17px]",
+              "card-geo-layer",
+              meta.geoTextureClass,
+            ].join(" ")}
+          />
 
           <div className={["pointer-events-none absolute inset-0 z-[1] opacity-[0.92]", meta.textureClass].join(" ")} />
 
-          <div className={["pointer-events-none absolute inset-x-[7%] top-[17%] z-[2] h-[42%] rounded-[999px] blur-3xl", meta.spotlightClass].join(" ")} />
+          <div className={["pointer-events-none absolute inset-x-[6%] top-[14.5%] z-[2] h-[46%] rounded-[999px] blur-3xl", meta.spotlightClass].join(" ")} />
 
           <div className="pointer-events-none absolute inset-x-0 top-0 z-[2] h-20 bg-gradient-to-b from-white/10 via-white/[0.02] to-transparent" />
 
-          <div className="player-chamber absolute inset-x-[3.8%] top-[15.5%] bottom-[30%] z-[3] overflow-hidden rounded-[18px]">
+          <div className="player-chamber absolute inset-x-[3.3%] top-[12.4%] bottom-[28.2%] z-[3] overflow-hidden rounded-[20px]">
             {portrait ? (
               <picture>
                 {portrait.webpSrcSet ? <source type="image/webp" srcSet={portrait.webpSrcSet} sizes="(max-width: 640px) 42vw, 260px" /> : null}
@@ -312,7 +327,7 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
                   src={portrait.fallbackSrc}
                   alt={player.name}
                   className={[
-                    "h-full w-full object-cover object-[50%_15%] transition-transform duration-500 group-hover:scale-[1.03]",
+                    "h-full w-full object-cover object-[50%_8%] transition-transform duration-500 group-hover:scale-[1.055]",
                     `portrait-${rarity}`,
                   ].join(" ")}
                   loading="lazy"
@@ -327,7 +342,7 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
             )}
 
             <div className="tc-glare pointer-events-none absolute inset-[-28%] z-[4]" aria-hidden />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.15),transparent_42%),linear-gradient(180deg,rgba(0,0,0,0)_40%,rgba(0,0,0,0.62)_100%)]" />
+            <div className="pointer-events-none absolute inset-0 card-photo-vignette" />
           </div>
 
           <img
@@ -338,19 +353,18 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
           />
 
           <header className="absolute left-4 right-4 top-3.5 z-10">
-            <div className="flex items-center justify-between font-[Inter] text-[9px] font-semibold uppercase tracking-[0.14em] text-white/64">
-              <span>2025-26</span>
-              <span>{meta.label}</span>
+            <div className="flex items-center justify-between font-[Inter] text-[9px] font-semibold uppercase tracking-[0.14em] text-white/70">
+              <span className="card-season-chip">{seasonLabel}</span>
+              <span className="card-season-chip">{player.club || "FANTASYFC"}</span>
             </div>
 
-            <div className="mt-1.5 flex items-start justify-between">
+            <div className="mt-2.5 flex items-start justify-between">
               <div>
-                <p className="engraved-text font-[Outfit] text-[42px] font-extrabold leading-none tracking-tight text-white">{player.rating}</p>
-                <p className="mt-0.5 font-[Inter] text-[10px] font-semibold uppercase tracking-[0.24em] text-white/72">OVR</p>
+                <p className="card-corner-pill engraved-text font-[Outfit] text-[34px] font-extrabold leading-none tracking-tight text-white">{player.rating}</p>
               </div>
 
               <div className="text-right">
-                <p className="engraved-text font-[Outfit] text-[17px] font-black uppercase tracking-[0.11em] text-white">{player.position}</p>
+                <p className="engraved-text font-[Outfit] text-[16px] font-black uppercase tracking-[0.11em] text-white">{player.position}</p>
                 <span className={["metal-pill mt-1 inline-flex rounded-full border px-2 py-0.5 font-[Inter] text-[9px] font-semibold uppercase tracking-[0.16em]", meta.rarityBadgeClass].join(" ")}>
                   {meta.label}
                 </span>
@@ -358,12 +372,12 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
             </div>
           </header>
 
-          <footer className="stat-module absolute inset-x-3.5 bottom-3.5 z-20 rounded-[16px] border border-white/14 bg-black/35 px-3.5 pb-2.5 pt-2.5 backdrop-blur-[3px]">
-            <h3 className="engraved-text truncate text-center font-[Outfit] text-[20px] font-extrabold uppercase leading-tight tracking-[0.02em] text-white">{player.name}</h3>
-            <p className="mt-0.5 truncate text-center font-[Inter] text-[10px] font-medium uppercase tracking-[0.15em] text-white/66">{player.club || "FantasyFC"} • EPL</p>
+          <footer className="card-nameplate absolute inset-x-3.5 bottom-3.5 z-20 rounded-[16px] border border-white/14 px-3.5 pb-2.5 pt-2.5">
+            <h3 className="card-name-tight engraved-text truncate text-center font-[Outfit] text-[22px] font-extrabold uppercase leading-[0.92] tracking-[0.005em] text-white">{player.name}</h3>
+            <p className="mt-1 truncate text-center font-[Inter] text-[10px] font-semibold uppercase tracking-[0.19em] text-white/70">{player.position} • {player.club || "FantasyFC"}</p>
 
             <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1.5">
-              {stats.map((stat) => (
+              {stats.slice(0, 3).map((stat) => (
                 <div key={stat.key} className="metal-capsule rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-1 text-center">
                   <div className="font-[Inter] text-[8px] font-semibold uppercase tracking-[0.15em] text-white/58">{stat.key}</div>
                   <div className="engraved-text font-[Outfit] text-[13px] font-bold leading-tight text-white">{stat.value}</div>
