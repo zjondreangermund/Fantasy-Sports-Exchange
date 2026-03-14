@@ -28,6 +28,14 @@ const frameMap: Record<Rarity, string> = {
   legendary: "/frames/legendary.svg",
 };
 
+const patternMap: Record<Rarity, string> = {
+  common: "/assets/patterns/common.svg",
+  rare: "/assets/patterns/rare.svg",
+  unique: "/assets/patterns/unique.svg",
+  epic: "/assets/patterns/unique.svg",
+  legendary: "/assets/patterns/legendary.svg",
+};
+
 const rarityMeta: Record<
   Rarity,
   {
@@ -151,6 +159,22 @@ function computeStats(player: PlayerCardData) {
   ];
 }
 
+function normalizeCardPosition(position: string): "GK" | "DEF" | "MID" | "FWD" {
+  const pos = String(position || "").toUpperCase();
+  if (pos.includes("GK") || pos.includes("GOAL")) return "GK";
+  if (pos.includes("DEF") || pos.includes("BACK")) return "DEF";
+  if (pos.includes("MID")) return "MID";
+  return "FWD";
+}
+
+function portraitFrameForPosition(position: string): { y: number; baseScale: number } {
+  const normalized = normalizeCardPosition(position);
+  if (normalized === "GK") return { y: 14, baseScale: 1.0 };
+  if (normalized === "DEF") return { y: 11, baseScale: 1.03 };
+  if (normalized === "MID") return { y: 9, baseScale: 1.065 };
+  return { y: 6, baseScale: 1.11 };
+}
+
 type ResponsivePortrait = {
   fallbackSrc: string;
   webpSrcSet?: string;
@@ -205,6 +229,7 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
   const pointerFxRef = React.useRef({ x: 50, y: 50, tiltX: 0, tiltY: 0 });
   const isLegendary = rarity === "legendary";
   const portrait = React.useMemo(() => buildResponsivePortrait(player.image), [player.image]);
+  const portraitFrame = React.useMemo(() => portraitFrameForPosition(player.position), [player.position]);
   const seasonLabel = "2025-26";
 
   const commitPointerFx = React.useCallback(() => {
@@ -280,6 +305,7 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
           className || "",
         ].join(" ")}
         data-tilt-card
+        data-rarity={rarity}
         onPointerMove={handlePointerMove}
         onPointerLeave={resetPointer}
         onPointerCancel={resetPointer}
@@ -310,7 +336,16 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
               "card-geo-layer",
               meta.geoTextureClass,
             ].join(" ")}
-          />
+          >
+            <img
+              src={patternMap[rarity]}
+              alt=""
+              aria-hidden
+              className="card-pattern-base absolute inset-0 h-full w-full object-cover"
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
 
           <div className={["pointer-events-none absolute inset-0 z-[1] opacity-[0.92]", meta.textureClass].join(" ")} />
 
@@ -327,9 +362,13 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
                   src={portrait.fallbackSrc}
                   alt={player.name}
                   className={[
-                    "h-full w-full object-cover object-[50%_8%] transition-transform duration-500 group-hover:scale-[1.055]",
+                    "portrait-dynamic h-full w-full object-cover transition-transform duration-500",
                     `portrait-${rarity}`,
                   ].join(" ")}
+                  style={{
+                    objectPosition: `50% ${portraitFrame.y}%`,
+                    ["--portrait-base-scale" as string]: String(portraitFrame.baseScale),
+                  }}
                   loading="lazy"
                   decoding="async"
                   width={800}
@@ -342,6 +381,14 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
             )}
 
             <div className="tc-glare pointer-events-none absolute inset-[-28%] z-[4]" aria-hidden />
+            <img
+              src={patternMap[rarity]}
+              alt=""
+              aria-hidden
+              className="card-pattern-photo absolute inset-0 z-[3] h-full w-full object-cover"
+              loading="lazy"
+              decoding="async"
+            />
             <div className="pointer-events-none absolute inset-0 card-photo-vignette" />
           </div>
 
@@ -372,7 +419,7 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
             </div>
           </header>
 
-          <footer className="card-nameplate absolute inset-x-3.5 bottom-3.5 z-20 rounded-[16px] border border-white/14 px-3.5 pb-2.5 pt-2.5">
+          <footer className="card-nameplate absolute inset-x-3.5 bottom-[3.2%] z-20 rounded-[16px] border border-white/14 px-3.5 pb-2.5 pt-2.5">
             <h3 className="card-name-tight engraved-text truncate text-center font-[Outfit] text-[22px] font-extrabold uppercase leading-[0.92] tracking-[0.005em] text-white">{player.name}</h3>
             <p className="mt-1 truncate text-center font-[Inter] text-[10px] font-semibold uppercase tracking-[0.19em] text-white/70">{player.position} • {player.club || "FantasyFC"}</p>
 

@@ -791,7 +791,7 @@
   .luxury-card-shell {
     transform-style: preserve-3d;
     background: var(--tier-bg, linear-gradient(180deg, #171c23 0%, #232a34 56%, #2b313a 100%));
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.24);
     box-shadow:
       0 32px 58px rgba(0, 0, 0, 0.6),
       0 0 0 1px rgba(255, 255, 255, 0.05),
@@ -802,10 +802,10 @@
   .luxury-card-shell::before {
     content: "";
     position: absolute;
-    inset: 8px;
-    border-radius: 18px;
+    inset: 6px;
+    border-radius: 20px;
     pointer-events: none;
-    border: 1px solid rgba(255, 255, 255, 0.17);
+    border: 2px solid rgba(255, 255, 255, 0.13);
     box-shadow:
       inset 0 0 22px color-mix(in srgb, var(--card-accent-soft) 36%, transparent),
       inset 0 1px 0 rgba(255, 255, 255, 0.1),
@@ -902,6 +902,15 @@
 
   .card-slab--hero {
     filter: drop-shadow(0 26px 26px rgba(0, 0, 0, 0.48));
+  }
+
+  .portrait-dynamic {
+    transform: scale(var(--portrait-base-scale, 1.05));
+    transform-origin: 50% 0%;
+  }
+
+  .card-slab-wrap:hover .portrait-dynamic {
+    transform: scale(calc(var(--portrait-base-scale, 1.05) + 0.028));
   }
 
   .card-slab-wrap:hover {
@@ -1006,6 +1015,64 @@
     opacity: 0.75;
   }
 
+  .card-pattern-base {
+    opacity: 0.36;
+    mix-blend-mode: overlay;
+    filter: saturate(1.22) contrast(1.08);
+  }
+
+  .card-pattern-photo {
+    opacity: 0.24;
+    mix-blend-mode: soft-light;
+    filter: saturate(1.28) contrast(1.08);
+    pointer-events: none;
+  }
+
+  [data-rarity="common"] .card-pattern-base {
+    opacity: 0.16;
+    mix-blend-mode: soft-light;
+    filter: saturate(0.78) contrast(1.01);
+  }
+
+  [data-rarity="common"] .card-pattern-photo {
+    opacity: 0.12;
+  }
+
+  [data-rarity="rare"] .card-pattern-base,
+  [data-rarity="rare"] .card-pattern-photo {
+    opacity: 0.33;
+    filter: saturate(1.36) contrast(1.1);
+  }
+
+  [data-rarity="unique"] .card-pattern-base,
+  [data-rarity="epic"] .card-pattern-base {
+    opacity: 0.41;
+    mix-blend-mode: screen;
+  }
+
+  [data-rarity="unique"] .card-pattern-photo {
+    opacity: 0.29;
+    mix-blend-mode: overlay;
+    filter: saturate(1.42) contrast(1.1);
+  }
+
+  [data-rarity="epic"] .card-pattern-photo {
+    opacity: 0.27;
+    mix-blend-mode: overlay;
+    filter: saturate(1.46) contrast(1.1);
+  }
+
+  [data-rarity="legendary"] .card-pattern-base {
+    opacity: 0.5;
+    mix-blend-mode: color-dodge;
+    filter: saturate(1.48) contrast(1.12);
+  }
+
+  [data-rarity="legendary"] .card-pattern-photo {
+    opacity: 0.28;
+    mix-blend-mode: overlay;
+  }
+
   .card-geo-common {
     background:
       radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.16), transparent 32%),
@@ -1072,6 +1139,7 @@
       0 16px 24px rgba(0, 0, 0, 0.46),
       inset 0 1px 0 rgba(255, 255, 255, 0.18),
       inset 0 -8px 12px rgba(0, 0, 0, 0.34);
+    backdrop-filter: blur(4px);
   }
 
   .tc-glare {
