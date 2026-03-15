@@ -44,10 +44,10 @@ const rarityMeta: Record<Rarity, SlabMeta> = {
   common: {
     label: "Common",
     frame: "linear-gradient(145deg, #d3d9e2 0%, #8d97a6 35%, #4e5661 100%)",
-    shellTop: "#596270",
-    shellBottom: "#232830",
-    faceTop: "#9aa3af",
-    faceBottom: "#454c56",
+    shellTop: "#474f5a",
+    shellBottom: "#171b21",
+    faceTop: "#6a7380",
+    faceBottom: "#2b3138",
     bevelLight: "rgba(255,255,255,0.26)",
     bevelDark: "rgba(0,0,0,0.42)",
     glow: "rgba(220,228,240,0.14)",
@@ -62,10 +62,10 @@ const rarityMeta: Record<Rarity, SlabMeta> = {
   rare: {
     label: "Rare",
     frame: "linear-gradient(145deg, #d8e6ff 0%, #6ca8ff 34%, #163f82 100%)",
-    shellTop: "#4b74c2",
-    shellBottom: "#0f2246",
-    faceTop: "#5e8fde",
-    faceBottom: "#16335f",
+    shellTop: "#315aa0",
+    shellBottom: "#0a1834",
+    faceTop: "#3e68ae",
+    faceBottom: "#11284c",
     bevelLight: "rgba(194,224,255,0.34)",
     bevelDark: "rgba(0,0,0,0.46)",
     glow: "rgba(91,159,255,0.20)",
@@ -80,10 +80,10 @@ const rarityMeta: Record<Rarity, SlabMeta> = {
   epic: {
     label: "Epic",
     frame: "linear-gradient(145deg, #e1c6ff 0%, #a05cff 35%, #3d165d 100%)",
-    shellTop: "#7440b8",
-    shellBottom: "#220d32",
-    faceTop: "#8652cb",
-    faceBottom: "#301247",
+    shellTop: "#5f31a1",
+    shellBottom: "#170a25",
+    faceTop: "#6a3fb0",
+    faceBottom: "#261038",
     bevelLight: "rgba(235,207,255,0.28)",
     bevelDark: "rgba(0,0,0,0.46)",
     glow: "rgba(177,98,255,0.18)",
@@ -98,10 +98,10 @@ const rarityMeta: Record<Rarity, SlabMeta> = {
   legendary: {
     label: "Legendary",
     frame: "linear-gradient(145deg, #fff0b2 0%, #f0c35a 34%, #835307 100%)",
-    shellTop: "#c99834",
-    shellBottom: "#3f2603",
-    faceTop: "#d7a53f",
-    faceBottom: "#6a4308",
+    shellTop: "#af7d21",
+    shellBottom: "#2d1902",
+    faceTop: "#be8b2b",
+    faceBottom: "#553307",
     bevelLight: "rgba(255,241,189,0.34)",
     bevelDark: "rgba(0,0,0,0.46)",
     glow: "rgba(255,211,102,0.22)",
@@ -116,10 +116,10 @@ const rarityMeta: Record<Rarity, SlabMeta> = {
   unique: {
     label: "Unique",
     frame: "linear-gradient(145deg, #bafcff 0%, #7c9cff 32%, #ff7ad9 64%, #1b1d29 100%)",
-    shellTop: "#4a5876",
-    shellBottom: "#0d1018",
-    faceTop: "#2c3142",
-    faceBottom: "#11141c",
+    shellTop: "#2a3140",
+    shellBottom: "#090c12",
+    faceTop: "#202634",
+    faceBottom: "#0d1017",
     bevelLight: "rgba(201,246,255,0.28)",
     bevelDark: "rgba(0,0,0,0.52)",
     glow: "rgba(143,247,255,0.18)",
@@ -377,7 +377,7 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
         >
           {/* brushed metal grain */}
           <div
-            className="absolute inset-0 opacity-[0.22] mix-blend-screen"
+            className="absolute inset-0 opacity-[0.08] mix-blend-soft-light"
             style={{
               backgroundImage: `
                 repeating-linear-gradient(
@@ -406,11 +406,11 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
             className="absolute inset-x-[4%] top-[16%] h-[47%] overflow-hidden rounded-[18px]"
             style={{
               background:
-                "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.10)), radial-gradient(circle at 50% 25%, rgba(255,255,255,0.12), transparent 65%)",
+                "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.16)), radial-gradient(circle at 50% 20%, rgba(255,255,255,0.08), transparent 58%)",
               boxShadow: `
-                inset 0 2px 8px rgba(0,0,0,0.34),
-                inset 0 1px 0 rgba(255,255,255,0.12),
-                0 8px 14px rgba(0,0,0,0.18)
+                inset 0 3px 10px rgba(0,0,0,0.42),
+                inset 0 1px 0 rgba(255,255,255,0.08),
+                0 10px 18px rgba(0,0,0,0.24)
               `,
               transform: "translateZ(24px)",
             }}
@@ -433,11 +433,11 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
                   loading="lazy"
                   decoding="async"
                   sizes="(max-width: 640px) 42vw, 260px"
-                  className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.05]"
+                  className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.035]"
                   style={{
                     objectPosition: `50% ${portraitFrame.y}%`,
                     transform: `scale(${portraitFrame.baseScale})`,
-                    filter: "contrast(1.06) saturate(1.02)",
+                    filter: "contrast(1.12) saturate(1.08) brightness(0.98)",
                   }}
                   onError={() => {
                     setImageIndex((prev) => (prev >= imageCandidates.length - 1 ? prev : prev + 1));
@@ -449,10 +449,10 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
             )}
 
             <div
-              className="absolute inset-0 opacity-60"
+              className="absolute inset-0 opacity-35"
               style={{
                 background:
-                  "linear-gradient(140deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.02) 18%, transparent 40%, transparent 100%)",
+                  "linear-gradient(140deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.01) 16%, transparent 34%, transparent 100%)",
               }}
             />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_100%,rgba(0,0,0,0.28),transparent_56%)]" />
@@ -500,12 +500,12 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
           <footer
             className="absolute inset-x-[4.3%] bottom-[4%] z-20 rounded-[18px] px-3 pb-2.5 pt-2.5"
             style={{
-              background: meta.statPlate,
+              background: "linear-gradient(180deg, rgba(18,20,27,0.74), rgba(8,10,14,0.86))",
               border: `1px solid ${meta.plateBorder}`,
               boxShadow: `
-                0 10px 18px rgba(0,0,0,0.18),
-                inset 0 1px 0 rgba(255,255,255,0.15),
-                inset 0 -4px 8px rgba(0,0,0,0.18)
+                0 14px 22px rgba(0,0,0,0.26),
+                inset 0 1px 0 rgba(255,255,255,0.10),
+                inset 0 -6px 10px rgba(0,0,0,0.26)
               `,
               transform: "translateZ(34px)",
               backdropFilter: "blur(8px)",
@@ -525,9 +525,9 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
                   key={stat.key}
                   className="rounded-[10px] px-1.5 py-1 text-center"
                   style={{
-                    background: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03))",
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -2px 4px rgba(0,0,0,0.18)",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.12))",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -3px 6px rgba(0,0,0,0.24)",
                   }}
                 >
                   <div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-white/58">{stat.key}</div>
@@ -546,14 +546,14 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
 
           {/* metallic shine */}
           <div
-            className="pointer-events-none absolute inset-[-30%] opacity-70 transition duration-500 group-hover:translate-x-[10%]"
+            className="pointer-events-none absolute inset-[-30%] opacity-28 transition duration-500 group-hover:translate-x-[8%]"
             style={{
               background: `linear-gradient(
                 115deg,
-                transparent 22%,
-                ${meta.shine} 34%,
-                rgba(255,255,255,0.06) 42%,
-                transparent 52%
+                transparent 24%,
+                rgba(255,255,255,0.14) 34%,
+                rgba(255,255,255,0.03) 41%,
+                transparent 50%
               )`,
               mixBlendMode: "screen",
               transform: "translateX(-18%)",

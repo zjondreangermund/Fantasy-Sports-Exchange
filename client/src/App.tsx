@@ -10,6 +10,7 @@ import { AppSidebar } from "./components/app-sidebar";
 import { ThemeProvider, ThemeToggle } from "./components/ThemeProvider";
 import StadiumAmbientLayer from "./components/StadiumAmbientLayer";
 import FloatingSupportWidget from "./components/FloatingSupportWidget";
+import FloatingEventNotifications from "./components/FloatingEventNotifications";
 import { useAuth } from "./hooks/use-auth";
 import { Skeleton } from "./components/ui/skeleton";
 
@@ -105,6 +106,7 @@ function AuthenticatedApp() {
           <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative z-10">
             <AuthenticatedRouter />
           </main>
+          <FloatingEventNotifications />
           <FloatingSupportWidget />
         </div>
       </div>

@@ -875,6 +875,52 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         liveChatMessagesStore.shift();
       }
 
+      try {
+        const { db } = await import("./db.js");
+        const { notifications, users } = await import("../shared/schema.js");
+        const { eq, sql: drizzleSql } = await import("drizzle-orm");
+
+        const recipients = new Set<string>();
+
+        if (replyTo?.userId && replyTo.userId !== userId) {
+          recipients.add(String(replyTo.userId));
+        }
+
+        const mentionMatches = String(text)
+          .match(/@([a-zA-Z0-9_.-]{2,40})/g)
+          ?.map((value) => value.slice(1).toLowerCase()) || [];
+        const mentionHandles = Array.from(new Set(mentionMatches));
+
+        for (const handle of mentionHandles) {
+          const [mentioned] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(
+              drizzleSql`lower(coalesce(${users.name}, '')) = ${handle} or lower(coalesce(${users.firstName}, '')) = ${handle}`,
+            )
+            .limit(1);
+
+          if (mentioned?.id && String(mentioned.id) !== userId) {
+            recipients.add(String(mentioned.id));
+          }
+        }
+
+        for (const recipientId of Array.from(recipients)) {
+          const title = "New chat mention";
+          const body = `${message.userName}: ${String(text).slice(0, 180)}`;
+
+          await db.insert(notifications).values({
+            userId: recipientId,
+            type: "system",
+            title,
+            message: body,
+            read: false,
+          } as any);
+        }
+      } catch (notifyError) {
+        console.warn("Live chat notify failed:", notifyError);
+      }
+
       return res.status(201).json(message);
     } catch (error: any) {
       console.error("Failed to send live chat message:", error);
