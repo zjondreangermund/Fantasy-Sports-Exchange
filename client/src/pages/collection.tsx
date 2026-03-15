@@ -225,15 +225,13 @@ export default function CollectionPage() {
             style={{ transformStyle: "preserve-3d" }}
           >
             {filteredCards.map((card) => {
-              const isInLineup = lineupData?.lineup?.cardIds?.includes(card.id);
               return (
                 <div 
                   key={card.id} 
-                  className="card-3d-container bg-transparent shadow-none p-0" 
+                  className="relative" 
                   style={{ 
                     transformStyle: "preserve-3d",
-                    minHeight: "380px",
-                    position: "relative"
+                    minHeight: "380px"
                   }}
                 >
                   <Metal3DCard player={toFantasyCardData(card)} className="!w-[208px]" />
