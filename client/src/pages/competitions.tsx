@@ -136,6 +136,10 @@ export default function CompetitionsPage() {
   const liveComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && (c.status === "open" || c.status === "active")) || [];
   const upcomingComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && c.status === "upcoming") || [];
   const completedComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && c.status === "completed") || [];
+  const myEntryByCompetitionId = new Map(
+    ((Array.isArray(myEntries) ? myEntries : []) || []).map((entry) => [entry.competitionId, entry] as const),
+  );
+  const myLiveComps = liveComps.filter((comp) => myEntryByCompetitionId.has(comp.id));
   const requiredTier = String(selectedComp?.tier || "").toLowerCase();
   const availableCards = (Array.isArray(myCards) ? myCards : [])
     ?.filter(c => c && !c.forSale)
@@ -181,6 +185,21 @@ export default function CompetitionsPage() {
     ? "Lineup must have at least 1 GK, 1 DEF, 1 MID, and 1 FWD (5th card is utility)"
     : null;
 
+  const openCompetitionAction = (comp: CompetitionWithEntries) => {
+    const myEntry = myEntryByCompetitionId.get(comp.id);
+    if (comp.status === "open") {
+      setSelectedComp(comp);
+      setSelectedCards([]);
+      setCaptainId(null);
+      return;
+    }
+    if (comp.status === "active" && myEntry) {
+      handleViewUserTeam(comp.id, myEntry.id);
+      return;
+    }
+    toast({ title: "Tournament unavailable", description: "This tournament is not open for new entries." });
+  };
+
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
@@ -201,12 +220,34 @@ export default function CompetitionsPage() {
           )}
         </div>
 
-        <Tabs defaultValue="live" className="w-full">
+        <Tabs defaultValue={myLiveComps.length > 0 ? "my-live" : "live"} className="w-full">
           <TabsList className="mb-4">
+            <TabsTrigger value="my-live">⭐ My Live</TabsTrigger>
             <TabsTrigger value="live">🔴 Live Tournaments</TabsTrigger>
             <TabsTrigger value="upcoming">📅 Upcoming</TabsTrigger>
             <TabsTrigger value="completed">✅ Completed</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="my-live">
+            {myLiveComps.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {myLiveComps.map((comp) => (
+                  <CompetitionCard
+                    key={comp.id}
+                    comp={comp}
+                    canViewTeams={enteredCompetitionIds.has(comp.id)}
+                    myEntryId={myEntryByCompetitionId.get(comp.id)?.id}
+                    onViewTeam={handleViewUserTeam}
+                    onJoin={() => openCompetitionAction(comp)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">You are not currently entered in a live tournament.</p>
+              </Card>
+            )}
+          </TabsContent>
 
           <TabsContent value="live">
             {isLoading ? (
@@ -220,8 +261,9 @@ export default function CompetitionsPage() {
                     key={comp.id}
                     comp={comp}
                     canViewTeams={enteredCompetitionIds.has(comp.id)}
+                    myEntryId={myEntryByCompetitionId.get(comp.id)?.id}
                     onViewTeam={handleViewUserTeam}
-                    onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }}
+                    onJoin={() => openCompetitionAction(comp)}
                   />
                 ))}
               </div>
@@ -244,8 +286,9 @@ export default function CompetitionsPage() {
                     key={comp.id}
                     comp={comp}
                     canViewTeams={enteredCompetitionIds.has(comp.id)}
+                    myEntryId={myEntryByCompetitionId.get(comp.id)?.id}
                     onViewTeam={handleViewUserTeam}
-                    onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }}
+                    onJoin={() => openCompetitionAction(comp)}
                   />
                 ))}
               </div>
@@ -268,8 +311,9 @@ export default function CompetitionsPage() {
                     key={comp.id}
                     comp={comp}
                     canViewTeams={enteredCompetitionIds.has(comp.id)}
+                    myEntryId={myEntryByCompetitionId.get(comp.id)?.id}
                     onViewTeam={handleViewUserTeam}
-                    onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }}
+                    onJoin={() => openCompetitionAction(comp)}
                   />
                 ))}
               </div>
@@ -498,10 +542,23 @@ function Leaderboard({ entries, canViewTeams, competitionId, onViewTeam }: { ent
   );
 }
 
-function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam }: { comp: CompetitionWithEntries; onJoin: () => void; canViewTeams: boolean; onViewTeam: (competitionId: number, entryId: number) => void }) {
+function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam, myEntryId }: { comp: CompetitionWithEntries; onJoin: () => void; canViewTeams: boolean; onViewTeam: (competitionId: number, entryId: number) => void; myEntryId?: number }) {
   const endDate = new Date(comp.endDate);
   const now = new Date();
   const daysLeft = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  const isOpen = comp.status === "open";
+  const isActive = comp.status === "active";
+  const hasMyEntry = Number.isFinite(Number(myEntryId));
+
+  const ctaLabel = isOpen
+    ? (comp.entryFee > 0 ? `Enter (N$${comp.entryFee})` : "Enter Free")
+    : isActive
+      ? (hasMyEntry ? "View My Live Lineup" : "Live (Entry Closed)")
+      : comp.status === "upcoming"
+        ? "Upcoming"
+        : "Completed";
+
+  const ctaDisabled = isOpen ? false : isActive ? !hasMyEntry : true;
 
   return (
     <Card className="p-5 hover:border-primary/50 transition-colors">
@@ -511,7 +568,7 @@ function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam }: { comp: Com
           <p className="text-sm text-muted-foreground">Game Week {comp.gameWeek}</p>
         </div>
         <Badge variant={comp.status === "open" ? "default" : comp.status === "active" ? "secondary" : "outline"}>
-          {comp.status === "open" ? "Open" : comp.status === "active" ? "Active" : "Completed"}
+          {comp.status === "open" ? "Open" : comp.status === "active" ? "Active" : comp.status === "upcoming" ? "Upcoming" : "Completed"}
         </Badge>
       </div>
 
@@ -582,9 +639,9 @@ function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam }: { comp: Com
       <Button
         className="w-full mt-4"
         onClick={onJoin}
-        disabled={comp.status !== "open"}
+        disabled={ctaDisabled}
       >
-        {comp.status === "open" ? (comp.entryFee > 0 ? `Enter (N$${comp.entryFee})` : "Enter Free") : "Closed"}
+        {ctaLabel}
       </Button>
     </Card>
   );

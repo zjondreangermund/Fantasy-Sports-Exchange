@@ -307,6 +307,18 @@
     --shine: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.4) 50%, transparent 60%);
   }
 
+  @keyframes uniqueEdgeShift {
+    0% {
+      filter: hue-rotate(0deg) brightness(1);
+    }
+    50% {
+      filter: hue-rotate(35deg) brightness(1.08);
+    }
+    100% {
+      filter: hue-rotate(0deg) brightness(1);
+    }
+  }
+
   @keyframes atmoFloat {
     0% {
       transform: translateY(0px) translateX(0px);

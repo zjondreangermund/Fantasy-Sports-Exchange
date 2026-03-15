@@ -75,7 +75,7 @@ const rarityMeta: Record<Rarity, SlabMeta> = {
     badgeText: "#e4f1ff",
     statPlate: "linear-gradient(180deg, rgba(135,182,255,0.14), rgba(255,255,255,0.03))",
     chamberGlow: "radial-gradient(circle at 50% 35%, rgba(114,177,255,0.24), rgba(56,112,255,0.07) 45%, transparent 82%)",
-    silhouette: "polygon(9% 0%, 91% 0%, 100% 10%, 100% 90%, 91% 100%, 9% 100%, 0% 90%, 0% 10%)",
+    silhouette: "polygon(8% 0%, 92% 0%, 100% 12%, 100% 88%, 92% 100%, 8% 100%, 0% 88%, 0% 12%)",
   },
   epic: {
     label: "Epic",
@@ -93,7 +93,7 @@ const rarityMeta: Record<Rarity, SlabMeta> = {
     badgeText: "#f6eaff",
     statPlate: "linear-gradient(180deg, rgba(181,120,255,0.15), rgba(255,255,255,0.03))",
     chamberGlow: "radial-gradient(circle at 50% 35%, rgba(187,112,255,0.24), rgba(135,41,214,0.08) 45%, transparent 82%)",
-    silhouette: "polygon(10% 0%, 90% 0%, 100% 7%, 100% 93%, 90% 100%, 10% 100%, 0% 93%, 0% 7%)",
+    silhouette: "polygon(12% 0%, 88% 0%, 100% 7%, 100% 93%, 88% 100%, 12% 100%, 0% 93%, 0% 7%)",
   },
   legendary: {
     label: "Legendary",
@@ -111,7 +111,7 @@ const rarityMeta: Record<Rarity, SlabMeta> = {
     badgeText: "#fff5cf",
     statPlate: "linear-gradient(180deg, rgba(255,218,123,0.16), rgba(255,255,255,0.03))",
     chamberGlow: "radial-gradient(circle at 50% 32%, rgba(255,220,123,0.26), rgba(255,173,32,0.08) 45%, transparent 82%)",
-    silhouette: "polygon(15% 0%, 32% 6%, 50% 0%, 68% 6%, 85% 0%, 100% 10%, 100% 90%, 90% 100%, 10% 100%, 0% 90%, 0% 10%)",
+    silhouette: "polygon(12% 0%, 24% 7%, 36% 0%, 50% 9%, 64% 0%, 76% 7%, 88% 0%, 100% 12%, 100% 88%, 90% 100%, 10% 100%, 0% 88%, 0% 12%)",
   },
   unique: {
     label: "Unique",
@@ -129,7 +129,7 @@ const rarityMeta: Record<Rarity, SlabMeta> = {
     badgeText: "#eefeff",
     statPlate: "linear-gradient(180deg, rgba(167,230,255,0.10), rgba(255,255,255,0.03))",
     chamberGlow: "radial-gradient(circle at 50% 34%, rgba(134,241,255,0.24), rgba(255,106,213,0.08) 44%, transparent 82%)",
-    silhouette: "polygon(8% 0%, 92% 0%, 100% 12%, 100% 88%, 88% 100%, 12% 100%, 0% 88%, 0% 12%)",
+    silhouette: "polygon(6% 0%, 94% 0%, 100% 13%, 100% 87%, 87% 100%, 13% 100%, 0% 87%, 0% 13%)",
   },
 };
 
@@ -309,7 +309,7 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
         onPointerLeave={resetPointer}
         onPointerCancel={resetPointer}
         className={[
-          "group relative isolate aspect-[2.5/3.5] w-[260px] select-none transition-transform duration-300",
+          "group relative isolate aspect-[2.5/3.5] w-[260px] select-none transition-transform duration-300 hover:scale-[1.025]",
           className,
         ].join(" ")}
         style={
@@ -325,9 +325,18 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
       >
         {/* OUTER DROP SHADOW */}
         <div
-          className="absolute inset-[2%] rounded-[30px] blur-xl transition duration-300 group-hover:scale-[1.03]"
+          className="absolute inset-[2%] rounded-[30px] blur-xl transition duration-300 group-hover:scale-[1.08]"
           style={{
-            background: meta.glow,
+            background:
+              rarity === "rare"
+                ? "rgba(70,140,255,0.22)"
+                : rarity === "epic"
+                ? "rgba(162,72,255,0.22)"
+                : rarity === "legendary"
+                ? "rgba(255,203,82,0.24)"
+                : rarity === "unique"
+                ? "rgba(124,247,255,0.18)"
+                : "rgba(220,228,240,0.12)",
             transform: "translateZ(-40px)",
           }}
         />
@@ -401,6 +410,30 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
             }}
           />
 
+          {rarity === "legendary" ? (
+            <div
+              className="pointer-events-none absolute left-[8%] right-[8%] top-[1.8%] z-[12] h-[16%]"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(255,232,164,0.34), rgba(255,194,70,0.10))",
+                clipPath:
+                  "polygon(0% 100%, 8% 58%, 18% 82%, 29% 22%, 40% 72%, 50% 0%, 60% 72%, 71% 22%, 82% 82%, 92% 58%, 100% 100%)",
+                filter: "drop-shadow(0 4px 10px rgba(255,190,60,0.18))",
+                opacity: 0.9,
+              }}
+            />
+          ) : null}
+
+          {rarity === "legendary" ? (
+            <div
+              className="pointer-events-none absolute left-[12%] right-[12%] top-[3.8%] z-[11] h-[8%] rounded-full"
+              style={{
+                background: "radial-gradient(circle, rgba(255,219,110,0.32), transparent 72%)",
+                filter: "blur(8px)",
+              }}
+            />
+          ) : null}
+
           {/* player chamber */}
           <div
             className="absolute inset-x-[4%] top-[16%] h-[47%] overflow-hidden rounded-[18px]"
@@ -417,8 +450,25 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
           >
             <div className="absolute inset-0" style={{ background: meta.chamberGlow }} />
 
+            <div
+              className="pointer-events-none absolute inset-x-[10%] top-[10%] bottom-[12%] z-[1] rounded-[999px]"
+              style={{
+                background:
+                  rarity === "rare"
+                    ? "radial-gradient(circle, rgba(88,160,255,0.22), transparent 68%)"
+                    : rarity === "epic"
+                    ? "radial-gradient(circle, rgba(176,102,255,0.24), transparent 68%)"
+                    : rarity === "legendary"
+                    ? "radial-gradient(circle, rgba(255,211,105,0.26), transparent 68%)"
+                    : rarity === "unique"
+                    ? "radial-gradient(circle, rgba(124,247,255,0.18), rgba(255,102,214,0.12) 42%, transparent 72%)"
+                    : "radial-gradient(circle, rgba(255,255,255,0.14), transparent 68%)",
+                filter: "blur(10px)",
+              }}
+            />
+
             {portrait ? (
-              <picture>
+              <picture className="absolute inset-0 z-[3]">
                 {portrait.webpSrcSet ? (
                   <source type="image/webp" srcSet={portrait.webpSrcSet} sizes="(max-width: 640px) 42vw, 260px" />
                 ) : null}
@@ -436,8 +486,8 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
                   className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.035]"
                   style={{
                     objectPosition: `50% ${portraitFrame.y}%`,
-                    transform: `scale(${portraitFrame.baseScale})`,
-                    filter: "contrast(1.12) saturate(1.08) brightness(0.98)",
+                    transform: `scale(${portraitFrame.baseScale * 1.03}) translateY(1px)`,
+                    filter: "contrast(1.16) saturate(1.12) brightness(1.01) drop-shadow(0 8px 12px rgba(0,0,0,0.34))",
                   }}
                   onError={() => {
                     setImageIndex((prev) => (prev >= imageCandidates.length - 1 ? prev : prev + 1));
@@ -456,6 +506,15 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
               }}
             />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_100%,rgba(0,0,0,0.28),transparent_56%)]" />
+
+            <div
+              className="pointer-events-none absolute inset-0 z-[4]"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.14) 0%, transparent 18%, transparent 72%, rgba(0,0,0,0.18) 100%)",
+                mixBlendMode: "soft-light",
+              }}
+            />
           </div>
 
           {/* engraved side rails */}
@@ -546,15 +605,34 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
 
           {/* metallic shine */}
           <div
-            className="pointer-events-none absolute inset-[-30%] opacity-28 transition duration-500 group-hover:translate-x-[8%]"
+            className="pointer-events-none absolute inset-[-30%] transition duration-500 group-hover:translate-x-[9%]"
             style={{
-              background: `linear-gradient(
-                115deg,
-                transparent 24%,
-                rgba(255,255,255,0.14) 34%,
-                rgba(255,255,255,0.03) 41%,
-                transparent 50%
-              )`,
+              opacity: rarity === "common" ? 0.18 : rarity === "rare" ? 0.34 : rarity === "epic" ? 0.38 : rarity === "legendary" ? 0.46 : 0.52,
+              background:
+                rarity === "unique"
+                  ? `linear-gradient(
+                      115deg,
+                      transparent 22%,
+                      rgba(124,247,255,0.18) 31%,
+                      rgba(255,114,214,0.20) 38%,
+                      rgba(255,255,255,0.09) 45%,
+                      transparent 55%
+                    )`
+                  : rarity === "legendary"
+                  ? `linear-gradient(
+                      115deg,
+                      transparent 22%,
+                      rgba(255,223,128,0.22) 33%,
+                      rgba(255,255,255,0.10) 42%,
+                      transparent 54%
+                    )`
+                  : `linear-gradient(
+                      115deg,
+                      transparent 24%,
+                      rgba(255,255,255,0.16) 34%,
+                      rgba(255,255,255,0.03) 41%,
+                      transparent 50%
+                    )`,
               mixBlendMode: "screen",
               transform: "translateX(-18%)",
             }}
@@ -567,6 +645,67 @@ export default function FantasyCard({ player, className = "" }: FantasyCardProps
               background: `radial-gradient(circle at var(--holo-x) var(--holo-y), rgba(255,255,255,0.18), transparent 24%)`,
             }}
           />
+
+          {rarity === "legendary" ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-[23] opacity-35"
+              style={{
+                background:
+                  "radial-gradient(circle at 50% 18%, rgba(255,228,126,0.20), transparent 30%)",
+                mixBlendMode: "screen",
+              }}
+            />
+          ) : null}
+
+          {rarity === "unique" ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-[23] opacity-30"
+              style={{
+                background:
+                  "radial-gradient(circle at 50% 16%, rgba(255,255,255,0.12), transparent 24%)",
+                mixBlendMode: "screen",
+              }}
+            />
+          ) : null}
+
+          {rarity === "unique" ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-[24] opacity-50"
+              style={{
+                background:
+                  "radial-gradient(circle at var(--holo-x) var(--holo-y), rgba(124,247,255,0.16), rgba(255,102,214,0.10) 18%, transparent 34%)",
+                mixBlendMode: "screen",
+              }}
+            />
+          ) : null}
+
+          {rarity === "unique" ? (
+            <div
+              className="pointer-events-none absolute inset-[1.4%] z-[25] rounded-[26px]"
+              style={{
+                background: `
+                  linear-gradient(
+                    130deg,
+                    rgba(124,247,255,0.00) 0%,
+                    rgba(124,247,255,0.16) 18%,
+                    rgba(255,111,214,0.18) 38%,
+                    rgba(156,132,255,0.16) 58%,
+                    rgba(124,247,255,0.00) 76%
+                  )
+                `,
+                mixBlendMode: "screen",
+                opacity: 0.9,
+                maskImage:
+                  "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+                WebkitMaskImage:
+                  "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)",
+                padding: "2px",
+                WebkitMaskComposite: "xor",
+                maskComposite: "exclude",
+                animation: "uniqueEdgeShift 4.5s linear infinite",
+              } as React.CSSProperties}
+            />
+          ) : null}
 
           {/* edge vignette */}
           <div className="pointer-events-none absolute inset-0 rounded-[22px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),inset_0_-18px_24px_rgba(0,0,0,0.18)]" />
