@@ -720,6 +720,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           UNIQUE (referred_user_id)
         )
       `);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.pack_auctions (
+          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          seller_user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          rarity text NOT NULL,
+          card_ids jsonb NOT NULL,
+          status text NOT NULL DEFAULT 'live',
+          start_price real NOT NULL DEFAULT 0,
+          reserve_price real NOT NULL DEFAULT 0,
+          buy_now_price real,
+          min_increment real NOT NULL DEFAULT 1,
+          starts_at timestamp,
+          ends_at timestamp,
+          created_at timestamp DEFAULT now()
+        )
+      `);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.pack_auction_bids (
+          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          pack_auction_id integer NOT NULL REFERENCES app.pack_auctions(id),
+          bidder_user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          amount real NOT NULL,
+          created_at timestamp DEFAULT now()
+        )
+      `);
     } catch (error) {
       console.warn("Runtime schema ensure failed:", error);
     }
@@ -1422,6 +1449,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
 
     return names;
+  };
+
+  const getCompetitionSubmissionCloseAt = async (competition: any): Promise<Date> => {
+    const fallback = competition?.startDate ? new Date(competition.startDate) : new Date(Date.now() + 60 * 60 * 1000);
+    const targetGw = Number(competition?.gameWeek || 0);
+    if (!Number.isFinite(targetGw) || targetGw <= 0) return fallback;
+
+    try {
+      const fixtures = await fplApi.fixtures();
+      const kickoffCandidates = (Array.isArray(fixtures) ? fixtures : [])
+        .filter((fixture: any) => Number(fixture?.event) === targetGw && fixture?.kickoff_time)
+        .map((fixture: any) => new Date(String(fixture.kickoff_time)).getTime())
+        .filter((value: number) => Number.isFinite(value) && value > 0)
+        .sort((a: number, b: number) => a - b);
+
+      if (kickoffCandidates.length === 0) return fallback;
+
+      return new Date(kickoffCandidates[0]);
+    } catch {
+      return fallback;
+    }
   };
 
   // -------------------------
@@ -2525,6 +2573,271 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ message: "Failed to cancel auction" });
     }
   });
+
+  // -------------------------
+  // PACK AUCTIONS ENDPOINTS
+  // -------------------------
+
+  const getPackAuctionBids = async (packAuctionId: number) => {
+    const { db } = await import("./db.js");
+    const rows = await db.execute(sql`
+      SELECT id, pack_auction_id, bidder_user_id, amount, created_at
+      FROM app.pack_auction_bids
+      WHERE pack_auction_id = ${packAuctionId}
+      ORDER BY amount DESC, created_at ASC
+    `);
+    return Array.isArray((rows as any)?.rows) ? (rows as any).rows : [];
+  };
+
+  app.get("/api/auctions/packs/active", async (_req, res) => {
+    try {
+      const { db } = await import("./db.js");
+      const now = new Date();
+      const rows = await db.execute(sql`
+        SELECT id, seller_user_id, rarity, card_ids, status, start_price, reserve_price, buy_now_price, min_increment, starts_at, ends_at, created_at
+        FROM app.pack_auctions
+        WHERE status = 'live' AND (ends_at IS NULL OR ends_at >= ${now})
+        ORDER BY created_at DESC
+      `);
+
+      const auctions = Array.isArray((rows as any)?.rows) ? (rows as any).rows : [];
+
+      const enriched = await Promise.all(
+        auctions.map(async (auction: any) => {
+          const cardIds = Array.isArray(auction.card_ids) ? auction.card_ids.map((id: any) => Number(id)) : [];
+          const cards = (await Promise.all(cardIds.map((cardId: number) => storage.getPlayerCardWithPlayer(cardId)))).filter(Boolean);
+          const bids = await getPackAuctionBids(Number(auction.id));
+          const currentBid = Number(bids[0]?.amount || auction.start_price || 0);
+          return {
+            id: Number(auction.id),
+            sellerUserId: String(auction.seller_user_id),
+            rarity: String(auction.rarity || "rare"),
+            cardIds,
+            cards,
+            status: String(auction.status || "live"),
+            startPrice: Number(auction.start_price || 0),
+            reservePrice: Number(auction.reserve_price || 0),
+            buyNowPrice: auction.buy_now_price == null ? null : Number(auction.buy_now_price),
+            minIncrement: Number(auction.min_increment || 1),
+            startsAt: auction.starts_at,
+            endsAt: auction.ends_at,
+            createdAt: auction.created_at,
+            bids,
+            currentBid,
+            bidCount: bids.length,
+          };
+        }),
+      );
+
+      return res.json(enriched);
+    } catch (error: any) {
+      console.error("Failed to fetch pack auctions:", error);
+      return res.status(500).json({ message: "Failed to fetch pack auctions" });
+    }
+  });
+
+  app.post("/api/auctions/packs/create", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const rarity = String(req.body?.rarity || "rare").toLowerCase();
+      const startPrice = Number(req.body?.startPrice || 0);
+      const buyNowPrice = req.body?.buyNowPrice == null ? null : Number(req.body.buyNowPrice);
+      const reservePrice = req.body?.reservePrice == null ? startPrice : Number(req.body.reservePrice);
+      const duration = Math.max(30 * 60, Number(req.body?.duration || 24 * 60 * 60));
+      const requestedCardIds = Array.isArray(req.body?.cardIds)
+        ? req.body.cardIds.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id) && id > 0)
+        : [];
+
+      if (!Number.isFinite(startPrice) || startPrice <= 0) {
+        return res.status(400).json({ message: "Valid positive startPrice required" });
+      }
+
+      const allowedRarities = new Set(["rare", "epic", "legendary", "unique"]);
+      if (!allowedRarities.has(rarity)) {
+        return res.status(400).json({ message: "Pack auctions support rare, epic, legendary, or unique cards" });
+      }
+
+      const ownedCards = await storage.getUserCards(userId);
+      const sameRarity = (Array.isArray(ownedCards) ? ownedCards : [])
+        .filter((card: any) => String(card?.rarity || "").toLowerCase() === rarity)
+        .filter((card: any) => !card?.forSale);
+
+      let selectedCards = sameRarity;
+      if (requestedCardIds.length > 0) {
+        const requestedSet = new Set(requestedCardIds);
+        selectedCards = sameRarity.filter((card: any) => requestedSet.has(Number(card.id)));
+      }
+
+      const uniqueByPlayer = new Map<number, any>();
+      selectedCards.forEach((card: any) => {
+        const playerId = Number(card?.playerId || 0);
+        if (!playerId || uniqueByPlayer.has(playerId)) return;
+        uniqueByPlayer.set(playerId, card);
+      });
+
+      const packCards = Array.from(uniqueByPlayer.values()).slice(0, 5);
+      if (packCards.length < 5) {
+        return res.status(400).json({ message: "Need 5 cards of the same rarity with different players to create a pack auction" });
+      }
+
+      const activeEntries = await storage.getUserCompetitions(userId);
+      const blockedCardIds = new Set<number>();
+      for (const entry of activeEntries) {
+        const comp = await storage.getCompetition(entry.competitionId);
+        if (!comp || (comp.status !== "open" && comp.status !== "active")) continue;
+        (Array.isArray(entry?.lineupCardIds) ? entry.lineupCardIds : []).forEach((id: number) => blockedCardIds.add(Number(id)));
+      }
+
+      const finalCardIds = packCards
+        .map((card: any) => Number(card.id))
+        .filter((id: number) => !blockedCardIds.has(id));
+
+      if (finalCardIds.length < 5) {
+        return res.status(400).json({ message: "Some selected cards are locked in active tournaments" });
+      }
+
+      const { db } = await import("./db.js");
+      const startsAt = new Date();
+      const endsAt = new Date(Date.now() + duration * 1000);
+      const minIncrement = Math.max(1, Math.round(startPrice * 0.05 * 100) / 100);
+
+      const created = await db.execute(sql`
+        INSERT INTO app.pack_auctions
+          (seller_user_id, rarity, card_ids, status, start_price, reserve_price, buy_now_price, min_increment, starts_at, ends_at)
+        VALUES
+          (${userId}, ${rarity}, ${JSON.stringify(finalCardIds)}::jsonb, 'live', ${startPrice}, ${reservePrice}, ${buyNowPrice}, ${minIncrement}, ${startsAt}, ${endsAt})
+        RETURNING id
+      `);
+
+      const row = Array.isArray((created as any)?.rows) ? (created as any).rows[0] : null;
+      return res.json({ success: true, auctionId: Number(row?.id || 0), cardIds: finalCardIds, endsAt });
+    } catch (error: any) {
+      console.error("Failed to create pack auction:", error);
+      return res.status(500).json({ message: "Failed to create pack auction" });
+    }
+  });
+
+  app.post("/api/auctions/packs/:id/bid", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const packAuctionId = Number(req.params.id);
+      const amount = Number(req.body?.amount || 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({ message: "Valid positive bid amount required" });
+      }
+
+      const { db } = await import("./db.js");
+      const rows = await db.execute(sql`
+        SELECT id, seller_user_id, status, start_price, min_increment, ends_at
+        FROM app.pack_auctions
+        WHERE id = ${packAuctionId}
+        LIMIT 1
+      `);
+      const auction = Array.isArray((rows as any)?.rows) ? (rows as any).rows[0] : null;
+      if (!auction) return res.status(404).json({ message: "Pack auction not found" });
+      if (String(auction.status) !== "live") return res.status(400).json({ message: "Pack auction is not active" });
+      if (auction.ends_at && new Date(auction.ends_at).getTime() < Date.now()) {
+        return res.status(400).json({ message: "Pack auction has ended" });
+      }
+      if (String(auction.seller_user_id) === userId) {
+        return res.status(400).json({ message: "Cannot bid on your own pack auction" });
+      }
+
+      const bids = await getPackAuctionBids(packAuctionId);
+      const currentAmount = Number(bids[0]?.amount || auction.start_price || 0);
+      const minBid = currentAmount + Number(auction.min_increment || 1);
+      if (amount < minBid) {
+        return res.status(400).json({ message: `Bid must be at least ${minBid.toFixed(2)}` });
+      }
+
+      const wallet = await storage.getWallet(userId);
+      if (!wallet || Number(wallet.balance || 0) < amount) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+
+      await storage.lockFunds(userId, amount);
+      if (bids[0] && String(bids[0].bidder_user_id) !== userId) {
+        await storage.unlockFunds(String(bids[0].bidder_user_id), Number(bids[0].amount || 0));
+      }
+
+      await db.execute(sql`
+        INSERT INTO app.pack_auction_bids (pack_auction_id, bidder_user_id, amount)
+        VALUES (${packAuctionId}, ${userId}, ${amount})
+      `);
+
+      return res.json({ success: true, message: "Pack bid placed successfully" });
+    } catch (error: any) {
+      console.error("Failed to place pack bid:", error);
+      return res.status(500).json({ message: "Failed to place pack bid" });
+    }
+  });
+
+  app.post("/api/auctions/packs/:id/buy-now", requireAuth, async (req: any, res) => {
+    try {
+      const buyerId = String(req.authUserId || "");
+      const packAuctionId = Number(req.params.id);
+      const { db } = await import("./db.js");
+
+      const rows = await db.execute(sql`
+        SELECT id, seller_user_id, card_ids, status, buy_now_price
+        FROM app.pack_auctions
+        WHERE id = ${packAuctionId}
+        LIMIT 1
+      `);
+      const auction = Array.isArray((rows as any)?.rows) ? (rows as any).rows[0] : null;
+      if (!auction) return res.status(404).json({ message: "Pack auction not found" });
+      if (String(auction.status) !== "live") return res.status(400).json({ message: "Pack auction is not active" });
+      if (String(auction.seller_user_id) === buyerId) return res.status(400).json({ message: "Cannot buy your own pack auction" });
+      const buyNowPrice = Number(auction.buy_now_price || 0);
+      if (!buyNowPrice || buyNowPrice <= 0) return res.status(400).json({ message: "Pack auction has no buy now price" });
+
+      const wallet = await storage.getWallet(buyerId);
+      if (!wallet || Number(wallet.balance || 0) < buyNowPrice) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+
+      const cardIds = Array.isArray(auction.card_ids) ? auction.card_ids.map((id: any) => Number(id)) : [];
+      if (cardIds.length < 5) return res.status(400).json({ message: "Pack auction payload is invalid" });
+
+      await db.transaction(async (tx: any) => {
+        await tx.execute(sql`
+          UPDATE app.wallets SET balance = balance - ${buyNowPrice} WHERE user_id = ${buyerId}
+        `);
+        await tx.execute(sql`
+          UPDATE app.wallets SET balance = balance + ${buyNowPrice} WHERE user_id = ${auction.seller_user_id}
+        `);
+
+        for (const cardId of cardIds) {
+          await tx.execute(sql`
+            UPDATE app.player_cards
+            SET owner_id = ${buyerId}
+            WHERE id = ${cardId}
+          `);
+        }
+
+        await tx.execute(sql`
+          UPDATE app.pack_auctions
+          SET status = 'settled'
+          WHERE id = ${packAuctionId}
+        `);
+
+        await tx.execute(sql`
+          INSERT INTO app.transactions (user_id, type, amount, description)
+          VALUES (${buyerId}, 'auction_settlement', ${-buyNowPrice}, ${`Pack auction purchase #${packAuctionId}`})
+        `);
+
+        await tx.execute(sql`
+          INSERT INTO app.transactions (user_id, type, amount, description)
+          VALUES (${auction.seller_user_id}, 'auction_settlement', ${buyNowPrice}, ${`Pack auction sale #${packAuctionId}`})
+        `);
+      });
+
+      return res.json({ success: true, message: "Pack purchased successfully" });
+    } catch (error: any) {
+      console.error("Failed to buy pack now:", error);
+      return res.status(500).json({ message: "Failed to buy pack now" });
+    }
+  });
   
   // -------------------------
   // COMPETITIONS ENDPOINTS
@@ -2550,6 +2863,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const competitionsWithEntries = await Promise.all(
         competitions.map(async (comp) => {
           const entries = await storage.getCompetitionEntries(comp.id);
+          const submissionClosesAt = await getCompetitionSubmissionCloseAt(comp);
+          const entryOpen = comp.status === "open" && Date.now() < submissionClosesAt.getTime();
           
           // Enrich entries with user data
           const enrichedEntries = await Promise.all(
@@ -2569,6 +2884,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           
           return {
             ...comp,
+            submissionClosesAt,
+            entryOpen,
             entries: sortedEntries,
             entryCount: sortedEntries.length,
             winner:
@@ -2620,6 +2937,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Check competition status
       if (competition.status !== "open") {
         return res.status(400).json({ message: "Tournament is not open for entries" });
+      }
+
+      const submissionClosesAt = await getCompetitionSubmissionCloseAt(competition);
+      if (Date.now() >= submissionClosesAt.getTime()) {
+        return res.status(400).json({
+          message: "Lineup submission is closed for this tournament. Deadline is before the first Premier League kickoff of this gameweek.",
+          submissionClosesAt,
+        });
       }
       
       // Validate lineup (1 GK, 1 DEF, 1 MID, 1 FWD, 1 Utility)

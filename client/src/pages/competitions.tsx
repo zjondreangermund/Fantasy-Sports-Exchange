@@ -26,6 +26,8 @@ import RewardPopup from "../components/RewardPopup";
 
 type EnrichedEntry = CompetitionEntry & { userName: string; userImage: string | null };
 type CompetitionWithEntries = Competition & {
+  submissionClosesAt?: string;
+  entryOpen?: boolean;
   entries: EnrichedEntry[];
   entryCount: number;
   winner?: {
@@ -188,6 +190,10 @@ export default function CompetitionsPage() {
   const openCompetitionAction = (comp: CompetitionWithEntries) => {
     const myEntry = myEntryByCompetitionId.get(comp.id);
     if (comp.status === "open") {
+      if (comp.entryOpen === false) {
+        toast({ title: "Submission closed", description: "This gameweek is locked because kickoff has started." });
+        return;
+      }
       setSelectedComp(comp);
       setSelectedCards([]);
       setCaptainId(null);
@@ -549,16 +555,17 @@ function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam, myEntryId }: 
   const isOpen = comp.status === "open";
   const isActive = comp.status === "active";
   const hasMyEntry = Number.isFinite(Number(myEntryId));
+  const submissionOpen = comp.entryOpen !== false;
 
   const ctaLabel = isOpen
-    ? (comp.entryFee > 0 ? `Enter (N$${comp.entryFee})` : "Enter Free")
+    ? (submissionOpen ? (comp.entryFee > 0 ? `Enter (N$${comp.entryFee})` : "Enter Free") : "Submission Closed")
     : isActive
       ? (hasMyEntry ? "View My Live Lineup" : "Live (Entry Closed)")
       : comp.status === "upcoming"
         ? "Upcoming"
         : "Completed";
 
-  const ctaDisabled = isOpen ? false : isActive ? !hasMyEntry : true;
+  const ctaDisabled = isOpen ? !submissionOpen : isActive ? !hasMyEntry : true;
 
   return (
     <Card className="p-5 hover:border-primary/50 transition-colors">
@@ -594,6 +601,12 @@ function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam, myEntryId }: 
           <span className="text-muted-foreground">{daysLeft} days left</span>
         </div>
       </div>
+
+      {comp.submissionClosesAt ? (
+        <div className="mb-3 text-xs text-muted-foreground">
+          Submission closes: {new Date(comp.submissionClosesAt).toLocaleString()}
+        </div>
+      ) : null}
 
       {comp.tier === "rare" && comp.entryCount > 0 && (
         <div className="mb-4 p-2 bg-muted/50 rounded-md">

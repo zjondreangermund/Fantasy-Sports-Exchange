@@ -11,6 +11,7 @@ import type { IStorage } from "../storage.js";
 export class ScoreUpdateService {
   private storage: any; // Using any to avoid complex type issues
   private updateInterval: NodeJS.Timeout | null = null;
+  private lastProcessedGameweek: number | null = null;
   
   constructor(storage: any) {
     this.storage = storage;
@@ -133,6 +134,12 @@ export class ScoreUpdateService {
       const activeComps = competitions.filter((c: any) => 
         c.status === "open" || c.status === "active"
       );
+
+      const currentGameweek = await fplApi.getCurrentGameweek();
+      if (this.lastProcessedGameweek !== null && this.lastProcessedGameweek !== currentGameweek) {
+        await this.resetForNewGameweek(activeComps);
+      }
+      this.lastProcessedGameweek = currentGameweek;
       
       if (activeComps.length === 0) {
         console.log("No active competitions to update");
@@ -262,6 +269,38 @@ export class ScoreUpdateService {
     } catch (error) {
       console.error("Failed to update competition scores:", error);
       throw error;
+    }
+  }
+
+  private async resetForNewGameweek(activeComps: any[]) {
+    try {
+      const touchedCardIds = new Set<number>();
+
+      for (const comp of activeComps) {
+        const entries = await this.storage.getCompetitionEntries(comp.id);
+        for (const entry of entries) {
+          await this.storage.updateCompetitionEntry(entry.id, {
+            totalScore: 0,
+          });
+
+          (Array.isArray(entry?.lineupCardIds) ? entry.lineupCardIds : []).forEach((id: number) => {
+            const value = Number(id);
+            if (Number.isFinite(value) && value > 0) touchedCardIds.add(value);
+          });
+        }
+      }
+
+      await Promise.all(
+        Array.from(touchedCardIds).map(async (cardId) => {
+          await this.storage.updatePlayerCard(cardId, {
+            decisiveScore: 0,
+          });
+        }),
+      );
+
+      console.log(`🔁 New gameweek reset complete: ${activeComps.length} competitions, ${touchedCardIds.size} cards reset to 0`);
+    } catch (error) {
+      console.error("Failed weekly points reset:", error);
     }
   }
   
