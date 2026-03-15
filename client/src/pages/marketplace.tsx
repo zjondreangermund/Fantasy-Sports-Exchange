@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 // IMPORT YOUR 3D CARD COMPONENT HERE
-import FantasyCard from "../components/FantasyCard";
+import Metal3DCard from "../components/Metal3DCard";
 import CardShowcase from "../components/CardShowcase";
 import CabinetSlot from "../components/CabinetSlot";
 import SceneAtmosphere from "../components/SceneAtmosphere";
@@ -197,7 +197,7 @@ export default function MarketplacePage() {
                     <div className="flex flex-col items-center gap-2">
                       <CabinetSlot rarity={card.rarity} className="h-[320px] w-[220px] p-2 overflow-visible">
                         <button type="button" className="w-full text-left" onClick={() => handleOpenBuyCard(card)}>
-                          <FantasyCard player={toFantasyCardData(card)} className="!w-full" />
+                          <Metal3DCard player={toFantasyCardData(card)} className="!w-full" />
                         </button>
                       </CabinetSlot>
                       <p className="text-xs text-muted-foreground">
@@ -238,7 +238,7 @@ export default function MarketplacePage() {
                   >
                     <div className="flex flex-col items-center gap-2">
                       <CabinetSlot rarity={card.rarity} className="h-[320px] w-[220px] p-2 overflow-visible">
-                        <FantasyCard player={toFantasyCardData(card)} className="!w-full" />
+                        <Metal3DCard player={toFantasyCardData(card)} className="!w-full" />
                       </CabinetSlot>
                       <p className="text-sm font-semibold text-green-500">
                         N${(card.price || 0).toFixed(2)}

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import FantasyCard, { type PlayerCardData } from "./FantasyCard";
+import Metal3DCard, { type PlayerCardData } from "./Metal3DCard";
 
 type FantasyCardFanProps = {
   cards: PlayerCardData[];
@@ -51,7 +51,7 @@ export default function FantasyCardFan({ cards, className, maxCards = 4 }: Fanta
                 zIndex: isHovered ? 300 : layer,
               }}
             >
-              <FantasyCard player={card} className="!w-[200px] sm:!w-[220px]" />
+              <Metal3DCard player={card} className="!w-[200px] sm:!w-[220px]" />
             </li>
           );
         })}

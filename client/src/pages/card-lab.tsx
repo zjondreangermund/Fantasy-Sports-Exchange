@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import FantasyCard from "../components/FantasyCard";
+import Metal3DCard from "../components/Metal3DCard";
 import FantasyCardFan from "../components/FantasyCardFan";
 import { fetchLocalPlayerRoster } from "../lib/local-player-roster";
 
@@ -44,7 +44,7 @@ export default function CardLabPage() {
 
             <div className="mt-8 grid grid-cols-1 place-items-center gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {grouped.map((card) => (
-                <FantasyCard key={card.id} player={card} className="!w-[220px]" />
+                <Metal3DCard key={card.id} player={card} className="!w-[220px]" />
               ))}
             </div>
           </>

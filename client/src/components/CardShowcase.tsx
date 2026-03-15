@@ -1,5 +1,5 @@
 import { memo } from "react";
-import FantasyCard from "./FantasyCard";
+import Metal3DCard from "./Metal3DCard";
 import FantasyCardFan from "./FantasyCardFan";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
@@ -33,7 +33,7 @@ function CardShowcaseBase({ withSpotlight = true, card, onClick }: CardShowcaseP
         <FantasyCardFan cards={fanCards} className="w-[320px]" maxCards={3} />
       ) : (
         <button type="button" onClick={onClick} className="text-left">
-          <FantasyCard player={mainCard} className="!w-[230px]" />
+          <Metal3DCard player={mainCard} className="!w-[230px]" />
         </button>
       )}
 

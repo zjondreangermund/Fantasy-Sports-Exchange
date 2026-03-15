@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 // Fixed: @/lib -> ../lib
 import { apiRequest, queryClient } from "../lib/queryClient";
 // Fixed: @/components -> ../components
-import FantasyCard from "../components/FantasyCard";
+import Metal3DCard from "../components/Metal3DCard";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -236,7 +236,7 @@ export default function CollectionPage() {
                     position: "relative"
                   }}
                 >
-                  <FantasyCard player={toFantasyCardData(card)} className="!w-[208px]" />
+                  <Metal3DCard player={toFantasyCardData(card)} className="!w-[208px]" />
                   <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
                     {card.forSale ? (
                       <Button

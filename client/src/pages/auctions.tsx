@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import FantasyCard from "@/components/FantasyCard";
+import Metal3DCard from "@/components/Metal3DCard";
 import { toFantasyCardData } from "@/lib/fantasy-card-adapter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -322,7 +322,7 @@ export default function AuctionsPage() {
                   {/* Card Preview */}
                   <div className="flex justify-center">
                     <div className="w-48">
-                      <FantasyCard player={toFantasyCardData(auction.card)} className="!w-full" />
+                      <Metal3DCard player={toFantasyCardData(auction.card)} className="!w-full" />
                     </div>
                   </div>
 

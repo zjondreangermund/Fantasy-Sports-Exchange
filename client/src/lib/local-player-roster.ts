@@ -1,4 +1,4 @@
-import { type PlayerCardData, type Rarity } from "../components/FantasyCard";
+import { type PlayerCardData, type Rarity } from "../components/Metal3DCard";
 
 type LocalRosterItem = {
   id: string;

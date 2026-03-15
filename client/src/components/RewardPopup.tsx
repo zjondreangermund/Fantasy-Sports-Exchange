@@ -2,7 +2,7 @@
 import { Dialog, DialogContent } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import FantasyCard from "./FantasyCard";
+import Metal3DCard from "./Metal3DCard";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { Trophy, Gift, DollarSign, Star } from "lucide-react";
 
@@ -54,7 +54,7 @@ export default function RewardPopup({ rewards, onClose }: RewardPopupProps) {
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <Gift className="w-4 h-4" /> Card Prize
                       </div>
-                      <FantasyCard player={toFantasyCardData(reward.prizeCard)} className="!w-[168px]" />
+                      <Metal3DCard player={toFantasyCardData(reward.prizeCard)} className="!w-[168px]" />
                     </div>
                   )}
                 </div>

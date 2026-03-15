@@ -1,6 +1,6 @@
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 import { buildCardImageCandidates } from "./card-image";
-import { type PlayerCardData, type Rarity } from "../components/FantasyCard";
+import { type PlayerCardData, type Rarity } from "../components/Metal3DCard";
 
 function normalizeRarity(rarity?: string | null): Rarity {
   const value = String(rarity || "common").toLowerCase();
