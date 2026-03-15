@@ -24,6 +24,7 @@ import {
 import { Label } from "../components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Clock, Gavel, Zap, TrendingUp } from "lucide-react";
+import { Link } from "wouter";
 
 export default function AuctionsPage() {
   const queryClient = useQueryClient();
@@ -252,6 +253,14 @@ export default function AuctionsPage() {
             <CardDescription>
               Pack release auctions are managed by admins only.
             </CardDescription>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link href="/account">
+                <Button variant="outline" size="sm">Open Account</Button>
+              </Link>
+              <Link href="/dashboard">
+                <Button variant="outline" size="sm">Go to Dashboard</Button>
+              </Link>
+            </div>
           </CardHeader>
         </Card>
       </div>
@@ -272,6 +281,9 @@ export default function AuctionsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/admin">
+            <Button variant="outline" size="sm">Back to Admin</Button>
+          </Link>
           <Clock className="h-5 w-5 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">Updates every 5s</span>
           <Button variant="outline" size="sm" onClick={() => setShowCreatePackDialog(true)}>

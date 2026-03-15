@@ -36,10 +36,12 @@ import {
   BarChart3,
   RefreshCw,
   ExternalLink,
+  Gavel,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
+import { Link } from "wouter";
 
 type TournamentEntry = {
   id: number;
@@ -749,17 +751,31 @@ export default function AdminPage() {
               <p className="text-sm text-muted-foreground">Manage withdrawal requests and platform operations</p>
             </div>
           </div>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              const ok = window.confirm("This will remove ALL users, balances, onboarding data, and force everyone to sign in again. Continue?");
-              if (ok) resetUsersMutation.mutate();
-            }}
-            disabled={resetUsersMutation.isPending}
-          >
-            <XCircle className="w-4 h-4 mr-2" />
-            Reset Users Now
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link href="/auctions">
+              <Button variant="outline">
+                <Gavel className="w-4 h-4 mr-2" />
+                Open Auctions
+              </Button>
+            </Link>
+            <Link href="/marketplace">
+              <Button variant="outline">
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open Marketplace
+              </Button>
+            </Link>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const ok = window.confirm("This will remove ALL users, balances, onboarding data, and force everyone to sign in again. Continue?");
+                if (ok) resetUsersMutation.mutate();
+              }}
+              disabled={resetUsersMutation.isPending}
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              Reset Users Now
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">

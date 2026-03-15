@@ -6,9 +6,10 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
-import { Bell, User as UserIcon, Mail, CheckCircle2, Sparkles, Crown, Shirt, Gift, Copy, Link2 } from "lucide-react";
+import { Bell, User as UserIcon, Mail, CheckCircle2, Sparkles, Crown, Shirt, Gift, Copy, Link2, Shield, Gavel } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { queryClient } from "../lib/queryClient";
+import { Link } from "wouter";
 
 type NotificationItem = {
   id: number;
@@ -138,6 +139,15 @@ export default function AccountPage() {
     },
   });
 
+  const { data: adminCheck, isLoading: adminCheckLoading } = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/admin/check"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/check", { credentials: "include" });
+      if (!res.ok) return { isAdmin: false };
+      return res.json();
+    },
+  });
+
   const markOneMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await fetch(`/api/notifications/${id}/read`, {
@@ -238,6 +248,40 @@ export default function AccountPage() {
                       <Mail className="w-4 h-4" />
                       {user?.email || "No email set"}
                     </p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <Shield className="h-4 w-4 text-primary" />
+                      <p className="text-sm font-semibold">Access & Tools</p>
+                      {adminCheckLoading ? (
+                        <Badge variant="secondary">Checking access...</Badge>
+                      ) : adminCheck?.isAdmin ? (
+                        <Badge>Admin Enabled</Badge>
+                      ) : (
+                        <Badge variant="secondary">Standard User</Badge>
+                      )}
+                    </div>
+
+                    {adminCheck?.isAdmin ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link href="/admin">
+                          <Button size="sm" variant="default">
+                            <Shield className="mr-1 h-3.5 w-3.5" />
+                            Open Admin Panel
+                          </Button>
+                        </Link>
+                        <Link href="/auctions">
+                          <Button size="sm" variant="outline">
+                            <Gavel className="mr-1 h-3.5 w-3.5" />
+                            Open Auctions
+                          </Button>
+                        </Link>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Admin-only tools like Auctions and Admin panel will appear automatically when this account has admin access.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Team</p>
