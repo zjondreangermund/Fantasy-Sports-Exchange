@@ -1,6 +1,6 @@
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
-export const CARD_IMAGE_FALLBACK = "/images/player-1.png";
+export const CARD_IMAGE_FALLBACK = "/players/fallback.png";
 
 type CardLike = Partial<PlayerCardWithPlayer> & {
   player?: {

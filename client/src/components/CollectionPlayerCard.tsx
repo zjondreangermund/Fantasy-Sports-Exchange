@@ -61,8 +61,23 @@ function useResolvedImage(player: PlayerCardData) {
     const merged = [player.image, ...(player.imageCandidates || [])].filter(
       (entry): entry is string => Boolean(String(entry || "").trim()),
     );
-    return Array.from(new Set(merged));
-  }, [player.image, player.imageCandidates]);
+    const normalizedName = String(player.name || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    const playerId = Number(player.id || 0);
+    const fallbackIndex = playerId > 0 ? ((playerId - 1) % 6) + 1 : 1;
+
+    const additional = [
+      normalizedName ? `/Players/${normalizedName}.png` : "",
+      normalizedName ? `/Players/${normalizedName}.webp` : "",
+      `/images/player-${fallbackIndex}.png`,
+      "/players/fallback.png",
+    ].filter(Boolean);
+
+    return Array.from(new Set([...merged, ...additional]));
+  }, [player.id, player.image, player.imageCandidates, player.name]);
 
   const [imageIndex, setImageIndex] = React.useState(0);
 
@@ -70,7 +85,7 @@ function useResolvedImage(player: PlayerCardData) {
     setImageIndex(0);
   }, [player.id, candidates.join("|")]);
 
-  const src = candidates[imageIndex] || "/images/player-1.png";
+  const src = candidates[imageIndex] || "/players/fallback.png";
   const onImageError = () => {
     setImageIndex((prev) => (prev >= candidates.length - 1 ? prev : prev + 1));
   };
@@ -86,92 +101,128 @@ export default function CollectionPlayerCard({ player, className = "" }: Collect
   return (
     <article
       className={[
-        "player-card relative w-[145px] aspect-[0.7/1] overflow-hidden rounded-[22px] select-none",
+        "player-card relative w-[150px] aspect-[0.7/1] overflow-hidden rounded-[24px] select-none",
         className,
       ].join(" ")}
       style={{
         background:
-          "radial-gradient(circle at 30% 20%, rgba(255,255,255,0.10), transparent 18%), radial-gradient(circle at 70% 30%, rgba(90,140,255,0.12), transparent 30%), linear-gradient(180deg, #0a1020 0%, #05070d 100%)",
+          "radial-gradient(circle at 50% 0%, rgba(255,255,255,0.10), transparent 28%), radial-gradient(circle at 20% 15%, rgba(75,120,255,0.10), transparent 24%), linear-gradient(180deg, #08111f 0%, #03060c 100%)",
         border: "1px solid rgba(255,255,255,0.08)",
         boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -16px 40px rgba(0,0,0,0.45), 0 14px 32px rgba(0,0,0,0.45)",
+          "inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -18px 30px rgba(0,0,0,0.45), 0 16px 28px rgba(0,0,0,0.35), 0 0 0 1px rgba(114,164,255,0.10)",
       }}
     >
-      <div className="card-reflection reflection-1" />
-      <div className="card-reflection reflection-2" />
-      <div className="card-reflection reflection-3" />
+      <div className="card-gloss" />
+      <div className="shine shine-1" />
+      <div className="shine shine-2" />
+      <div className="shine shine-3" />
 
-      <div className="card-top absolute top-3 left-3 right-3 z-[3] flex items-start justify-between">
-        <div className="rating-block">
-          <div className="rating text-[30px] leading-none font-extrabold text-white">{player.rating}</div>
-          <div className="position mt-0.5 text-[11px] font-bold tracking-[0.08em] text-white/85">{player.position}</div>
+      <div className="card-header absolute top-3 left-3 right-3 z-[4] flex items-start justify-between">
+        <div>
+          <div className="rating text-[30px] font-black leading-none tracking-[-0.03em] text-white">{player.rating}</div>
+          <div className="position mt-[3px] text-[11px] font-bold tracking-[0.08em] text-white/90">{player.position}</div>
         </div>
         <div
-          className="rarity-badge rounded-full px-2 py-1 text-[9px] font-extrabold tracking-[0.1em] text-white"
+          className="rarity-badge rounded-full px-[10px] py-[5px] text-[9px] font-extrabold tracking-[0.12em] text-white"
           style={{
             background: rarity.background,
             border: `1px solid ${rarity.border}`,
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.14)",
+            backdropFilter: "blur(8px)",
           }}
         >
           {rarity.label}
         </div>
       </div>
 
-      <div className="player-image-wrap absolute left-[12%] right-[12%] top-[22%] bottom-[24%] z-[2] flex items-center justify-center pointer-events-none">
+      <div className="player-art-wrap absolute left-[16%] right-[16%] top-[24%] h-[36%] z-[2] flex items-center justify-center pointer-events-none">
         <img
-          className="player-image max-h-full max-w-full object-contain"
+          className="player-art max-h-full max-w-full object-contain"
           src={src}
           alt={player.name}
           loading="lazy"
           decoding="async"
           onError={onImageError}
           style={{
-            filter: "drop-shadow(0 8px 14px rgba(0,0,0,0.45)) saturate(1.05) contrast(1.03)",
+            filter: "drop-shadow(0 10px 18px rgba(0,0,0,0.45)) saturate(1.06) contrast(1.04)",
             opacity: 0.96,
           }}
         />
       </div>
 
-      <div className="absolute inset-0 z-[3] bg-[linear-gradient(170deg,rgba(255,255,255,0.12)_2%,transparent_24%,transparent_70%,rgba(255,255,255,0.05)_100%)] mix-blend-screen pointer-events-none" />
+      <div className="card-meta absolute left-[10px] right-[10px] bottom-3 z-[4] text-center">
+        <div className="stats-row flex justify-center gap-[10px] whitespace-nowrap text-[9px] leading-none text-white/80">
+          <span>
+            <b className="mr-0.5 font-extrabold text-white/55">LV</b>
+            <span className="font-bold text-white/90">{stats.level}</span>
+          </span>
+          <span>
+            <b className="mr-0.5 font-extrabold text-white/55">DE</b>
+            <span className="font-bold text-white/90">{stats.defensive}</span>
+          </span>
+          <span>
+            <b className="mr-0.5 font-extrabold text-white/55">SPD</b>
+            <span className="font-bold text-white/90">{stats.speed}</span>
+          </span>
+        </div>
 
-      <div className="card-stats absolute left-3 right-3 bottom-[34px] z-[3] flex justify-center gap-2 text-[8px] font-bold text-white/75">
-        <span>LV {stats.level}</span>
-        <span>DF {stats.defensive}</span>
-        <span>SPD {stats.speed}</span>
+        <div className="player-name mt-2 max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[11px] font-black uppercase text-white" title={player.name}>
+          {player.name}
+        </div>
+        <div className="club-name mt-[3px] truncate text-[8px] uppercase tracking-[0.10em] text-white/60">{player.club || player.team || "Fantasy FC"}</div>
       </div>
 
-      <div className="card-bottom absolute left-3 right-3 bottom-3 z-[3] text-center">
-        <div className="player-name truncate text-[12px] leading-[1.05] font-extrabold uppercase text-white">{player.name}</div>
-        <div className="club-name mt-0.5 truncate text-[8px] uppercase tracking-[0.08em] text-white/60">{player.club || player.team || "Fantasy FC"}</div>
-      </div>
-
-      <div className="pointer-events-none absolute inset-0 rounded-[22px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),inset_0_-14px_22px_rgba(0,0,0,0.26)]" />
+      <div className="pointer-events-none absolute inset-0 rounded-[24px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),inset_0_-16px_24px_rgba(0,0,0,0.34)]" />
 
       <style>{`
-        .player-card .card-reflection {
+        .player-card::before {
+          content: "";
+          position: absolute;
+          inset: 1px;
+          border-radius: inherit;
+          background: linear-gradient(
+            125deg,
+            rgba(255,255,255,0.10) 0%,
+            rgba(255,255,255,0.02) 18%,
+            rgba(255,255,255,0.00) 42%
+          );
+          pointer-events: none;
+          z-index: 3;
+        }
+
+        .player-card .card-gloss {
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(115deg, rgba(255,255,255,0.08) 8%, rgba(255,255,255,0.03) 18%, transparent 34%),
+            linear-gradient(180deg, rgba(255,255,255,0.04), transparent 30%);
+          pointer-events: none;
+          z-index: 3;
+        }
+
+        .player-card .shine {
           position: absolute;
           border-radius: 999px;
-          background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.18) 32%, transparent 70%);
-          filter: blur(1px);
+          background: radial-gradient(circle, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.20) 35%, transparent 72%);
           pointer-events: none;
-          z-index: 4;
+          z-index: 2;
         }
 
-        .player-card .reflection-1 {
-          width: 16px;
-          height: 16px;
-          top: 16px;
-          left: 62%;
+        .player-card .shine-1 {
+          width: 14px;
+          height: 14px;
+          top: 20px;
+          left: 68%;
         }
 
-        .player-card .reflection-2 {
+        .player-card .shine-2 {
           width: 24px;
           height: 24px;
           top: 92px;
-          left: 46%;
+          left: 42%;
         }
 
-        .player-card .reflection-3 {
+        .player-card .shine-3 {
           width: 18px;
           height: 18px;
           top: 122px;
