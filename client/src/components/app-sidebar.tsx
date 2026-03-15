@@ -109,11 +109,9 @@ export function AppSidebar() {
           variant="ghost"
           size="sm"
           className="w-full justify-start text-muted-foreground"
-          onClick={() => {
-            // Logout and redirect to landing page
-            fetch("/api/logout", { credentials: "include" })
-              .then(() => { window.location.href = "/"; })
-              .catch(() => { window.location.href = "/"; });
+          onClick={async () => {
+            await Promise.resolve(logout());
+            window.location.assign("/");
           }}
           data-testid="button-logout"
         >

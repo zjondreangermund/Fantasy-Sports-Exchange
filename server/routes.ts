@@ -10,6 +10,7 @@ import { calculatePlayerScore, mapFplStatsToPlayerStats } from "./services/scori
 import { randomUUID } from "crypto";
 import path from "path";
 import { promises as fs } from "fs";
+import { sql } from "drizzle-orm";
 import { registerCardsRoutes } from "./routes/cards.routes.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.routes.js";
 import { registerMarketplaceRoutes } from "./routes/marketplace.routes.js";
@@ -329,6 +330,120 @@ function normalizeLookupText(value: string): string {
     .trim();
 }
 
+const LIVE_CHAT_MAX_MESSAGES = 200;
+const liveChatMessagesStore: Array<{
+  id: string;
+  userId: string;
+  userName: string;
+  text: string;
+  replyToMessageId?: string;
+  replyToUserId?: string;
+  replyToUserName?: string;
+  replyToText?: string;
+  createdAt: string;
+}> = [];
+
+const livePointReasons = [
+  "Goal",
+  "Assist",
+  "Clean Sheet",
+  "Big Chance Created",
+  "Key Pass",
+  "Penalty Save",
+  "Yellow Card",
+  "Red Card",
+];
+
+const livePointTeams = [
+  "Arsenal",
+  "Liverpool",
+  "Chelsea",
+  "Manchester City",
+  "Manchester United",
+  "Tottenham",
+  "Newcastle",
+  "Aston Villa",
+];
+
+const livePointFeedStore: Array<{
+  id: string;
+  gameId: number;
+  team: string;
+  delta: number;
+  reason: string;
+  createdAt: string;
+}> = [];
+
+let livePointLastGeneratedAt = 0;
+
+function pushLivePointEvent() {
+  const now = Date.now();
+  if (now - livePointLastGeneratedAt < 20_000) return;
+  livePointLastGeneratedAt = now;
+
+  const team = livePointTeams[Math.floor(Math.random() * livePointTeams.length)] || "Premier League";
+  const reason = livePointReasons[Math.floor(Math.random() * livePointReasons.length)] || "Action";
+  const signedDelta = Math.random() > 0.2 ? Math.ceil(Math.random() * 8) : -Math.ceil(Math.random() * 5);
+
+  livePointFeedStore.push({
+    id: randomUUID(),
+    gameId: Math.floor(Math.random() * 10_000) + 1,
+    team,
+    delta: signedDelta,
+    reason,
+    createdAt: new Date().toISOString(),
+  });
+
+  while (livePointFeedStore.length > 250) {
+    livePointFeedStore.shift();
+  }
+}
+
+function encodeReferralCode(userId: string): string {
+  return Buffer.from(String(userId), "utf8").toString("base64url");
+}
+
+function decodeReferralCode(code: string): string {
+  try {
+    return Buffer.from(String(code || ""), "base64url").toString("utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+async function grantReferralRewardCard(userId: string): Promise<number | null> {
+  const allPlayers = await storage.getPlayers();
+  if (!Array.isArray(allPlayers) || allPlayers.length === 0) return null;
+
+  const userCards = await storage.getUserCards(userId);
+  const ownedCommonIds = new Set(
+    (Array.isArray(userCards) ? userCards : [])
+      .filter((card: any) => card?.rarity === "common")
+      .map((card: any) => Number(card.playerId)),
+  );
+
+  const candidates = allPlayers
+    .filter((player: any) => !ownedCommonIds.has(Number(player.id)))
+    .map((player: any) => Number(player.id))
+    .filter((id: number) => Number.isFinite(id) && id > 0);
+
+  if (candidates.length === 0) return null;
+
+  const selectedPlayerId = candidates[Math.floor(Math.random() * candidates.length)] as number;
+  const createdCard = await storage.createPlayerCard({
+    playerId: selectedPlayerId,
+    ownerId: userId,
+    rarity: "common",
+    level: 1,
+    xp: 0,
+    decisiveScore: 35,
+    forSale: false,
+    price: 0,
+  } as any);
+
+  return Number(createdCard.id);
+}
+
 function extractPhotoCode(value: string): string {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -593,6 +708,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS ban_reason text`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS banned_at timestamp`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS banned_by varchar(255)`);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.referrals (
+          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          referrer_user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          referred_user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          reward_card_id integer REFERENCES app.player_cards(id),
+          created_at timestamp DEFAULT now(),
+          UNIQUE (referrer_user_id, referred_user_id),
+          UNIQUE (referred_user_id)
+        )
+      `);
     } catch (error) {
       console.warn("Runtime schema ensure failed:", error);
     }
@@ -637,6 +764,165 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       console.error("Update user profile:", e);
       res.status(500).json({ message: e?.message || "Failed to update profile" });
+    }
+  });
+
+  app.get("/api/referrals/me", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const code = encodeReferralCode(userId);
+      const publicBase = String(process.env.PUBLIC_BASE_URL || "").trim();
+      const fallback = `${req.protocol}://${req.get("host") || ""}`;
+      const base = publicBase || fallback;
+      const url = `${base.replace(/\/$/, "")}/?ref=${encodeURIComponent(code)}`;
+      return res.json({ code, url });
+    } catch (error: any) {
+      console.error("Failed to get referral code:", error);
+      return res.status(500).json({ message: "Failed to get referral code" });
+    }
+  });
+
+  app.post("/api/referrals/claim", requireAuth, async (req: any, res) => {
+    try {
+      const referredUserId = String(req.authUserId || "").trim();
+      const rawCode = String(req.body?.code || "").trim();
+      if (!rawCode) {
+        return res.status(400).json({ message: "Referral code required" });
+      }
+
+      const referrerUserId = decodeReferralCode(rawCode);
+      if (!referrerUserId) {
+        return res.status(400).json({ message: "Invalid referral code" });
+      }
+      if (referrerUserId === referredUserId) {
+        return res.status(400).json({ message: "You cannot refer yourself" });
+      }
+
+      const referrer = await storage.getUser(referrerUserId);
+      if (!referrer) {
+        return res.status(404).json({ message: "Referrer account not found" });
+      }
+
+      const { db } = await import("./db.js");
+      const existingRows = await db.execute(sql`
+        SELECT id, reward_card_id
+        FROM app.referrals
+        WHERE referred_user_id = ${referredUserId}
+        LIMIT 1
+      `);
+      const existing = Array.isArray((existingRows as any)?.rows) ? (existingRows as any).rows[0] : null;
+      if (existing) {
+        return res.json({ success: true, alreadyClaimed: true, rewardCardId: existing.reward_card_id ?? null });
+      }
+
+      const rewardCardId = await grantReferralRewardCard(referrerUserId);
+
+      await db.execute(sql`
+        INSERT INTO app.referrals (referrer_user_id, referred_user_id, reward_card_id)
+        VALUES (${referrerUserId}, ${referredUserId}, ${rewardCardId})
+        ON CONFLICT (referred_user_id) DO NOTHING
+      `);
+
+      return res.json({ success: true, alreadyClaimed: false, rewardCardId });
+    } catch (error: any) {
+      console.error("Failed to claim referral:", error);
+      return res.status(500).json({ message: "Failed to claim referral" });
+    }
+  });
+
+  app.get("/api/live-chat/messages", requireAuth, async (req: any, res) => {
+    try {
+      const limit = Math.max(1, Math.min(80, Number(req.query.limit || 40) || 40));
+      return res.json(liveChatMessagesStore.slice(-limit));
+    } catch (error: any) {
+      console.error("Failed to fetch live chat messages:", error);
+      return res.status(500).json({ message: "Failed to fetch chat" });
+    }
+  });
+
+  app.post("/api/live-chat/messages", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const user = await storage.getUser(userId);
+      const text = String(req.body?.text || "").trim().slice(0, 280);
+      if (!text) {
+        return res.status(400).json({ message: "Message text is required" });
+      }
+
+      const replyToMessageId = String(req.body?.replyToMessageId || "").trim();
+      const replyTo = replyToMessageId
+        ? liveChatMessagesStore.find((message) => message.id === replyToMessageId)
+        : undefined;
+
+      const message = {
+        id: randomUUID(),
+        userId,
+        userName: String(user?.name || user?.firstName || user?.email || "Manager"),
+        text,
+        createdAt: new Date().toISOString(),
+        ...(replyTo
+          ? {
+              replyToMessageId: replyTo.id,
+              replyToUserId: replyTo.userId,
+              replyToUserName: replyTo.userName,
+              replyToText: replyTo.text,
+            }
+          : {}),
+      };
+
+      liveChatMessagesStore.push(message);
+      while (liveChatMessagesStore.length > LIVE_CHAT_MAX_MESSAGES) {
+        liveChatMessagesStore.shift();
+      }
+
+      return res.status(201).json(message);
+    } catch (error: any) {
+      console.error("Failed to send live chat message:", error);
+      return res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  app.get("/api/live/point-feed", requireAuth, async (req: any, res) => {
+    try {
+      pushLivePointEvent();
+      const limit = Math.max(1, Math.min(50, Number(req.query.limit || 20) || 20));
+      return res.json(livePointFeedStore.slice(-limit));
+    } catch (error: any) {
+      console.error("Failed to fetch point feed:", error);
+      return res.status(500).json({ message: "Failed to fetch point feed" });
+    }
+  });
+
+  app.post("/api/ai/help", requireAuth, async (req: any, res) => {
+    try {
+      const message = String(req.body?.message || "").trim().toLowerCase();
+      if (!message) {
+        return res.status(400).json({ message: "Question is required" });
+      }
+
+      const userId = String(req.authUserId || "");
+      const cards = await storage.getUserCards(userId);
+      const rarityCount = (Array.isArray(cards) ? cards : []).reduce((acc: Record<string, number>, card: any) => {
+        const rarity = String(card?.rarity || "common").toLowerCase();
+        acc[rarity] = (acc[rarity] || 0) + 1;
+        return acc;
+      }, {});
+
+      let answer = "Focus on building a full 5-card lineup with one GK, DEF, MID, and FWD before entering tournaments.";
+      if (message.includes("rare")) {
+        answer = `For rare tournaments, only rare cards are allowed. You currently have ${rarityCount.rare || 0} rare cards.`;
+      } else if (message.includes("lineup") || message.includes("team")) {
+        answer = "A valid lineup needs exactly 5 cards with role coverage: GK, DEF, MID, FWD, plus one utility slot.";
+      } else if (message.includes("auction") || message.includes("market")) {
+        answer = "Auction and marketplace entries work best when you keep tournament cards unlocked and list duplicates or upgrades.";
+      } else if (message.includes("referral") || message.includes("invite")) {
+        answer = "Share your referral link from your account. Each successful signup gives the referrer one random common card they do not own yet.";
+      }
+
+      return res.json({ answer });
+    } catch (error: any) {
+      console.error("AI help failed:", error);
+      return res.status(500).json({ message: "Failed to generate help response" });
     }
   });
 
@@ -1951,6 +2237,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (card.forSale) {
         return res.status(400).json({ message: "Card is already listed for sale. Cancel the listing first." });
       }
+
+      if (String(card.rarity || "common").toLowerCase() === "common") {
+        return res.status(400).json({ message: "Only rare, unique, epic, or legendary cards can be auctioned." });
+      }
       
       // Set auction times
       const startsAt = new Date();
@@ -2265,6 +2555,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!competitionId || !Array.isArray(cardIds) || cardIds.length !== 5) {
         return res.status(400).json({ message: "Tournament ID and exactly 5 card IDs required" });
       }
+      if (new Set(cardIds).size !== 5) {
+        return res.status(400).json({ message: "Lineup must contain 5 different cards" });
+      }
       
       // Get competition
       const competition = await storage.getCompetition(competitionId);
@@ -2291,6 +2584,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!card || card.ownerId !== userId) {
           return res.status(403).json({ message: "You don't own all selected cards" });
         }
+      }
+
+      const expectedRarity = String(competition.tier || "common").toLowerCase();
+      const mixedRarity = cards.some((card: any) => String(card?.rarity || "common").toLowerCase() !== expectedRarity);
+      if (mixedRarity) {
+        return res.status(400).json({
+          message: `${competition.tier.charAt(0).toUpperCase()}${competition.tier.slice(1)} tournaments only accept ${competition.tier} cards.`,
+        });
       }
       
       // Check if any cards are listed for sale
@@ -2345,6 +2646,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const fullCards = await Promise.all(
         cardIds.map(id => storage.getPlayerCardWithPlayer(id, userId))
       );
+
+      const lineupPlayerIds = fullCards.map((card: any) => Number(card?.playerId)).filter((id: number) => Number.isFinite(id) && id > 0);
+      if (new Set(lineupPlayerIds).size !== lineupPlayerIds.length) {
+        return res.status(400).json({ message: "Lineup must use 5 different players" });
+      }
       
       const positions = fullCards.map(c => c?.player?.position).filter(Boolean);
       const hasGK = positions.includes("GK");

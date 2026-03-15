@@ -9,6 +9,7 @@ import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
 import { AppSidebar } from "./components/app-sidebar";
 import { ThemeProvider, ThemeToggle } from "./components/ThemeProvider";
 import StadiumAmbientLayer from "./components/StadiumAmbientLayer";
+import FloatingSupportWidget from "./components/FloatingSupportWidget";
 import { useAuth } from "./hooks/use-auth";
 import { Skeleton } from "./components/ui/skeleton";
 
@@ -104,6 +105,7 @@ function AuthenticatedApp() {
           <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative z-10">
             <AuthenticatedRouter />
           </main>
+          <FloatingSupportWidget />
         </div>
       </div>
     </SidebarProvider>
@@ -112,6 +114,31 @@ function AuthenticatedApp() {
 
 function AppContent() {
   const { user, isLoading } = useAuth();
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = String(params.get("ref") || "").trim();
+    if (!ref) return;
+    localStorage.setItem("fantasy_referral_code", ref);
+  }, []);
+
+  React.useEffect(() => {
+    if (!user) return;
+    const code = localStorage.getItem("fantasy_referral_code");
+    if (!code) return;
+    fetch("/api/referrals/claim", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    })
+      .then(() => {
+        localStorage.removeItem("fantasy_referral_code");
+      })
+      .catch(() => {
+        // Keep code for a retry on next load if request fails.
+      });
+  }, [user]);
 
   if (isLoading) {
     return (

@@ -21,121 +21,116 @@ type FantasyCardProps = {
   className?: string;
 };
 
-const frameMap: Record<Rarity, string> = {
-  common: "/frames/common.svg",
-  rare: "/frames/rare.svg",
-  unique: "/frames/unique.svg",
-  epic: "/frames/epic.svg",
-  legendary: "/frames/legendary.svg",
+type SlabMeta = {
+  label: string;
+  frame: string;
+  shellTop: string;
+  shellBottom: string;
+  faceTop: string;
+  faceBottom: string;
+  bevelLight: string;
+  bevelDark: string;
+  glow: string;
+  shine: string;
+  plateBorder: string;
+  badgeBg: string;
+  badgeText: string;
+  statPlate: string;
+  chamberGlow: string;
+  silhouette: string;
 };
 
-const patternMap: Record<Rarity, string> = {
-  common: "/assets/patterns/common.svg",
-  rare: "/assets/patterns/rare.svg",
-  unique: "/assets/patterns/unique.svg",
-  epic: "/assets/patterns/unique.svg",
-  legendary: "/assets/patterns/legendary.svg",
-};
-
-const rarityMeta: Record<
-  Rarity,
-  {
-    label: string;
-    textureClass: string;
-    spotlightClass: string;
-    geoTextureClass: string;
-    accent: string;
-    accentSoft: string;
-    baseTop: string;
-    baseMid: string;
-    baseBottom: string;
-    rarityBadgeClass: string;
-  }
-> = {
+const rarityMeta: Record<Rarity, SlabMeta> = {
   common: {
     label: "Common",
-    textureClass: "luxury-texture-common",
-    spotlightClass: "luxury-spotlight-common",
-    geoTextureClass: "card-geo-common",
-    accent: "#7A7C80",
-    accentSoft: "rgba(122,124,128,0.30)",
-    baseTop: "#3A3F44",
-    baseMid: "#2B2D31",
-    baseBottom: "#1C1E21",
-    rarityBadgeClass: "border-[#7A7C80]/45 bg-[#7A7C80]/12 text-[#d8dadd]",
+    frame: "linear-gradient(145deg, #d3d9e2 0%, #8d97a6 35%, #4e5661 100%)",
+    shellTop: "#596270",
+    shellBottom: "#232830",
+    faceTop: "#9aa3af",
+    faceBottom: "#454c56",
+    bevelLight: "rgba(255,255,255,0.26)",
+    bevelDark: "rgba(0,0,0,0.42)",
+    glow: "rgba(220,228,240,0.14)",
+    shine: "rgba(255,255,255,0.28)",
+    plateBorder: "rgba(233,239,246,0.18)",
+    badgeBg: "rgba(210,220,232,0.16)",
+    badgeText: "#edf2f7",
+    statPlate: "linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.03))",
+    chamberGlow: "radial-gradient(circle at 50% 35%, rgba(255,255,255,0.20), rgba(255,255,255,0.04) 45%, transparent 80%)",
+    silhouette: "polygon(10% 0%, 90% 0%, 100% 8%, 100% 92%, 90% 100%, 10% 100%, 0% 92%, 0% 8%)",
   },
   rare: {
     label: "Rare",
-    textureClass: "luxury-texture-rare",
-    spotlightClass: "luxury-spotlight-rare",
-    geoTextureClass: "card-geo-rare",
-    accent: "#ff2b2b",
-    accentSoft: "rgba(255,43,43,0.32)",
-    baseTop: "#ff3838",
-    baseMid: "#d31818",
-    baseBottom: "#a30000",
-    rarityBadgeClass: "border-[#ff2b2b]/52 bg-[#ff2b2b]/18 text-[#ffd8d8]",
+    frame: "linear-gradient(145deg, #d8e6ff 0%, #6ca8ff 34%, #163f82 100%)",
+    shellTop: "#4b74c2",
+    shellBottom: "#0f2246",
+    faceTop: "#5e8fde",
+    faceBottom: "#16335f",
+    bevelLight: "rgba(194,224,255,0.34)",
+    bevelDark: "rgba(0,0,0,0.46)",
+    glow: "rgba(91,159,255,0.20)",
+    shine: "rgba(195,225,255,0.34)",
+    plateBorder: "rgba(187,220,255,0.24)",
+    badgeBg: "rgba(86,154,255,0.18)",
+    badgeText: "#e4f1ff",
+    statPlate: "linear-gradient(180deg, rgba(135,182,255,0.14), rgba(255,255,255,0.03))",
+    chamberGlow: "radial-gradient(circle at 50% 35%, rgba(114,177,255,0.24), rgba(56,112,255,0.07) 45%, transparent 82%)",
+    silhouette: "polygon(9% 0%, 91% 0%, 100% 10%, 100% 90%, 91% 100%, 9% 100%, 0% 90%, 0% 10%)",
   },
   epic: {
     label: "Epic",
-    textureClass: "luxury-texture-epic",
-    spotlightClass: "luxury-spotlight-epic",
-    geoTextureClass: "card-geo-epic",
-    accent: "#a12fff",
-    accentSoft: "rgba(161,47,255,0.34)",
-    baseTop: "#a12fff",
-    baseMid: "#6f16b8",
-    baseBottom: "#40024c",
-    rarityBadgeClass: "border-[#a12fff]/50 bg-[#a12fff]/24 text-[#f3d8ff]",
+    frame: "linear-gradient(145deg, #e1c6ff 0%, #a05cff 35%, #3d165d 100%)",
+    shellTop: "#7440b8",
+    shellBottom: "#220d32",
+    faceTop: "#8652cb",
+    faceBottom: "#301247",
+    bevelLight: "rgba(235,207,255,0.28)",
+    bevelDark: "rgba(0,0,0,0.46)",
+    glow: "rgba(177,98,255,0.18)",
+    shine: "rgba(248,225,255,0.30)",
+    plateBorder: "rgba(225,196,255,0.20)",
+    badgeBg: "rgba(168,96,255,0.18)",
+    badgeText: "#f6eaff",
+    statPlate: "linear-gradient(180deg, rgba(181,120,255,0.15), rgba(255,255,255,0.03))",
+    chamberGlow: "radial-gradient(circle at 50% 35%, rgba(187,112,255,0.24), rgba(135,41,214,0.08) 45%, transparent 82%)",
+    silhouette: "polygon(10% 0%, 90% 0%, 100% 7%, 100% 93%, 90% 100%, 10% 100%, 0% 93%, 0% 7%)",
   },
   legendary: {
     label: "Legendary",
-    textureClass: "luxury-texture-legendary",
-    spotlightClass: "luxury-spotlight-legendary",
-    geoTextureClass: "card-geo-legendary",
-    accent: "#FFD700",
-    accentSoft: "rgba(255,215,0,0.36)",
-    baseTop: "#ffd36a",
-    baseMid: "#d39a24",
-    baseBottom: "#a36b00",
-    rarityBadgeClass: "border-[#FFD700]/62 bg-[#FFD700]/30 text-[#fff4bc]",
+    frame: "linear-gradient(145deg, #fff0b2 0%, #f0c35a 34%, #835307 100%)",
+    shellTop: "#c99834",
+    shellBottom: "#3f2603",
+    faceTop: "#d7a53f",
+    faceBottom: "#6a4308",
+    bevelLight: "rgba(255,241,189,0.34)",
+    bevelDark: "rgba(0,0,0,0.46)",
+    glow: "rgba(255,211,102,0.22)",
+    shine: "rgba(255,248,212,0.38)",
+    plateBorder: "rgba(255,227,142,0.22)",
+    badgeBg: "rgba(255,210,96,0.22)",
+    badgeText: "#fff5cf",
+    statPlate: "linear-gradient(180deg, rgba(255,218,123,0.16), rgba(255,255,255,0.03))",
+    chamberGlow: "radial-gradient(circle at 50% 32%, rgba(255,220,123,0.26), rgba(255,173,32,0.08) 45%, transparent 82%)",
+    silhouette: "polygon(15% 0%, 32% 6%, 50% 0%, 68% 6%, 85% 0%, 100% 10%, 100% 90%, 90% 100%, 10% 100%, 0% 90%, 0% 10%)",
   },
   unique: {
     label: "Unique",
-    textureClass: "luxury-texture-unique",
-    spotlightClass: "luxury-spotlight-unique",
-    geoTextureClass: "card-geo-unique",
-    accent: "#0f6eff",
-    accentSoft: "rgba(15,110,255,0.30)",
-    baseTop: "#0f6eff",
-    baseMid: "#0b3daf",
-    baseBottom: "#041a67",
-    rarityBadgeClass: "border-[#0f6eff]/50 bg-[#0f6eff]/20 text-[#dcedff]",
+    frame: "linear-gradient(145deg, #bafcff 0%, #7c9cff 32%, #ff7ad9 64%, #1b1d29 100%)",
+    shellTop: "#4a5876",
+    shellBottom: "#0d1018",
+    faceTop: "#2c3142",
+    faceBottom: "#11141c",
+    bevelLight: "rgba(201,246,255,0.28)",
+    bevelDark: "rgba(0,0,0,0.52)",
+    glow: "rgba(143,247,255,0.18)",
+    shine: "rgba(255,255,255,0.34)",
+    plateBorder: "rgba(190,233,255,0.22)",
+    badgeBg: "linear-gradient(90deg, rgba(123,244,255,0.18), rgba(255,104,211,0.18))",
+    badgeText: "#eefeff",
+    statPlate: "linear-gradient(180deg, rgba(167,230,255,0.10), rgba(255,255,255,0.03))",
+    chamberGlow: "radial-gradient(circle at 50% 34%, rgba(134,241,255,0.24), rgba(255,106,213,0.08) 44%, transparent 82%)",
+    silhouette: "polygon(8% 0%, 92% 0%, 100% 12%, 100% 88%, 88% 100%, 12% 100%, 0% 88%, 0% 12%)",
   },
-};
-
-const rarityEdgeClass: Record<Rarity, string> = {
-  common: "luxury-edge-common",
-  rare: "luxury-edge-rare",
-  epic: "luxury-edge-epic",
-  legendary: "luxury-edge-legendary",
-  unique: "luxury-edge-unique",
-};
-
-const rarityShapeClass: Record<Rarity, string> = {
-  common: "slab-shape-common",
-  rare: "slab-shape-rare",
-  epic: "slab-shape-epic",
-  legendary: "slab-shape-legendary",
-  unique: "slab-shape-unique",
-};
-
-const rarityToneClass: Record<Rarity, string> = {
-  common: "card-rarity-common",
-  rare: "card-rarity-rare",
-  epic: "card-rarity-epic",
-  legendary: "card-rarity-legendary",
-  unique: "card-rarity-unique",
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -220,7 +215,7 @@ function buildResponsivePortrait(src?: string): ResponsivePortrait | null {
   }
 }
 
-export default function FantasyCard({ player, className }: FantasyCardProps) {
+export default function FantasyCard({ player, className = "" }: FantasyCardProps) {
   const rarity = player.rarity;
   const meta = rarityMeta[rarity];
   const stats = computeStats(player);
@@ -228,12 +223,13 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
   const rafRef = React.useRef<number | null>(null);
   const canTiltRef = React.useRef(true);
   const pointerFxRef = React.useRef({ x: 50, y: 50, tiltX: 0, tiltY: 0 });
-  const isLegendary = rarity === "legendary";
+
   const imageCandidates = React.useMemo(() => {
     const list = Array.isArray(player.imageCandidates) ? player.imageCandidates : [];
     const merged = [player.image, ...list].filter((value): value is string => Boolean(String(value || "").trim()));
     return Array.from(new Set(merged));
   }, [player.image, player.imageCandidates]);
+
   const [imageIndex, setImageIndex] = React.useState(0);
 
   React.useEffect(() => {
@@ -243,7 +239,6 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
   const activeImage = imageCandidates[imageIndex] || player.image;
   const portrait = React.useMemo(() => buildResponsivePortrait(activeImage), [activeImage]);
   const portraitFrame = React.useMemo(() => portraitFrameForPosition(player.position), [player.position]);
-  const seasonLabel = "2025-26";
 
   const commitPointerFx = React.useCallback(() => {
     rafRef.current = null;
@@ -263,7 +258,7 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
       if (rafRef.current !== null) return;
       rafRef.current = window.requestAnimationFrame(commitPointerFx);
     },
-    [commitPointerFx],
+    [commitPointerFx]
   );
 
   React.useEffect(() => {
@@ -277,16 +272,13 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
     };
 
     syncTiltCapability();
-
     reducedMotionQuery.addEventListener("change", syncTiltCapability);
     coarsePointerQuery.addEventListener("change", syncTiltCapability);
 
     return () => {
       reducedMotionQuery.removeEventListener("change", syncTiltCapability);
       coarsePointerQuery.removeEventListener("change", syncTiltCapability);
-      if (rafRef.current !== null) {
-        window.cancelAnimationFrame(rafRef.current);
-      }
+      if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
     };
   }, []);
 
@@ -299,8 +291,8 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
     const offsetX = x - 50;
     const offsetY = y - 50;
 
-    const tiltX = canTiltRef.current ? clamp(-offsetY * 0.2, -10, 10) : 0;
-    const tiltY = canTiltRef.current ? clamp(offsetX * 0.24, -12, 12) : 0;
+    const tiltX = canTiltRef.current ? clamp(-offsetY * 0.18, -10, 10) : 0;
+    const tiltY = canTiltRef.current ? clamp(offsetX * 0.22, -12, 12) : 0;
 
     schedulePointerFx({ x, y, tiltX, tiltY });
   };
@@ -310,148 +302,241 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
   };
 
   return (
-    <div className="card-slab-scene">
+    <div className="relative [perspective:1400px]">
       <article
         ref={cardRef}
-        className={[
-          "group card-slab-wrap card-slab--hero relative isolate aspect-[2.5/3.5] w-[260px] overflow-visible transition duration-300",
-          className || "",
-        ].join(" ")}
-        data-tilt-card
-        data-rarity={rarity}
         onPointerMove={handlePointerMove}
         onPointerLeave={resetPointer}
         onPointerCancel={resetPointer}
-        style={{
-          ["--card-accent" as string]: meta.accent,
-          ["--card-accent-soft" as string]: meta.accentSoft,
-          ["--holo-x" as string]: "50%",
-          ["--holo-y" as string]: "50%",
-          ["--tilt-x" as string]: "0deg",
-          ["--tilt-y" as string]: "0deg",
-        }}
+        className={[
+          "group relative isolate aspect-[2.5/3.5] w-[260px] select-none transition-transform duration-300",
+          className,
+        ].join(" ")}
+        style={
+          {
+            ["--holo-x" as string]: "50%",
+            ["--holo-y" as string]: "50%",
+            ["--tilt-x" as string]: "0deg",
+            ["--tilt-y" as string]: "0deg",
+            transform: "rotateX(var(--tilt-x)) rotateY(var(--tilt-y)) translateZ(0)",
+            transformStyle: "preserve-3d",
+          } as React.CSSProperties
+        }
       >
-        <div className={["card-slab-back absolute inset-[1.6%] z-0 rounded-[26px]", rarityShapeClass[rarity], rarityToneClass[rarity]].join(" ")} />
-
+        {/* OUTER DROP SHADOW */}
         <div
-          className={[
-            "luxury-card-shell absolute inset-0 overflow-hidden rounded-[28px]",
-            rarityEdgeClass[rarity],
-            rarityShapeClass[rarity],
-            rarityToneClass[rarity],
-          ].join(" ")}
+          className="absolute inset-[2%] rounded-[30px] blur-xl transition duration-300 group-hover:scale-[1.03]"
+          style={{
+            background: meta.glow,
+            transform: "translateZ(-40px)",
+          }}
+        />
+
+        {/* METAL SLAB BODY */}
+        <div
+          className="absolute inset-0 rounded-[30px]"
+          style={{
+            clipPath: meta.silhouette,
+            background: `linear-gradient(180deg, ${meta.shellTop} 0%, ${meta.shellBottom} 100%)`,
+            boxShadow: `
+              0 28px 45px rgba(0,0,0,0.42),
+              0 10px 20px rgba(0,0,0,0.28),
+              inset 0 2px 0 ${meta.bevelLight},
+              inset 0 -10px 14px ${meta.bevelDark}
+            `,
+            transform: "translateZ(0px)",
+          }}
+        />
+
+        {/* FRAME RING */}
+        <div
+          className="absolute inset-[1.7%] rounded-[28px]"
+          style={{
+            clipPath: meta.silhouette,
+            background: meta.frame,
+            boxShadow: `
+              inset 0 1px 0 rgba(255,255,255,0.34),
+              inset 0 -3px 8px rgba(0,0,0,0.34),
+              0 0 0 1px rgba(255,255,255,0.06)
+            `,
+            transform: "translateZ(10px)",
+          }}
+        />
+
+        {/* INNER FACE */}
+        <div
+          className="absolute inset-[5.3%] rounded-[22px] overflow-hidden"
+          style={{
+            background: `linear-gradient(180deg, ${meta.faceTop} 0%, ${meta.faceBottom} 100%)`,
+            boxShadow: `
+              inset 0 1px 0 rgba(255,255,255,0.18),
+              inset 0 -8px 12px rgba(0,0,0,0.28)
+            `,
+            transform: "translateZ(18px)",
+          }}
         >
-          <div className={["slab-face-plate absolute inset-[9px] z-[0.5] rounded-[20px]", `material-${rarity}`].join(" ")} />
-
+          {/* brushed metal grain */}
           <div
-            className={[
-              "pointer-events-none absolute inset-x-[4%] top-[11.8%] bottom-[31.3%] z-[2] rounded-[17px]",
-              "card-geo-layer",
-              meta.geoTextureClass,
-            ].join(" ")}
+            className="absolute inset-0 opacity-[0.22] mix-blend-screen"
+            style={{
+              backgroundImage: `
+                repeating-linear-gradient(
+                  100deg,
+                  rgba(255,255,255,0.10) 0px,
+                  rgba(255,255,255,0.10) 1px,
+                  rgba(255,255,255,0.02) 2px,
+                  rgba(0,0,0,0.04) 4px,
+                  rgba(0,0,0,0.04) 6px
+                )
+              `,
+            }}
+          />
+
+          {/* top machined header strip */}
+          <div
+            className="absolute inset-x-[3%] top-[2.5%] h-[17%] rounded-[14px]"
+            style={{
+              background: "linear-gradient(180deg, rgba(255,255,255,0.13), rgba(0,0,0,0.08))",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -2px 6px rgba(0,0,0,0.22)",
+            }}
+          />
+
+          {/* player chamber */}
+          <div
+            className="absolute inset-x-[4%] top-[16%] h-[47%] overflow-hidden rounded-[18px]"
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(0,0,0,0.10)), radial-gradient(circle at 50% 25%, rgba(255,255,255,0.12), transparent 65%)",
+              boxShadow: `
+                inset 0 2px 8px rgba(0,0,0,0.34),
+                inset 0 1px 0 rgba(255,255,255,0.12),
+                0 8px 14px rgba(0,0,0,0.18)
+              `,
+              transform: "translateZ(24px)",
+            }}
           >
-            <img
-              src={patternMap[rarity]}
-              alt=""
-              aria-hidden
-              className="card-pattern-base absolute inset-0 h-full w-full object-cover"
-              loading="lazy"
-              decoding="async"
-            />
-          </div>
+            <div className="absolute inset-0" style={{ background: meta.chamberGlow }} />
 
-          <div className={["pointer-events-none absolute inset-0 z-[1] opacity-[0.92]", meta.textureClass].join(" ")} />
-
-          <div className={["pointer-events-none absolute inset-x-[6%] top-[14.5%] z-[2] h-[46%] rounded-[999px] blur-3xl", meta.spotlightClass].join(" ")} />
-
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-[2] h-20 bg-gradient-to-b from-white/10 via-white/[0.02] to-transparent" />
-
-          <div className="player-chamber absolute inset-x-[3.3%] top-[12.4%] bottom-[28.2%] z-[3] overflow-hidden rounded-[20px]">
             {portrait ? (
               <picture>
-                {portrait.webpSrcSet ? <source type="image/webp" srcSet={portrait.webpSrcSet} sizes="(max-width: 640px) 42vw, 260px" /> : null}
-                {portrait.jpegSrcSet ? <source type="image/jpeg" srcSet={portrait.jpegSrcSet} sizes="(max-width: 640px) 42vw, 260px" /> : null}
+                {portrait.webpSrcSet ? (
+                  <source type="image/webp" srcSet={portrait.webpSrcSet} sizes="(max-width: 640px) 42vw, 260px" />
+                ) : null}
+                {portrait.jpegSrcSet ? (
+                  <source type="image/jpeg" srcSet={portrait.jpegSrcSet} sizes="(max-width: 640px) 42vw, 260px" />
+                ) : null}
                 <img
                   src={portrait.fallbackSrc}
                   alt={player.name}
-                  className={[
-                    "portrait-dynamic h-full w-full object-cover transition-transform duration-500",
-                    `portrait-${rarity}`,
-                  ].join(" ")}
-                  style={{
-                    objectPosition: `50% ${portraitFrame.y}%`,
-                    ["--portrait-base-scale" as string]: String(portraitFrame.baseScale),
-                  }}
-                  onError={() => {
-                    setImageIndex((prev) => {
-                      if (prev >= imageCandidates.length - 1) return prev;
-                      return prev + 1;
-                    });
-                  }}
-                  loading="lazy"
-                  decoding="async"
                   width={800}
                   height={1000}
+                  loading="lazy"
+                  decoding="async"
                   sizes="(max-width: 640px) 42vw, 260px"
+                  className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.05]"
+                  style={{
+                    objectPosition: `50% ${portraitFrame.y}%`,
+                    transform: `scale(${portraitFrame.baseScale})`,
+                    filter: "contrast(1.06) saturate(1.02)",
+                  }}
+                  onError={() => {
+                    setImageIndex((prev) => (prev >= imageCandidates.length - 1 ? prev : prev + 1));
+                  }}
                 />
               </picture>
             ) : (
-              <div className="h-full w-full bg-gradient-to-b from-white/10 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-black/10" />
             )}
 
-            <div className="tc-glare pointer-events-none absolute inset-[-28%] z-[4]" aria-hidden />
-            <img
-              src={patternMap[rarity]}
-              alt=""
-              aria-hidden
-              className="card-pattern-photo absolute inset-0 z-[3] h-full w-full object-cover"
-              loading="lazy"
-              decoding="async"
+            <div
+              className="absolute inset-0 opacity-60"
+              style={{
+                background:
+                  "linear-gradient(140deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.02) 18%, transparent 40%, transparent 100%)",
+              }}
             />
-            <div className="pointer-events-none absolute inset-0 card-photo-vignette" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_100%,rgba(0,0,0,0.28),transparent_56%)]" />
           </div>
 
-          <img
-            src={frameMap[rarity]}
-            alt=""
-            aria-hidden
-            className="pointer-events-none absolute inset-[1.2%] z-[6] h-[97.6%] w-[97.6%] object-cover opacity-55"
-          />
+          {/* engraved side rails */}
+          <div className="absolute left-[4%] top-[17%] bottom-[31%] w-[5px] rounded-full bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),inset_0_-1px_0_rgba(0,0,0,0.35)]" />
+          <div className="absolute right-[4%] top-[17%] bottom-[31%] w-[5px] rounded-full bg-black/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),inset_0_-1px_0_rgba(0,0,0,0.35)]" />
 
-          <header className="absolute left-4 right-4 top-3.5 z-10">
-            <div className="flex items-center justify-between font-[Inter] text-[9px] font-semibold uppercase tracking-[0.14em] text-white/70">
-              <span className="card-season-chip">{seasonLabel}</span>
-              <span className="card-season-chip">{player.club || "FANTASYFC"}</span>
+          {/* header content */}
+          <header className="absolute inset-x-[6%] top-[5.2%] z-20 flex items-start justify-between">
+            <div>
+              <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/68">
+                {player.club || "FantasyFC"}
+              </div>
+              <div
+                className="mt-1 text-[38px] font-black leading-none tracking-[-0.05em] text-white"
+                style={{
+                  textShadow: "0 1px 0 rgba(255,255,255,0.14), 0 2px 4px rgba(0,0,0,0.18)",
+                }}
+              >
+                {player.rating}
+              </div>
             </div>
 
-            <div className="mt-2.5 flex items-start justify-between">
-              <div>
-                <p className="card-corner-pill engraved-text font-[Outfit] text-[34px] font-extrabold leading-none tracking-tight text-white">{player.rating}</p>
+            <div className="text-right">
+              <div className="text-[17px] font-black uppercase tracking-[0.10em] text-white">
+                {player.position}
               </div>
-
-              <div className="text-right">
-                <p className="engraved-text font-[Outfit] text-[16px] font-black uppercase tracking-[0.11em] text-white">{player.position}</p>
-                <span className={["metal-pill mt-1 inline-flex rounded-full border px-2 py-0.5 font-[Inter] text-[9px] font-semibold uppercase tracking-[0.16em]", meta.rarityBadgeClass].join(" ")}>
-                  {meta.label}
-                </span>
-              </div>
+              <span
+                className="mt-1 inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]"
+                style={{
+                  borderColor: meta.plateBorder,
+                  background: meta.badgeBg,
+                  color: meta.badgeText,
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.14)",
+                }}
+              >
+                {meta.label}
+              </span>
             </div>
           </header>
 
-          <footer className="card-nameplate absolute inset-x-3.5 bottom-[3.2%] z-20 rounded-[16px] border border-white/14 px-3.5 pb-2.5 pt-2.5">
-            <h3 className="card-name-tight engraved-text truncate text-center font-[Outfit] text-[22px] font-extrabold uppercase leading-[0.92] tracking-[0.005em] text-white">{player.name}</h3>
-            <p className="mt-1 truncate text-center font-[Inter] text-[10px] font-semibold uppercase tracking-[0.19em] text-white/70">{player.position} • {player.club || "FantasyFC"}</p>
+          {/* mounted bottom stat slab */}
+          <footer
+            className="absolute inset-x-[4.3%] bottom-[4%] z-20 rounded-[18px] px-3 pb-2.5 pt-2.5"
+            style={{
+              background: meta.statPlate,
+              border: `1px solid ${meta.plateBorder}`,
+              boxShadow: `
+                0 10px 18px rgba(0,0,0,0.18),
+                inset 0 1px 0 rgba(255,255,255,0.15),
+                inset 0 -4px 8px rgba(0,0,0,0.18)
+              `,
+              transform: "translateZ(34px)",
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            <h3 className="truncate text-center text-[22px] font-black uppercase leading-[0.92] tracking-[-0.02em] text-white">
+              {player.name}
+            </h3>
 
-            <div className="mt-2 grid grid-cols-3 gap-x-2 gap-y-1.5">
-              {stats.slice(0, 3).map((stat) => (
-                <div key={stat.key} className="metal-capsule rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-1 text-center">
-                  <div className="font-[Inter] text-[8px] font-semibold uppercase tracking-[0.15em] text-white/58">{stat.key}</div>
-                  <div className="engraved-text font-[Outfit] text-[13px] font-bold leading-tight text-white">{stat.value}</div>
+            <p className="mt-1 truncate text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70">
+              {player.position} • {player.club || "FantasyFC"}
+            </p>
+
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
+              {stats.slice(0, 6).map((stat) => (
+                <div
+                  key={stat.key}
+                  className="rounded-[10px] px-1.5 py-1 text-center"
+                  style={{
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03))",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -2px 4px rgba(0,0,0,0.18)",
+                  }}
+                >
+                  <div className="text-[8px] font-semibold uppercase tracking-[0.14em] text-white/58">{stat.key}</div>
+                  <div className="text-[13px] font-extrabold leading-tight text-white">{stat.value}</div>
                 </div>
               ))}
             </div>
 
-            <div className="mt-2.5 flex items-center justify-between font-[Inter] text-[9px] font-semibold uppercase tracking-[0.14em] text-white/62">
+            <div className="mt-2.5 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.14em] text-white/62">
               <span>{player.position}</span>
               <span>
                 #{String(player.serial || 1).padStart(3, "0")} / {player.maxSupply || 500}
@@ -459,15 +544,32 @@ export default function FantasyCard({ player, className }: FantasyCardProps) {
             </div>
           </footer>
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[8] h-[13px] bg-gradient-to-b from-white/[0.10] via-white/[0.03] to-transparent" />
+          {/* metallic shine */}
+          <div
+            className="pointer-events-none absolute inset-[-30%] opacity-70 transition duration-500 group-hover:translate-x-[10%]"
+            style={{
+              background: `linear-gradient(
+                115deg,
+                transparent 22%,
+                ${meta.shine} 34%,
+                rgba(255,255,255,0.06) 42%,
+                transparent 52%
+              )`,
+              mixBlendMode: "screen",
+              transform: "translateX(-18%)",
+            }}
+          />
 
-          {isLegendary ? <div className="legendary-holo-overlay pointer-events-none absolute inset-[10px] z-[8] rounded-[18px]" /> : null}
+          {/* holo hotspot */}
+          <div
+            className="pointer-events-none absolute inset-0 opacity-40"
+            style={{
+              background: `radial-gradient(circle at var(--holo-x) var(--holo-y), rgba(255,255,255,0.18), transparent 24%)`,
+            }}
+          />
 
-          <div className="pointer-events-none absolute inset-0 z-[11] opacity-0 transition duration-500 group-hover:opacity-100">
-            <div className="luxury-shine absolute inset-[-22%]" />
-          </div>
-
-          <div className="pointer-events-none absolute inset-0 z-[9] rounded-[24px] border border-white/12" />
+          {/* edge vignette */}
+          <div className="pointer-events-none absolute inset-0 rounded-[22px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),inset_0_-18px_24px_rgba(0,0,0,0.18)]" />
         </div>
       </article>
     </div>

@@ -136,7 +136,13 @@ export default function CompetitionsPage() {
   const liveComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && (c.status === "open" || c.status === "active")) || [];
   const upcomingComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && c.status === "upcoming") || [];
   const completedComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && c.status === "completed") || [];
-  const availableCards = (Array.isArray(myCards) ? myCards : [])?.filter(c => c && !c.forSale) || [];
+  const requiredTier = String(selectedComp?.tier || "").toLowerCase();
+  const availableCards = (Array.isArray(myCards) ? myCards : [])
+    ?.filter(c => c && !c.forSale)
+    .filter((card) => {
+      if (!requiredTier) return true;
+      return String(card.rarity || "common").toLowerCase() === requiredTier;
+    }) || [];
   const enteredCompetitionIds = new Set(((Array.isArray(myEntries) ? myEntries : []) || []).map((entry) => entry.competitionId));
 
   const handleViewUserTeam = async (competitionId: number, entryId: number) => {
@@ -303,6 +309,11 @@ export default function CompetitionsPage() {
                 Select 5 cards for your lineup (1 GK, 1 DEF, 1 MID, 1 FWD + 1 Utility), then choose a captain for a 10% score bonus.
                 {selectedCards.length}/5 selected.
               </p>
+              {selectedComp?.tier && (
+                <p className="text-xs text-muted-foreground mb-2">
+                  Tournament tier is <span className="font-semibold capitalize">{selectedComp.tier}</span>. Only {selectedComp.tier} cards are shown and allowed.
+                </p>
+              )}
               {lineupError && (
                 <p className="text-sm text-red-500 mb-2">{lineupError}</p>
               )}

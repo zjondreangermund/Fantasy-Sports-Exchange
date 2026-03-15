@@ -7,6 +7,8 @@ import { motion } from "framer-motion";
 
 export default function LandingPage() {
   const [heroVideoError, setHeroVideoError] = useState(false);
+  const refCode = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("ref") : "";
+  const loginHref = refCode ? `/api/login?ref=${encodeURIComponent(refCode)}` : "/api/login";
 
   return (
     <div className="min-h-screen bg-background">
@@ -33,7 +35,7 @@ export default function LandingPage() {
             <span className="font-bold text-lg text-foreground">FantasyFC</span>
           </div>
           <div className="flex items-center gap-3">
-            <a href="/api/auth/google">
+            <a href={loginHref}>
   <Button data-testid="button-login">Sign In with Google</Button>
 </a>
           </div>
@@ -95,7 +97,7 @@ export default function LandingPage() {
               </p>
 
               <div className="mt-8 flex flex-wrap items-center gap-3">
-                <a href="/api/auth/google" className="relative inline-flex">
+                <a href={loginHref} className="relative inline-flex">
                   {/* Glow underlay */}
                   <span
                     className="absolute -inset-2 rounded-2xl blur-xl"
@@ -235,7 +237,7 @@ export default function LandingPage() {
           <p className="text-muted-foreground max-w-xl mx-auto mb-6">
             Join now, lock your lineup, and start climbing the leaderboard before the next kickoff.
           </p>
-          <a href="/api/auth/google">
+          <a href={loginHref}>
             <Button size="lg" data-testid="button-final-cta">Start Free with Google</Button>
           </a>
         </Card>
