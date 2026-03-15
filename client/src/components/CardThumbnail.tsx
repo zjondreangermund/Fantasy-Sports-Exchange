@@ -32,7 +32,7 @@ function CardThumbnailBase({
   const rarity = String(card.rarity || "common").toLowerCase();
   const selectedRing = raritySelectedRing[rarity] || raritySelectedRing.common;
   const player = card.player || ({} as any);
-  const fantasyCard = toFantasyCardData(card);
+  const fantasyCard = toFantasyCardData(card, { imageWidth: 320 });
 
   const frame =
     size === "sm"

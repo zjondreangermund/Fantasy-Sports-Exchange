@@ -36,7 +36,6 @@ const menuItems = [
   { title: "Tournaments", href: "/competitions", icon: Trophy },
   { title: "Collection", href: "/collection", icon: Library },
   { title: "Marketplace", href: "/marketplace", icon: ShoppingCart },
-  { title: "Auctions", href: "/auctions", icon: Gavel },
   { title: "Wallet", href: "/wallet", icon: Wallet },
   { title: "Account", href: "/account", icon: Bell },
   { title: "Card Lab", href: "/card-lab", icon: Gem },
@@ -52,7 +51,7 @@ export function AppSidebar() {
   });
 
   const allItems = adminCheck?.isAdmin
-    ? [...menuItems, { title: "Admin", href: "/admin", icon: Shield }]
+    ? [...menuItems, { title: "Auctions", href: "/auctions", icon: Gavel }, { title: "Admin", href: "/admin", icon: Shield }]
     : menuItems;
 
   return (

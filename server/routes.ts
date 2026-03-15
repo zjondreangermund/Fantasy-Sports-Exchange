@@ -2307,7 +2307,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   
   // Create auction
-  app.post("/api/auctions/create", requireAuth, async (req: any, res) => {
+  app.post("/api/auctions/create", requireAuth, isAdmin, async (req: any, res) => {
     try {
       const userId = req.authUserId;
       const { cardId, startPrice, buyNowPrice, reservePrice, duration } = req.body;
@@ -2636,7 +2636,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/auctions/packs/create", requireAuth, async (req: any, res) => {
+  app.post("/api/auctions/packs/create", requireAuth, isAdmin, async (req: any, res) => {
     try {
       const userId = String(req.authUserId || "");
       const rarity = String(req.body?.rarity || "rare").toLowerCase();

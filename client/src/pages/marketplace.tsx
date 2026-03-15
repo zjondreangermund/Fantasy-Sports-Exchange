@@ -133,7 +133,7 @@ export default function MarketplacePage() {
   useEffect(() => {
     if (!visibleBuyListings.length) return;
     const snapshot = visibleBuyListings.slice(0, 5).map((card) => {
-      const fantasy = toFantasyCardData(card);
+      const fantasy = toFantasyCardData(card, { imageWidth: 256 });
       return {
         id: card.id,
         name: card.player?.name,
@@ -212,7 +212,7 @@ export default function MarketplacePage() {
                   >
                     <div className="flex flex-col items-center gap-2">
                       <button type="button" className="w-full text-left" onClick={() => handleOpenBuyCard(card)}>
-                        <CollectionPlayerCard player={toFantasyCardData(card)} />
+                        <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 256 })} />
                       </button>
                       <p className="text-xs text-muted-foreground">
                         Seller: {card.ownerUsername || card.ownerName || "FantasyFC"}
@@ -256,7 +256,7 @@ export default function MarketplacePage() {
                     }}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <CollectionPlayerCard player={toFantasyCardData(card)} />
+                      <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 256 })} />
                       <p className="text-sm font-semibold text-green-500">
                         N${(card.price || 0).toFixed(2)}
                       </p>

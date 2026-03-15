@@ -16,7 +16,7 @@ type CardShowcaseProps = {
 
 function CardShowcaseBase({ withSpotlight = true, card, onClick }: CardShowcaseProps) {
   const player = card.player;
-  const mainCard = toFantasyCardData(card);
+  const mainCard = toFantasyCardData(card, { imageWidth: 320 });
 
   return (
     <div className="relative inline-flex flex-col items-center justify-center px-2 pb-8 pt-6" onClick={onClick}>

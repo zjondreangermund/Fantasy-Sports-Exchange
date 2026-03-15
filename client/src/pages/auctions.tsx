@@ -37,6 +37,15 @@ export default function AuctionsPage() {
   const [packStartPrice, setPackStartPrice] = useState("100");
   const [packBuyNow, setPackBuyNow] = useState("0");
 
+  const { data: adminCheck, isLoading: isAdminLoading } = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/admin/check"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/check", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to verify admin access");
+      return res.json();
+    },
+  });
+
   // Fetch active auctions
   const { data: auctions = [], isLoading } = useQuery({
     queryKey: ["/api/auctions/active"],
@@ -45,6 +54,7 @@ export default function AuctionsPage() {
       if (!res.ok) throw new Error("Failed to fetch auctions");
       return res.json();
     },
+    enabled: adminCheck?.isAdmin === true,
     refetchInterval: 5000, // Auto-refresh every 5 seconds for live updates
   });
 
@@ -55,6 +65,7 @@ export default function AuctionsPage() {
       if (!res.ok) throw new Error("Failed to fetch pack auctions");
       return res.json();
     },
+    enabled: adminCheck?.isAdmin === true,
     refetchInterval: 5000,
   });
 
@@ -220,6 +231,29 @@ export default function AuctionsPage() {
     return (
       <div className="container mx-auto py-8">
         <div className="text-center">Loading auctions...</div>
+      </div>
+    );
+  }
+
+  if (isAdminLoading) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-center">Checking admin access...</div>
+      </div>
+    );
+  }
+
+  if (!adminCheck?.isAdmin) {
+    return (
+      <div className="container mx-auto py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Auctions Are Admin-Only</CardTitle>
+            <CardDescription>
+              Pack release auctions are managed by admins only.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       </div>
     );
   }

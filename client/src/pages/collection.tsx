@@ -169,7 +169,7 @@ export default function CollectionPage() {
   useEffect(() => {
     if (!visibleCards.length) return;
     const snapshot = visibleCards.slice(0, 5).map((card) => {
-      const fantasy = toFantasyCardData(card);
+      const fantasy = toFantasyCardData(card, { imageWidth: 256 });
       return {
         id: card.id,
         name: card.player?.name,
@@ -247,7 +247,7 @@ export default function CollectionPage() {
             style={{ transformStyle: "preserve-3d" }}
           >
             {visibleCards.map((card) => {
-              const fantasyCard = toFantasyCardData(card);
+              const fantasyCard = toFantasyCardData(card, { imageWidth: 256 });
               return (
                 <div 
                   key={card.id} 
