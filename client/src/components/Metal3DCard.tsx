@@ -190,27 +190,100 @@ async function createPortraitTexture(player: PlayerCardData): Promise<THREE.Canv
 	return texture;
 }
 
-function createPlateTexture(player: PlayerCardData): THREE.CanvasTexture {
-	const canvas = document.createElement("canvas");
-	canvas.width = 344;
-	canvas.height = 144;
-	const ctx = canvas.getContext("2d")!;
+function computeStats(player: PlayerCardData) {
+	const rating = Math.max(45, Math.min(99, Number(player.rating) || 70));
+	const pos = String(player.position || "").toUpperCase();
 
-	ctx.fillStyle = "#141414";
-	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	const atkBias = pos.includes("ST") || pos.includes("FW") ? 8 : pos.includes("MID") ? 4 : -2;
+	const defBias = pos.includes("GK") || pos.includes("DEF") ? 9 : pos.includes("MID") ? 3 : -4;
+
+	return [
+		["ATK", Math.max(40, Math.min(99, rating + atkBias))],
+		["VIS", Math.max(38, Math.min(99, Math.round(rating * 0.9)))],
+		["CTL", Math.max(38, Math.min(99, Math.round(rating * 0.94 + 2)))],
+		["DEF", Math.max(35, Math.min(99, rating + defBias))],
+		["ENG", Math.max(40, Math.min(99, Math.round(rating * 0.82 + 12)))],
+		["FRM", Math.max(40, Math.min(99, Math.round(rating * 0.78 + 10)))],
+	];
+}
+
+function roundRect(
+	ctx: CanvasRenderingContext2D,
+	x: number,
+	y: number,
+	width: number,
+	height: number,
+	radius: number,
+) {
+	ctx.beginPath();
+	ctx.moveTo(x + radius, y);
+	ctx.lineTo(x + width - radius, y);
+	ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+	ctx.lineTo(x + width, y + height - radius);
+	ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+	ctx.lineTo(x + radius, y + height);
+	ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+	ctx.lineTo(x, y + radius);
+	ctx.quadraticCurveTo(x, y, x + radius, y);
+	ctx.closePath();
+}
+
+function createStatsTexture(player: PlayerCardData): THREE.CanvasTexture {
+	const canvas = document.createElement("canvas");
+	canvas.width = 512;
+	canvas.height = 260;
+	const ctx = canvas.getContext("2d")!;
+	ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+	const stats = computeStats(player);
+	ctx.textAlign = "center";
 
 	ctx.fillStyle = "#ffffff";
-	ctx.font = "bold 32px Arial";
-	ctx.textAlign = "center";
-	ctx.fillText(player.name, canvas.width / 2, 45);
+	ctx.font = "bold 34px Arial";
+	ctx.fillText(player.name, canvas.width / 2, 42);
 
+	ctx.fillStyle = "#b8bec8";
+	ctx.font = "16px Arial";
+	ctx.fillText(`${player.position} • ${player.club || "FantasyFC"}`, canvas.width / 2, 68);
+
+	const startX = 92;
+	const startY = 94;
+	const boxW = 100;
+	const boxH = 56;
+	const gapX = 18;
+	const gapY = 16;
+
+	for (let i = 0; i < stats.length; i += 1) {
+		const row = Math.floor(i / 3);
+		const col = i % 3;
+		const x = startX + col * (boxW + gapX);
+		const y = startY + row * (boxH + gapY);
+
+		ctx.fillStyle = "rgba(255,255,255,0.08)";
+		roundRect(ctx, x, y, boxW, boxH, 12);
+		ctx.fill();
+
+		ctx.strokeStyle = "rgba(255,255,255,0.10)";
+		ctx.lineWidth = 1;
+		roundRect(ctx, x, y, boxW, boxH, 12);
+		ctx.stroke();
+
+		ctx.fillStyle = "#9ea6b2";
+		ctx.font = "bold 14px Arial";
+		ctx.fillText(String(stats[i][0]), x + boxW / 2, y + 18);
+
+		ctx.fillStyle = "#ffffff";
+		ctx.font = "bold 24px Arial";
+		ctx.fillText(String(stats[i][1]), x + boxW / 2, y + 44);
+	}
+
+	ctx.fillStyle = "#8d95a1";
 	ctx.font = "14px Arial";
-	ctx.fillStyle = "#cccccc";
-	ctx.fillText(`${player.position} • ${player.club || "FantasyFC"}`, canvas.width / 2, 75);
-
-	ctx.font = "12px Arial";
-	ctx.fillStyle = "#999999";
-	ctx.fillText(`#${String(player.serial || 1).padStart(3, "0")} / ${player.maxSupply || 500}`, canvas.width / 2, 130);
+	ctx.fillText(
+		`#${String(player.serial || 1).padStart(3, "0")} / ${player.maxSupply || 500}`,
+		canvas.width / 2,
+		242,
+	);
 
 	const texture = new THREE.CanvasTexture(canvas);
 	texture.magFilter = THREE.LinearFilter;
@@ -330,13 +403,13 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 
 		const bodyShape = createRoundedRectShape(1.95, 2.78, 0.12);
 		const bodyGeometry = new THREE.ExtrudeGeometry(bodyShape, {
-			depth: 0.24,
+			depth: 0.34,
 			bevelEnabled: true,
-			bevelSegments: 4,
+			bevelSegments: 5,
 			steps: 1,
-			bevelSize: 0.035,
-			bevelThickness: 0.03,
-			curveSegments: 18,
+			bevelSize: 0.04,
+			bevelThickness: 0.045,
+			curveSegments: 22,
 		});
 		bodyGeometry.center();
 		const bodyMaterial = new THREE.MeshStandardMaterial({
@@ -350,7 +423,7 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 		bodyMesh.receiveShadow = true;
 		slab.add(bodyMesh);
 
-		const faceGeometry = new THREE.BoxGeometry(1.72, 2.5, 0.045);
+		const faceGeometry = new THREE.BoxGeometry(1.72, 2.5, 0.07);
 		const faceMaterial = new THREE.MeshStandardMaterial({
 			color: metalConfig.metalColor.clone().multiplyScalar(0.82),
 			metalness: 0.92,
@@ -358,7 +431,7 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 			envMapIntensity: 2.1,
 		});
 		const faceMesh = new THREE.Mesh(faceGeometry, faceMaterial);
-		faceMesh.position.z = 0.105;
+		faceMesh.position.z = 0.11;
 		faceMesh.castShadow = true;
 		faceMesh.receiveShadow = true;
 		slab.add(faceMesh);
@@ -375,76 +448,89 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 		portraitFrameMesh.receiveShadow = true;
 		slab.add(portraitFrameMesh);
 
-		const portraitGeometry = new THREE.BoxGeometry(1.72, 1.44, 0.06);
+		const portraitGeometry = new THREE.BoxGeometry(1.72, 1.44, 0.08);
 		const portraitBackMaterial = new THREE.MeshStandardMaterial({
 			color: new THREE.Color(0x0a0a0a),
 			metalness: 0.2,
 			roughness: 0.6,
 		});
 		const portraitBackMesh = new THREE.Mesh(portraitGeometry, portraitBackMaterial);
-		portraitBackMesh.position.set(0, 0.32, 0.12);
+		portraitBackMesh.position.set(0, 0.3, 0.145);
 		portraitBackMesh.castShadow = true;
 		portraitBackMesh.receiveShadow = true;
 		slab.add(portraitBackMesh);
 
-		const plateGeometry = new THREE.BoxGeometry(1.8, 0.86, 0.07);
-		const plateMaterial = new THREE.MeshStandardMaterial({
-			color: new THREE.Color(0x0f0f0f),
-			metalness: 0.5,
-			roughness: 0.25,
+		const infoStripGeometry = new THREE.BoxGeometry(1.78, 0.34, 0.05);
+		const infoStripMaterial = new THREE.MeshStandardMaterial({
+			color: new THREE.Color(0x101215),
+			metalness: 0.65,
+			roughness: 0.22,
 		});
-		const plateMesh = new THREE.Mesh(plateGeometry, plateMaterial);
-		plateMesh.position.set(0, -0.9, 0.135);
-		plateMesh.castShadow = true;
-		plateMesh.receiveShadow = true;
-		slab.add(plateMesh);
+		const infoStripMesh = new THREE.Mesh(infoStripGeometry, infoStripMaterial);
+		infoStripMesh.position.set(0, -1.06, 0.16);
+		infoStripMesh.castShadow = true;
+		infoStripMesh.receiveShadow = true;
+		slab.add(infoStripMesh);
 
 		let portraitTexture: THREE.CanvasTexture | null = null;
-		let plateTexture: THREE.CanvasTexture | null = null;
+		let statsTexture: THREE.CanvasTexture | null = null;
 		let topLabelTexture: THREE.CanvasTexture | null = null;
 		let portraitMaterialOverlay: THREE.MeshStandardMaterial | null = null;
-		let plateMaterialOverlay: THREE.MeshStandardMaterial | null = null;
+		let statsMaterialOverlay: THREE.MeshStandardMaterial | null = null;
 		let topLabelMaterial: THREE.MeshStandardMaterial | null = null;
 		let portraitPlaneGeometry: THREE.PlaneGeometry | null = null;
-		let platePlaneGeometry: THREE.PlaneGeometry | null = null;
+		let statsPlaneGeometry: THREE.PlaneGeometry | null = null;
 		let topLabelGeometry: THREE.PlaneGeometry | null = null;
 
-		Promise.all([createPortraitTexture(player), createPlateTexture(player), createTopLabelTexture(player)]).then(([pTex, plTex, tTex]) => {
+		Promise.all([createPortraitTexture(player), createStatsTexture(player), createTopLabelTexture(player)]).then(([pTex, sTex, tTex]) => {
 			portraitTexture = pTex;
-			plateTexture = plTex;
+			statsTexture = sTex;
 			topLabelTexture = tTex;
 
 			portraitMaterialOverlay = new THREE.MeshStandardMaterial({
 				map: portraitTexture,
 				metalness: 0.25,
 				roughness: 0.15,
+				transparent: true,
+				depthWrite: false,
+				polygonOffset: true,
+				polygonOffsetFactor: -2,
+				polygonOffsetUnits: -2,
 			});
 			portraitPlaneGeometry = new THREE.PlaneGeometry(1.72, 1.44);
 			const portraitMesh = new THREE.Mesh(portraitPlaneGeometry, portraitMaterialOverlay);
-			portraitMesh.position.set(0, 0.32, 0.16);
+			portraitMesh.position.set(0, 0.3, 0.182);
 			portraitMesh.castShadow = true;
 			slab.add(portraitMesh);
 
-			plateMaterialOverlay = new THREE.MeshStandardMaterial({
-				map: plateTexture,
-				metalness: 0.35,
-				roughness: 0.2,
+			statsMaterialOverlay = new THREE.MeshStandardMaterial({
+				map: statsTexture,
+				metalness: 0.2,
+				roughness: 0.18,
+				transparent: true,
+				depthWrite: false,
+				polygonOffset: true,
+				polygonOffsetFactor: -2,
+				polygonOffsetUnits: -2,
 			});
-			platePlaneGeometry = new THREE.PlaneGeometry(1.8, 0.86);
-			const plateMeshOverlay = new THREE.Mesh(platePlaneGeometry, plateMaterialOverlay);
-			plateMeshOverlay.position.set(0, -0.9, 0.171);
-			plateMeshOverlay.castShadow = true;
-			slab.add(plateMeshOverlay);
+			statsPlaneGeometry = new THREE.PlaneGeometry(1.74, 0.88);
+			const statsMesh = new THREE.Mesh(statsPlaneGeometry, statsMaterialOverlay);
+			statsMesh.position.set(0, -0.78, 0.19);
+			slab.add(statsMesh);
 
 			topLabelMaterial = new THREE.MeshStandardMaterial({
 				map: topLabelTexture,
 				metalness: 0.25,
 				roughness: 0.15,
 				transparent: true,
+				depthWrite: false,
+				polygonOffset: true,
+				polygonOffsetFactor: -2,
+				polygonOffsetUnits: -2,
 			});
 			topLabelGeometry = new THREE.PlaneGeometry(1.72, 0.4);
 			const topLabelMesh = new THREE.Mesh(topLabelGeometry, topLabelMaterial);
-			topLabelMesh.position.set(0, 1.1, 0.16);
+			topLabelMesh.position.set(0, 1.12, 0.19);
 			topLabelMesh.castShadow = true;
 			slab.add(topLabelMesh);
 		});
@@ -455,10 +541,14 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 			metalness: 0.4,
 			roughness: 0.35,
 			transparent: true,
+			depthWrite: false,
+			polygonOffset: true,
+			polygonOffsetFactor: -2,
+			polygonOffsetUnits: -2,
 		});
 		const patternGeometry = new THREE.PlaneGeometry(1.75, 2.55);
 		const patternMesh = new THREE.Mesh(patternGeometry, patternMaterial);
-		patternMesh.position.z = 0.17;
+		patternMesh.position.z = 0.172;
 		slab.add(patternMesh);
 
 		const shineMaterial = new THREE.MeshStandardMaterial({
@@ -467,6 +557,10 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 			opacity: player.rarity === "common" ? 0.08 : 0.16,
 			metalness: 0.1,
 			roughness: 0.05,
+			depthWrite: false,
+			polygonOffset: true,
+			polygonOffsetFactor: -2,
+			polygonOffsetUnits: -2,
 		});
 		const shineGeometry = new THREE.PlaneGeometry(0.42, 2.3);
 		const shineMesh = new THREE.Mesh(shineGeometry, shineMaterial);
@@ -593,33 +687,33 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 			faceGeometry.dispose();
 			portraitFrameGeometry.dispose();
 			portraitGeometry.dispose();
-			plateGeometry.dispose();
+			infoStripGeometry.dispose();
 			patternGeometry.dispose();
 			shineGeometry.dispose();
 			crownGeometry?.dispose();
 			edgeGeometry?.dispose();
 			sharpGeometry?.dispose();
 			portraitPlaneGeometry?.dispose();
-			platePlaneGeometry?.dispose();
+			statsPlaneGeometry?.dispose();
 			topLabelGeometry?.dispose();
 
 			bodyMaterial.dispose();
 			faceMaterial.dispose();
 			portraitFrameMaterial.dispose();
 			portraitBackMaterial.dispose();
-			plateMaterial.dispose();
+			infoStripMaterial.dispose();
 			patternMaterial.dispose();
 			shineMaterial.dispose();
 			crownMaterial?.dispose();
 			edgeMaterial?.dispose();
 			sharpMaterial?.dispose();
 			portraitMaterialOverlay?.dispose();
-			plateMaterialOverlay?.dispose();
+			statsMaterialOverlay?.dispose();
 			topLabelMaterial?.dispose();
 
 			patternTexture.dispose();
 			portraitTexture?.dispose();
-			plateTexture?.dispose();
+			statsTexture?.dispose();
 			topLabelTexture?.dispose();
 			renderer.dispose();
 		};
