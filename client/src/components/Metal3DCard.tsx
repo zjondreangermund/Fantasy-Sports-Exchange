@@ -19,6 +19,7 @@ export type PlayerCardData = {
   team?: string;
   nationality?: string;
   level?: number;
+  form?: number;
   last5Scores?: number[];
 };
 

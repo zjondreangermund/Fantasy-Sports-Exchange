@@ -15,21 +15,30 @@ import { useAuth } from "./hooks/use-auth";
 import { Skeleton } from "./components/ui/skeleton";
 
 import NotFound from "./pages/not-found";
-import LandingPage from "./pages/landing";
-import OnboardingPage from "./pages/onboarding";
-import OnboardingPacksScene from "./pages/onboarding-packs";
-import OnboardingTunnelPage from "./pages/onboarding-tunnel";
-import CardRevealPage from "./pages/card-reveal";
-import DashboardPage from "./pages/dashboard";
-import CollectionPage from "./pages/collection";
-import MarketplacePage from "./pages/marketplace";
-import AuctionsPage from "./pages/auctions";
-import WalletPage from "./pages/wallet";
-import AccountPage from "./pages/account";
-import CompetitionsPage from "./pages/competitions";
-import PremierLeaguePage from "./pages/premier-league";
-import AdminPage from "./pages/admin";
-import CardLabPage from "./pages/card-lab";
+
+const LandingPage = React.lazy(() => import("./pages/landing"));
+const OnboardingPage = React.lazy(() => import("./pages/onboarding"));
+const OnboardingPacksScene = React.lazy(() => import("./pages/onboarding-packs"));
+const OnboardingTunnelPage = React.lazy(() => import("./pages/onboarding-tunnel"));
+const CardRevealPage = React.lazy(() => import("./pages/card-reveal"));
+const DashboardPage = React.lazy(() => import("./pages/dashboard"));
+const CollectionPage = React.lazy(() => import("./pages/collection"));
+const MarketplacePage = React.lazy(() => import("./pages/marketplace"));
+const AuctionsPage = React.lazy(() => import("./pages/auctions"));
+const WalletPage = React.lazy(() => import("./pages/wallet"));
+const AccountPage = React.lazy(() => import("./pages/account"));
+const CompetitionsPage = React.lazy(() => import("./pages/competitions"));
+const PremierLeaguePage = React.lazy(() => import("./pages/premier-league"));
+const AdminPage = React.lazy(() => import("./pages/admin"));
+const CardLabPage = React.lazy(() => import("./pages/card-lab"));
+
+function RouteFallback() {
+  return (
+    <div className="flex-1 flex items-center justify-center">
+      <Skeleton className="w-32 h-8" />
+    </div>
+  );
+}
 
 function AuthenticatedRouter() {
   // ✅ Use /status (doesn't 404 when offers not created yet)
@@ -48,35 +57,39 @@ function AuthenticatedRouter() {
   // ✅ If onboarding is not completed, force user into onboarding flow
   if (onboarding && !onboarding.completed) {
     return (
-      <Switch>
-        <Route path="/onboarding" component={OnboardingPage} />
-        <Route path="/onboarding-packs" component={OnboardingPacksScene} />
-        <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
-        <Route path="/card-reveal" component={CardRevealPage} />
-        <Route component={OnboardingPage} />
-      </Switch>
+      <React.Suspense fallback={<RouteFallback />}>
+        <Switch>
+          <Route path="/onboarding" component={OnboardingPage} />
+          <Route path="/onboarding-packs" component={OnboardingPacksScene} />
+          <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
+          <Route path="/card-reveal" component={CardRevealPage} />
+          <Route component={OnboardingPage} />
+        </Switch>
+      </React.Suspense>
     );
   }
 
   return (
-    <Switch>
-      <Route path="/" component={DashboardPage} />
-      <Route path="/dashboard" component={DashboardPage} />
-      <Route path="/onboarding" component={OnboardingPage} />
-      <Route path="/onboarding-packs" component={OnboardingPacksScene} />
-      <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
-      <Route path="/card-reveal" component={CardRevealPage} />
-      <Route path="/competitions" component={CompetitionsPage} />
-      <Route path="/premier-league" component={PremierLeaguePage} />
-      <Route path="/card-lab" component={CardLabPage} />
-      <Route path="/collection" component={CollectionPage} />
-      <Route path="/marketplace" component={MarketplacePage} />
-      <Route path="/auctions" component={AuctionsPage} />
-      <Route path="/wallet" component={WalletPage} />
-      <Route path="/account" component={AccountPage} />
-      <Route path="/admin" component={AdminPage} />
-      <Route component={NotFound} />
-    </Switch>
+    <React.Suspense fallback={<RouteFallback />}>
+      <Switch>
+        <Route path="/" component={DashboardPage} />
+        <Route path="/dashboard" component={DashboardPage} />
+        <Route path="/onboarding" component={OnboardingPage} />
+        <Route path="/onboarding-packs" component={OnboardingPacksScene} />
+        <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
+        <Route path="/card-reveal" component={CardRevealPage} />
+        <Route path="/competitions" component={CompetitionsPage} />
+        <Route path="/premier-league" component={PremierLeaguePage} />
+        <Route path="/card-lab" component={CardLabPage} />
+        <Route path="/collection" component={CollectionPage} />
+        <Route path="/marketplace" component={MarketplacePage} />
+        <Route path="/auctions" component={AuctionsPage} />
+        <Route path="/wallet" component={WalletPage} />
+        <Route path="/account" component={AccountPage} />
+        <Route path="/admin" component={AdminPage} />
+        <Route component={NotFound} />
+      </Switch>
+    </React.Suspense>
   );
 }
 
@@ -154,7 +167,11 @@ function AppContent() {
   }
 
   if (!user) {
-    return <LandingPage />;
+    return (
+      <React.Suspense fallback={<RouteFallback />}>
+        <LandingPage />
+      </React.Suspense>
+    );
   }
 
   return <AuthenticatedApp />;

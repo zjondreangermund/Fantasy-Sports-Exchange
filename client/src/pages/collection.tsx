@@ -2,12 +2,9 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 // Fixed: @/lib -> ../lib
 import { apiRequest, queryClient } from "../lib/queryClient";
-// Fixed: @/components -> ../components
-import Metal3DCard from "../components/Metal3DCard";
-import PlainImageCard from "../components/PlainImageCard";
+import CollectionPlayerCard from "../components/CollectionPlayerCard";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
 import { Input } from "../components/ui/input";
 import {
@@ -20,7 +17,7 @@ import {
 } from "../components/ui/dialog";
 // Fixed: @shared -> ../../../shared
 import { type PlayerCardWithPlayer, type Lineup } from "../../../shared/schema";
-import { Filter, Save, Check, DollarSign } from "lucide-react";
+import { Filter, DollarSign } from "lucide-react";
 // Fixed: @/hooks -> ../hooks
 import { useToast } from "../hooks/use-toast";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
@@ -246,10 +243,10 @@ export default function CollectionPage() {
           </div>
         ) : filteredCards && filteredCards.length > 0 ? (
           <div 
-            className="flex flex-wrap gap-8 justify-center preserve-3d"
+            className="flex flex-wrap gap-8 justify-center"
             style={{ transformStyle: "preserve-3d" }}
           >
-            {visibleCards.map((card, index) => {
+            {visibleCards.map((card) => {
               const fantasyCard = toFantasyCardData(card);
               return (
                 <div 
@@ -257,14 +254,10 @@ export default function CollectionPage() {
                   className="relative" 
                   style={{ 
                     transformStyle: "preserve-3d",
-                    minHeight: "380px"
+                    minHeight: "320px"
                   }}
                 >
-                  {index === 0 ? (
-                    <PlainImageCard player={fantasyCard} className="!h-[364px] !w-[208px]" />
-                  ) : (
-                    <Metal3DCard player={fantasyCard} className="!w-[208px]" />
-                  )}
+                  <CollectionPlayerCard player={fantasyCard} />
                   <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
                     {card.forSale ? (
                       <Button

@@ -6,42 +6,70 @@ type StadiumAmbientLayerProps = {
 
 export default function StadiumAmbientLayer({ teamName }: StadiumAmbientLayerProps) {
   const [flash, setFlash] = useState(false);
-  const audioEnabled = true;
-  const crowdAudioRef = useRef<HTMLAudioElement | null>(null);
-  const windAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [muted, setMuted] = useState(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fadeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    crowdAudioRef.current = new Audio("/sfx/crowd_cheer.wav");
-    windAudioRef.current = new Audio("/sfx/wind.wav");
-
-    const crowd = crowdAudioRef.current;
-    const wind = windAudioRef.current;
-
-    crowd.loop = true;
-    wind.loop = true;
-    crowd.volume = 0.1;
-    wind.volume = 0.05;
-
-    const tryPlay = () => {
-      if (!audioEnabled) return;
-      crowd.play().catch(() => undefined);
-      wind.play().catch(() => undefined);
-    };
-
-    const startOnGesture = () => {
-      tryPlay();
-      window.removeEventListener("pointerdown", startOnGesture);
-    };
-
-    window.addEventListener("pointerdown", startOnGesture);
-    tryPlay();
+    const audio = new Audio("/audio/gaming-ambient-loop.mp3");
+    audio.loop = true;
+    audio.volume = 0;
+    audio.muted = true;
+    audioRef.current = audio;
+    audio.play().catch(() => undefined);
 
     return () => {
-      window.removeEventListener("pointerdown", startOnGesture);
-      crowd.pause();
-      wind.pause();
+      if (fadeTimerRef.current) {
+        window.clearInterval(fadeTimerRef.current);
+        fadeTimerRef.current = null;
+      }
+      audio.pause();
+      audio.currentTime = 0;
+      audioRef.current = null;
     };
-  }, [audioEnabled]);
+  }, []);
+
+  const fadeInAudio = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (fadeTimerRef.current) {
+      window.clearInterval(fadeTimerRef.current);
+      fadeTimerRef.current = null;
+    }
+
+    const targetVolume = 0.18;
+    const step = targetVolume / 18;
+    audio.volume = 0;
+
+    fadeTimerRef.current = window.setInterval(() => {
+      if (!audioRef.current) return;
+      const next = Math.min(targetVolume, Number((audio.volume + step).toFixed(3)));
+      audio.volume = next;
+
+      if (next >= targetVolume && fadeTimerRef.current) {
+        window.clearInterval(fadeTimerRef.current);
+        fadeTimerRef.current = null;
+      }
+    }, 120);
+  };
+
+  const toggleAudio = async () => {
+    if (!audioRef.current) return;
+
+    const nextMuted = !muted;
+    audioRef.current.muted = nextMuted;
+    setMuted(nextMuted);
+
+    if (!nextMuted) {
+      try {
+        await audioRef.current.play();
+      } catch {
+        return;
+      }
+      fadeInAudio();
+    }
+  };
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -54,6 +82,16 @@ export default function StadiumAmbientLayer({ teamName }: StadiumAmbientLayerPro
 
   return (
     <>
+      <div className="absolute right-4 top-4 z-20 pointer-events-auto">
+        <button
+          type="button"
+          onClick={toggleAudio}
+          className="rounded-full border border-white/20 bg-black/50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/90 backdrop-blur-sm transition hover:bg-black/65"
+        >
+          {muted ? "Unmute Theme" : "Mute Theme"}
+        </button>
+      </div>
+
       <div
         className="absolute inset-0 pointer-events-none z-0"
         style={{

@@ -1,11 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
-// IMPORT YOUR 3D CARD COMPONENT HERE
-import Metal3DCard from "../components/Metal3DCard";
-import PlainImageCard from "../components/PlainImageCard";
+import CollectionPlayerCard from "../components/CollectionPlayerCard";
 import CardShowcase from "../components/CardShowcase";
-import CabinetSlot from "../components/CabinetSlot";
 import SceneAtmosphere from "../components/SceneAtmosphere";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { Button } from "../components/ui/button";
@@ -21,15 +18,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "../components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
 import { type PlayerCardWithPlayer, type Wallet, SITE_FEE_RATE } from "../../../shared/schema";
-import { Search, Filter, ShoppingCart, Tag, DollarSign, ArrowLeftRight, TrendingUp } from "lucide-react";
+import { Search, ShoppingCart, Tag, TrendingUp } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
 import { useUiSound } from "../hooks/use-ui-sound";
@@ -43,8 +33,6 @@ export default function MarketplacePage() {
   const [search, setSearch] = useState("");
   const [rarityFilter, setRarityFilter] = useState("all");
   const [buyCard, setBuyCard] = useState<PlayerCardWithPlayer | null>(null);
-  const [sellCard, setSellCard] = useState<PlayerCardWithPlayer | null>(null);
-  const [sellPrice, setSellPrice] = useState("");
   const [activeTab, setActiveTab] = useState("buy");
   const [buyVisibleCount, setBuyVisibleCount] = useState(12);
   const [sellVisibleCount, setSellVisibleCount] = useState(12);
@@ -214,26 +202,18 @@ export default function MarketplacePage() {
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 preserve-3d"
                 style={{ transformStyle: "preserve-3d" }}
               >
-                {visibleBuyListings.map((card, index) => (
+                {visibleBuyListings.map((card) => (
                   <div 
                     key={card.id} 
                     className="flex items-center justify-center"
                     style={{ 
-                      transformStyle: "preserve-3d",
-                      minHeight: "380px",
-                      perspectiveOrigin: "center"
+                      minHeight: "300px"
                     }}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <CabinetSlot rarity={card.rarity} className="h-[320px] w-[220px] p-2 overflow-visible">
-                        <button type="button" className="w-full text-left" onClick={() => handleOpenBuyCard(card)}>
-                          {index === 0 ? (
-                            <PlainImageCard player={toFantasyCardData(card)} className="!w-full" />
-                          ) : (
-                            <Metal3DCard player={toFantasyCardData(card)} className="!w-full" />
-                          )}
-                        </button>
-                      </CabinetSlot>
+                      <button type="button" className="w-full text-left" onClick={() => handleOpenBuyCard(card)}>
+                        <CollectionPlayerCard player={toFantasyCardData(card)} />
+                      </button>
                       <p className="text-xs text-muted-foreground">
                         Seller: {card.ownerUsername || card.ownerName || "FantasyFC"}
                       </p>
@@ -272,15 +252,11 @@ export default function MarketplacePage() {
                     key={card.id} 
                     className="relative flex items-center justify-center"
                     style={{ 
-                      transformStyle: "preserve-3d",
-                      minHeight: "380px",
-                      perspectiveOrigin: "center"
+                      minHeight: "300px"
                     }}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <CabinetSlot rarity={card.rarity} className="h-[320px] w-[220px] p-2 overflow-visible">
-                        <Metal3DCard player={toFantasyCardData(card)} className="!w-full" />
-                      </CabinetSlot>
+                      <CollectionPlayerCard player={toFantasyCardData(card)} />
                       <p className="text-sm font-semibold text-green-500">
                         N${(card.price || 0).toFixed(2)}
                       </p>
