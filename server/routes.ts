@@ -3318,8 +3318,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { notifications } = await import("../shared/schema.js");
       
       const isRareTier = String(competition.tier || "").toLowerCase() === "rare";
-      const totalPrizePool = toMoney(entries.length * Number(competition.entryFee || 0));
-      const payoutPercentages = isRareTier ? [0.5, 0.2, 0.15, 0.1, 0.05] : [0.6, 0.3, 0.1];
+      const totalEntries = entries.length;
+      const totalPrizePool = toMoney(totalEntries * Number(competition.entryFee || 0));
+      const payoutPercentages = [0.6, 0.3, 0.1];
 
       const todayTeams = await getTodayTeamNames();
       const allPlayers = await storage.getPlayers();
@@ -3353,7 +3354,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const getCardRarityForRank = (rank: number): string | null => {
         if (isRareTier) {
           if (rank === 1) return "unique";
-          if (rank === 4 || rank === 5) return "rare";
+          if (totalEntries > 100 && (rank === 4 || rank === 5)) return "rare";
           return null;
         }
 
