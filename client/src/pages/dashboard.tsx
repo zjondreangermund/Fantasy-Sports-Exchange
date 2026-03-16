@@ -32,6 +32,7 @@ import {
   Flame,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useToast } from "../hooks/use-toast";
 
 type OnboardingConfig = {
   signupPacksEnabled: boolean;
@@ -66,16 +67,21 @@ type LivePointEvent = {
 type TournamentRewardStatus = {
   available: boolean;
   claimed: boolean;
-  rarity: "rare" | "epic" | "legendary";
+  rarity: "common" | "rare" | "unique" | "epic" | "legendary";
   competitionName?: string;
   competitionId?: number | null;
   entryId?: number | null;
   cardId?: number | null;
+  rank?: number;
+  prizeAmount?: number;
+  hasMoney?: boolean;
+  hasCard?: boolean;
 };
 
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [, navigate] = useLocation();
   const [cheers, setCheers] = useState(182);
   const [chatInput, setChatInput] = useState("");
@@ -176,16 +182,38 @@ export default function DashboardPage() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to claim tournament reward");
-      return res.json() as Promise<{ rarity: "rare" | "epic" | "legendary"; cardId: number }>;
+      return res.json() as Promise<{
+        rarity: "common" | "rare" | "unique" | "epic" | "legendary";
+        cardId?: number | null;
+        prizeAmount?: number;
+        competitionName?: string;
+      }>;
     },
     onSuccess: async (data) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/wallet"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/rewards"] }),
         refetchTournamentReward(),
       ]);
       const rarity = String(data?.rarity || "rare").toLowerCase();
       const cardId = Number(data?.cardId || 0);
-      navigate(`/card-reveal?source=tournament-reward&rarity=${encodeURIComponent(rarity)}&cardId=${cardId}`);
+      if (cardId > 0) {
+        navigate(`/card-reveal?source=tournament-reward&rarity=${encodeURIComponent(rarity)}&cardId=${cardId}`);
+        return;
+      }
+
+      toast({
+        title: "Congratulations! Reward claimed",
+        description: `Your ${data?.competitionName || "tournament"} cash reward of N$${Number(data?.prizeAmount || 0).toFixed(2)} has been added to your wallet.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Could not claim reward",
+        description: "Please try again in a moment.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -250,18 +278,18 @@ export default function DashboardPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-wide text-amber-300 font-semibold">Tournament Winner Reward</p>
-                <h3 className="text-lg font-semibold text-foreground">Congratulations! You won a {String(tournamentRewardStatus?.rarity || "rare").toUpperCase()} card</h3>
+                <h3 className="text-lg font-semibold text-foreground">Congratulations! Your reward is ready to claim</h3>
                 <p className="text-sm text-muted-foreground">
                   {tournamentRewardStatus?.competitionName
-                    ? `${tournamentRewardStatus.competitionName} victory reward is ready to reveal.`
-                    : "Your tournament victory reward is ready to reveal."}
+                    ? `${tournamentRewardStatus.competitionName} reward is waiting: ${tournamentRewardStatus?.hasMoney ? `N$${Number(tournamentRewardStatus?.prizeAmount || 0).toFixed(2)} cash` : ""}${tournamentRewardStatus?.hasMoney && tournamentRewardStatus?.hasCard ? " + " : ""}${tournamentRewardStatus?.hasCard ? `${String(tournamentRewardStatus?.rarity || "rare").toUpperCase()} card` : ""}.`
+                    : "Your tournament reward is ready to claim."}
                 </p>
               </div>
               <Button
                 onClick={() => claimTournamentRewardMutation.mutate()}
                 disabled={claimTournamentRewardMutation.isPending}
               >
-                {claimTournamentRewardMutation.isPending ? "Claiming..." : "Claim & Reveal"}
+                {claimTournamentRewardMutation.isPending ? "Claiming..." : tournamentRewardStatus?.hasCard ? "Claim & Reveal" : "Claim Reward"}
               </Button>
             </div>
           </Card>

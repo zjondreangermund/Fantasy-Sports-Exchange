@@ -1,3 +1,4 @@
+import { useMutation } from "@tanstack/react-query";
 // Fixed: Since RewardPopup is in /components/, use ./ui/ to find the dialog
 import { Dialog, DialogContent } from "./ui/dialog";
 import { Button } from "./ui/button";
@@ -5,6 +6,8 @@ import { Badge } from "./ui/badge";
 import Metal3DCard from "./Metal3DCard";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { Trophy, Gift, DollarSign, Star } from "lucide-react";
+import { queryClient } from "../lib/queryClient";
+import { useToast } from "../hooks/use-toast";
 
 interface RewardPopupProps {
   rewards: any[];
@@ -12,6 +15,62 @@ interface RewardPopupProps {
 }
 
 export default function RewardPopup({ rewards, onClose }: RewardPopupProps) {
+  const { toast } = useToast();
+
+  const claimMutation = useMutation({
+    mutationFn: async () => {
+      const claimable = (Array.isArray(rewards) ? rewards : []).filter(
+        (reward) => reward && !reward.claimed && (Number(reward.prizeAmount || 0) > 0 || reward.prizeCardId || reward.prizeCard),
+      );
+
+      let claimedCount = 0;
+      let totalMoney = 0;
+      for (const reward of claimable) {
+        const entryId = Number(reward.id || 0);
+        const res = await fetch("/api/rewards/tournament-claim", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(entryId > 0 ? { entryId } : {}),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.message || "Failed to claim rewards");
+        }
+
+        const data = await res.json();
+        claimedCount += 1;
+        totalMoney += Number(data?.prizeAmount || 0);
+      }
+
+      return { claimedCount, totalMoney };
+    },
+    onSuccess: async ({ claimedCount, totalMoney }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/rewards"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/rewards/tournament-status"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/wallet"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] }),
+      ]);
+
+      toast({
+        title: "Congratulations! Rewards claimed",
+        description: claimedCount > 0
+          ? `You claimed ${claimedCount} reward${claimedCount === 1 ? "" : "s"}${totalMoney > 0 ? ` and received N$${totalMoney.toFixed(2)}.` : "."}`
+          : "No claimable rewards found.",
+      });
+      onClose();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Reward claim failed",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   return (
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="max-w-lg">
@@ -62,8 +121,8 @@ export default function RewardPopup({ rewards, onClose }: RewardPopupProps) {
             ))}
           </div>
 
-          <Button onClick={onClose} className="mt-6 w-full">
-            Claim & Close
+          <Button onClick={() => claimMutation.mutate()} disabled={claimMutation.isPending} className="mt-6 w-full">
+            {claimMutation.isPending ? "Claiming..." : "Claim Rewards"}
           </Button>
         </div>
       </DialogContent>

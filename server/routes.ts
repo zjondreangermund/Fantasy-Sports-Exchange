@@ -722,6 +722,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       `);
 
       await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.competition_reward_claims (
+          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          entry_id integer NOT NULL UNIQUE REFERENCES app.competition_entries(id),
+          user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          competition_id integer NOT NULL REFERENCES app.competitions(id),
+          prize_amount real NOT NULL DEFAULT 0,
+          prize_card_id integer REFERENCES app.player_cards(id),
+          claimed_at timestamp NOT NULL DEFAULT now()
+        )
+      `);
+
+      await db.execute(sql`
         CREATE TABLE IF NOT EXISTS app.pack_auctions (
           id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
           seller_user_id varchar(255) NOT NULL REFERENCES app.users(id),
@@ -806,6 +818,53 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Failed to get referral code:", error);
       return res.status(500).json({ message: "Failed to get referral code" });
+    }
+  });
+
+  app.get("/api/referrals/history", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "").trim();
+      const { db } = await import("./db.js");
+
+      const rows = await db.execute(sql`
+        SELECT
+          r.id,
+          r.referred_user_id,
+          r.reward_card_id,
+          r.created_at,
+          u.name AS referred_name,
+          u.email AS referred_email
+        FROM app.referrals r
+        LEFT JOIN app.users u ON u.id = r.referred_user_id
+        WHERE r.referrer_user_id = ${userId}
+        ORDER BY r.created_at DESC
+      `);
+
+      const referrals = Array.isArray((rows as any)?.rows) ? (rows as any).rows : [];
+      const enriched = await Promise.all(
+        referrals.map(async (row: any) => {
+          const rewardCardId = row?.reward_card_id == null ? null : Number(row.reward_card_id);
+          const rewardCard = rewardCardId ? await storage.getPlayerCardWithPlayer(rewardCardId) : null;
+          return {
+            id: Number(row.id),
+            referredUserId: String(row.referred_user_id || ""),
+            referredName: String(row.referred_name || "").trim() || "Manager",
+            referredEmail: String(row.referred_email || "").trim() || null,
+            rewardCardId,
+            rewardCard,
+            createdAt: row.created_at,
+          };
+        }),
+      );
+
+      return res.json({
+        referrals: enriched,
+        totalReferrals: enriched.length,
+        rewardsGranted: enriched.filter((item) => Number(item.rewardCardId || 0) > 0).length,
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch referral history:", error);
+      return res.status(500).json({ message: "Failed to fetch referral history" });
     }
   });
 
@@ -2307,7 +2366,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
   
   // Create auction
-  app.post("/api/auctions/create", requireAuth, isAdmin, async (req: any, res) => {
+  app.post("/api/auctions/create", requireAuth, async (req: any, res) => {
     try {
       const userId = req.authUserId;
       const { cardId, startPrice, buyNowPrice, reservePrice, duration } = req.body;
@@ -3258,52 +3317,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { db } = await import("./db.js");
       const { notifications } = await import("../shared/schema.js");
       
-      // Distribute prizes (60%, 30%, 10% for top 3)
-      const totalPrizePool = entries.length * (competition.entryFee || 0);
-      const prizes = [
-        totalPrizePool * 0.6,  // 1st place
-        totalPrizePool * 0.3,  // 2nd place
-        totalPrizePool * 0.1,  // 3rd place
-      ];
-      
-      for (let i = 0; i < Math.min(3, sortedEntries.length); i++) {
-        const entry = sortedEntries[i];
-        const prize = prizes[i];
-        
-        await storage.updateCompetitionEntry(entry.id, {
-          rank: i + 1,
-          prizeAmount: prize,
-        });
-        
-        // Credit winner's wallet
-        if (prize > 0) {
-          await storage.updateWalletBalance(entry.userId, prize);
-          await storage.createTransaction({
-            userId: entry.userId,
-            type: "prize",
-            amount: prize,
-            description: `Tournament prize: ${competition.name} - Rank ${i + 1}`,
-          });
-        }
-      }
+      const isRareTier = String(competition.tier || "").toLowerCase() === "rare";
+      const totalPrizePool = toMoney(entries.length * Number(competition.entryFee || 0));
+      const payoutPercentages = isRareTier ? [0.5, 0.2, 0.15, 0.1, 0.05] : [0.6, 0.3, 0.1];
 
-      let winnerPrizeCardId: number | null = null;
-      if (sortedEntries.length > 0) {
-        const winner = sortedEntries[0];
-        const prizeRarity = String(competition.prizeCardRarity || "rare").toLowerCase();
-        const todayTeams = await getTodayTeamNames();
-        const allPlayers = await storage.getPlayers();
-        const todayPlayers = todayTeams.size
-          ? allPlayers.filter((p: any) => todayTeams.has(String(p.team || "").toLowerCase()))
-          : [];
-        const candidatePool = shuffle(todayPlayers.length > 0 ? todayPlayers : allPlayers);
+      const todayTeams = await getTodayTeamNames();
+      const allPlayers = await storage.getPlayers();
+      const todayPlayers = todayTeams.size
+        ? allPlayers.filter((p: any) => todayTeams.has(String(p.team || "").toLowerCase()))
+        : [];
+      const cardCandidatePool = shuffle(todayPlayers.length > 0 ? todayPlayers : allPlayers);
 
-        for (const p of candidatePool) {
+      const createPrizeCardForUser = async (targetUserId: string, rarity: string): Promise<number | null> => {
+        for (const p of cardCandidatePool) {
           try {
             const created = await storage.createPlayerCard({
               playerId: p.id,
-              ownerId: winner.userId,
-              rarity: prizeRarity as any,
+              ownerId: targetUserId,
+              rarity: rarity as any,
               level: 1,
               xp: 0,
               decisiveScore: 35,
@@ -3311,58 +3342,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               forSale: false,
               price: 0,
             } as any);
-            winnerPrizeCardId = created.id;
-            break;
-          } catch (_e) {
+            return created.id;
+          } catch {
             continue;
           }
         }
+        return null;
+      };
 
-        const winnerUser = await storage.getUser(winner.userId);
-        const prizeRarityLabel = `${prizeRarity.charAt(0).toUpperCase()}${prizeRarity.slice(1)}`;
-        const winnerTitle = winnerPrizeCardId
-          ? `🏆 You won! ${prizeRarityLabel} card awarded`
-          : "🏆 You won today's tournament";
-        const winnerMessage = winnerPrizeCardId
-          ? `You finished 1st in ${competition.name}. Your ${prizeRarityLabel.toLowerCase()} card prize was auto-delivered to your collection.`
-          : `You finished 1st in ${competition.name}. ${prizeRarityLabel} card supply was exhausted, but your cash prize was delivered.`;
-
-        await db.insert(notifications).values({
-          userId: winner.userId,
-          type: "win",
-          title: winnerTitle,
-          message: winnerMessage,
-          read: false,
-        } as any);
-
-        if (winnerUser?.email) {
-          await sendEmailNotification(
-            winnerUser.email,
-            `You won today - ${prizeRarityLabel.toLowerCase()} card awarded`,
-            `<p>Congrats! You finished <strong>1st</strong> in <strong>${competition.name}</strong>.</p><p>${winnerMessage}</p>`,
-          );
+      const getCardRarityForRank = (rank: number): string | null => {
+        if (isRareTier) {
+          if (rank === 1) return "unique";
+          if (rank === 4 || rank === 5) return "rare";
+          return null;
         }
 
-        if (sortedEntries.length > 1) {
-          const runnerUp = sortedEntries[1];
-          const runnerUpUser = await storage.getUser(runnerUp.userId);
-          const runnerUpMessage = `You finished 2nd in ${competition.name}. Great run today — stay confident and try again in the next contest.`;
+        if (rank === 1) {
+          return String(competition.prizeCardRarity || "rare").toLowerCase();
+        }
+
+        return null;
+      };
+
+      let winnerPrizeCardId: number | null = null;
+
+      for (let i = 0; i < sortedEntries.length; i += 1) {
+        const entry = sortedEntries[i];
+        const rank = i + 1;
+        const payoutPct = payoutPercentages[i] || 0;
+        const prizeAmount = toMoney(totalPrizePool * payoutPct);
+        const cardRarity = getCardRarityForRank(rank);
+        const prizeCardId = cardRarity ? await createPrizeCardForUser(entry.userId, cardRarity) : null;
+
+        await storage.updateCompetitionEntry(entry.id, {
+          rank,
+          prizeAmount,
+          prizeCardId,
+        });
+
+        if (rank === 1 && prizeCardId) {
+          winnerPrizeCardId = prizeCardId;
+        }
+
+        if (prizeAmount > 0 || prizeCardId) {
+          const rewardBits: string[] = [];
+          if (prizeAmount > 0) rewardBits.push(`${formatMoney(prizeAmount)} cash`);
+          if (prizeCardId && cardRarity) rewardBits.push(`${cardRarity.toUpperCase()} card`);
+          const rewardText = rewardBits.join(" + ");
 
           await db.insert(notifications).values({
-            userId: runnerUp.userId,
-            type: "runner_up",
-            title: "🥈 Runner-up today — keep pushing",
-            message: runnerUpMessage,
+            userId: entry.userId,
+            type: rank === 1 ? "win" : rank === 2 ? "runner_up" : "system",
+            title: rank === 1 ? "Congratulations! Rewards ready to claim" : `Tournament rewards ready (Rank ${rank})`,
+            message: `You finished #${rank} in ${competition.name}. Claim your reward: ${rewardText}.`,
             read: false,
           } as any);
-
-          if (runnerUpUser?.email) {
-            await sendEmailNotification(
-              runnerUpUser.email,
-              "Runner-up today - keep going",
-              `<p>You placed <strong>2nd</strong> in <strong>${competition.name}</strong>.</p><p>${runnerUpMessage}</p>`,
-            );
-          }
         }
       }
       
@@ -3370,12 +3404,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await storage.updateCompetition(competitionId, {
         status: "completed",
       });
-
-      if (winnerPrizeCardId && sortedEntries[0]) {
-        await storage.updateCompetitionEntry(sortedEntries[0].id, {
-          prizeCardId: winnerPrizeCardId,
-        });
-      }
 
       await writeAuditLog(String(req.authUserId || ""), "admin.competition.settle", {
         competitionId,
@@ -3463,10 +3491,237 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const userId = req.authUserId;
       const rewards = await storage.getUserRewards(userId);
-      res.json(rewards);
+      const { db } = await import("./db.js");
+
+      let claimedEntryIds = new Set<number>();
+
+      const rows = await db.execute(sql`
+        SELECT entry_id
+        FROM app.competition_reward_claims
+        WHERE user_id = ${userId}
+      `);
+      const claimRows = Array.isArray((rows as any)?.rows) ? (rows as any).rows : [];
+      claimedEntryIds = new Set(
+        claimRows
+          .map((row: any) => Number(row.entry_id))
+          .filter((value: number) => Number.isFinite(value) && value > 0),
+      );
+
+      const enriched = await Promise.all(
+        rewards.map(async (entry) => {
+          const competition = await storage.getCompetition(entry.competitionId);
+          const prizeCard = entry.prizeCardId ? await storage.getPlayerCardWithPlayer(entry.prizeCardId) : null;
+          return {
+            ...entry,
+            claimed: claimedEntryIds.has(Number(entry.id)),
+            competition,
+            prizeCard,
+          };
+        }),
+      );
+
+      res.json(enriched);
     } catch (error: any) {
       console.error("Failed to fetch rewards:", error);
       res.status(500).json({ message: "Failed to fetch rewards" });
+    }
+  });
+
+  app.get("/api/rewards/tournament-status", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const { db } = await import("./db.js");
+
+      const rows = await db.execute(sql`
+        SELECT
+          ce.id AS entry_id,
+          ce.competition_id,
+          ce.rank,
+          ce.prize_amount,
+          ce.prize_card_id,
+          c.name AS competition_name,
+          c.prize_card_rarity,
+          c.tier
+        FROM app.competition_entries ce
+        INNER JOIN app.competitions c ON c.id = ce.competition_id
+        LEFT JOIN app.competition_reward_claims rc ON rc.entry_id = ce.id
+        WHERE ce.user_id = ${userId}
+          AND c.status = 'completed'
+          AND (COALESCE(ce.prize_amount, 0) > 0 OR ce.prize_card_id IS NOT NULL)
+          AND rc.id IS NULL
+        ORDER BY c.end_date DESC NULLS LAST, ce.joined_at DESC
+        LIMIT 1
+      `);
+
+      const row = Array.isArray((rows as any)?.rows) ? (rows as any).rows[0] : null;
+      if (!row) {
+        return res.json({ available: false, claimed: false });
+      }
+
+      const prizeCardId = row.prize_card_id == null ? null : Number(row.prize_card_id);
+      const prizeAmount = toMoney(row.prize_amount || 0);
+      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId) : null;
+      const fallbackRarity = String(row.tier || "").toLowerCase() === "rare" && Number(row.rank || 0) === 1
+        ? "unique"
+        : String(row.prize_card_rarity || "rare").toLowerCase();
+
+      return res.json({
+        available: true,
+        claimed: false,
+        competitionName: String(row.competition_name || "Tournament"),
+        competitionId: Number(row.competition_id),
+        entryId: Number(row.entry_id),
+        rank: Number(row.rank || 0),
+        prizeAmount,
+        hasMoney: prizeAmount > 0,
+        cardId: prizeCardId,
+        hasCard: Boolean(prizeCardId),
+        rarity: String(prizeCard?.rarity || fallbackRarity || "rare").toLowerCase(),
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch tournament reward status:", error);
+      return res.status(500).json({ message: "Failed to fetch tournament reward status" });
+    }
+  });
+
+  app.post("/api/rewards/tournament-claim", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const requestedEntryId = Number(req.body?.entryId || 0);
+      const { db } = await import("./db.js");
+      const { wallets, transactions, notifications } = await import("../shared/schema.js");
+      const { eq } = await import("drizzle-orm");
+
+      const getPendingRewardQuery = requestedEntryId > 0
+        ? sql`
+            SELECT
+              ce.id AS entry_id,
+              ce.competition_id,
+              ce.rank,
+              ce.prize_amount,
+              ce.prize_card_id,
+              c.name AS competition_name,
+              c.prize_card_rarity,
+              c.tier
+            FROM app.competition_entries ce
+            INNER JOIN app.competitions c ON c.id = ce.competition_id
+            LEFT JOIN app.competition_reward_claims rc ON rc.entry_id = ce.id
+            WHERE ce.user_id = ${userId}
+              AND ce.id = ${requestedEntryId}
+              AND c.status = 'completed'
+              AND (COALESCE(ce.prize_amount, 0) > 0 OR ce.prize_card_id IS NOT NULL)
+              AND rc.id IS NULL
+            LIMIT 1
+          `
+        : sql`
+            SELECT
+              ce.id AS entry_id,
+              ce.competition_id,
+              ce.rank,
+              ce.prize_amount,
+              ce.prize_card_id,
+              c.name AS competition_name,
+              c.prize_card_rarity,
+              c.tier
+            FROM app.competition_entries ce
+            INNER JOIN app.competitions c ON c.id = ce.competition_id
+            LEFT JOIN app.competition_reward_claims rc ON rc.entry_id = ce.id
+            WHERE ce.user_id = ${userId}
+              AND c.status = 'completed'
+              AND (COALESCE(ce.prize_amount, 0) > 0 OR ce.prize_card_id IS NOT NULL)
+              AND rc.id IS NULL
+            ORDER BY c.end_date DESC NULLS LAST, ce.joined_at DESC
+            LIMIT 1
+          `;
+
+      const rows = await db.execute(getPendingRewardQuery);
+      const pending = Array.isArray((rows as any)?.rows) ? (rows as any).rows[0] : null;
+      if (!pending) {
+        return res.status(404).json({ message: "No claimable tournament reward found" });
+      }
+
+      const entryId = Number(pending.entry_id);
+      const competitionId = Number(pending.competition_id);
+      const rank = Number(pending.rank || 0);
+      const prizeAmount = toMoney(pending.prize_amount || 0);
+      const prizeCardId = pending.prize_card_id == null ? null : Number(pending.prize_card_id);
+      const competitionName = String(pending.competition_name || "Tournament");
+
+      let claimId = 0;
+
+      await db.transaction(async (tx) => {
+        const existingClaimRows = await tx.execute(sql`
+          SELECT id
+          FROM app.competition_reward_claims
+          WHERE entry_id = ${entryId}
+          LIMIT 1
+        `);
+        const existingClaim = Array.isArray((existingClaimRows as any)?.rows)
+          ? (existingClaimRows as any).rows[0]
+          : null;
+        if (existingClaim?.id) {
+          claimId = Number(existingClaim.id);
+          return;
+        }
+
+        if (prizeAmount > 0) {
+          await tx
+            .update(wallets)
+            .set({ balance: sql`${wallets.balance} + ${prizeAmount}` } as any)
+            .where(eq(wallets.userId, userId));
+
+          await tx.insert(transactions).values({
+            userId,
+            type: "prize",
+            amount: prizeAmount,
+            description: `Tournament reward claimed: ${competitionName} (Rank ${rank})`,
+          } as any);
+        }
+
+        const inserted = await tx.execute(sql`
+          INSERT INTO app.competition_reward_claims
+            (entry_id, user_id, competition_id, prize_amount, prize_card_id)
+          VALUES
+            (${entryId}, ${userId}, ${competitionId}, ${prizeAmount}, ${prizeCardId})
+          RETURNING id
+        `);
+
+        claimId = Number(
+          Array.isArray((inserted as any)?.rows) ? (inserted as any).rows?.[0]?.id || 0 : 0,
+        );
+
+        const bits: string[] = [];
+        if (prizeAmount > 0) bits.push(`${formatMoney(prizeAmount)} cash`);
+        if (prizeCardId) bits.push("card reward");
+
+        await tx.insert(notifications).values({
+          userId,
+          type: rank === 1 ? "win" : "system",
+          title: "Congratulations! Reward claimed",
+          message: `You claimed your ${competitionName} reward${bits.length ? `: ${bits.join(" + ")}` : ""}.`,
+          read: false,
+        } as any);
+      });
+
+      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId) : null;
+      const fallbackRarity = String(pending.tier || "").toLowerCase() === "rare" && rank === 1
+        ? "unique"
+        : String(pending.prize_card_rarity || "rare").toLowerCase();
+
+      return res.json({
+        success: true,
+        claimId,
+        competitionId,
+        competitionName,
+        entryId,
+        rank,
+        prizeAmount,
+        cardId: prizeCardId,
+        rarity: String(prizeCard?.rarity || fallbackRarity || "rare").toLowerCase(),
+      });
+    } catch (error: any) {
+      console.error("Failed to claim tournament reward:", error);
+      return res.status(500).json({ message: "Failed to claim tournament reward" });
     }
   });
 

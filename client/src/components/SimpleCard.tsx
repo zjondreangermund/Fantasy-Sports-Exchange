@@ -7,6 +7,26 @@ type SimpleCardProps = {
   className?: string;
 };
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function buildStats(player: PlayerCardData) {
+  const rating = clamp(Number(player.rating) || 70, 45, 99);
+  const pos = String(player.position || "").toUpperCase();
+  const atkBias = pos.includes("ST") || pos.includes("FW") ? 8 : pos.includes("MID") ? 4 : -2;
+  const defBias = pos.includes("GK") || pos.includes("DEF") ? 9 : pos.includes("MID") ? 3 : -4;
+
+  return [
+    ["ATK", Math.max(40, Math.min(99, rating + atkBias))],
+    ["VIS", Math.max(38, Math.min(99, Math.round(rating * 0.9)))],
+    ["CTL", Math.max(38, Math.min(99, Math.round(rating * 0.94 + 2)))],
+    ["DEF", Math.max(35, Math.min(99, rating + defBias))],
+    ["ENG", Math.max(40, Math.min(99, Math.round(rating * 0.82 + 12)))],
+    ["FRM", Math.max(40, Math.min(99, Math.round(rating * 0.78 + 10)))],
+  ] as const;
+}
+
 const rarityStyles: Record<PlayerCardData["rarity"], string> = {
   common: "from-zinc-700 to-zinc-900 border-zinc-500/60",
   rare: "from-sky-700 to-slate-900 border-sky-400/70",
@@ -16,6 +36,7 @@ const rarityStyles: Record<PlayerCardData["rarity"], string> = {
 };
 
 export default function SimpleCard({ player, className = "" }: SimpleCardProps) {
+  const stats = useMemo(() => buildStats(player), [player]);
   const candidates = useMemo(() => {
     const list = [player.image, ...(player.imageCandidates || []), CARD_IMAGE_FALLBACK]
       .filter((value): value is string => Boolean(value));
@@ -26,7 +47,7 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
 
   return (
     <article
-      className={`relative h-[364px] w-[260px] overflow-hidden rounded-2xl border bg-gradient-to-b ${rarityStyles[player.rarity]} shadow-xl ${className}`}
+      className={`relative w-[220px] max-w-full aspect-[260/364] overflow-hidden rounded-2xl border bg-gradient-to-b ${rarityStyles[player.rarity]} shadow-xl ${className}`}
     >
       {candidates.length > 0 ? (
         <img
@@ -61,7 +82,7 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
 
       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
 
-      <div className="absolute left-4 top-4 rounded-md bg-black/55 px-2 py-1 text-2xl font-black text-white">
+      <div className="absolute left-4 top-4 rounded-md bg-black/55 px-2 py-1 text-lg font-black text-white">
         {player.rating}
       </div>
       <div className="absolute right-4 top-4 rounded-md bg-black/55 px-2 py-1 text-sm font-semibold text-zinc-100">
@@ -71,6 +92,14 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
       <div className="absolute bottom-0 w-full p-4 text-white">
         <p className="truncate text-lg font-bold uppercase tracking-wide">{player.name}</p>
         <p className="truncate text-xs text-zinc-300">{player.club || "FantasyFC"}</p>
+        <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1 rounded-md border border-white/10 bg-black/35 px-2 py-1 text-[10px]">
+          {stats.map(([label, value]) => (
+            <span key={label} className="text-center">
+              <b className="mr-1 text-[9px] text-zinc-300">{label}</b>
+              <strong className="font-bold text-white">{value}</strong>
+            </span>
+          ))}
+        </div>
         <p className="mt-2 text-xs text-zinc-300">
           #{String(player.serial || 1).padStart(3, "0")} / {player.maxSupply || 500}
         </p>

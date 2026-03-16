@@ -236,7 +236,7 @@ function createFaceOverlayTexture(player: PlayerCardData): THREE.CanvasTexture {
   ];
 
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 82px Arial";
+  ctx.font = "bold 66px Arial";
   ctx.fillText(String(player.rating), 180, 120);
 
   ctx.font = "bold 44px Arial";

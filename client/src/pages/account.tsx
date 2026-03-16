@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
-import { Bell, User as UserIcon, Mail, CheckCircle2, Sparkles, Crown, Shirt, Gift, Copy, Link2, Shield, Gavel } from "lucide-react";
+import { Bell, User as UserIcon, Mail, CheckCircle2, Sparkles, Crown, Shirt, Gift, Copy, Link2, Shield, Gavel, Users } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { queryClient } from "../lib/queryClient";
 import { Link } from "wouter";
@@ -36,6 +36,22 @@ type UserProfile = {
 type ReferralMeResponse = {
   code: string;
   url: string;
+};
+
+type ReferralHistoryItem = {
+  id: number;
+  referredUserId: string;
+  referredName: string;
+  referredEmail: string | null;
+  rewardCardId: number | null;
+  rewardCard: any;
+  createdAt: string | null;
+};
+
+type ReferralHistoryResponse = {
+  referrals: ReferralHistoryItem[];
+  totalReferrals: number;
+  rewardsGranted: number;
 };
 
 export default function AccountPage() {
@@ -148,6 +164,15 @@ export default function AccountPage() {
     },
   });
 
+  const { data: referralHistory, isLoading: referralHistoryLoading } = useQuery<ReferralHistoryResponse>({
+    queryKey: ["/api/referrals/history"],
+    queryFn: async () => {
+      const res = await fetch("/api/referrals/history", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch referral history");
+      return res.json();
+    },
+  });
+
   const markOneMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await fetch(`/api/notifications/${id}/read`, {
@@ -216,7 +241,7 @@ export default function AccountPage() {
         </div>
 
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid grid-cols-2 w-full max-w-md">
+          <TabsList className="grid grid-cols-3 w-full max-w-xl">
             <TabsTrigger value="profile" className="flex items-center gap-2">
               <UserIcon className="w-4 h-4" />
               Profile
@@ -225,6 +250,10 @@ export default function AccountPage() {
               <Bell className="w-4 h-4" />
               Inbox
               {!!inbox?.unreadCount && <Badge>{inbox.unreadCount}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="referrals" className="flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Referrals
             </TabsTrigger>
           </TabsList>
 
@@ -490,6 +519,50 @@ export default function AccountPage() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No notifications yet.</p>
+              )}
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="referrals" className="mt-4">
+            <Card className="p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <h2 className="text-lg font-semibold">Referral Stats</h2>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">Total Referrals: {Number(referralHistory?.totalReferrals || 0)}</Badge>
+                  <Badge variant="outline">Rewards Given: {Number(referralHistory?.rewardsGranted || 0)}</Badge>
+                </div>
+              </div>
+
+              {referralHistoryLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                </div>
+              ) : Array.isArray(referralHistory?.referrals) && referralHistory!.referrals.length > 0 ? (
+                <div className="space-y-3">
+                  {referralHistory!.referrals.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-border/70 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="font-medium text-sm">{item.referredName}</p>
+                          <p className="text-xs text-muted-foreground">{item.referredEmail || item.referredUserId}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Joined via referral: {item.createdAt ? new Date(item.createdAt).toLocaleString() : "-"}
+                          </p>
+                        </div>
+                        {item.rewardCard ? (
+                          <Badge className="capitalize">
+                            Reward: {String(item.rewardCard?.rarity || "common")} {String(item.rewardCard?.player?.name || "Card")}
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">No reward card</Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No referrals yet. Share your referral link in the Profile tab.</p>
               )}
             </Card>
           </TabsContent>

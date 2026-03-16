@@ -170,7 +170,8 @@ export default function CompetitionsPage() {
     }
   };
 
-  const unclaimedRewards = (Array.isArray(rewards) ? rewards : [])?.filter(r => r && (r.prizeAmount > 0 || r.prizeCard)) || [];
+  const unclaimedRewards = (Array.isArray(rewards) ? rewards : [])
+    ?.filter((r) => r && !r.claimed && (Number(r.prizeAmount || 0) > 0 || r.prizeCard)) || [];
 
   const selectedCardObjects = availableCards.filter(c => selectedCards.includes(c.id));
   const positionCounts: Record<string, number> = {};
@@ -350,7 +351,7 @@ export default function CompetitionsPage() {
                 </Badge>
                 {selectedComp.tier === "rare" && (
                   <Badge variant="outline" className="text-blue-400 border-blue-400">
-                    + Prize Pool (60/30/10 split)
+                    + Prize Pool (50/20/15/10/5 split)
                   </Badge>
                 )}
               </div>

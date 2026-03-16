@@ -25,8 +25,10 @@ import { Label } from "../components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Clock, Gavel, Zap, TrendingUp } from "lucide-react";
 import { Link } from "wouter";
+import { useToast } from "../hooks/use-toast";
 
 export default function AuctionsPage() {
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedAuction, setSelectedAuction] = useState<any>(null);
   const [selectedPackAuction, setSelectedPackAuction] = useState<any>(null);
@@ -90,6 +92,10 @@ export default function AuctionsPage() {
       setShowBidDialog(false);
       setBidAmount("");
       setSelectedAuction(null);
+      toast({ title: "Bid placed" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Bid failed", description: error?.message || "Could not place bid.", variant: "destructive" });
     },
   });
 
@@ -108,6 +114,10 @@ export default function AuctionsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auctions/active"] });
+      toast({ title: "Purchase complete" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Buy now failed", description: error?.message || "Could not complete purchase.", variant: "destructive" });
     },
   });
 
@@ -133,6 +143,10 @@ export default function AuctionsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auctions/packs/active"] });
       setShowCreatePackDialog(false);
+      toast({ title: "Pack auction created" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Pack auction not created", description: error?.message || "Could not create pack auction.", variant: "destructive" });
     },
   });
 
@@ -155,6 +169,10 @@ export default function AuctionsPage() {
       setShowPackBidDialog(false);
       setSelectedPackAuction(null);
       setBidAmount("");
+      toast({ title: "Pack bid placed" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Pack bid failed", description: error?.message || "Could not place pack bid.", variant: "destructive" });
     },
   });
 
@@ -173,6 +191,10 @@ export default function AuctionsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auctions/packs/active"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
+      toast({ title: "Pack purchased" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Pack purchase failed", description: error?.message || "Could not buy pack.", variant: "destructive" });
     },
   });
 
