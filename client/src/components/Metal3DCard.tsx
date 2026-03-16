@@ -521,7 +521,8 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
     });
     const shellPatternGeometry = new THREE.PlaneGeometry(1.76, 2.56);
     const shellPatternMesh = new THREE.Mesh(shellPatternGeometry, shellPatternMaterial);
-    shellPatternMesh.position.set(0, 0, 0.196);
+    shellPatternMesh.position.set(0, 0, 0.18);
+    shellPatternMesh.renderOrder = 5;
     slab.add(shellPatternMesh);
 
     const grooveMaterial = new THREE.MeshStandardMaterial({
@@ -566,51 +567,57 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
     });
     const shineGeometry = new THREE.PlaneGeometry(0.42, 2.3);
     const shineMesh = new THREE.Mesh(shineGeometry, shineMaterial);
-    shineMesh.position.set(-0.32, 0, 0.228);
+    shineMesh.position.set(-0.32, 0, 0.24);
+    shineMesh.renderOrder = 10;
     shineMesh.rotation.z = -0.28;
     slab.add(shineMesh);
 
     let portraitTex: THREE.CanvasTexture | null = null;
     let overlayTex: THREE.CanvasTexture | null = null;
-    let portraitMaterial: THREE.MeshStandardMaterial | null = null;
-    let overlayMaterial: THREE.MeshStandardMaterial | null = null;
+    let portraitMaterial: THREE.MeshBasicMaterial | null = null;
+    let overlayMaterial: THREE.MeshBasicMaterial | null = null;
     let portraitPlaneGeometry: THREE.PlaneGeometry | null = null;
     let overlayGeometry: THREE.PlaneGeometry | null = null;
+    let portraitMesh: THREE.Mesh | null = null;
+    let overlayMesh: THREE.Mesh | null = null;
+    let cancelled = false;
 
-    Promise.all([createPortraitTexture(player), Promise.resolve(createFaceOverlayTexture(player))]).then(([pTex, oTex]) => {
-      portraitTex = pTex;
-      overlayTex = oTex;
-
-      portraitMaterial = new THREE.MeshStandardMaterial({
-        map: portraitTex,
-        transparent: true,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -2,
-        polygonOffsetUnits: -2,
-        metalness: 0.08,
-        roughness: 0.22,
-      });
-      portraitPlaneGeometry = new THREE.PlaneGeometry(1.46, 1.62);
-      const portraitMesh = new THREE.Mesh(portraitPlaneGeometry, portraitMaterial);
-      portraitMesh.position.set(0, 0.18, 0.225);
-      slab.add(portraitMesh);
-
-      overlayMaterial = new THREE.MeshStandardMaterial({
-        map: overlayTex,
-        transparent: true,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -2,
-        polygonOffsetUnits: -2,
-        metalness: 0.15,
-        roughness: 0.2,
-      });
-      overlayGeometry = new THREE.PlaneGeometry(1.76, 2.56);
-      const overlayMesh = new THREE.Mesh(overlayGeometry, overlayMaterial);
-      overlayMesh.position.set(0, 0, 0.235);
-      slab.add(overlayMesh);
+    overlayTex = createFaceOverlayTexture(player);
+    overlayMaterial = new THREE.MeshBasicMaterial({
+      map: overlayTex,
+      transparent: true,
+      depthWrite: false,
     });
+    overlayGeometry = new THREE.PlaneGeometry(1.76, 2.56);
+    overlayMesh = new THREE.Mesh(overlayGeometry, overlayMaterial);
+    overlayMesh.position.set(0, 0, 0.34);
+    overlayMesh.renderOrder = 30;
+    slab.add(overlayMesh);
+    console.log("[Metal3DCard] overlay added", player.name);
+
+    createPortraitTexture(player)
+      .then((pTex) => {
+        if (cancelled) {
+          pTex.dispose();
+          return;
+        }
+
+        portraitTex = pTex;
+        portraitMaterial = new THREE.MeshBasicMaterial({
+          map: portraitTex,
+          transparent: true,
+          depthWrite: false,
+        });
+        portraitPlaneGeometry = new THREE.PlaneGeometry(1.46, 1.62);
+        portraitMesh = new THREE.Mesh(portraitPlaneGeometry, portraitMaterial);
+        portraitMesh.position.set(0, 0.18, 0.29);
+        portraitMesh.renderOrder = 20;
+        slab.add(portraitMesh);
+        console.log("[Metal3DCard] portrait added", player.name, player.image);
+      })
+      .catch((err) => {
+        console.error("[Metal3DCard] portrait load failed", player.name, err);
+      });
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.35);
     scene.add(ambientLight);
@@ -668,6 +675,7 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
     window.addEventListener("resize", handleResize);
 
     return () => {
+      cancelled = true;
       cancelAnimationFrame(rafId);
       if (containerRef.current) {
         containerRef.current.removeEventListener("mousemove", handleMouseMove);
@@ -676,6 +684,9 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
         }
       }
       window.removeEventListener("resize", handleResize);
+
+      if (portraitMesh && portraitMesh.parent) portraitMesh.parent.remove(portraitMesh);
+      if (overlayMesh && overlayMesh.parent) overlayMesh.parent.remove(overlayMesh);
 
       bodyGeometry.dispose();
       faceGeometry.dispose();
