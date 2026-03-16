@@ -25,7 +25,7 @@ function getLast5(player: PlayerCardData) {
 
 const rarityStyles: Record<
   PlayerCardData["rarity"],
-  { shell: string; border: string; glow: string; badge: string; orb: string }
+  { shell: string; border: string; glow: string; badge: string; orb: string; wash: string; halo: string }
 > = {
   common: {
     shell: "from-[#0c1420] via-[#08101a] to-[#03060c]",
@@ -33,34 +33,44 @@ const rarityStyles: Record<
     glow: "shadow-[0_18px_45px_rgba(0,0,0,0.45)]",
     badge: "bg-white/10 border-white/20 text-white/90",
     orb: "bg-white",
+    wash: "from-white/5 via-transparent to-transparent",
+    halo: "bg-white/10",
   },
   rare: {
     shell: "from-[#0b1d44] via-[#081428] to-[#03060c]",
-    border: "border-sky-300/35",
-    glow: "shadow-[0_18px_45px_rgba(36,99,235,0.28)]",
+    border: "border-sky-300/50",
+    glow: "shadow-[0_18px_55px_rgba(36,99,235,0.45)]",
     badge: "bg-sky-400/18 border-sky-200/40 text-white",
     orb: "bg-sky-200",
+    wash: "from-sky-300/32 via-blue-300/12 to-transparent",
+    halo: "bg-sky-300/30",
   },
   unique: {
     shell: "from-[#34104b] via-[#170d2d] to-[#03060c]",
-    border: "border-fuchsia-300/35",
-    glow: "shadow-[0_18px_45px_rgba(168,85,247,0.30)]",
+    border: "border-fuchsia-300/55",
+    glow: "shadow-[0_18px_55px_rgba(168,85,247,0.48)]",
     badge: "bg-fuchsia-400/18 border-fuchsia-200/40 text-white",
     orb: "bg-fuchsia-200",
+    wash: "from-fuchsia-300/34 via-purple-300/14 to-transparent",
+    halo: "bg-fuchsia-300/30",
   },
   epic: {
     shell: "from-[#5b0f4a] via-[#2c0c2d] to-[#03060c]",
-    border: "border-pink-300/35",
-    glow: "shadow-[0_18px_45px_rgba(236,72,153,0.30)]",
+    border: "border-pink-300/58",
+    glow: "shadow-[0_18px_58px_rgba(236,72,153,0.50)]",
     badge: "bg-pink-400/18 border-pink-200/40 text-white",
     orb: "bg-pink-200",
+    wash: "from-pink-300/36 via-fuchsia-300/14 to-transparent",
+    halo: "bg-pink-300/32",
   },
   legendary: {
     shell: "from-[#5d3b00] via-[#2b1800] to-[#03060c]",
-    border: "border-amber-200/50",
-    glow: "shadow-[0_18px_50px_rgba(245,158,11,0.34)]",
+    border: "border-amber-200/70",
+    glow: "shadow-[0_20px_60px_rgba(245,158,11,0.55)]",
     badge: "bg-amber-300/18 border-amber-100/45 text-white",
     orb: "bg-amber-200",
+    wash: "from-amber-200/40 via-yellow-300/16 to-transparent",
+    halo: "bg-amber-200/36",
   },
 };
 
@@ -92,6 +102,7 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
       ].join(" ")}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.08),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.04),transparent_22%),linear-gradient(180deg,transparent_0%,rgba(0,0,0,0.08)_50%,rgba(0,0,0,0.24)_100%)]" />
+      <div className={`absolute inset-0 bg-gradient-to-b ${rarity.wash}`} />
       <div className="pointer-events-none absolute inset-[1px] rounded-[23px] bg-[linear-gradient(118deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0.03)_18%,rgba(255,255,255,0)_42%)]" />
 
       <div className="absolute left-3 top-3 z-20">
@@ -104,14 +115,14 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
         {rarityLabel}
       </div>
 
-      <div className="absolute inset-x-[14%] top-[22%] z-10 flex h-[40%] items-center justify-center">
+      <div className="absolute inset-x-[10%] top-[17%] z-10 flex h-[48%] items-center justify-center">
         {candidates.length > 0 ? (
           <img
             src={src}
             alt={player.name}
             loading="lazy"
             decoding="async"
-            className="max-h-full max-w-full object-contain drop-shadow-[0_10px_18px_rgba(0,0,0,0.45)]"
+            className="max-h-full max-w-full object-contain drop-shadow-[0_16px_26px_rgba(0,0,0,0.55)]"
             onError={() => {
               if (candidateIndex < candidates.length - 1) {
                 setCandidateIndex((prev) => prev + 1);
@@ -121,11 +132,18 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
         ) : null}
       </div>
 
-      <div className="pointer-events-none absolute left-1/2 top-[46%] z-[11] h-[120px] w-[120px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/10 blur-2xl" />
+      <div className={`pointer-events-none absolute left-1/2 top-[44%] z-[11] h-[170px] w-[170px] -translate-x-1/2 -translate-y-1/2 rounded-full ${rarity.halo} blur-3xl`} />
 
       <div className={`absolute left-[70%] top-[14%] z-20 h-2.5 w-2.5 rounded-full ${rarity.orb} shadow-[0_0_12px_rgba(255,255,255,0.95)]`} />
       <div className={`absolute left-[47%] top-[39%] z-20 h-4.5 w-4.5 rounded-full ${rarity.orb} shadow-[0_0_18px_rgba(255,255,255,0.95)]`} />
       <div className={`absolute left-[49%] top-[48%] z-20 h-3.5 w-3.5 rounded-full ${rarity.orb} shadow-[0_0_14px_rgba(255,255,255,0.95)]`} />
+      {player.rarity !== "common" ? (
+        <>
+          <div className={`absolute left-[26%] top-[21%] z-20 h-1.5 w-1.5 animate-pulse rounded-full ${rarity.orb} shadow-[0_0_10px_rgba(255,255,255,0.95)]`} />
+          <div className={`absolute left-[73%] top-[34%] z-20 h-1.5 w-1.5 animate-pulse rounded-full ${rarity.orb} shadow-[0_0_10px_rgba(255,255,255,0.95)]`} style={{ animationDelay: "220ms" }} />
+          <div className={`absolute left-[38%] top-[55%] z-20 h-1 w-1 animate-pulse rounded-full ${rarity.orb} shadow-[0_0_8px_rgba(255,255,255,0.95)]`} style={{ animationDelay: "420ms" }} />
+        </>
+      ) : null}
 
       <div className="absolute inset-x-3 bottom-3 z-20 text-center">
         <div className="flex items-center justify-center gap-3 text-[8px] font-bold uppercase tracking-[0.08em] text-white/85">

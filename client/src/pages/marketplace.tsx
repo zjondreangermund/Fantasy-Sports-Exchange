@@ -133,7 +133,7 @@ export default function MarketplacePage() {
   useEffect(() => {
     if (!visibleBuyListings.length) return;
     const snapshot = visibleBuyListings.slice(0, 5).map((card) => {
-      const fantasy = toFantasyCardData(card, { imageWidth: 256 });
+      const fantasy = toFantasyCardData(card, { imageWidth: 1024 });
       return {
         id: card.id,
         name: card.player?.name,
@@ -198,21 +198,12 @@ export default function MarketplacePage() {
                 ))}
               </div>
             ) : sortedListings && sortedListings.length > 0 ? (
-              <div 
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 preserve-3d"
-                style={{ transformStyle: "preserve-3d" }}
-              >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
                 {visibleBuyListings.map((card) => (
-                  <div 
-                    key={card.id} 
-                    className="flex items-center justify-center"
-                    style={{ 
-                      minHeight: "300px"
-                    }}
-                  >
+                  <div key={card.id} className="flex items-center justify-center min-h-[360px]">
                     <div className="flex flex-col items-center gap-2">
                       <button type="button" className="w-full text-left" onClick={() => handleOpenBuyCard(card)}>
-                        <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 256 })} />
+                        <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1024 })} className={isMobile ? "!w-[172px]" : "!w-[220px]"} />
                       </button>
                       <p className="text-xs text-muted-foreground">
                         Seller: {card.ownerUsername || card.ownerName || "FantasyFC"}
@@ -243,20 +234,11 @@ export default function MarketplacePage() {
 
           <TabsContent value="sell">
             {myListedCards && myListedCards.length > 0 ? (
-              <div 
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 preserve-3d"
-                style={{ transformStyle: "preserve-3d" }}
-              >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
                 {visibleSellListings.map((card) => (
-                  <div 
-                    key={card.id} 
-                    className="relative flex items-center justify-center"
-                    style={{ 
-                      minHeight: "300px"
-                    }}
-                  >
+                  <div key={card.id} className="relative flex items-center justify-center min-h-[360px]">
                     <div className="flex flex-col items-center gap-2">
-                      <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 256 })} />
+                      <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1024 })} className={isMobile ? "!w-[172px]" : "!w-[220px]"} />
                       <p className="text-sm font-semibold text-green-500">
                         N${(card.price || 0).toFixed(2)}
                       </p>

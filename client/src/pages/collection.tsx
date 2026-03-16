@@ -169,7 +169,7 @@ export default function CollectionPage() {
   useEffect(() => {
     if (!visibleCards.length) return;
     const snapshot = visibleCards.slice(0, 5).map((card) => {
-      const fantasy = toFantasyCardData(card, { imageWidth: 256 });
+      const fantasy = toFantasyCardData(card, { imageWidth: 1024 });
       return {
         id: card.id,
         name: card.player?.name,
@@ -242,23 +242,13 @@ export default function CollectionPage() {
             ))}
           </div>
         ) : filteredCards && filteredCards.length > 0 ? (
-          <div 
-            className="flex flex-wrap gap-8 justify-center"
-            style={{ transformStyle: "preserve-3d" }}
-          >
+          <div className="flex flex-wrap gap-4 md:gap-5 justify-center">
             {visibleCards.map((card) => {
-              const fantasyCard = toFantasyCardData(card, { imageWidth: 256 });
+              const fantasyCard = toFantasyCardData(card, { imageWidth: 1024 });
               return (
-                <div 
-                  key={card.id} 
-                  className="relative" 
-                  style={{ 
-                    transformStyle: "preserve-3d",
-                    minHeight: "320px"
-                  }}
-                >
-                  <CollectionPlayerCard player={fantasyCard} />
-                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
+                <div key={card.id} className="flex min-h-[360px] flex-col items-center gap-2">
+                  <CollectionPlayerCard player={fantasyCard} className={isMobile ? "!w-[172px]" : "!w-[220px]"} />
+                  <div className="z-30 flex gap-2">
                     {card.forSale ? (
                       <Button
                         size="sm"

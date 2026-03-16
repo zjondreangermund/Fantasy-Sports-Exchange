@@ -28,7 +28,7 @@ function CardShowcaseBase({ withSpotlight = true, card, onClick }: CardShowcaseP
       )}
 
       <button type="button" onClick={onClick} className="text-left">
-        <CollectionPlayerCard player={mainCard} className="!w-[150px]" />
+        <CollectionPlayerCard player={mainCard} mode="3d" className="!w-[220px] !h-[308px]" />
       </button>
 
       <div className="relative z-10 mt-2 rounded-lg border border-white/15 bg-black/45 px-3 py-2 text-center backdrop-blur-sm">
