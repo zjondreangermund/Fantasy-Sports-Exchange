@@ -49,7 +49,6 @@ export default function AuctionsPage() {
     },
   });
 
-  // Fetch active auctions
   const { data: auctions = [], isLoading } = useQuery({
     queryKey: ["/api/auctions/active"],
     queryFn: async () => {
@@ -57,7 +56,6 @@ export default function AuctionsPage() {
       if (!res.ok) throw new Error("Failed to fetch auctions");
       return res.json();
     },
-    enabled: adminCheck?.isAdmin === true,
     refetchInterval: 5000, // Auto-refresh every 5 seconds for live updates
   });
 
@@ -68,7 +66,6 @@ export default function AuctionsPage() {
       if (!res.ok) throw new Error("Failed to fetch pack auctions");
       return res.json();
     },
-    enabled: adminCheck?.isAdmin === true,
     refetchInterval: 5000,
   });
 
@@ -266,29 +263,6 @@ export default function AuctionsPage() {
     );
   }
 
-  if (!adminCheck?.isAdmin) {
-    return (
-      <div className="container mx-auto py-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Auctions Are Admin-Only</CardTitle>
-            <CardDescription>
-              Pack release auctions are managed by admins only.
-            </CardDescription>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link href="/account">
-                <Button variant="outline" size="sm">Open Account</Button>
-              </Link>
-              <Link href="/dashboard">
-                <Button variant="outline" size="sm">Go to Dashboard</Button>
-              </Link>
-            </div>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="container mx-auto py-8 space-y-6">
       {/* Header */}
@@ -303,14 +277,18 @@ export default function AuctionsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/admin">
-            <Button variant="outline" size="sm">Back to Admin</Button>
-          </Link>
+          {adminCheck?.isAdmin ? (
+            <Link href="/admin">
+              <Button variant="outline" size="sm">Back to Admin</Button>
+            </Link>
+          ) : null}
           <Clock className="h-5 w-5 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">Updates every 5s</span>
-          <Button variant="outline" size="sm" onClick={() => setShowCreatePackDialog(true)}>
-            Create Pack Auction
-          </Button>
+          {adminCheck?.isAdmin ? (
+            <Button variant="outline" size="sm" onClick={() => setShowCreatePackDialog(true)}>
+              Create Pack Auction
+            </Button>
+          ) : null}
         </div>
       </div>
 

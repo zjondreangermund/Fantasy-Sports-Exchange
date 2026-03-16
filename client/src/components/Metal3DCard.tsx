@@ -164,8 +164,8 @@ function createEngravedPatternTexture(
 
 async function createPortraitTexture(player: PlayerCardData): Promise<THREE.CanvasTexture> {
   const canvas = document.createElement("canvas");
-  canvas.width = 700;
-  canvas.height = 760;
+  canvas.width = 1400;
+  canvas.height = 1520;
   const ctx = canvas.getContext("2d")!;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -178,6 +178,25 @@ async function createPortraitTexture(player: PlayerCardData): Promise<THREE.Canv
 
   const imageSources = [player.image, ...(player.imageCandidates || [])]
     .map((entry) => String(entry || "").trim())
+    .map((entry) => {
+      if (!entry.startsWith("/api/players/") || !entry.includes("/photo")) return entry;
+      try {
+        const [pathOnly, queryString = ""] = entry.split("?");
+        const params = new URLSearchParams(queryString);
+        params.delete("variant");
+        params.set("variant", "card");
+        const width = Number(params.get("w") || params.get("width") || 0);
+        if (!Number.isFinite(width) || width < 1024) {
+          params.set("w", "1200");
+        }
+        if (!params.get("format")) {
+          params.set("format", "webp");
+        }
+        return `${pathOnly}?${params.toString()}`;
+      } catch {
+        return entry;
+      }
+    })
     .filter((entry) => entry.length > 0);
 
   let selectedImage: HTMLImageElement | null = null;
@@ -230,16 +249,17 @@ async function createPortraitTexture(player: PlayerCardData): Promise<THREE.Canv
   ctx.fill();
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.generateMipmaps = true;
   texture.magFilter = THREE.LinearFilter;
-  texture.minFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.needsUpdate = true;
   return texture;
 }
 
 function createFaceOverlayTexture(player: PlayerCardData): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = 1024;
-  canvas.height = 1430;
+  canvas.width = 2048;
+  canvas.height = 2860;
   const ctx = canvas.getContext("2d")!;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -258,25 +278,25 @@ function createFaceOverlayTexture(player: PlayerCardData): THREE.CanvasTexture {
   const rarityLabel = getRarityLabel(player.rarity);
 
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 112px Arial";
-  ctx.fillText(String(rating), 106, 150);
+  ctx.font = "bold 224px Arial";
+  ctx.fillText(String(rating), 212, 300);
 
   ctx.fillStyle = "rgba(255,255,255,0.90)";
-  ctx.font = "bold 46px Arial";
-  ctx.fillText(position, 110, 206);
+  ctx.font = "bold 92px Arial";
+  ctx.fillText(position, 220, 412);
 
-  const pillX = 690;
-  const pillY = 84;
-  const pillW = 210;
-  const pillH = 70;
-  const pillR = 34;
+  const pillX = 1380;
+  const pillY = 168;
+  const pillW = 420;
+  const pillH = 140;
+  const pillR = 68;
 
   ctx.save();
   ctx.shadowColor = badge.glow;
   ctx.shadowBlur = 20;
   ctx.fillStyle = badge.bg;
   ctx.strokeStyle = badge.border;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(pillX + pillR, pillY);
   ctx.lineTo(pillX + pillW - pillR, pillY);
@@ -293,15 +313,15 @@ function createFaceOverlayTexture(player: PlayerCardData): THREE.CanvasTexture {
   ctx.restore();
 
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 28px Arial";
+  ctx.font = "bold 56px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(rarityLabel, pillX + pillW / 2, pillY + 46);
+  ctx.fillText(rarityLabel, pillX + pillW / 2, pillY + 92);
 
   ctx.save();
   const orbs = [
-    { x: 308, y: 116, r: 16 },
-    { x: 500, y: 408, r: 34 },
-    { x: 500, y: 502, r: 22 },
+    { x: 616, y: 232, r: 32 },
+    { x: 1000, y: 816, r: 68 },
+    { x: 1000, y: 1004, r: 44 },
   ];
   for (const orb of orbs) {
     const g = ctx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, orb.r);
@@ -317,41 +337,77 @@ function createFaceOverlayTexture(player: PlayerCardData): THREE.CanvasTexture {
 
   ctx.textAlign = "center";
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 54px Arial";
-  ctx.fillText(name, 512, 1172);
+  ctx.font = "bold 108px Arial";
+  ctx.fillText(name, 1024, 2344);
 
   ctx.fillStyle = "rgba(220,226,235,0.78)";
-  ctx.font = "30px Arial";
-  ctx.fillText(club, 512, 1220);
+  ctx.font = "60px Arial";
+  ctx.fillText(club, 1024, 2440);
 
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(255,255,255,0.92)";
-  ctx.font = "bold 34px Arial";
-  ctx.fillText(`LV ${level}`, 108, 1330);
+  ctx.font = "bold 68px Arial";
+  ctx.fillText(`LV ${level}`, 216, 2660);
   ctx.fillStyle = "rgba(255,255,255,0.88)";
-  ctx.fillText(`XP ${xp}/${xpMax}`, 366, 1330);
+  ctx.fillText(`XP ${xp}/${xpMax}`, 732, 2660);
   ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.fillText("L5", 108, 1386);
+  ctx.fillText("L5", 216, 2772);
 
   const dotColors = ["#84cc16", "#22c55e", "#f59e0b", "#fb923c", "#a3e635"];
-  let startX = 220;
+  let startX = 440;
   for (let i = 0; i < 5; i += 1) {
-    const x = startX + i * 118;
+    const x = startX + i * 236;
     const value = last5[i] ?? 0;
     ctx.fillStyle = dotColors[i % dotColors.length];
     ctx.beginPath();
-    ctx.arc(x - 28, 1377, 11, 0, Math.PI * 2);
+    ctx.arc(x - 56, 2754, 22, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.font = "bold 30px Arial";
-    ctx.fillText(String(value), x, 1386);
+    ctx.font = "bold 60px Arial";
+    ctx.fillText(String(value), x, 2772);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.generateMipmaps = true;
   texture.magFilter = THREE.LinearFilter;
-  texture.minFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.needsUpdate = true;
   return texture;
+}
+
+function createGlowTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d")!;
+  const g = ctx.createRadialGradient(256, 256, 0, 256, 256, 220);
+  g.addColorStop(0, "rgba(255,255,255,0.9)");
+  g.addColorStop(0.25, "rgba(255,255,255,0.25)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 512, 512);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.generateMipmaps = true;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function getRarityGlowColor(rarity: Rarity): number {
+  switch (rarity) {
+    case "rare":
+      return 0x60a5fa;
+    case "unique":
+      return 0xc084fc;
+    case "epic":
+      return 0xf472b6;
+    case "legendary":
+      return 0xfbbf24;
+    default:
+      return 0xffffff;
+  }
 }
 
 function getRarityLabel(rarity: Rarity) {
@@ -441,7 +497,7 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height, false);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -508,6 +564,11 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
       metalConfig.patternColor,
       player.rarity === "legendary" ? 0.28 : player.rarity === "unique" ? 0.24 : 0.18,
     );
+    engravedTexture.generateMipmaps = true;
+    engravedTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    engravedTexture.magFilter = THREE.LinearFilter;
+    engravedTexture.minFilter = THREE.LinearMipmapLinearFilter;
+    engravedTexture.needsUpdate = true;
     const shellPatternMaterial = new THREE.MeshStandardMaterial({
       map: engravedTexture,
       transparent: true,
@@ -572,6 +633,33 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
     shineMesh.rotation.z = -0.28;
     slab.add(shineMesh);
 
+    const shineMaterial2 = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(0xffffff),
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+    });
+    const shineGeometry2 = new THREE.PlaneGeometry(0.24, 2.15);
+    const shineMesh2 = new THREE.Mesh(shineGeometry2, shineMaterial2);
+    shineMesh2.position.set(0.18, 0.04, 0.245);
+    shineMesh2.rotation.z = -0.34;
+    shineMesh2.renderOrder = 11;
+    slab.add(shineMesh2);
+
+    const glowTex = createGlowTexture();
+    glowTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    glowTex.needsUpdate = true;
+    const glowMat = new THREE.MeshBasicMaterial({
+      map: glowTex,
+      transparent: true,
+      opacity: player.rarity === "legendary" ? 0.34 : 0.2,
+      depthWrite: false,
+    });
+    const glowMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.95), glowMat);
+    glowMesh.position.set(0, 0.18, 0.27);
+    glowMesh.renderOrder = 18;
+    slab.add(glowMesh);
+
     let portraitTex: THREE.CanvasTexture | null = null;
     let overlayTex: THREE.CanvasTexture | null = null;
     let portraitMaterial: THREE.MeshBasicMaterial | null = null;
@@ -583,6 +671,8 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
     let cancelled = false;
 
     overlayTex = createFaceOverlayTexture(player);
+    overlayTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    overlayTex.needsUpdate = true;
     overlayMaterial = new THREE.MeshBasicMaterial({
       map: overlayTex,
       transparent: true,
@@ -603,14 +693,16 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
         }
 
         portraitTex = pTex;
+        portraitTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        portraitTex.needsUpdate = true;
         portraitMaterial = new THREE.MeshBasicMaterial({
           map: portraitTex,
           transparent: true,
           depthWrite: false,
         });
-        portraitPlaneGeometry = new THREE.PlaneGeometry(1.46, 1.62);
+        portraitPlaneGeometry = new THREE.PlaneGeometry(1.06, 1.22);
         portraitMesh = new THREE.Mesh(portraitPlaneGeometry, portraitMaterial);
-        portraitMesh.position.set(0, 0.18, 0.29);
+        portraitMesh.position.set(0, 0.34, 0.29);
         portraitMesh.renderOrder = 20;
         slab.add(portraitMesh);
         console.log("[Metal3DCard] portrait added", player.name, player.image);
@@ -638,6 +730,10 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
     fillLight.position.set(0, -2, 5);
     scene.add(fillLight);
 
+    const rarityGlow = new THREE.PointLight(getRarityGlowColor(player.rarity), 0.9, 4);
+    rarityGlow.position.set(0, -0.4, 1.4);
+    slab.add(rarityGlow);
+
     const backLight = new THREE.DirectionalLight(0x4a90e2, 0.6);
     backLight.position.set(0, 0, -6);
     scene.add(backLight);
@@ -659,7 +755,9 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
         slabRef.current.rotation.x += (mousePosRef.current.y * 0.08 - slabRef.current.rotation.x) * 0.08;
         slabRef.current.rotation.y += (mousePosRef.current.x * 0.1 - slabRef.current.rotation.y) * 0.08;
       }
-      shineMesh.position.x = -0.32 + Math.sin(performance.now() * 0.0012) * 0.08;
+      const t = performance.now();
+      shineMesh.position.x = -0.32 + Math.sin(t * 0.0012) * 0.08;
+      shineMesh2.position.x = 0.18 + Math.sin(t * 0.0014 + 0.8) * 0.06;
       renderer.render(scene, camera);
     };
     animate();
@@ -697,6 +795,8 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
       leftChevron.geometry.dispose();
       rightChevron.geometry.dispose();
       shineGeometry.dispose();
+      shineGeometry2.dispose();
+      glowMesh.geometry.dispose();
       portraitPlaneGeometry?.dispose();
       overlayGeometry?.dispose();
 
@@ -707,10 +807,13 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
       grooveMaterial.dispose();
       chevronMaterial.dispose();
       shineMaterial.dispose();
+      shineMaterial2.dispose();
+      glowMat.dispose();
       portraitMaterial?.dispose();
       overlayMaterial?.dispose();
 
       engravedTexture.dispose();
+      glowTex.dispose();
       portraitTex?.dispose();
       overlayTex?.dispose();
       renderer.dispose();

@@ -14,8 +14,9 @@ function normalizeRarity(rarity?: string | null): Rarity {
 
 export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCardDataOptions = {}): PlayerCardData {
   const player = card.player as any;
-  const imageWidth = Number(options.imageWidth) > 0 ? Number(options.imageWidth) : 512;
-  const candidates = buildCardImageCandidates(card, { thumb: true, width: imageWidth, format: "webp" });
+  const requestedWidth = Number(options.imageWidth) > 0 ? Number(options.imageWidth) : 1024;
+  const imageWidth = Math.max(1024, requestedWidth);
+  const candidates = buildCardImageCandidates(card, { thumb: false, width: imageWidth, format: "webp" });
 
   return {
     id: String(card.id),
