@@ -28,6 +28,12 @@ export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCa
     rarity: normalizeRarity(card.rarity),
     serial: Number(card.serialNumber || 1),
     maxSupply: Number(card.maxSupply || 100),
+    level: Number(card.level || 1),
+    xp: Number(card.xp || 0),
+    xpMax: Number(card.maxSupply && Number(card.maxSupply) > 0 ? card.maxSupply : 1000),
     form: Number(card.decisiveScore || 0),
+    last5Scores: Array.isArray(card.last5Scores)
+      ? card.last5Scores.map((value: any) => Number(value || 0)).slice(0, 5)
+      : [0, 0, 0, 0, 0],
   };
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 import SimpleCard from "./SimpleCard";
 import { useIsMobile } from "../hooks/use-mobile";
@@ -19,6 +19,8 @@ export type PlayerCardData = {
   team?: string;
   nationality?: string;
   level?: number;
+  xp?: number;
+  xpMax?: number;
   form?: number;
   last5Scores?: number[];
 };
@@ -45,20 +47,20 @@ const rarityMetals: Record<Rarity, RarityMetal> = {
   rare: {
     metalColor: new THREE.Color(0x4a90e2),
     rimColor: new THREE.Color(0x2c5aa0),
-    glossiness: 0.8,
+    glossiness: 0.82,
     patternColor: new THREE.Color(0x1e3a5f),
   },
   unique: {
-    metalColor: new THREE.Color(0x00d4ff),
-    rimColor: new THREE.Color(0xff63cd),
-    glossiness: 0.9,
-    patternColor: new THREE.Color(0xff63cd),
-  },
-  epic: {
     metalColor: new THREE.Color(0x9b59ff),
     rimColor: new THREE.Color(0x5d2ea8),
-    glossiness: 0.88,
+    glossiness: 0.9,
     patternColor: new THREE.Color(0x3f2570),
+  },
+  epic: {
+    metalColor: new THREE.Color(0xff4fd8),
+    rimColor: new THREE.Color(0xa3267c),
+    glossiness: 0.9,
+    patternColor: new THREE.Color(0x5c1846),
   },
   legendary: {
     metalColor: new THREE.Color(0xffd700),
@@ -166,7 +168,12 @@ async function createPortraitTexture(player: PlayerCardData): Promise<THREE.Canv
   canvas.height = 760;
   const ctx = canvas.getContext("2d")!;
 
-  ctx.fillStyle = "#101216";
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  bg.addColorStop(0, "rgba(8,12,22,0.00)");
+  bg.addColorStop(0.35, "rgba(8,12,22,0.05)");
+  bg.addColorStop(1, "rgba(8,12,22,0.10)");
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const imageSources = [player.image, ...(player.imageCandidates || [])]
@@ -186,40 +193,41 @@ async function createPortraitTexture(player: PlayerCardData): Promise<THREE.Canv
   if (selectedImage) {
     try {
       const img = selectedImage;
+      const maxW = canvas.width * 0.66;
+      const maxH = canvas.height * 0.70;
+      const scale = Math.min(maxW / img.width, maxH / img.height);
+      const drawW = img.width * scale;
+      const drawH = img.height * scale;
+      const dx = (canvas.width - drawW) / 2;
+      const dy = canvas.height * 0.13;
 
-      const targetAspect = canvas.width / canvas.height;
-      const sourceAspect = img.width / img.height;
-
-      let sx = 0;
-      let sy = 0;
-      let sw = img.width;
-      let sh = img.height;
-
-      if (sourceAspect > targetAspect) {
-        sw = img.height * targetAspect;
-        sx = (img.width - sw) / 2;
-      } else {
-        sh = img.width / targetAspect;
-        sy = img.height * 0.08;
-        if (sy + sh > img.height) sy = img.height - sh;
-      }
-
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetY = 12;
+      ctx.drawImage(img, dx, dy, drawW, drawH);
+      ctx.restore();
     } catch {
       ctx.fillStyle = "#2a2f38";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
-  } else {
-    ctx.fillStyle = "#2a2f38";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  grad.addColorStop(0, "rgba(0,0,0,0.10)");
-  grad.addColorStop(0.7, "rgba(0,0,0,0.02)");
-  grad.addColorStop(1, "rgba(0,0,0,0.28)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const radial = ctx.createRadialGradient(
+    canvas.width * 0.5,
+    canvas.height * 0.52,
+    10,
+    canvas.width * 0.5,
+    canvas.height * 0.52,
+    240,
+  );
+  radial.addColorStop(0, "rgba(255,255,255,0.16)");
+  radial.addColorStop(0.3, "rgba(255,255,255,0.06)");
+  radial.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = radial;
+  ctx.beginPath();
+  ctx.ellipse(canvas.width * 0.5, canvas.height * 0.54, 220, 180, 0, 0, Math.PI * 2);
+  ctx.fill();
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.LinearFilter;
@@ -235,64 +243,109 @@ function createFaceOverlayTexture(player: PlayerCardData): THREE.CanvasTexture {
   const ctx = canvas.getContext("2d")!;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.textAlign = "center";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
 
   const rating = Math.max(45, Math.min(99, Number(player.rating) || 70));
-  const pos = String(player.position || "").toUpperCase();
-
-  const atkBias = pos.includes("ST") || pos.includes("FW") ? 8 : pos.includes("MID") ? 4 : -2;
-  const defBias = pos.includes("GK") || pos.includes("DEF") ? 9 : pos.includes("MID") ? 3 : -4;
-
-  const stats = [
-    ["ATK", Math.max(40, Math.min(99, rating + atkBias))],
-    ["VIS", Math.max(38, Math.min(99, Math.round(rating * 0.9)))],
-    ["CTL", Math.max(38, Math.min(99, Math.round(rating * 0.94 + 2)))],
-    ["DEF", Math.max(35, Math.min(99, rating + defBias))],
-    ["ENG", Math.max(40, Math.min(99, Math.round(rating * 0.82 + 12)))],
-    ["FRM", Math.max(40, Math.min(99, Math.round(rating * 0.78 + 10)))],
-  ];
+  const position = String(player.position || "").toUpperCase();
+  const name = fitName(player.name, 20);
+  const club = String(player.club || player.team || "FantasyFC").toUpperCase();
+  const level = Math.max(1, Number(player.level) || 1);
+  const xp = Math.max(0, Number(player.xp) || 0);
+  const xpMax = Math.max(100, Number(player.xpMax) || 1000);
+  const last5 = getLast5(player);
+  const badge = getRarityBadgeColors(player.rarity);
+  const rarityLabel = getRarityLabel(player.rarity);
 
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 66px Arial";
-  ctx.fillText(String(player.rating), 180, 120);
+  ctx.font = "bold 112px Arial";
+  ctx.fillText(String(rating), 106, 150);
 
-  ctx.font = "bold 44px Arial";
-  ctx.fillText(player.position, 840, 120);
+  ctx.fillStyle = "rgba(255,255,255,0.90)";
+  ctx.font = "bold 46px Arial";
+  ctx.fillText(position, 110, 206);
 
-  ctx.font = "bold 54px Arial";
-  ctx.fillText(player.name, 512, 1015);
+  const pillX = 690;
+  const pillY = 84;
+  const pillW = 210;
+  const pillH = 70;
+  const pillR = 34;
 
-  ctx.fillStyle = "#c9d0da";
-  ctx.font = "28px Arial";
-  ctx.fillText(`${player.position} • ${player.club || "FantasyFC"}`, 512, 1065);
+  ctx.save();
+  ctx.shadowColor = badge.glow;
+  ctx.shadowBlur = 20;
+  ctx.fillStyle = badge.bg;
+  ctx.strokeStyle = badge.border;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(pillX + pillR, pillY);
+  ctx.lineTo(pillX + pillW - pillR, pillY);
+  ctx.quadraticCurveTo(pillX + pillW, pillY, pillX + pillW, pillY + pillR);
+  ctx.lineTo(pillX + pillW, pillY + pillH - pillR);
+  ctx.quadraticCurveTo(pillX + pillW, pillY + pillH, pillX + pillW - pillR, pillY + pillH);
+  ctx.lineTo(pillX + pillR, pillY + pillH);
+  ctx.quadraticCurveTo(pillX, pillY + pillH, pillX, pillY + pillH - pillR);
+  ctx.lineTo(pillX, pillY + pillR);
+  ctx.quadraticCurveTo(pillX, pillY, pillX + pillR, pillY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 
-  const startX = 238;
-  const startY = 1120;
-  const gapX = 150;
-  const gapY = 110;
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 28px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(rarityLabel, pillX + pillW / 2, pillY + 46);
 
-  for (let i = 0; i < stats.length; i += 1) {
-    const row = Math.floor(i / 3);
-    const col = i % 3;
-    const x = startX + col * gapX;
-    const y = startY + row * gapY;
-
-    ctx.fillStyle = "rgba(255,255,255,0.86)";
-    ctx.font = "bold 22px Arial";
-    ctx.fillText(String(stats[i][0]), x, y);
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 42px Arial";
-    ctx.fillText(String(stats[i][1]), x, y + 42);
+  ctx.save();
+  const orbs = [
+    { x: 308, y: 116, r: 16 },
+    { x: 500, y: 408, r: 34 },
+    { x: 500, y: 502, r: 22 },
+  ];
+  for (const orb of orbs) {
+    const g = ctx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, orb.r);
+    g.addColorStop(0, "rgba(255,255,255,0.98)");
+    g.addColorStop(0.32, "rgba(255,255,255,0.32)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI * 2);
+    ctx.fill();
   }
+  ctx.restore();
 
-  ctx.fillStyle = "#9ea6b2";
-  ctx.font = "24px Arial";
-  ctx.fillText(
-    `#${String(player.serial || 1).padStart(3, "0")} / ${player.maxSupply || 500}`,
-    512,
-    1370,
-  );
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 54px Arial";
+  ctx.fillText(name, 512, 1172);
+
+  ctx.fillStyle = "rgba(220,226,235,0.78)";
+  ctx.font = "30px Arial";
+  ctx.fillText(club, 512, 1220);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.font = "bold 34px Arial";
+  ctx.fillText(`LV ${level}`, 108, 1330);
+  ctx.fillStyle = "rgba(255,255,255,0.88)";
+  ctx.fillText(`XP ${xp}/${xpMax}`, 366, 1330);
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.fillText("L5", 108, 1386);
+
+  const dotColors = ["#84cc16", "#22c55e", "#f59e0b", "#fb923c", "#a3e635"];
+  let startX = 220;
+  for (let i = 0; i < 5; i += 1) {
+    const x = startX + i * 118;
+    const value = last5[i] ?? 0;
+    ctx.fillStyle = dotColors[i % dotColors.length];
+    ctx.beginPath();
+    ctx.arc(x - 28, 1377, 11, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.font = "bold 30px Arial";
+    ctx.fillText(String(value), x, 1386);
+  }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.LinearFilter;
@@ -301,20 +354,55 @@ function createFaceOverlayTexture(player: PlayerCardData): THREE.CanvasTexture {
   return texture;
 }
 
-function getDisplayStats(player: PlayerCardData) {
-  const rating = Math.max(45, Math.min(99, Number(player.rating) || 70));
-  const pos = String(player.position || "").toUpperCase();
-  const atkBias = pos.includes("ST") || pos.includes("FW") ? 8 : pos.includes("MID") ? 4 : -2;
-  const defBias = pos.includes("GK") || pos.includes("DEF") ? 9 : pos.includes("MID") ? 3 : -4;
+function getRarityLabel(rarity: Rarity) {
+  return String(rarity || "common").toUpperCase();
+}
 
-  return [
-    ["ATK", Math.max(40, Math.min(99, rating + atkBias))],
-    ["VIS", Math.max(38, Math.min(99, Math.round(rating * 0.9)))],
-    ["CTL", Math.max(38, Math.min(99, Math.round(rating * 0.94 + 2)))],
-    ["DEF", Math.max(35, Math.min(99, rating + defBias))],
-    ["ENG", Math.max(40, Math.min(99, Math.round(rating * 0.82 + 12)))],
-    ["FRM", Math.max(40, Math.min(99, Math.round(rating * 0.78 + 10)))],
-  ] as const;
+function getRarityBadgeColors(rarity: Rarity) {
+  switch (rarity) {
+    case "rare":
+      return {
+        bg: "rgba(74,144,226,0.22)",
+        border: "rgba(144,190,255,0.50)",
+        glow: "rgba(74,144,226,0.35)",
+      };
+    case "unique":
+      return {
+        bg: "rgba(155,89,255,0.24)",
+        border: "rgba(208,176,255,0.54)",
+        glow: "rgba(155,89,255,0.35)",
+      };
+    case "epic":
+      return {
+        bg: "rgba(255,79,216,0.24)",
+        border: "rgba(255,176,232,0.52)",
+        glow: "rgba(255,79,216,0.32)",
+      };
+    case "legendary":
+      return {
+        bg: "rgba(255,190,40,0.26)",
+        border: "rgba(255,225,140,0.58)",
+        glow: "rgba(255,190,40,0.36)",
+      };
+    default:
+      return {
+        bg: "rgba(210,220,240,0.14)",
+        border: "rgba(255,255,255,0.28)",
+        glow: "rgba(255,255,255,0.14)",
+      };
+  }
+}
+
+function fitName(name: string, max = 20) {
+  const clean = String(name || "").trim().toUpperCase();
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, max - 1)}...`;
+}
+
+function getLast5(player: PlayerCardData) {
+  const last5 = Array.isArray(player.last5Scores) ? player.last5Scores.slice(0, 5) : [];
+  while (last5.length < 5) last5.push(0);
+  return last5;
 }
 
 export default function Metal3DCard({ player, className = "" }: Metal3DCardProps) {
@@ -322,7 +410,6 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
   const slabRef = useRef<THREE.Group | null>(null);
   const mousePosRef = useRef({ x: 0, y: 0 });
   const isMobile = useIsMobile();
-  const displayStats = useMemo(() => getDisplayStats(player), [player.rating, player.position]);
 
   useEffect(() => {
     const candidates = player.imageCandidates || [];
@@ -504,9 +591,9 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
         metalness: 0.08,
         roughness: 0.22,
       });
-      portraitPlaneGeometry = new THREE.PlaneGeometry(1.72, 1.5);
+      portraitPlaneGeometry = new THREE.PlaneGeometry(1.46, 1.62);
       const portraitMesh = new THREE.Mesh(portraitPlaneGeometry, portraitMaterial);
-      portraitMesh.position.set(0, 0.36, 0.225);
+      portraitMesh.position.set(0, 0.18, 0.225);
       slab.add(portraitMesh);
 
       overlayMaterial = new THREE.MeshStandardMaterial({
@@ -643,17 +730,6 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
       ref={containerRef}
       className={`relative h-[364px] w-[260px] overflow-visible ${className}`}
       style={{ perspective: "1000px" }}
-    >
-      <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 w-[84%] -translate-x-1/2 rounded-md border border-white/15 bg-black/50 px-2 py-1 text-[10px] text-white backdrop-blur-sm">
-        <div className="grid grid-cols-3 gap-x-2 gap-y-1">
-          {displayStats.map(([label, value]) => (
-            <span key={label} className="text-center leading-none">
-              <b className="mr-1 text-[9px] text-zinc-300">{label}</b>
-              <strong className="font-bold text-white">{value}</strong>
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
+    />
   );
 }
