@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import SimpleCard from "./SimpleCard";
 import { useIsMobile } from "../hooks/use-mobile";
@@ -169,9 +169,23 @@ async function createPortraitTexture(player: PlayerCardData): Promise<THREE.Canv
   ctx.fillStyle = "#101216";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  if (player.image) {
+  const imageSources = [player.image, ...(player.imageCandidates || [])]
+    .map((entry) => String(entry || "").trim())
+    .filter((entry) => entry.length > 0);
+
+  let selectedImage: HTMLImageElement | null = null;
+  for (const src of imageSources) {
     try {
-      const img = await loadImage(player.image);
+      selectedImage = await loadImage(src);
+      break;
+    } catch {
+      continue;
+    }
+  }
+
+  if (selectedImage) {
+    try {
+      const img = selectedImage;
 
       const targetAspect = canvas.width / canvas.height;
       const sourceAspect = img.width / img.height;
@@ -195,6 +209,9 @@ async function createPortraitTexture(player: PlayerCardData): Promise<THREE.Canv
       ctx.fillStyle = "#2a2f38";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
+  } else {
+    ctx.fillStyle = "#2a2f38";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
   const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
@@ -284,11 +301,28 @@ function createFaceOverlayTexture(player: PlayerCardData): THREE.CanvasTexture {
   return texture;
 }
 
+function getDisplayStats(player: PlayerCardData) {
+  const rating = Math.max(45, Math.min(99, Number(player.rating) || 70));
+  const pos = String(player.position || "").toUpperCase();
+  const atkBias = pos.includes("ST") || pos.includes("FW") ? 8 : pos.includes("MID") ? 4 : -2;
+  const defBias = pos.includes("GK") || pos.includes("DEF") ? 9 : pos.includes("MID") ? 3 : -4;
+
+  return [
+    ["ATK", Math.max(40, Math.min(99, rating + atkBias))],
+    ["VIS", Math.max(38, Math.min(99, Math.round(rating * 0.9)))],
+    ["CTL", Math.max(38, Math.min(99, Math.round(rating * 0.94 + 2)))],
+    ["DEF", Math.max(35, Math.min(99, rating + defBias))],
+    ["ENG", Math.max(40, Math.min(99, Math.round(rating * 0.82 + 12)))],
+    ["FRM", Math.max(40, Math.min(99, Math.round(rating * 0.78 + 10)))],
+  ] as const;
+}
+
 export default function Metal3DCard({ player, className = "" }: Metal3DCardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const slabRef = useRef<THREE.Group | null>(null);
   const mousePosRef = useRef({ x: 0, y: 0 });
   const isMobile = useIsMobile();
+  const displayStats = useMemo(() => getDisplayStats(player), [player.rating, player.position]);
 
   useEffect(() => {
     const candidates = player.imageCandidates || [];
@@ -609,6 +643,17 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
       ref={containerRef}
       className={`relative h-[364px] w-[260px] overflow-visible ${className}`}
       style={{ perspective: "1000px" }}
-    />
+    >
+      <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 w-[84%] -translate-x-1/2 rounded-md border border-white/15 bg-black/50 px-2 py-1 text-[10px] text-white backdrop-blur-sm">
+        <div className="grid grid-cols-3 gap-x-2 gap-y-1">
+          {displayStats.map(([label, value]) => (
+            <span key={label} className="text-center leading-none">
+              <b className="mr-1 text-[9px] text-zinc-300">{label}</b>
+              <strong className="font-bold text-white">{value}</strong>
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

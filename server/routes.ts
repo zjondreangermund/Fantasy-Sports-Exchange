@@ -1632,8 +1632,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const candidateUrls = [
-        photoCode ? `https://media.api-sports.io/football/players/${photoCode}.png` : null,
+        photoCode ? `https://resources.premierleague.com/premierleague/photos/players/110x140/p${photoCode}.png` : null,
+        photoCode ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoCode}.png` : null,
         imageUrl && /^https?:\/\//i.test(imageUrl) ? imageUrl : null,
+        photoCode ? `https://media.api-sports.io/football/players/${photoCode}.png` : null,
       ].filter(Boolean) as string[];
 
       for (const sourceUrl of candidateUrls) {
