@@ -1,3 +1,4 @@
+// onboarding-packs.tsx (fixed)
 
 function OnboardingPacks() {
   const [packs, setPacks] = useState<Pack[]>([]);
@@ -10,10 +11,10 @@ function OnboardingPacks() {
       .then((res) => res.json())
       .then((players) => {
         // Split into packs of 3
-        const packs: Pack[] = [];
+        const nextPacks: Pack[] = [];
         for (let i = 0; i < players.length; i += 3) {
-          packs.push({
-            title: `PACK ${packs.length + 1}`,
+          nextPacks.push({
+            title: `PACK ${nextPacks.length + 1}`,
             cards: players.slice(i, i + 3).map((p: any) => ({
               id: p.id,
               playerId: p.id,
@@ -33,7 +34,11 @@ function OnboardingPacks() {
             })),
           });
         }
-        setPacks(packs);
+        setPacks(nextPacks);
+      })
+      .catch((err) => {
+        console.error("Failed to load players for packs:", err);
+        setPacks([]);
       });
   }, []);
 
@@ -94,7 +99,7 @@ function OnboardingPacks() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <div className="text-xs text-white/60">REVEAL</div>
-                    <div className="text-2xl font-black">{packs[activePack].title}</div>
+                    <div className="text-2xl font-black">{packs[activePack]?.title}</div>
                   </div>
 
                   <button
@@ -108,16 +113,16 @@ function OnboardingPacks() {
                 {/* Pack opening animation */}
                 <PackOpenAnimation
                   opened={!!openedPacks[activePack]}
-                  onOpen={() =>
-                    setOpenedPacks((prev) => ({ ...prev, [activePack]: true }))
-                  }
+                  onOpen={() => setOpenedPacks((prev) => ({ ...prev, [activePack]: true }))}
                 />
 
                 {/* Cards reveal tray */}
                 <div className="mt-6">
-                  <div className="text-sm font-bold text-white/80 mb-3">Cards ({packs[activePack]?.cards.length || 0})</div>
+                  <div className="text-sm font-bold text-white/80 mb-3">
+                    Cards ({packs[activePack]?.cards.length || 0})
+                  </div>
                   <div className="flex flex-wrap gap-4">
-                    {packs[activePack]?.cards.map((card, idx) => (
+                    {packs[activePack]?.cards.map((card) => (
                       <PlayerCard key={card.id} card={card} size="md" />
                     ))}
                   </div>
@@ -129,8 +134,9 @@ function OnboardingPacks() {
       </div>
     </div>
   );
+}
 
-
+// ✅ MUST be outside OnboardingPacks()
 function PackOpenAnimation({ opened, onOpen }: { opened: boolean; onOpen: () => void }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6 overflow-hidden relative">
@@ -173,7 +179,6 @@ function PackOpenAnimation({ opened, onOpen }: { opened: boolean; onOpen: () => 
           }
           transition={{ type: "spring", stiffness: 120, damping: 16 }}
           style={{ transformStyle: "preserve-3d" }}
-
         />
       </div>
     </div>

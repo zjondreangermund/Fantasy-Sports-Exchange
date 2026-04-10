@@ -356,7 +356,14 @@ interface CanvasErrorBoundaryProps {
 
 class CanvasErrorBoundary extends Component<CanvasErrorBoundaryProps, { hasError: boolean }> {
   state = { hasError: false };
+<<<<<<< HEAD
   static getDerivedStateFromError() {
+=======
+
+  state = { hasError: false };
+
+ static getDerivedStateFromError() {
+>>>>>>> bcc624e7a3466e0ba997a6c378413921663e7b0f
     return { hasError: true };
   }
   componentDidCatch() {
