@@ -1,5 +1,6 @@
-import Metal3DCard, { type PlayerCardData } from "./Metal3DCard";
+import PlayerCard3D from "./PlayerCard3D";
 import SimpleCard from "./SimpleCard";
+import { type PlayerCardData } from "./Metal3DCard";
 
 type CollectionPlayerCardProps = {
   player: PlayerCardData;
@@ -7,12 +8,12 @@ type CollectionPlayerCardProps = {
   mode?: "css" | "3d";
 };
 
-export default function CollectionPlayerCard({ player, className = "", mode = "css" }: CollectionPlayerCardProps) {
-  if (mode === "3d") {
-    return <Metal3DCard player={player} className={`!w-[260px] !h-[364px] ${className}`.trim()} />;
+export default function CollectionPlayerCard({ player, className = "", mode = "3d" }: CollectionPlayerCardProps) {
+  if (mode === "css") {
+    return (
+      <SimpleCard player={player} className={`!w-[220px] ${className}`.trim()} />
+    );
   }
 
-  return (
-    <SimpleCard player={player} className={`!w-[220px] ${className}`.trim()} />
-  );
+  return <PlayerCard3D player={player} className={`!w-[260px] !h-[364px] ${className}`.trim()} />;
 }

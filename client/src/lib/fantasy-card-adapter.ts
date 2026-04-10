@@ -25,6 +25,8 @@ export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCa
     position: String(player?.position || "N/A"),
     club: player?.team ? String(player.team) : undefined,
     image: candidates[0],
+    imageUrl: player?.imageUrl ? String(player.imageUrl) : undefined,
+    photo: player?.photo ? String(player.photo) : undefined,
     imageCandidates: candidates,
     rarity: normalizeRarity(card.rarity),
     serial: Number(card.serialNumber || 1),
