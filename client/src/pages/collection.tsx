@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 // Fixed: @/lib -> ../lib
 import { apiRequest, queryClient } from "../lib/queryClient";
-import CollectionPlayerCard from "../components/CollectionPlayerCard";
+import PlayerCard3D from "../components/PlayerCard3D";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
@@ -247,7 +247,7 @@ export default function CollectionPage() {
               const fantasyCard = toFantasyCardData(card, { imageWidth: 1024 });
               return (
                 <div key={card.id} className="flex min-h-[360px] flex-col items-center gap-2">
-                  <CollectionPlayerCard player={fantasyCard} className={isMobile ? "!w-[172px]" : "!w-[220px]"} />
+                  <PlayerCard3D player={fantasyCard} className={isMobile ? "!w-[172px] !h-[240px]" : ""} />
                   <div className="z-30 flex gap-2">
                     {card.forSale ? (
                       <Button
