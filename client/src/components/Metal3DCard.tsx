@@ -12,6 +12,8 @@ export type PlayerCardData = {
   position: string;
   club?: string;
   image?: string;
+  imageUrl?: string;
+  photo?: string;
   imageCandidates?: string[];
   rarity: Rarity;
   serial?: number;
@@ -176,7 +178,7 @@ async function createPortraitTexture(player: PlayerCardData): Promise<THREE.Canv
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const imageSources = [player.image, ...(player.imageCandidates || [])]
+  const imageSources = [player.imageUrl, player.photo, player.image, ...(player.imageCandidates || [])]
     .map((entry) => String(entry || "").trim())
     .map((entry) => {
       if (!entry.startsWith("/api/players/") || !entry.includes("/photo")) return entry;
@@ -232,22 +234,6 @@ async function createPortraitTexture(player: PlayerCardData): Promise<THREE.Canv
     }
   }
 
-  const radial = ctx.createRadialGradient(
-    canvas.width * 0.5,
-    canvas.height * 0.52,
-    10,
-    canvas.width * 0.5,
-    canvas.height * 0.52,
-    240,
-  );
-  radial.addColorStop(0, "rgba(255,255,255,0.16)");
-  radial.addColorStop(0.3, "rgba(255,255,255,0.06)");
-  radial.addColorStop(1, "rgba(255,255,255,0)");
-  ctx.fillStyle = radial;
-  ctx.beginPath();
-  ctx.ellipse(canvas.width * 0.5, canvas.height * 0.54, 220, 180, 0, 0, Math.PI * 2);
-  ctx.fill();
-
   const texture = new THREE.CanvasTexture(canvas);
   texture.generateMipmaps = true;
   texture.magFilter = THREE.LinearFilter;
@@ -278,12 +264,12 @@ function createFaceOverlayTexture(player: PlayerCardData): THREE.CanvasTexture {
   const rarityLabel = getRarityLabel(player.rarity);
 
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 224px Arial";
-  ctx.fillText(String(rating), 212, 300);
+  ctx.font = "bold 256px Arial";
+  ctx.fillText(String(rating), 212, 320);
 
   ctx.fillStyle = "rgba(255,255,255,0.90)";
-  ctx.font = "bold 92px Arial";
-  ctx.fillText(position, 220, 412);
+  ctx.font = "bold 112px Arial";
+  ctx.fillText(position, 220, 452);
 
   const pillX = 1380;
   const pillY = 168;
@@ -313,9 +299,9 @@ function createFaceOverlayTexture(player: PlayerCardData): THREE.CanvasTexture {
   ctx.restore();
 
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 56px Arial";
+  ctx.font = "bold 68px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(rarityLabel, pillX + pillW / 2, pillY + 92);
+  ctx.fillText(rarityLabel, pillX + pillW / 2, pillY + 100);
 
   ctx.save();
   const orbs = [
@@ -363,7 +349,7 @@ function createFaceOverlayTexture(player: PlayerCardData): THREE.CanvasTexture {
     ctx.arc(x - 56, 2754, 22, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.font = "bold 60px Arial";
+    ctx.font = "bold 76px Arial";
     ctx.fillText(String(value), x, 2772);
   }
 

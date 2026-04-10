@@ -494,12 +494,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     try {
+      const isPremierLeagueUrl = /resources\.premierleague\.com/i.test(rawUrl);
       const upstream = await fetch(rawUrl, {
         method: "GET",
         redirect: "follow",
         headers: {
           Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-          "User-Agent": "FantasyFC-ImageProxy/1.0",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          ...(isPremierLeagueUrl ? { Referer: "https://www.premierleague.com" } : {}),
         },
       });
 
@@ -3407,6 +3409,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await storage.updateCompetition(competitionId, {
         status: "completed",
       });
+
+      // Reset decisiveScore to 0 for all cards used in this tournament
+      // Preserve last5Scores, xp, and level so progression is not lost
+      const { playerCards: playerCardsTable } = await import("../shared/schema.js");
+      const { inArray: inArrayOp } = await import("drizzle-orm");
+      const allLineupCardIds = entries.flatMap((e) =>
+        Array.isArray(e.lineupCardIds) ? e.lineupCardIds.map(Number).filter((id) => Number.isFinite(id) && id > 0) : [],
+      );
+      const uniqueCardIds = Array.from(new Set(allLineupCardIds));
+      if (uniqueCardIds.length > 0) {
+        await db
+          .update(playerCardsTable)
+          .set({ decisiveScore: 0 } as any)
+          .where(inArrayOp(playerCardsTable.id, uniqueCardIds));
+      }
 
       await writeAuditLog(String(req.authUserId || ""), "admin.competition.settle", {
         competitionId,
