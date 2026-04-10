@@ -8,6 +8,7 @@ const FPL_BASE = "https://fantasy.premierleague.com/api";
 const CACHE_TTL = {
   bootstrap: 12 * 60 * 60 * 1000, // 12 hours
   fixtures: 4 * 60 * 60 * 1000,   // 4 hours
+  fixturesLive: 60 * 1000,        // 1 minute (for live scores/minutes)
 };
 
 type CacheEntry<T> = { ts: number; data: T };
@@ -85,6 +86,16 @@ export const fplApi = {
   },
 
   /**
+   * Fixtures with short cache for live scoreboards.
+   * FPL fixture payload contains minutes and team scores, so this must refresh often.
+   */
+  async fixturesLive() {
+    return cached("fixtures_live", CACHE_TTL.fixturesLive, () =>
+      fetchJson<any[]>("/fixtures/")
+    );
+  },
+
+  /**
    * Player list
    */
   async getPlayers() {
@@ -146,7 +157,7 @@ export const fplApi = {
   async getLiveGames() {
     try {
       const [fixtures, liveData, bootstrap] = await Promise.all([
-        this.fixtures(),
+        this.fixturesLive(),
         this.getLiveGameweek(),
         this.bootstrap(),
       ]);

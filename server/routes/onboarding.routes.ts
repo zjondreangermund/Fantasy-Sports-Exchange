@@ -4,6 +4,14 @@ interface RegisterOnboardingRoutesDeps {
   requireAuth: any;
   storage: any;
   fplApi: any;
+  getOnboardingConfig?: () => {
+    signupPacksEnabled: boolean;
+    requireTeamName: boolean;
+    teamNameMinLength: number;
+    onboardingEntryPath: string;
+    starterChecklistLabel: string;
+    packLabels: string[];
+  };
 }
 
 function shuffle<T>(arr: T[]) {
@@ -30,6 +38,15 @@ function normalizePackPosition(pos: string) {
 
 export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingRoutesDeps) {
   const { requireAuth, storage, fplApi } = deps;
+  const getOnboardingConfig = () =>
+    deps.getOnboardingConfig?.() ?? {
+      signupPacksEnabled: true,
+      requireTeamName: true,
+      teamNameMinLength: 3,
+      onboardingEntryPath: "/onboarding",
+      starterChecklistLabel: "Open starter packs",
+      packLabels: ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"],
+    };
 
   const getOnboardingPlayerPool = async () => {
     const [fplPlayers, bootstrap, fixtures] = await Promise.all([
@@ -58,10 +75,6 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       todayTeamIds.add(Number(fixture.team_a));
     });
 
-    if (todayTeamIds.size === 0) {
-      return [] as any[];
-    }
-
     const positionMap: Record<number, "GK" | "DEF" | "MID" | "FWD"> = {
       1: "GK",
       2: "DEF",
@@ -69,8 +82,11 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       4: "FWD",
     };
 
-    const candidates = (Array.isArray(fplPlayers) ? fplPlayers : [])
-      .filter((p: any) => todayTeamIds.has(Number(p.team)))
+    const allFplPlayers = Array.isArray(fplPlayers) ? fplPlayers : [];
+    const todayCandidates = allFplPlayers.filter((p: any) => todayTeamIds.has(Number(p.team)));
+    const sourcePool = todayCandidates.length >= 15 ? todayCandidates : allFplPlayers;
+
+    const candidates = sourcePool
       .sort((a: any, b: any) => {
         const sa = Number(a.starts || 0);
         const sb = Number(b.starts || 0);
@@ -152,8 +168,16 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
     ];
   };
 
+  app.get("/api/onboarding/config", requireAuth, async (_req: any, res) => {
+    return res.json(getOnboardingConfig());
+  });
+
   app.get("/api/onboarding/status", requireAuth, async (req: any, res) => {
     try {
+      const config = getOnboardingConfig();
+      if (!config.signupPacksEnabled) {
+        return res.json({ completed: true });
+      }
       const userId = req.authUserId;
       const ob = await storage.getOnboarding(userId);
       res.json({ completed: ob?.completed ?? false });
@@ -165,6 +189,11 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
 
   app.post("/api/onboarding/create-offer", requireAuth, async (req: any, res) => {
     try {
+      const config = getOnboardingConfig();
+      if (!config.signupPacksEnabled) {
+        return res.status(403).json({ message: "Signup starter packs are currently disabled by admin" });
+      }
+
       const userId = req.authUserId;
       const ob = await storage.getOnboarding(userId);
 
@@ -212,6 +241,14 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
 
   app.get("/api/onboarding/offers", requireAuth, async (req: any, res) => {
     try {
+      const config = getOnboardingConfig();
+      if (!config.signupPacksEnabled) {
+        return res.status(403).json({
+          message: "Signup starter packs are currently disabled by admin",
+          config,
+        });
+      }
+
       const userId = req.authUserId;
       let ob = await storage.getOnboarding(userId);
 
@@ -255,6 +292,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
         players,
         selectedCards: ob?.selectedCards ?? [],
         completed: ob?.completed ?? false,
+        config,
       });
     } catch (error: any) {
       console.error("Fetch offers failed:", error);
@@ -264,6 +302,11 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
 
   app.post("/api/onboarding/choose", requireAuth, async (req: any, res) => {
     try {
+      const config = getOnboardingConfig();
+      if (!config.signupPacksEnabled) {
+        return res.status(403).json({ message: "Signup starter packs are currently disabled by admin" });
+      }
+
       const userId = req.authUserId;
       const selected: number[] = req.body?.selectedPlayerIds ?? [];
 

@@ -35,6 +35,9 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
 
       if (!card) throw new Error("Card not found");
       if (!card.forSale) throw new Error("Card is not for sale");
+      if (String(card.rarity || "").toLowerCase() === "common") {
+        throw new Error("Common cards are tournament-only and cannot be traded");
+      }
 
       const sellerId = String(card.ownerId || "");
       const price = toMoney(card.price || 0);
@@ -94,6 +97,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         : message.includes("Insufficient") ||
             message.includes("Cannot buy") ||
             message.includes("not for sale") ||
+            message.includes("cannot be traded") ||
             message.includes("invalid")
           ? 400
           : 500;

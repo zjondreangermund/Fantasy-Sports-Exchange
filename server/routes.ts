@@ -10,6 +10,7 @@ import { calculatePlayerScore, mapFplStatsToPlayerStats } from "./services/scori
 import { randomUUID } from "crypto";
 import path from "path";
 import { promises as fs } from "fs";
+import { sql } from "drizzle-orm";
 import { registerCardsRoutes } from "./routes/cards.routes.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.routes.js";
 import { registerMarketplaceRoutes } from "./routes/marketplace.routes.js";
@@ -258,6 +259,68 @@ function parseMaxAge(cacheControl?: string | null): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+type ImageOutputFormat = "webp" | "png" | "jpeg";
+
+function parseImageFormat(value: unknown): ImageOutputFormat | null {
+  const format = String(value || "").toLowerCase().trim();
+  if (format === "webp") return "webp";
+  if (format === "png") return "png";
+  if (format === "jpeg" || format === "jpg") return "jpeg";
+  return null;
+}
+
+function parseImageWidth(value: unknown): number | null {
+  const width = Number(value);
+  if (!Number.isFinite(width)) return null;
+  return Math.max(96, Math.min(1024, Math.round(width)));
+}
+
+async function transformImageBuffer(
+  input: Buffer,
+  contentType: string,
+  options: { width?: number | null; format?: ImageOutputFormat | null },
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const requestedWidth = options.width ?? null;
+  const requestedFormat = options.format ?? null;
+  if (!requestedWidth && !requestedFormat) {
+    return { buffer: input, contentType };
+  }
+
+  try {
+    const runtimeImport = new Function("m", "return import(m)") as (moduleName: string) => Promise<any>;
+    const sharpModule = await runtimeImport("sharp");
+    const sharpFactory = (sharpModule as any).default || sharpModule;
+    let pipeline = sharpFactory(input, { failOn: "none" });
+
+    if (requestedWidth) {
+      pipeline = pipeline.resize({
+        width: requestedWidth,
+        fit: "cover",
+        position: "attention",
+        withoutEnlargement: true,
+      });
+    }
+
+    if (requestedFormat === "webp") {
+      pipeline = pipeline.webp({ quality: 78, effort: 4 });
+      return { buffer: await pipeline.toBuffer(), contentType: "image/webp" };
+    }
+    if (requestedFormat === "png") {
+      pipeline = pipeline.png({ compressionLevel: 9, adaptiveFiltering: true });
+      return { buffer: await pipeline.toBuffer(), contentType: "image/png" };
+    }
+    if (requestedFormat === "jpeg") {
+      pipeline = pipeline.jpeg({ quality: 82, mozjpeg: true });
+      return { buffer: await pipeline.toBuffer(), contentType: "image/jpeg" };
+    }
+
+    return { buffer: await pipeline.toBuffer(), contentType };
+  } catch {
+    // Keep passthrough behavior when image processing is unavailable.
+    return { buffer: input, contentType };
+  }
+}
+
 function normalizeLookupText(value: string): string {
   return String(value || "")
     .toLowerCase()
@@ -265,6 +328,120 @@ function normalizeLookupText(value: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+const LIVE_CHAT_MAX_MESSAGES = 200;
+const liveChatMessagesStore: Array<{
+  id: string;
+  userId: string;
+  userName: string;
+  text: string;
+  replyToMessageId?: string;
+  replyToUserId?: string;
+  replyToUserName?: string;
+  replyToText?: string;
+  createdAt: string;
+}> = [];
+
+const livePointReasons = [
+  "Goal",
+  "Assist",
+  "Clean Sheet",
+  "Big Chance Created",
+  "Key Pass",
+  "Penalty Save",
+  "Yellow Card",
+  "Red Card",
+];
+
+const livePointTeams = [
+  "Arsenal",
+  "Liverpool",
+  "Chelsea",
+  "Manchester City",
+  "Manchester United",
+  "Tottenham",
+  "Newcastle",
+  "Aston Villa",
+];
+
+const livePointFeedStore: Array<{
+  id: string;
+  gameId: number;
+  team: string;
+  delta: number;
+  reason: string;
+  createdAt: string;
+}> = [];
+
+let livePointLastGeneratedAt = 0;
+
+function pushLivePointEvent() {
+  const now = Date.now();
+  if (now - livePointLastGeneratedAt < 20_000) return;
+  livePointLastGeneratedAt = now;
+
+  const team = livePointTeams[Math.floor(Math.random() * livePointTeams.length)] || "Premier League";
+  const reason = livePointReasons[Math.floor(Math.random() * livePointReasons.length)] || "Action";
+  const signedDelta = Math.random() > 0.2 ? Math.ceil(Math.random() * 8) : -Math.ceil(Math.random() * 5);
+
+  livePointFeedStore.push({
+    id: randomUUID(),
+    gameId: Math.floor(Math.random() * 10_000) + 1,
+    team,
+    delta: signedDelta,
+    reason,
+    createdAt: new Date().toISOString(),
+  });
+
+  while (livePointFeedStore.length > 250) {
+    livePointFeedStore.shift();
+  }
+}
+
+function encodeReferralCode(userId: string): string {
+  return Buffer.from(String(userId), "utf8").toString("base64url");
+}
+
+function decodeReferralCode(code: string): string {
+  try {
+    return Buffer.from(String(code || ""), "base64url").toString("utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+async function grantReferralRewardCard(userId: string): Promise<number | null> {
+  const allPlayers = await storage.getPlayers();
+  if (!Array.isArray(allPlayers) || allPlayers.length === 0) return null;
+
+  const userCards = await storage.getUserCards(userId);
+  const ownedCommonIds = new Set(
+    (Array.isArray(userCards) ? userCards : [])
+      .filter((card: any) => card?.rarity === "common")
+      .map((card: any) => Number(card.playerId)),
+  );
+
+  const candidates = allPlayers
+    .filter((player: any) => !ownedCommonIds.has(Number(player.id)))
+    .map((player: any) => Number(player.id))
+    .filter((id: number) => Number.isFinite(id) && id > 0);
+
+  if (candidates.length === 0) return null;
+
+  const selectedPlayerId = candidates[Math.floor(Math.random() * candidates.length)] as number;
+  const createdCard = await storage.createPlayerCard({
+    playerId: selectedPlayerId,
+    ownerId: userId,
+    rarity: "common",
+    level: 1,
+    xp: 0,
+    decisiveScore: 35,
+    forSale: false,
+    price: 0,
+  } as any);
+
+  return Number(createdCard.id);
 }
 
 function extractPhotoCode(value: string): string {
@@ -531,6 +708,57 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS ban_reason text`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS banned_at timestamp`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.users ADD COLUMN IF NOT EXISTS banned_by varchar(255)`);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.referrals (
+          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          referrer_user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          referred_user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          reward_card_id integer REFERENCES app.player_cards(id),
+          created_at timestamp DEFAULT now(),
+          UNIQUE (referrer_user_id, referred_user_id),
+          UNIQUE (referred_user_id)
+        )
+      `);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.competition_reward_claims (
+          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          entry_id integer NOT NULL UNIQUE REFERENCES app.competition_entries(id),
+          user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          competition_id integer NOT NULL REFERENCES app.competitions(id),
+          prize_amount real NOT NULL DEFAULT 0,
+          prize_card_id integer REFERENCES app.player_cards(id),
+          claimed_at timestamp NOT NULL DEFAULT now()
+        )
+      `);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.pack_auctions (
+          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          seller_user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          rarity text NOT NULL,
+          card_ids jsonb NOT NULL,
+          status text NOT NULL DEFAULT 'live',
+          start_price real NOT NULL DEFAULT 0,
+          reserve_price real NOT NULL DEFAULT 0,
+          buy_now_price real,
+          min_increment real NOT NULL DEFAULT 1,
+          starts_at timestamp,
+          ends_at timestamp,
+          created_at timestamp DEFAULT now()
+        )
+      `);
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.pack_auction_bids (
+          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          pack_auction_id integer NOT NULL REFERENCES app.pack_auctions(id),
+          bidder_user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          amount real NOT NULL,
+          created_at timestamp DEFAULT now()
+        )
+      `);
     } catch (error) {
       console.warn("Runtime schema ensure failed:", error);
     }
@@ -575,6 +803,258 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       console.error("Update user profile:", e);
       res.status(500).json({ message: e?.message || "Failed to update profile" });
+    }
+  });
+
+  app.get("/api/referrals/me", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const code = encodeReferralCode(userId);
+      const publicBase = String(process.env.PUBLIC_BASE_URL || "").trim();
+      const fallback = `${req.protocol}://${req.get("host") || ""}`;
+      const base = publicBase || fallback;
+      const url = `${base.replace(/\/$/, "")}/?ref=${encodeURIComponent(code)}`;
+      return res.json({ code, url });
+    } catch (error: any) {
+      console.error("Failed to get referral code:", error);
+      return res.status(500).json({ message: "Failed to get referral code" });
+    }
+  });
+
+  app.get("/api/referrals/history", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "").trim();
+      const { db } = await import("./db.js");
+
+      const rows = await db.execute(sql`
+        SELECT
+          r.id,
+          r.referred_user_id,
+          r.reward_card_id,
+          r.created_at,
+          u.name AS referred_name,
+          u.email AS referred_email
+        FROM app.referrals r
+        LEFT JOIN app.users u ON u.id = r.referred_user_id
+        WHERE r.referrer_user_id = ${userId}
+        ORDER BY r.created_at DESC
+      `);
+
+      const referrals = Array.isArray((rows as any)?.rows) ? (rows as any).rows : [];
+      const enriched = await Promise.all(
+        referrals.map(async (row: any) => {
+          const rewardCardId = row?.reward_card_id == null ? null : Number(row.reward_card_id);
+          const rewardCard = rewardCardId ? await storage.getPlayerCardWithPlayer(rewardCardId) : null;
+          return {
+            id: Number(row.id),
+            referredUserId: String(row.referred_user_id || ""),
+            referredName: String(row.referred_name || "").trim() || "Manager",
+            referredEmail: String(row.referred_email || "").trim() || null,
+            rewardCardId,
+            rewardCard,
+            createdAt: row.created_at,
+          };
+        }),
+      );
+
+      return res.json({
+        referrals: enriched,
+        totalReferrals: enriched.length,
+        rewardsGranted: enriched.filter((item) => Number(item.rewardCardId || 0) > 0).length,
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch referral history:", error);
+      return res.status(500).json({ message: "Failed to fetch referral history" });
+    }
+  });
+
+  app.post("/api/referrals/claim", requireAuth, async (req: any, res) => {
+    try {
+      const referredUserId = String(req.authUserId || "").trim();
+      const rawCode = String(req.body?.code || "").trim();
+      if (!rawCode) {
+        return res.status(400).json({ message: "Referral code required" });
+      }
+
+      const referrerUserId = decodeReferralCode(rawCode);
+      if (!referrerUserId) {
+        return res.status(400).json({ message: "Invalid referral code" });
+      }
+      if (referrerUserId === referredUserId) {
+        return res.status(400).json({ message: "You cannot refer yourself" });
+      }
+
+      const referrer = await storage.getUser(referrerUserId);
+      if (!referrer) {
+        return res.status(404).json({ message: "Referrer account not found" });
+      }
+
+      const { db } = await import("./db.js");
+      const existingRows = await db.execute(sql`
+        SELECT id, reward_card_id
+        FROM app.referrals
+        WHERE referred_user_id = ${referredUserId}
+        LIMIT 1
+      `);
+      const existing = Array.isArray((existingRows as any)?.rows) ? (existingRows as any).rows[0] : null;
+      if (existing) {
+        return res.json({ success: true, alreadyClaimed: true, rewardCardId: existing.reward_card_id ?? null });
+      }
+
+      const rewardCardId = await grantReferralRewardCard(referrerUserId);
+
+      await db.execute(sql`
+        INSERT INTO app.referrals (referrer_user_id, referred_user_id, reward_card_id)
+        VALUES (${referrerUserId}, ${referredUserId}, ${rewardCardId})
+        ON CONFLICT (referred_user_id) DO NOTHING
+      `);
+
+      return res.json({ success: true, alreadyClaimed: false, rewardCardId });
+    } catch (error: any) {
+      console.error("Failed to claim referral:", error);
+      return res.status(500).json({ message: "Failed to claim referral" });
+    }
+  });
+
+  app.get("/api/live-chat/messages", requireAuth, async (req: any, res) => {
+    try {
+      const limit = Math.max(1, Math.min(80, Number(req.query.limit || 40) || 40));
+      return res.json(liveChatMessagesStore.slice(-limit));
+    } catch (error: any) {
+      console.error("Failed to fetch live chat messages:", error);
+      return res.status(500).json({ message: "Failed to fetch chat" });
+    }
+  });
+
+  app.post("/api/live-chat/messages", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const user = await storage.getUser(userId);
+      const text = String(req.body?.text || "").trim().slice(0, 280);
+      if (!text) {
+        return res.status(400).json({ message: "Message text is required" });
+      }
+
+      const replyToMessageId = String(req.body?.replyToMessageId || "").trim();
+      const replyTo = replyToMessageId
+        ? liveChatMessagesStore.find((message) => message.id === replyToMessageId)
+        : undefined;
+
+      const message = {
+        id: randomUUID(),
+        userId,
+        userName: String(user?.name || user?.firstName || user?.email || "Manager"),
+        text,
+        createdAt: new Date().toISOString(),
+        ...(replyTo
+          ? {
+              replyToMessageId: replyTo.id,
+              replyToUserId: replyTo.userId,
+              replyToUserName: replyTo.userName,
+              replyToText: replyTo.text,
+            }
+          : {}),
+      };
+
+      liveChatMessagesStore.push(message);
+      while (liveChatMessagesStore.length > LIVE_CHAT_MAX_MESSAGES) {
+        liveChatMessagesStore.shift();
+      }
+
+      try {
+        const { db } = await import("./db.js");
+        const { notifications, users } = await import("../shared/schema.js");
+        const { eq, sql: drizzleSql } = await import("drizzle-orm");
+
+        const recipients = new Set<string>();
+
+        if (replyTo?.userId && replyTo.userId !== userId) {
+          recipients.add(String(replyTo.userId));
+        }
+
+        const mentionMatches = String(text)
+          .match(/@([a-zA-Z0-9_.-]{2,40})/g)
+          ?.map((value) => value.slice(1).toLowerCase()) || [];
+        const mentionHandles = Array.from(new Set(mentionMatches));
+
+        for (const handle of mentionHandles) {
+          const [mentioned] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(
+              drizzleSql`lower(coalesce(${users.name}, '')) = ${handle} or lower(coalesce(${users.firstName}, '')) = ${handle}`,
+            )
+            .limit(1);
+
+          if (mentioned?.id && String(mentioned.id) !== userId) {
+            recipients.add(String(mentioned.id));
+          }
+        }
+
+        for (const recipientId of Array.from(recipients)) {
+          const title = "New chat mention";
+          const body = `${message.userName}: ${String(text).slice(0, 180)}`;
+
+          await db.insert(notifications).values({
+            userId: recipientId,
+            type: "system",
+            title,
+            message: body,
+            read: false,
+          } as any);
+        }
+      } catch (notifyError) {
+        console.warn("Live chat notify failed:", notifyError);
+      }
+
+      return res.status(201).json(message);
+    } catch (error: any) {
+      console.error("Failed to send live chat message:", error);
+      return res.status(500).json({ message: "Failed to send message" });
+    }
+  });
+
+  app.get("/api/live/point-feed", requireAuth, async (req: any, res) => {
+    try {
+      pushLivePointEvent();
+      const limit = Math.max(1, Math.min(50, Number(req.query.limit || 20) || 20));
+      return res.json(livePointFeedStore.slice(-limit));
+    } catch (error: any) {
+      console.error("Failed to fetch point feed:", error);
+      return res.status(500).json({ message: "Failed to fetch point feed" });
+    }
+  });
+
+  app.post("/api/ai/help", requireAuth, async (req: any, res) => {
+    try {
+      const message = String(req.body?.message || "").trim().toLowerCase();
+      if (!message) {
+        return res.status(400).json({ message: "Question is required" });
+      }
+
+      const userId = String(req.authUserId || "");
+      const cards = await storage.getUserCards(userId);
+      const rarityCount = (Array.isArray(cards) ? cards : []).reduce((acc: Record<string, number>, card: any) => {
+        const rarity = String(card?.rarity || "common").toLowerCase();
+        acc[rarity] = (acc[rarity] || 0) + 1;
+        return acc;
+      }, {});
+
+      let answer = "Focus on building a full 5-card lineup with one GK, DEF, MID, and FWD before entering tournaments.";
+      if (message.includes("rare")) {
+        answer = `For rare tournaments, only rare cards are allowed. You currently have ${rarityCount.rare || 0} rare cards.`;
+      } else if (message.includes("lineup") || message.includes("team")) {
+        answer = "A valid lineup needs exactly 5 cards with role coverage: GK, DEF, MID, FWD, plus one utility slot.";
+      } else if (message.includes("auction") || message.includes("market")) {
+        answer = "Auction and marketplace entries work best when you keep tournament cards unlocked and list duplicates or upgrades.";
+      } else if (message.includes("referral") || message.includes("invite")) {
+        answer = "Share your referral link from your account. Each successful signup gives the referrer one random common card they do not own yet.";
+      }
+
+      return res.json({ answer });
+    } catch (error: any) {
+      console.error("AI help failed:", error);
+      return res.status(500).json({ message: "Failed to generate help response" });
     }
   });
 
@@ -1030,6 +1510,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return names;
   };
 
+  const getCompetitionSubmissionCloseAt = async (competition: any): Promise<Date> => {
+    const fallback = competition?.startDate ? new Date(competition.startDate) : new Date(Date.now() + 60 * 60 * 1000);
+    const targetGw = Number(competition?.gameWeek || 0);
+    if (!Number.isFinite(targetGw) || targetGw <= 0) return fallback;
+
+    try {
+      const fixtures = await fplApi.fixtures();
+      const kickoffCandidates = (Array.isArray(fixtures) ? fixtures : [])
+        .filter((fixture: any) => Number(fixture?.event) === targetGw && fixture?.kickoff_time)
+        .map((fixture: any) => new Date(String(fixture.kickoff_time)).getTime())
+        .filter((value: number) => Number.isFinite(value) && value > 0)
+        .sort((a: number, b: number) => a - b);
+
+      if (kickoffCandidates.length === 0) return fallback;
+
+      return new Date(kickoffCandidates[0]);
+    } catch {
+      return fallback;
+    }
+  };
+
   // -------------------------
   // USER CARDS / PLAYER DETAILS
   // -------------------------
@@ -1053,6 +1554,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!Number.isFinite(playerId) || playerId <= 0) {
         return res.status(400).json({ message: "Invalid player id" });
       }
+
+      const variant = String(req.query.variant || "").toLowerCase().trim();
+      const requestedWidth = parseImageWidth(req.query.w || req.query.width) || (variant === "thumb" ? 256 : null);
+      const requestedFormat = parseImageFormat(req.query.format) || (variant === "thumb" ? "webp" : null);
 
       const player = await storage.getPlayer(playerId);
       if (!player) return res.status(404).json({ message: "Player not found" });
@@ -1091,12 +1596,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       if (imageUrl.startsWith("/player-cache/")) {
-        return res.redirect(302, imageUrl);
+        if (!requestedWidth && !requestedFormat) {
+          return res.redirect(302, imageUrl);
+        }
+
+        const cacheRelativePath = imageUrl.replace(/^\/+/, "");
+        const distPath = path.resolve(process.cwd(), "dist", "public", cacheRelativePath);
+        const clientPath = path.resolve(process.cwd(), "client", "public", cacheRelativePath);
+
+        const localFilePath = await fs
+          .access(distPath)
+          .then(() => distPath)
+          .catch(async () => {
+            await fs.access(clientPath);
+            return clientPath;
+          });
+
+        const localBuffer = await fs.readFile(localFilePath);
+        const sourceType = localFilePath.toLowerCase().endsWith(".webp")
+          ? "image/webp"
+          : localFilePath.toLowerCase().endsWith(".jpg") || localFilePath.toLowerCase().endsWith(".jpeg")
+            ? "image/jpeg"
+            : "image/png";
+
+        const transformedLocal = await transformImageBuffer(localBuffer, sourceType, {
+          width: requestedWidth,
+          format: requestedFormat,
+        });
+
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        res.setHeader("Cache-Control", variant === "thumb" ? "public, max-age=604800" : "public, max-age=21600");
+        res.setHeader("Content-Type", transformedLocal.contentType);
+        return res.status(200).send(transformedLocal.buffer);
       }
 
       const candidateUrls = [
-        photoCode ? `https://media.api-sports.io/football/players/${photoCode}.png` : null,
+        photoCode ? `https://resources.premierleague.com/premierleague/photos/players/110x140/p${photoCode}.png` : null,
+        photoCode ? `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoCode}.png` : null,
         imageUrl && /^https?:\/\//i.test(imageUrl) ? imageUrl : null,
+        photoCode ? `https://media.api-sports.io/football/players/${photoCode}.png` : null,
       ].filter(Boolean) as string[];
 
       for (const sourceUrl of candidateUrls) {
@@ -1116,20 +1655,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
           res.setHeader("Access-Control-Allow-Origin", "*");
           res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-          res.setHeader("Content-Type", contentType);
-          res.setHeader("Cache-Control", "public, max-age=21600");
+          res.setHeader("Cache-Control", variant === "thumb" ? "public, max-age=604800" : "public, max-age=21600");
 
           const data = Buffer.from(await upstream.arrayBuffer());
-          return res.status(200).send(data);
+          const transformed = await transformImageBuffer(data, contentType, {
+            width: requestedWidth,
+            format: requestedFormat,
+          });
+
+          res.setHeader("Content-Type", transformed.contentType);
+          return res.status(200).send(transformed.buffer);
         } catch {
           continue;
         }
       }
 
-      return res.status(404).json({ message: "No real player photo available" });
+      return res.redirect(302, "/images/player-1.png");
     } catch (error: any) {
       console.error("Error serving player photo:", error);
-      return res.status(500).json({ message: "Error serving player photo" });
+      return res.redirect(302, "/images/player-1.png");
     }
   });
 
@@ -1848,6 +2392,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (card.forSale) {
         return res.status(400).json({ message: "Card is already listed for sale. Cancel the listing first." });
       }
+
+      if (String(card.rarity || "common").toLowerCase() === "common") {
+        return res.status(400).json({ message: "Only rare, unique, epic, or legendary cards can be auctioned." });
+      }
       
       // Set auction times
       const startsAt = new Date();
@@ -2086,6 +2634,271 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ message: "Failed to cancel auction" });
     }
   });
+
+  // -------------------------
+  // PACK AUCTIONS ENDPOINTS
+  // -------------------------
+
+  const getPackAuctionBids = async (packAuctionId: number) => {
+    const { db } = await import("./db.js");
+    const rows = await db.execute(sql`
+      SELECT id, pack_auction_id, bidder_user_id, amount, created_at
+      FROM app.pack_auction_bids
+      WHERE pack_auction_id = ${packAuctionId}
+      ORDER BY amount DESC, created_at ASC
+    `);
+    return Array.isArray((rows as any)?.rows) ? (rows as any).rows : [];
+  };
+
+  app.get("/api/auctions/packs/active", async (_req, res) => {
+    try {
+      const { db } = await import("./db.js");
+      const now = new Date();
+      const rows = await db.execute(sql`
+        SELECT id, seller_user_id, rarity, card_ids, status, start_price, reserve_price, buy_now_price, min_increment, starts_at, ends_at, created_at
+        FROM app.pack_auctions
+        WHERE status = 'live' AND (ends_at IS NULL OR ends_at >= ${now})
+        ORDER BY created_at DESC
+      `);
+
+      const auctions = Array.isArray((rows as any)?.rows) ? (rows as any).rows : [];
+
+      const enriched = await Promise.all(
+        auctions.map(async (auction: any) => {
+          const cardIds = Array.isArray(auction.card_ids) ? auction.card_ids.map((id: any) => Number(id)) : [];
+          const cards = (await Promise.all(cardIds.map((cardId: number) => storage.getPlayerCardWithPlayer(cardId)))).filter(Boolean);
+          const bids = await getPackAuctionBids(Number(auction.id));
+          const currentBid = Number(bids[0]?.amount || auction.start_price || 0);
+          return {
+            id: Number(auction.id),
+            sellerUserId: String(auction.seller_user_id),
+            rarity: String(auction.rarity || "rare"),
+            cardIds,
+            cards,
+            status: String(auction.status || "live"),
+            startPrice: Number(auction.start_price || 0),
+            reservePrice: Number(auction.reserve_price || 0),
+            buyNowPrice: auction.buy_now_price == null ? null : Number(auction.buy_now_price),
+            minIncrement: Number(auction.min_increment || 1),
+            startsAt: auction.starts_at,
+            endsAt: auction.ends_at,
+            createdAt: auction.created_at,
+            bids,
+            currentBid,
+            bidCount: bids.length,
+          };
+        }),
+      );
+
+      return res.json(enriched);
+    } catch (error: any) {
+      console.error("Failed to fetch pack auctions:", error);
+      return res.status(500).json({ message: "Failed to fetch pack auctions" });
+    }
+  });
+
+  app.post("/api/auctions/packs/create", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const rarity = String(req.body?.rarity || "rare").toLowerCase();
+      const startPrice = Number(req.body?.startPrice || 0);
+      const buyNowPrice = req.body?.buyNowPrice == null ? null : Number(req.body.buyNowPrice);
+      const reservePrice = req.body?.reservePrice == null ? startPrice : Number(req.body.reservePrice);
+      const duration = Math.max(30 * 60, Number(req.body?.duration || 24 * 60 * 60));
+      const requestedCardIds = Array.isArray(req.body?.cardIds)
+        ? req.body.cardIds.map((id: any) => Number(id)).filter((id: number) => Number.isFinite(id) && id > 0)
+        : [];
+
+      if (!Number.isFinite(startPrice) || startPrice <= 0) {
+        return res.status(400).json({ message: "Valid positive startPrice required" });
+      }
+
+      const allowedRarities = new Set(["rare", "epic", "legendary", "unique"]);
+      if (!allowedRarities.has(rarity)) {
+        return res.status(400).json({ message: "Pack auctions support rare, epic, legendary, or unique cards" });
+      }
+
+      const ownedCards = await storage.getUserCards(userId);
+      const sameRarity = (Array.isArray(ownedCards) ? ownedCards : [])
+        .filter((card: any) => String(card?.rarity || "").toLowerCase() === rarity)
+        .filter((card: any) => !card?.forSale);
+
+      let selectedCards = sameRarity;
+      if (requestedCardIds.length > 0) {
+        const requestedSet = new Set(requestedCardIds);
+        selectedCards = sameRarity.filter((card: any) => requestedSet.has(Number(card.id)));
+      }
+
+      const uniqueByPlayer = new Map<number, any>();
+      selectedCards.forEach((card: any) => {
+        const playerId = Number(card?.playerId || 0);
+        if (!playerId || uniqueByPlayer.has(playerId)) return;
+        uniqueByPlayer.set(playerId, card);
+      });
+
+      const packCards = Array.from(uniqueByPlayer.values()).slice(0, 5);
+      if (packCards.length < 5) {
+        return res.status(400).json({ message: "Need 5 cards of the same rarity with different players to create a pack auction" });
+      }
+
+      const activeEntries = await storage.getUserCompetitions(userId);
+      const blockedCardIds = new Set<number>();
+      for (const entry of activeEntries) {
+        const comp = await storage.getCompetition(entry.competitionId);
+        if (!comp || (comp.status !== "open" && comp.status !== "active")) continue;
+        (Array.isArray(entry?.lineupCardIds) ? entry.lineupCardIds : []).forEach((id: number) => blockedCardIds.add(Number(id)));
+      }
+
+      const finalCardIds = packCards
+        .map((card: any) => Number(card.id))
+        .filter((id: number) => !blockedCardIds.has(id));
+
+      if (finalCardIds.length < 5) {
+        return res.status(400).json({ message: "Some selected cards are locked in active tournaments" });
+      }
+
+      const { db } = await import("./db.js");
+      const startsAt = new Date();
+      const endsAt = new Date(Date.now() + duration * 1000);
+      const minIncrement = Math.max(1, Math.round(startPrice * 0.05 * 100) / 100);
+
+      const created = await db.execute(sql`
+        INSERT INTO app.pack_auctions
+          (seller_user_id, rarity, card_ids, status, start_price, reserve_price, buy_now_price, min_increment, starts_at, ends_at)
+        VALUES
+          (${userId}, ${rarity}, ${JSON.stringify(finalCardIds)}::jsonb, 'live', ${startPrice}, ${reservePrice}, ${buyNowPrice}, ${minIncrement}, ${startsAt}, ${endsAt})
+        RETURNING id
+      `);
+
+      const row = Array.isArray((created as any)?.rows) ? (created as any).rows[0] : null;
+      return res.json({ success: true, auctionId: Number(row?.id || 0), cardIds: finalCardIds, endsAt });
+    } catch (error: any) {
+      console.error("Failed to create pack auction:", error);
+      return res.status(500).json({ message: "Failed to create pack auction" });
+    }
+  });
+
+  app.post("/api/auctions/packs/:id/bid", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const packAuctionId = Number(req.params.id);
+      const amount = Number(req.body?.amount || 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({ message: "Valid positive bid amount required" });
+      }
+
+      const { db } = await import("./db.js");
+      const rows = await db.execute(sql`
+        SELECT id, seller_user_id, status, start_price, min_increment, ends_at
+        FROM app.pack_auctions
+        WHERE id = ${packAuctionId}
+        LIMIT 1
+      `);
+      const auction = Array.isArray((rows as any)?.rows) ? (rows as any).rows[0] : null;
+      if (!auction) return res.status(404).json({ message: "Pack auction not found" });
+      if (String(auction.status) !== "live") return res.status(400).json({ message: "Pack auction is not active" });
+      if (auction.ends_at && new Date(auction.ends_at).getTime() < Date.now()) {
+        return res.status(400).json({ message: "Pack auction has ended" });
+      }
+      if (String(auction.seller_user_id) === userId) {
+        return res.status(400).json({ message: "Cannot bid on your own pack auction" });
+      }
+
+      const bids = await getPackAuctionBids(packAuctionId);
+      const currentAmount = Number(bids[0]?.amount || auction.start_price || 0);
+      const minBid = currentAmount + Number(auction.min_increment || 1);
+      if (amount < minBid) {
+        return res.status(400).json({ message: `Bid must be at least ${minBid.toFixed(2)}` });
+      }
+
+      const wallet = await storage.getWallet(userId);
+      if (!wallet || Number(wallet.balance || 0) < amount) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+
+      await storage.lockFunds(userId, amount);
+      if (bids[0] && String(bids[0].bidder_user_id) !== userId) {
+        await storage.unlockFunds(String(bids[0].bidder_user_id), Number(bids[0].amount || 0));
+      }
+
+      await db.execute(sql`
+        INSERT INTO app.pack_auction_bids (pack_auction_id, bidder_user_id, amount)
+        VALUES (${packAuctionId}, ${userId}, ${amount})
+      `);
+
+      return res.json({ success: true, message: "Pack bid placed successfully" });
+    } catch (error: any) {
+      console.error("Failed to place pack bid:", error);
+      return res.status(500).json({ message: "Failed to place pack bid" });
+    }
+  });
+
+  app.post("/api/auctions/packs/:id/buy-now", requireAuth, async (req: any, res) => {
+    try {
+      const buyerId = String(req.authUserId || "");
+      const packAuctionId = Number(req.params.id);
+      const { db } = await import("./db.js");
+
+      const rows = await db.execute(sql`
+        SELECT id, seller_user_id, card_ids, status, buy_now_price
+        FROM app.pack_auctions
+        WHERE id = ${packAuctionId}
+        LIMIT 1
+      `);
+      const auction = Array.isArray((rows as any)?.rows) ? (rows as any).rows[0] : null;
+      if (!auction) return res.status(404).json({ message: "Pack auction not found" });
+      if (String(auction.status) !== "live") return res.status(400).json({ message: "Pack auction is not active" });
+      if (String(auction.seller_user_id) === buyerId) return res.status(400).json({ message: "Cannot buy your own pack auction" });
+      const buyNowPrice = Number(auction.buy_now_price || 0);
+      if (!buyNowPrice || buyNowPrice <= 0) return res.status(400).json({ message: "Pack auction has no buy now price" });
+
+      const wallet = await storage.getWallet(buyerId);
+      if (!wallet || Number(wallet.balance || 0) < buyNowPrice) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+
+      const cardIds = Array.isArray(auction.card_ids) ? auction.card_ids.map((id: any) => Number(id)) : [];
+      if (cardIds.length < 5) return res.status(400).json({ message: "Pack auction payload is invalid" });
+
+      await db.transaction(async (tx: any) => {
+        await tx.execute(sql`
+          UPDATE app.wallets SET balance = balance - ${buyNowPrice} WHERE user_id = ${buyerId}
+        `);
+        await tx.execute(sql`
+          UPDATE app.wallets SET balance = balance + ${buyNowPrice} WHERE user_id = ${auction.seller_user_id}
+        `);
+
+        for (const cardId of cardIds) {
+          await tx.execute(sql`
+            UPDATE app.player_cards
+            SET owner_id = ${buyerId}
+            WHERE id = ${cardId}
+          `);
+        }
+
+        await tx.execute(sql`
+          UPDATE app.pack_auctions
+          SET status = 'settled'
+          WHERE id = ${packAuctionId}
+        `);
+
+        await tx.execute(sql`
+          INSERT INTO app.transactions (user_id, type, amount, description)
+          VALUES (${buyerId}, 'auction_settlement', ${-buyNowPrice}, ${`Pack auction purchase #${packAuctionId}`})
+        `);
+
+        await tx.execute(sql`
+          INSERT INTO app.transactions (user_id, type, amount, description)
+          VALUES (${auction.seller_user_id}, 'auction_settlement', ${buyNowPrice}, ${`Pack auction sale #${packAuctionId}`})
+        `);
+      });
+
+      return res.json({ success: true, message: "Pack purchased successfully" });
+    } catch (error: any) {
+      console.error("Failed to buy pack now:", error);
+      return res.status(500).json({ message: "Failed to buy pack now" });
+    }
+  });
   
   // -------------------------
   // COMPETITIONS ENDPOINTS
@@ -2111,6 +2924,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const competitionsWithEntries = await Promise.all(
         competitions.map(async (comp) => {
           const entries = await storage.getCompetitionEntries(comp.id);
+          const submissionClosesAt = await getCompetitionSubmissionCloseAt(comp);
+          const entryOpen = comp.status === "open" && Date.now() < submissionClosesAt.getTime();
           
           // Enrich entries with user data
           const enrichedEntries = await Promise.all(
@@ -2130,6 +2945,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           
           return {
             ...comp,
+            submissionClosesAt,
+            entryOpen,
             entries: sortedEntries,
             entryCount: sortedEntries.length,
             winner:
@@ -2162,6 +2979,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!competitionId || !Array.isArray(cardIds) || cardIds.length !== 5) {
         return res.status(400).json({ message: "Tournament ID and exactly 5 card IDs required" });
       }
+      if (new Set(cardIds).size !== 5) {
+        return res.status(400).json({ message: "Lineup must contain 5 different cards" });
+      }
       
       // Get competition
       const competition = await storage.getCompetition(competitionId);
@@ -2179,6 +2999,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (competition.status !== "open") {
         return res.status(400).json({ message: "Tournament is not open for entries" });
       }
+
+      const submissionClosesAt = await getCompetitionSubmissionCloseAt(competition);
+      if (Date.now() >= submissionClosesAt.getTime()) {
+        return res.status(400).json({
+          message: "Lineup submission is closed for this tournament. Deadline is before the first Premier League kickoff of this gameweek.",
+          submissionClosesAt,
+        });
+      }
       
       // Validate lineup (1 GK, 1 DEF, 1 MID, 1 FWD, 1 Utility)
       const cards = await Promise.all(cardIds.map(id => storage.getPlayerCard(id)));
@@ -2188,6 +3016,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (!card || card.ownerId !== userId) {
           return res.status(403).json({ message: "You don't own all selected cards" });
         }
+      }
+
+      const expectedRarity = String(competition.tier || "common").toLowerCase();
+      const mixedRarity = cards.some((card: any) => String(card?.rarity || "common").toLowerCase() !== expectedRarity);
+      if (mixedRarity) {
+        return res.status(400).json({
+          message: `${competition.tier.charAt(0).toUpperCase()}${competition.tier.slice(1)} tournaments only accept ${competition.tier} cards.`,
+        });
       }
       
       // Check if any cards are listed for sale
@@ -2242,6 +3078,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const fullCards = await Promise.all(
         cardIds.map(id => storage.getPlayerCardWithPlayer(id, userId))
       );
+
+      const lineupPlayerIds = fullCards.map((card: any) => Number(card?.playerId)).filter((id: number) => Number.isFinite(id) && id > 0);
+      if (new Set(lineupPlayerIds).size !== lineupPlayerIds.length) {
+        return res.status(400).json({ message: "Lineup must use 5 different players" });
+      }
       
       const positions = fullCards.map(c => c?.player?.position).filter(Boolean);
       const hasGK = positions.includes("GK");
@@ -2478,52 +3319,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { db } = await import("./db.js");
       const { notifications } = await import("../shared/schema.js");
       
-      // Distribute prizes (60%, 30%, 10% for top 3)
-      const totalPrizePool = entries.length * (competition.entryFee || 0);
-      const prizes = [
-        totalPrizePool * 0.6,  // 1st place
-        totalPrizePool * 0.3,  // 2nd place
-        totalPrizePool * 0.1,  // 3rd place
-      ];
-      
-      for (let i = 0; i < Math.min(3, sortedEntries.length); i++) {
-        const entry = sortedEntries[i];
-        const prize = prizes[i];
-        
-        await storage.updateCompetitionEntry(entry.id, {
-          rank: i + 1,
-          prizeAmount: prize,
-        });
-        
-        // Credit winner's wallet
-        if (prize > 0) {
-          await storage.updateWalletBalance(entry.userId, prize);
-          await storage.createTransaction({
-            userId: entry.userId,
-            type: "prize",
-            amount: prize,
-            description: `Tournament prize: ${competition.name} - Rank ${i + 1}`,
-          });
-        }
-      }
+      const isRareTier = String(competition.tier || "").toLowerCase() === "rare";
+      const totalEntries = entries.length;
+      const totalPrizePool = toMoney(totalEntries * Number(competition.entryFee || 0));
+      const payoutPercentages = [0.6, 0.3, 0.1];
 
-      let winnerPrizeCardId: number | null = null;
-      if (sortedEntries.length > 0) {
-        const winner = sortedEntries[0];
-        const prizeRarity = String(competition.prizeCardRarity || "rare").toLowerCase();
-        const todayTeams = await getTodayTeamNames();
-        const allPlayers = await storage.getPlayers();
-        const todayPlayers = todayTeams.size
-          ? allPlayers.filter((p: any) => todayTeams.has(String(p.team || "").toLowerCase()))
-          : [];
-        const candidatePool = shuffle(todayPlayers.length > 0 ? todayPlayers : allPlayers);
+      const todayTeams = await getTodayTeamNames();
+      const allPlayers = await storage.getPlayers();
+      const todayPlayers = todayTeams.size
+        ? allPlayers.filter((p: any) => todayTeams.has(String(p.team || "").toLowerCase()))
+        : [];
+      const cardCandidatePool = shuffle(todayPlayers.length > 0 ? todayPlayers : allPlayers);
 
-        for (const p of candidatePool) {
+      const createPrizeCardForUser = async (targetUserId: string, rarity: string): Promise<number | null> => {
+        for (const p of cardCandidatePool) {
           try {
             const created = await storage.createPlayerCard({
               playerId: p.id,
-              ownerId: winner.userId,
-              rarity: prizeRarity as any,
+              ownerId: targetUserId,
+              rarity: rarity as any,
               level: 1,
               xp: 0,
               decisiveScore: 35,
@@ -2531,58 +3345,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               forSale: false,
               price: 0,
             } as any);
-            winnerPrizeCardId = created.id;
-            break;
-          } catch (_e) {
+            return created.id;
+          } catch {
             continue;
           }
         }
+        return null;
+      };
 
-        const winnerUser = await storage.getUser(winner.userId);
-        const prizeRarityLabel = `${prizeRarity.charAt(0).toUpperCase()}${prizeRarity.slice(1)}`;
-        const winnerTitle = winnerPrizeCardId
-          ? `🏆 You won! ${prizeRarityLabel} card awarded`
-          : "🏆 You won today's tournament";
-        const winnerMessage = winnerPrizeCardId
-          ? `You finished 1st in ${competition.name}. Your ${prizeRarityLabel.toLowerCase()} card prize was auto-delivered to your collection.`
-          : `You finished 1st in ${competition.name}. ${prizeRarityLabel} card supply was exhausted, but your cash prize was delivered.`;
-
-        await db.insert(notifications).values({
-          userId: winner.userId,
-          type: "win",
-          title: winnerTitle,
-          message: winnerMessage,
-          read: false,
-        } as any);
-
-        if (winnerUser?.email) {
-          await sendEmailNotification(
-            winnerUser.email,
-            `You won today - ${prizeRarityLabel.toLowerCase()} card awarded`,
-            `<p>Congrats! You finished <strong>1st</strong> in <strong>${competition.name}</strong>.</p><p>${winnerMessage}</p>`,
-          );
+      const getCardRarityForRank = (rank: number): string | null => {
+        if (isRareTier) {
+          if (rank === 1) return "unique";
+          if (totalEntries > 100 && (rank === 4 || rank === 5)) return "rare";
+          return null;
         }
 
-        if (sortedEntries.length > 1) {
-          const runnerUp = sortedEntries[1];
-          const runnerUpUser = await storage.getUser(runnerUp.userId);
-          const runnerUpMessage = `You finished 2nd in ${competition.name}. Great run today — stay confident and try again in the next contest.`;
+        if (rank === 1) {
+          return String(competition.prizeCardRarity || "rare").toLowerCase();
+        }
+
+        return null;
+      };
+
+      let winnerPrizeCardId: number | null = null;
+
+      for (let i = 0; i < sortedEntries.length; i += 1) {
+        const entry = sortedEntries[i];
+        const rank = i + 1;
+        const payoutPct = payoutPercentages[i] || 0;
+        const prizeAmount = toMoney(totalPrizePool * payoutPct);
+        const cardRarity = getCardRarityForRank(rank);
+        const prizeCardId = cardRarity ? await createPrizeCardForUser(entry.userId, cardRarity) : null;
+
+        await storage.updateCompetitionEntry(entry.id, {
+          rank,
+          prizeAmount,
+          prizeCardId,
+        });
+
+        if (rank === 1 && prizeCardId) {
+          winnerPrizeCardId = prizeCardId;
+        }
+
+        if (prizeAmount > 0 || prizeCardId) {
+          const rewardBits: string[] = [];
+          if (prizeAmount > 0) rewardBits.push(`${formatMoney(prizeAmount)} cash`);
+          if (prizeCardId && cardRarity) rewardBits.push(`${cardRarity.toUpperCase()} card`);
+          const rewardText = rewardBits.join(" + ");
 
           await db.insert(notifications).values({
-            userId: runnerUp.userId,
-            type: "runner_up",
-            title: "🥈 Runner-up today — keep pushing",
-            message: runnerUpMessage,
+            userId: entry.userId,
+            type: rank === 1 ? "win" : rank === 2 ? "runner_up" : "system",
+            title: rank === 1 ? "Congratulations! Rewards ready to claim" : `Tournament rewards ready (Rank ${rank})`,
+            message: `You finished #${rank} in ${competition.name}. Claim your reward: ${rewardText}.`,
             read: false,
           } as any);
-
-          if (runnerUpUser?.email) {
-            await sendEmailNotification(
-              runnerUpUser.email,
-              "Runner-up today - keep going",
-              `<p>You placed <strong>2nd</strong> in <strong>${competition.name}</strong>.</p><p>${runnerUpMessage}</p>`,
-            );
-          }
         }
       }
       
@@ -2590,12 +3407,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await storage.updateCompetition(competitionId, {
         status: "completed",
       });
-
-      if (winnerPrizeCardId && sortedEntries[0]) {
-        await storage.updateCompetitionEntry(sortedEntries[0].id, {
-          prizeCardId: winnerPrizeCardId,
-        });
-      }
 
       await writeAuditLog(String(req.authUserId || ""), "admin.competition.settle", {
         competitionId,
@@ -2683,10 +3494,237 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const userId = req.authUserId;
       const rewards = await storage.getUserRewards(userId);
-      res.json(rewards);
+      const { db } = await import("./db.js");
+
+      let claimedEntryIds = new Set<number>();
+
+      const rows = await db.execute(sql`
+        SELECT entry_id
+        FROM app.competition_reward_claims
+        WHERE user_id = ${userId}
+      `);
+      const claimRows = Array.isArray((rows as any)?.rows) ? (rows as any).rows : [];
+      claimedEntryIds = new Set(
+        claimRows
+          .map((row: any) => Number(row.entry_id))
+          .filter((value: number) => Number.isFinite(value) && value > 0),
+      );
+
+      const enriched = await Promise.all(
+        rewards.map(async (entry) => {
+          const competition = await storage.getCompetition(entry.competitionId);
+          const prizeCard = entry.prizeCardId ? await storage.getPlayerCardWithPlayer(entry.prizeCardId) : null;
+          return {
+            ...entry,
+            claimed: claimedEntryIds.has(Number(entry.id)),
+            competition,
+            prizeCard,
+          };
+        }),
+      );
+
+      res.json(enriched);
     } catch (error: any) {
       console.error("Failed to fetch rewards:", error);
       res.status(500).json({ message: "Failed to fetch rewards" });
+    }
+  });
+
+  app.get("/api/rewards/tournament-status", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const { db } = await import("./db.js");
+
+      const rows = await db.execute(sql`
+        SELECT
+          ce.id AS entry_id,
+          ce.competition_id,
+          ce.rank,
+          ce.prize_amount,
+          ce.prize_card_id,
+          c.name AS competition_name,
+          c.prize_card_rarity,
+          c.tier
+        FROM app.competition_entries ce
+        INNER JOIN app.competitions c ON c.id = ce.competition_id
+        LEFT JOIN app.competition_reward_claims rc ON rc.entry_id = ce.id
+        WHERE ce.user_id = ${userId}
+          AND c.status = 'completed'
+          AND (COALESCE(ce.prize_amount, 0) > 0 OR ce.prize_card_id IS NOT NULL)
+          AND rc.id IS NULL
+        ORDER BY c.end_date DESC NULLS LAST, ce.joined_at DESC
+        LIMIT 1
+      `);
+
+      const row = Array.isArray((rows as any)?.rows) ? (rows as any).rows[0] : null;
+      if (!row) {
+        return res.json({ available: false, claimed: false });
+      }
+
+      const prizeCardId = row.prize_card_id == null ? null : Number(row.prize_card_id);
+      const prizeAmount = toMoney(row.prize_amount || 0);
+      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId) : null;
+      const fallbackRarity = String(row.tier || "").toLowerCase() === "rare" && Number(row.rank || 0) === 1
+        ? "unique"
+        : String(row.prize_card_rarity || "rare").toLowerCase();
+
+      return res.json({
+        available: true,
+        claimed: false,
+        competitionName: String(row.competition_name || "Tournament"),
+        competitionId: Number(row.competition_id),
+        entryId: Number(row.entry_id),
+        rank: Number(row.rank || 0),
+        prizeAmount,
+        hasMoney: prizeAmount > 0,
+        cardId: prizeCardId,
+        hasCard: Boolean(prizeCardId),
+        rarity: String(prizeCard?.rarity || fallbackRarity || "rare").toLowerCase(),
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch tournament reward status:", error);
+      return res.status(500).json({ message: "Failed to fetch tournament reward status" });
+    }
+  });
+
+  app.post("/api/rewards/tournament-claim", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const requestedEntryId = Number(req.body?.entryId || 0);
+      const { db } = await import("./db.js");
+      const { wallets, transactions, notifications } = await import("../shared/schema.js");
+      const { eq } = await import("drizzle-orm");
+
+      const getPendingRewardQuery = requestedEntryId > 0
+        ? sql`
+            SELECT
+              ce.id AS entry_id,
+              ce.competition_id,
+              ce.rank,
+              ce.prize_amount,
+              ce.prize_card_id,
+              c.name AS competition_name,
+              c.prize_card_rarity,
+              c.tier
+            FROM app.competition_entries ce
+            INNER JOIN app.competitions c ON c.id = ce.competition_id
+            LEFT JOIN app.competition_reward_claims rc ON rc.entry_id = ce.id
+            WHERE ce.user_id = ${userId}
+              AND ce.id = ${requestedEntryId}
+              AND c.status = 'completed'
+              AND (COALESCE(ce.prize_amount, 0) > 0 OR ce.prize_card_id IS NOT NULL)
+              AND rc.id IS NULL
+            LIMIT 1
+          `
+        : sql`
+            SELECT
+              ce.id AS entry_id,
+              ce.competition_id,
+              ce.rank,
+              ce.prize_amount,
+              ce.prize_card_id,
+              c.name AS competition_name,
+              c.prize_card_rarity,
+              c.tier
+            FROM app.competition_entries ce
+            INNER JOIN app.competitions c ON c.id = ce.competition_id
+            LEFT JOIN app.competition_reward_claims rc ON rc.entry_id = ce.id
+            WHERE ce.user_id = ${userId}
+              AND c.status = 'completed'
+              AND (COALESCE(ce.prize_amount, 0) > 0 OR ce.prize_card_id IS NOT NULL)
+              AND rc.id IS NULL
+            ORDER BY c.end_date DESC NULLS LAST, ce.joined_at DESC
+            LIMIT 1
+          `;
+
+      const rows = await db.execute(getPendingRewardQuery);
+      const pending = Array.isArray((rows as any)?.rows) ? (rows as any).rows[0] : null;
+      if (!pending) {
+        return res.status(404).json({ message: "No claimable tournament reward found" });
+      }
+
+      const entryId = Number(pending.entry_id);
+      const competitionId = Number(pending.competition_id);
+      const rank = Number(pending.rank || 0);
+      const prizeAmount = toMoney(pending.prize_amount || 0);
+      const prizeCardId = pending.prize_card_id == null ? null : Number(pending.prize_card_id);
+      const competitionName = String(pending.competition_name || "Tournament");
+
+      let claimId = 0;
+
+      await db.transaction(async (tx) => {
+        const existingClaimRows = await tx.execute(sql`
+          SELECT id
+          FROM app.competition_reward_claims
+          WHERE entry_id = ${entryId}
+          LIMIT 1
+        `);
+        const existingClaim = Array.isArray((existingClaimRows as any)?.rows)
+          ? (existingClaimRows as any).rows[0]
+          : null;
+        if (existingClaim?.id) {
+          claimId = Number(existingClaim.id);
+          return;
+        }
+
+        if (prizeAmount > 0) {
+          await tx
+            .update(wallets)
+            .set({ balance: sql`${wallets.balance} + ${prizeAmount}` } as any)
+            .where(eq(wallets.userId, userId));
+
+          await tx.insert(transactions).values({
+            userId,
+            type: "prize",
+            amount: prizeAmount,
+            description: `Tournament reward claimed: ${competitionName} (Rank ${rank})`,
+          } as any);
+        }
+
+        const inserted = await tx.execute(sql`
+          INSERT INTO app.competition_reward_claims
+            (entry_id, user_id, competition_id, prize_amount, prize_card_id)
+          VALUES
+            (${entryId}, ${userId}, ${competitionId}, ${prizeAmount}, ${prizeCardId})
+          RETURNING id
+        `);
+
+        claimId = Number(
+          Array.isArray((inserted as any)?.rows) ? (inserted as any).rows?.[0]?.id || 0 : 0,
+        );
+
+        const bits: string[] = [];
+        if (prizeAmount > 0) bits.push(`${formatMoney(prizeAmount)} cash`);
+        if (prizeCardId) bits.push("card reward");
+
+        await tx.insert(notifications).values({
+          userId,
+          type: rank === 1 ? "win" : "system",
+          title: "Congratulations! Reward claimed",
+          message: `You claimed your ${competitionName} reward${bits.length ? `: ${bits.join(" + ")}` : ""}.`,
+          read: false,
+        } as any);
+      });
+
+      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId) : null;
+      const fallbackRarity = String(pending.tier || "").toLowerCase() === "rare" && rank === 1
+        ? "unique"
+        : String(pending.prize_card_rarity || "rare").toLowerCase();
+
+      return res.json({
+        success: true,
+        claimId,
+        competitionId,
+        competitionName,
+        entryId,
+        rank,
+        prizeAmount,
+        cardId: prizeCardId,
+        rarity: String(prizeCard?.rarity || fallbackRarity || "rare").toLowerCase(),
+      });
+    } catch (error: any) {
+      console.error("Failed to claim tournament reward:", error);
+      return res.status(500).json({ message: "Failed to claim tournament reward" });
     }
   });
 

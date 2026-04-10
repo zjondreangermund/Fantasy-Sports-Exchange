@@ -1,12 +1,15 @@
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
-import { Bell, User as UserIcon, Mail, CheckCircle2 } from "lucide-react";
+import { Bell, User as UserIcon, Mail, CheckCircle2, Sparkles, Crown, Shirt, Gift, Copy, Link2, Shield, Gavel, Users } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { queryClient } from "../lib/queryClient";
+import { Link } from "wouter";
 
 type NotificationItem = {
   id: number;
@@ -30,15 +33,144 @@ type UserProfile = {
   managerTeamName?: string | null;
 };
 
+type ReferralMeResponse = {
+  code: string;
+  url: string;
+};
+
+type ReferralHistoryItem = {
+  id: number;
+  referredUserId: string;
+  referredName: string;
+  referredEmail: string | null;
+  rewardCardId: number | null;
+  rewardCard: any;
+  createdAt: string | null;
+};
+
+type ReferralHistoryResponse = {
+  referrals: ReferralHistoryItem[];
+  totalReferrals: number;
+  rewardsGranted: number;
+};
+
 export default function AccountPage() {
   const { toast } = useToast();
+  const [outfit, setOutfit] = useState("classic");
+  const [aura, setAura] = useState("none");
+  const [commentator, setCommentator] = useState("hype");
+  const [unlockedSuits, setUnlockedSuits] = useState<string[]>(["classic", "street"]);
+  const [teamNameInput, setTeamNameInput] = useState("");
+  const [copyingLink, setCopyingLink] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("managerAvatar");
+      const voiceRaw = localStorage.getItem("fantasyCommentator");
+      if (voiceRaw) setCommentator(voiceRaw);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        outfit?: string;
+        aura?: string;
+        unlockedSuits?: string[];
+      };
+      if (parsed?.outfit) setOutfit(parsed.outfit);
+      if (parsed?.aura) setAura(parsed.aura);
+      if (Array.isArray(parsed?.unlockedSuits) && parsed.unlockedSuits.length) {
+        setUnlockedSuits(parsed.unlockedSuits);
+      }
+    } catch {
+      // ignore bad local storage payload
+    }
+  }, []);
+
+  const saveAvatar = (
+    next: Partial<{ outfit: string; aura: string; unlockedSuits: string[]; commentator: string }> = {},
+  ) => {
+    const nextOutfit = next.outfit || outfit;
+    const nextAura = next.aura || aura;
+    const nextUnlocked = next.unlockedSuits || unlockedSuits;
+    const nextCommentator = next.commentator || commentator;
+    setOutfit(nextOutfit);
+    setAura(nextAura);
+    setUnlockedSuits(nextUnlocked);
+    setCommentator(nextCommentator);
+    localStorage.setItem(
+      "managerAvatar",
+      JSON.stringify({
+        outfit: nextOutfit,
+        aura: nextAura,
+        unlockedSuits: nextUnlocked,
+      }),
+    );
+    localStorage.setItem("fantasyCommentator", nextCommentator);
+  };
+
+  const luckBonus = useMemo(() => {
+    const hasElite = unlockedSuits.includes("elite");
+    const hasLegend = unlockedSuits.includes("legend");
+    if (hasLegend) return 4;
+    if (hasElite) return 2;
+    return 0;
+  }, [unlockedSuits]);
 
   const { data: user, isLoading: userLoading } = useQuery<UserProfile>({
     queryKey: ["/api/user"],
   });
 
+  useEffect(() => {
+    setTeamNameInput(user?.managerTeamName || "");
+  }, [user?.managerTeamName]);
+
+  const updateTeamNameMutation = useMutation({
+    mutationFn: async (managerTeamName: string) => {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ managerTeamName }),
+      });
+      if (!res.ok) throw new Error("Failed to update team name");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      toast({ title: "Team name updated" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not update team name.", variant: "destructive" });
+    },
+  });
+
   const { data: inbox, isLoading: inboxLoading } = useQuery<NotificationResponse>({
     queryKey: ["/api/notifications"],
+  });
+
+  const { data: referralData, isLoading: referralLoading } = useQuery<ReferralMeResponse>({
+    queryKey: ["/api/referrals/me"],
+    queryFn: async () => {
+      const res = await fetch("/api/referrals/me", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch referral link");
+      return res.json();
+    },
+  });
+
+  const { data: adminCheck, isLoading: adminCheckLoading } = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/admin/check"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/check", { credentials: "include" });
+      if (!res.ok) return { isAdmin: false };
+      return res.json();
+    },
+  });
+
+  const { data: referralHistory, isLoading: referralHistoryLoading } = useQuery<ReferralHistoryResponse>({
+    queryKey: ["/api/referrals/history"],
+    queryFn: async () => {
+      const res = await fetch("/api/referrals/history", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch referral history");
+      return res.json();
+    },
   });
 
   const markOneMutation = useMutation({
@@ -73,6 +205,33 @@ export default function AccountPage() {
     },
   });
 
+  const copyReferralLink = async () => {
+    const url = String(referralData?.url || "").trim();
+    if (!url) {
+      toast({ title: "Referral link unavailable", description: "Please try again in a moment.", variant: "destructive" });
+      return;
+    }
+
+    setCopyingLink(true);
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const input = document.createElement("input");
+        input.value = url;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }
+      toast({ title: "Referral link copied", description: "Share it to earn a random new common card per successful signup." });
+    } catch {
+      toast({ title: "Could not copy", description: "Copy the link manually from the field.", variant: "destructive" });
+    } finally {
+      setCopyingLink(false);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
       <div className="max-w-5xl mx-auto">
@@ -82,7 +241,7 @@ export default function AccountPage() {
         </div>
 
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid grid-cols-2 w-full max-w-md">
+          <TabsList className="grid grid-cols-3 w-full max-w-xl">
             <TabsTrigger value="profile" className="flex items-center gap-2">
               <UserIcon className="w-4 h-4" />
               Profile
@@ -92,10 +251,14 @@ export default function AccountPage() {
               Inbox
               {!!inbox?.unreadCount && <Badge>{inbox.unreadCount}</Badge>}
             </TabsTrigger>
+            <TabsTrigger value="referrals" className="flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Referrals
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="mt-4">
-            <Card className="p-5 space-y-3">
+            <Card className="p-5 space-y-4">
               {userLoading ? (
                 <>
                   <Skeleton className="h-5 w-48" />
@@ -115,9 +278,203 @@ export default function AccountPage() {
                       {user?.email || "No email set"}
                     </p>
                   </div>
+                  <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <Shield className="h-4 w-4 text-primary" />
+                      <p className="text-sm font-semibold">Access & Tools</p>
+                      {adminCheckLoading ? (
+                        <Badge variant="secondary">Checking access...</Badge>
+                      ) : adminCheck?.isAdmin ? (
+                        <Badge>Admin Enabled</Badge>
+                      ) : (
+                        <Badge variant="secondary">Standard User</Badge>
+                      )}
+                    </div>
+
+                    {adminCheck?.isAdmin ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link href="/admin">
+                          <Button size="sm" variant="default">
+                            <Shield className="mr-1 h-3.5 w-3.5" />
+                            Open Admin Panel
+                          </Button>
+                        </Link>
+                        <Link href="/auctions">
+                          <Button size="sm" variant="outline">
+                            <Gavel className="mr-1 h-3.5 w-3.5" />
+                            Open Auctions
+                          </Button>
+                        </Link>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Admin-only tools like Auctions and Admin panel will appear automatically when this account has admin access.
+                      </p>
+                    )}
+                  </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Team</p>
                     <p className="font-medium">{user?.managerTeamName || "Not set"}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Input
+                        value={teamNameInput}
+                        onChange={(e) => setTeamNameInput(e.target.value)}
+                        placeholder="Enter manager team name"
+                        className="max-w-xs"
+                        maxLength={30}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => updateTeamNameMutation.mutate(teamNameInput.trim())}
+                        disabled={teamNameInput.trim().length < 3 || updateTeamNameMutation.isPending}
+                      >
+                        Save Team Name
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-border/60">
+                    <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <Gift className="w-4 h-4 text-emerald-500" />
+                        <p className="text-sm font-semibold">Referral Program</p>
+                        <Badge variant="secondary" className="text-emerald-600 border-emerald-500/40">
+                          Reward: random new Common card
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Each successful signup from your referral link gives you one random Common card you do not own yet.
+                      </p>
+
+                      {referralLoading ? (
+                        <Skeleton className="h-9 w-full max-w-xl" />
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="relative flex-1 min-w-[240px] max-w-xl">
+                            <Link2 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                              readOnly
+                              value={referralData?.url || ""}
+                              className="pl-8"
+                              aria-label="Referral link"
+                            />
+                          </div>
+                          <Button size="sm" onClick={copyReferralLink} disabled={copyingLink || !referralData?.url}>
+                            <Copy className="w-4 h-4 mr-1" />
+                            {copyingLink ? "Copying..." : "Copy Link"}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-2">
+                      <Crown className="w-4 h-4 text-primary" />
+                      <p className="text-sm font-semibold">Manager Avatar</p>
+                      <Badge variant="secondary">Pack luck +{luckBonus}%</Badge>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-2">Outfit</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { key: "classic", label: "Classic" },
+                            { key: "street", label: "Street" },
+                            { key: "elite", label: "Elite" },
+                            { key: "legend", label: "Legend" },
+                          ].map((option) => {
+                            const unlocked = unlockedSuits.includes(option.key);
+                            return (
+                              <Button
+                                key={option.key}
+                                size="sm"
+                                variant={outfit === option.key ? "default" : "outline"}
+                                disabled={!unlocked}
+                                onClick={() => saveAvatar({ outfit: option.key })}
+                              >
+                                <Shirt className="w-3 h-3 mr-1" />
+                                {option.label}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-2">Aura</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { key: "none", label: "None" },
+                            { key: "neon", label: "Neon" },
+                            { key: "gold", label: "Gold" },
+                            { key: "royal", label: "Royal" },
+                          ].map((option) => (
+                            <Button
+                              key={option.key}
+                              size="sm"
+                              variant={aura === option.key ? "default" : "outline"}
+                              onClick={() => saveAvatar({ aura: option.key })}
+                            >
+                              <Sparkles className="w-3 h-3 mr-1" />
+                              {option.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (unlockedSuits.includes("elite")) {
+                            toast({ title: "Elite suit already unlocked" });
+                            return;
+                          }
+                          const next = [...unlockedSuits, "elite"];
+                          saveAvatar({ unlockedSuits: next, outfit: "elite" });
+                          toast({ title: "Elite suit unlocked" });
+                        }}
+                      >
+                        Unlock Elite Suit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (unlockedSuits.includes("legend")) {
+                            toast({ title: "Legend suit already unlocked" });
+                            return;
+                          }
+                          const next = [...unlockedSuits, "legend"];
+                          saveAvatar({ unlockedSuits: next, outfit: "legend", aura: "gold" });
+                          toast({ title: "Legend suit unlocked", description: "Pack luck bonus increased." });
+                        }}
+                      >
+                        Unlock Legend Suit
+                      </Button>
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="text-xs text-muted-foreground mb-2">Commentary Voice</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {[
+                          { key: "hype", label: "Hype" },
+                          { key: "classic", label: "Classic" },
+                          { key: "calm", label: "Calm" },
+                        ].map((voice) => (
+                          <Button
+                            key={voice.key}
+                            size="sm"
+                            variant={commentator === voice.key ? "default" : "outline"}
+                            onClick={() => saveAvatar({ commentator: voice.key })}
+                          >
+                            {voice.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
@@ -162,6 +519,50 @@ export default function AccountPage() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">No notifications yet.</p>
+              )}
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="referrals" className="mt-4">
+            <Card className="p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <h2 className="text-lg font-semibold">Referral Stats</h2>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">Total Referrals: {Number(referralHistory?.totalReferrals || 0)}</Badge>
+                  <Badge variant="outline">Rewards Given: {Number(referralHistory?.rewardsGranted || 0)}</Badge>
+                </div>
+              </div>
+
+              {referralHistoryLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-20 w-full" />
+                  <Skeleton className="h-20 w-full" />
+                </div>
+              ) : Array.isArray(referralHistory?.referrals) && referralHistory!.referrals.length > 0 ? (
+                <div className="space-y-3">
+                  {referralHistory!.referrals.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-border/70 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="font-medium text-sm">{item.referredName}</p>
+                          <p className="text-xs text-muted-foreground">{item.referredEmail || item.referredUserId}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Joined via referral: {item.createdAt ? new Date(item.createdAt).toLocaleString() : "-"}
+                          </p>
+                        </div>
+                        {item.rewardCard ? (
+                          <Badge className="capitalize">
+                            Reward: {String(item.rewardCard?.rarity || "common")} {String(item.rewardCard?.player?.name || "Card")}
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">No reward card</Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No referrals yet. Share your referral link in the Profile tab.</p>
               )}
             </Card>
           </TabsContent>

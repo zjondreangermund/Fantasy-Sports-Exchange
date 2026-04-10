@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import CinematicBackground from "../components/CinematicBackground";
-import Card3D from "../components/Card3D";
+import SceneAtmosphere from "../components/SceneAtmosphere";
+import CardThumbnail from "../components/CardThumbnail";
 import { Button } from "../components/ui/button";
 import { Volume2, VolumeX } from "lucide-react";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
+import { useUiSound } from "../hooks/use-ui-sound";
 
 type OnboardingPhase =
   | "start"
@@ -20,36 +21,15 @@ type OnboardingPhase =
 
 export default function OnboardingTunnelPage() {
   const [, setLocation] = useLocation();
+  const { play } = useUiSound();
   const [phase, setPhase] = useState<OnboardingPhase>("start");
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [cardsRevealed, setCardsRevealed] = useState(false);
   const [selectedCards, setSelectedCards] = useState<Set<number>>(new Set());
-  const [videoError, setVideoError] = useState(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  // Audio refs
-  const crowdAudioRef = useRef<HTMLAudioElement | null>(null);
-  const whooshAudioRef = useRef<HTMLAudioElement | null>(null);
-  const packOpenAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Detect if mobile/portrait for video selection
   const isMobile = window.innerWidth < 768 || window.innerHeight > window.innerWidth;
   const tunnelVideo = isMobile ? "/cinematics/tunnel_9x16.mp4" : "/cinematics/tunnel_16x9.mp4";
-
-  const tryPlayTunnelVideo = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    video.muted = true;
-    video.playsInline = true;
-    if (video.readyState < 2) {
-      video.load();
-    }
-
-    video.play().catch((e) => {
-      console.log("Tunnel video play failed:", e);
-    });
-  };
 
   // Fetch user's cards for onboarding
   const { data: cards, isLoading } = useQuery<PlayerCardWithPlayer[]>({
@@ -57,58 +37,22 @@ export default function OnboardingTunnelPage() {
     enabled: phase !== "start",
   });
 
-  // Initialize audio
-  useEffect(() => {
-    crowdAudioRef.current = new Audio("/sfx/crowd_cheer.mp3");
-    whooshAudioRef.current = new Audio("/sfx/whoosh.mp3");
-    packOpenAudioRef.current = new Audio("/sfx/pack_open.mp3");
-
-    // Set volumes
-    if (crowdAudioRef.current) crowdAudioRef.current.volume = 0.6;
-    if (whooshAudioRef.current) whooshAudioRef.current.volume = 0.4;
-    if (packOpenAudioRef.current) packOpenAudioRef.current.volume = 0.7;
-
-    return () => {
-      // Cleanup audio
-      crowdAudioRef.current?.pause();
-      whooshAudioRef.current?.pause();
-      packOpenAudioRef.current?.pause();
-    };
-  }, []);
-
-  // Play audio helper
-  const playAudio = (audioRef: React.MutableRefObject<HTMLAudioElement | null>) => {
-    if (audioEnabled && audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.play().catch((e) => console.log("Audio play failed:", e));
-    }
-  };
-
   // Start the cinematic sequence
   const startSequence = () => {
     setAudioEnabled(true);
-    setVideoError(false);
     setPhase("tunnel");
-
-    // Mirror landing behavior: start playback immediately on user gesture
-    requestAnimationFrame(() => {
-      tryPlayTunnelVideo();
-    });
-    setTimeout(() => tryPlayTunnelVideo(), 150);
-
-    // Start crowd audio
-    playAudio(crowdAudioRef);
+    play("reveal");
 
     // Timeline orchestration
     setTimeout(() => setPhase("light"), 3000); // 3s: brighten
     setTimeout(() => setPhase("pack-appear"), 3000); // 3s: pack appears
     setTimeout(() => {
       setPhase("pack-shake");
-      playAudio(whooshAudioRef);
+      if (audioEnabled) play("click");
     }, 3500); // 3.5s: pack shakes
     setTimeout(() => {
       setPhase("pack-open");
-      playAudio(packOpenAudioRef);
+      if (audioEnabled) play("reveal");
     }, 4000); // 4s: pack opens
     setTimeout(() => {
       setPhase("cards-reveal");
@@ -116,23 +60,6 @@ export default function OnboardingTunnelPage() {
     }, 4200); // 4.2s: cards fly out
     setTimeout(() => setPhase("complete"), 5000); // 5s: UI appears
   };
-
-  useEffect(() => {
-    if (phase !== "tunnel" || videoError) return;
-    const video = videoRef.current;
-    if (!video) return;
-
-    const attemptPlay = () => tryPlayTunnelVideo();
-
-    attemptPlay();
-    video.addEventListener("canplay", attemptPlay);
-    video.addEventListener("loadeddata", attemptPlay);
-
-    return () => {
-      video.removeEventListener("canplay", attemptPlay);
-      video.removeEventListener("loadeddata", attemptPlay);
-    };
-  }, [phase, videoError]);
 
   // Toggle card selection
   const toggleCard = (cardId: number) => {
@@ -161,10 +88,11 @@ export default function OnboardingTunnelPage() {
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-black">
-      {/* Cinematic Background */}
-      <CinematicBackground
-        show={phase !== "start" && phase !== "tunnel"}
-        overlayOpacity={phase === "light" ? 0.2 : 0.5}
+      <SceneAtmosphere
+        variant="tunnel"
+        videoSrc={phase === "tunnel" ? tunnelVideo : undefined}
+        videoPoster="/cinematics/tunnel.png"
+        fallbackImage="/cinematics/tunnel.png"
       />
 
       {/* Audio Toggle (top right) */}
@@ -216,33 +144,6 @@ export default function OnboardingTunnelPage() {
       {/* "Crowd Cheering" Text */}
       {phase === "tunnel" && (
         <>
-          {/* Video Background (if available) */}
-          {!videoError && (
-            <video
-              ref={videoRef}
-              className="absolute inset-0 w-full h-full object-cover z-0"
-              autoPlay
-              muted
-              loop
-              preload="auto"
-              playsInline
-              onError={() => setVideoError(true)}
-              onCanPlay={tryPlayTunnelVideo}
-              onLoadedMetadata={tryPlayTunnelVideo}
-              poster="/cinematics/tunnel.png"
-            >
-              <source src={tunnelVideo} type="video/mp4" />
-            </video>
-          )}
-
-          {videoError && (
-            <img
-              src="/cinematics/tunnel.png"
-              alt="Stadium tunnel"
-              className="absolute inset-0 w-full h-full object-cover z-0"
-            />
-          )}
-          
           {/* Text Overlay */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -360,7 +261,7 @@ export default function OnboardingTunnelPage() {
                             : "hover:scale-105"
                         }`}
                       >
-                        <Card3D
+                        <CardThumbnail
                           card={card}
                           size="sm"
                           selected={selectedCards.has(card.id)}

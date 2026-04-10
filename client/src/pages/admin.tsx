@@ -36,10 +36,12 @@ import {
   BarChart3,
   RefreshCw,
   ExternalLink,
+  Gavel,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
+import { Link } from "wouter";
 
 type TournamentEntry = {
   id: number;
@@ -69,6 +71,35 @@ type AdminUserSearchRow = {
   balance?: number;
 };
 
+type OnboardingAdminConfig = {
+  signupPacksEnabled: boolean;
+  requireTeamName: boolean;
+  teamNameMinLength: number;
+  onboardingEntryPath: string;
+  starterChecklistLabel: string;
+  packLabels: string[];
+};
+
+type TournamentRewardClaim = {
+  claimId: number;
+  entryId: number;
+  userId: string;
+  userEmail?: string;
+  userName?: string;
+  cardId: number;
+  claimedAt: string;
+  competitionId?: number | null;
+  competitionName?: string;
+  rank?: number | null;
+  prizeAmount?: number | null;
+  rarity: string;
+  player?: {
+    id: number;
+    name: string;
+    team: string;
+  } | null;
+};
+
 export default function AdminPage() {
   const { toast } = useToast();
   const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
@@ -82,6 +113,10 @@ export default function AdminPage() {
   const [listingFilterRarity, setListingFilterRarity] = useState("all");
   const [listingFilterOwner, setListingFilterOwner] = useState("");
   const [listingRemovalReason, setListingRemovalReason] = useState<Record<number, string>>({});
+  const [rewardClaimUserFilter, setRewardClaimUserFilter] = useState("");
+  const [rewardClaimCompetitionFilter, setRewardClaimCompetitionFilter] = useState("");
+  const [reopenReasonByClaimId, setReopenReasonByClaimId] = useState<Record<number, string>>({});
+  const [onboardingDraft, setOnboardingDraft] = useState<OnboardingAdminConfig | null>(null);
   const [tournamentForm, setTournamentForm] = useState({
     name: "",
     tier: "common",
@@ -128,6 +163,11 @@ export default function AdminPage() {
     queryKey: [`/api/admin/logs${auditActionFilter ? `?action=${encodeURIComponent(auditActionFilter)}` : ""}`],
   });
 
+  const rewardClaimsQuery = `/api/admin/rewards/tournament-claims?limit=100${rewardClaimUserFilter.trim() ? `&userId=${encodeURIComponent(rewardClaimUserFilter.trim())}` : ""}${rewardClaimCompetitionFilter.trim() ? `&competitionId=${encodeURIComponent(rewardClaimCompetitionFilter.trim())}` : ""}`;
+  const { data: adminTournamentClaims, refetch: refetchAdminTournamentClaims, isFetching: claimsLoading } = useQuery<{ claims: TournamentRewardClaim[] }>({
+    queryKey: [rewardClaimsQuery],
+  });
+
   const { data: searchedUsers, refetch: refetchUserSearch, isFetching: searchingUsers } = useQuery<{ users: AdminUserSearchRow[]; total: number }>({
     queryKey: [`/api/admin/users/search${userSearchTerm ? `?q=${encodeURIComponent(userSearchTerm)}` : ""}`],
     enabled: userSearchTerm.length > 0,
@@ -149,6 +189,10 @@ export default function AdminPage() {
     perMinuteSeries: Array<{ minuteOffset: number; count: number }>;
   }>({
     queryKey: ["/api/admin/traffic"],
+  });
+
+  const { data: onboardingConfig, refetch: refetchOnboardingConfig } = useQuery<OnboardingAdminConfig>({
+    queryKey: ["/api/admin/onboarding-config"],
   });
 
   // Withdrawals
@@ -395,6 +439,24 @@ export default function AdminPage() {
     },
   });
 
+  const reopenTournamentClaimMutation = useMutation({
+    mutationFn: async ({ claimId, reason }: { claimId: number; reason?: string }) => {
+      const res = await apiRequest("POST", `/api/admin/rewards/tournament-claims/${claimId}/reopen`, {
+        reason: reason || "",
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/rewards/tournament-claims"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/logs"] });
+      refetchAdminTournamentClaims();
+      toast({ title: "Tournament reward reopened" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to reopen claim", variant: "destructive" });
+    },
+  });
+
   const backfillPlayerPhotosMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/players/backfill-fpl-photos", {});
@@ -428,6 +490,54 @@ export default function AdminPage() {
       toast({ title: "Error", description: error.message || "Failed to cache player images", variant: "destructive" });
     },
   });
+
+  const saveOnboardingConfigMutation = useMutation({
+    mutationFn: async (payload: OnboardingAdminConfig) => {
+      const res = await apiRequest("PATCH", "/api/admin/onboarding-config", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/onboarding-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/onboarding/config"] });
+      toast({ title: "Onboarding settings saved" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to save onboarding settings", variant: "destructive" });
+    },
+  });
+
+  const resetOnboardingConfigMutation = useMutation({
+    mutationFn: async () => {
+      const defaults: OnboardingAdminConfig = {
+        signupPacksEnabled: true,
+        requireTeamName: true,
+        teamNameMinLength: 3,
+        onboardingEntryPath: "/onboarding",
+        starterChecklistLabel: "Open starter packs",
+        packLabels: ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"],
+      };
+      const res = await apiRequest("PATCH", "/api/admin/onboarding-config", defaults);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/onboarding-config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/onboarding/config"] });
+      toast({ title: "Onboarding settings reset" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to reset onboarding settings", variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    if (!onboardingConfig) return;
+    setOnboardingDraft({
+      ...onboardingConfig,
+      packLabels: Array.isArray(onboardingConfig.packLabels)
+        ? onboardingConfig.packLabels
+        : ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"],
+    });
+  }, [onboardingConfig]);
 
   const statusBadge = (status: string) => {
     switch (status) {
@@ -641,17 +751,31 @@ export default function AdminPage() {
               <p className="text-sm text-muted-foreground">Manage withdrawal requests and platform operations</p>
             </div>
           </div>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              const ok = window.confirm("This will remove ALL users, balances, onboarding data, and force everyone to sign in again. Continue?");
-              if (ok) resetUsersMutation.mutate();
-            }}
-            disabled={resetUsersMutation.isPending}
-          >
-            <XCircle className="w-4 h-4 mr-2" />
-            Reset Users Now
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link href="/auctions">
+              <Button variant="outline">
+                <Gavel className="w-4 h-4 mr-2" />
+                Open Auctions
+              </Button>
+            </Link>
+            <Link href="/marketplace">
+              <Button variant="outline">
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open Marketplace
+              </Button>
+            </Link>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const ok = window.confirm("This will remove ALL users, balances, onboarding data, and force everyone to sign in again. Continue?");
+                if (ok) resetUsersMutation.mutate();
+              }}
+              disabled={resetUsersMutation.isPending}
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              Reset Users Now
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
@@ -682,7 +806,7 @@ export default function AdminPage() {
         </div>
 
         <Tabs defaultValue="withdrawals" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="withdrawals">
               <DollarSign className="w-4 h-4 mr-2" />
               Withdrawals
@@ -694,6 +818,10 @@ export default function AdminPage() {
             <TabsTrigger value="management">
               <Shield className="w-4 h-4 mr-2" />
               Management
+            </TabsTrigger>
+            <TabsTrigger value="onboarding">
+              <Users className="w-4 h-4 mr-2" />
+              Onboarding
             </TabsTrigger>
           </TabsList>
 
@@ -1200,6 +1328,87 @@ export default function AdminPage() {
               <Card className="p-6">
                 <div className="flex items-center justify-between mb-4 gap-2">
                   <div className="flex items-center gap-3">
+                    <Trophy className="w-5 h-5 text-amber-500" />
+                    <h3 className="text-lg font-semibold">Tournament Reward Claims</h3>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => refetchAdminTournamentClaims()}>
+                    <RefreshCw className="w-4 h-4 mr-1" />
+                    Refresh
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Input
+                    value={rewardClaimUserFilter}
+                    onChange={(e) => setRewardClaimUserFilter(e.target.value)}
+                    placeholder="Filter by user ID"
+                    className="max-w-xs"
+                  />
+                  <Input
+                    value={rewardClaimCompetitionFilter}
+                    onChange={(e) => setRewardClaimCompetitionFilter(e.target.value)}
+                    placeholder="Filter by competition ID"
+                    className="max-w-xs"
+                  />
+                  <Button size="sm" variant="outline" onClick={() => refetchAdminTournamentClaims()}>
+                    Apply Filters
+                  </Button>
+                </div>
+
+                <div className="space-y-2 max-h-80 overflow-auto">
+                  {claimsLoading ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-20 w-full rounded-md" />
+                      ))}
+                    </div>
+                  ) : (adminTournamentClaims?.claims || []).length > 0 ? (
+                    (adminTournamentClaims?.claims || []).map((claim) => (
+                      <div key={claim.claimId} className="border rounded-md p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                          <p className="font-semibold">Claim #{claim.claimId} • {String(claim.rarity || "rare").toUpperCase()} • Card #{claim.cardId}</p>
+                          <Badge variant="outline">Entry #{claim.entryId}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-1">
+                          User: {claim.userEmail || claim.userId} • Competition: {claim.competitionName || `#${claim.competitionId || "-"}`}
+                        </p>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Player: {claim.player?.name || "Unknown"} ({claim.player?.team || "N/A"}) • Claimed: {new Date(claim.claimedAt).toLocaleString()}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Input
+                            value={reopenReasonByClaimId[claim.claimId] || ""}
+                            onChange={(e) =>
+                              setReopenReasonByClaimId((prev) => ({ ...prev, [claim.claimId]: e.target.value }))
+                            }
+                            placeholder="Reason (audit note)"
+                            className="max-w-xs"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              reopenTournamentClaimMutation.mutate({
+                                claimId: claim.claimId,
+                                reason: reopenReasonByClaimId[claim.claimId] || "",
+                              })
+                            }
+                            disabled={reopenTournamentClaimMutation.isPending}
+                          >
+                            Reopen Claim
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No tournament reward claims found for current filters.</p>
+                  )}
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4 gap-2">
+                  <div className="flex items-center gap-3">
                     <Activity className="w-5 h-5 text-purple-500" />
                     <h3 className="text-lg font-semibold">Audit Log</h3>
                   </div>
@@ -1391,6 +1600,159 @@ export default function AdminPage() {
                     <span>Monitor high-value trades for suspicious activity</span>
                   </li>
                 </ul>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="onboarding">
+            <div className="space-y-6">
+              <Card className="p-6 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold">Signup Onboarding Controls</h3>
+                    <p className="text-sm text-muted-foreground">Manage starter packs, team-name requirements, and user entry paths.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => refetchOnboardingConfig()}>
+                      <RefreshCw className="w-4 h-4 mr-1" />
+                      Refresh
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => resetOnboardingConfigMutation.mutate()}
+                      disabled={resetOnboardingConfigMutation.isPending}
+                    >
+                      Reset Defaults
+                    </Button>
+                  </div>
+                </div>
+
+                {!onboardingDraft ? (
+                  <Skeleton className="h-44 w-full" />
+                ) : (
+                  <>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <label className="flex items-center justify-between rounded-lg border p-3 text-sm">
+                        <span>Enable signup starter packs</span>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(onboardingDraft.signupPacksEnabled)}
+                          onChange={(e) =>
+                            setOnboardingDraft((prev) =>
+                              prev ? { ...prev, signupPacksEnabled: e.target.checked } : prev,
+                            )
+                          }
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between rounded-lg border p-3 text-sm">
+                        <span>Require team name on onboarding</span>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(onboardingDraft.requireTeamName)}
+                          onChange={(e) =>
+                            setOnboardingDraft((prev) =>
+                              prev ? { ...prev, requireTeamName: e.target.checked } : prev,
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Minimum team-name length</label>
+                        <Input
+                          type="number"
+                          min={2}
+                          max={30}
+                          value={onboardingDraft.teamNameMinLength}
+                          onChange={(e) =>
+                            setOnboardingDraft((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    teamNameMinLength: Math.max(2, Math.min(30, Number(e.target.value || 3))),
+                                  }
+                                : prev,
+                            )
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Onboarding entry path</label>
+                        <Input
+                          value={onboardingDraft.onboardingEntryPath}
+                          onChange={(e) =>
+                            setOnboardingDraft((prev) =>
+                              prev ? { ...prev, onboardingEntryPath: e.target.value } : prev,
+                            )
+                          }
+                          placeholder="/onboarding"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground">Dashboard checklist label</label>
+                      <Input
+                        value={onboardingDraft.starterChecklistLabel}
+                        onChange={(e) =>
+                          setOnboardingDraft((prev) =>
+                            prev ? { ...prev, starterChecklistLabel: e.target.value } : prev,
+                          )
+                        }
+                        placeholder="Open starter packs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-muted-foreground block mb-2">Pack labels (5)</label>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Input
+                            key={i}
+                            value={onboardingDraft.packLabels?.[i] || ""}
+                            onChange={(e) =>
+                              setOnboardingDraft((prev) => {
+                                if (!prev) return prev;
+                                const labels = [...(prev.packLabels || [])];
+                                while (labels.length < 5) labels.push("");
+                                labels[i] = e.target.value;
+                                return { ...prev, packLabels: labels };
+                              })
+                            }
+                            placeholder={`Pack ${i + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <Button
+                        onClick={() => onboardingDraft && saveOnboardingConfigMutation.mutate(onboardingDraft)}
+                        disabled={saveOnboardingConfigMutation.isPending}
+                      >
+                        Save Onboarding Settings
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => window.open(onboardingDraft.onboardingEntryPath || "/onboarding", "_blank", "noopener,noreferrer")}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Open Entry Link
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => window.open("/", "_blank", "noopener,noreferrer")}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Open Dashboard
+                      </Button>
+                    </div>
+                  </>
+                )}
               </Card>
             </div>
           </TabsContent>

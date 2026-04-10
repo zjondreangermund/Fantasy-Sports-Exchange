@@ -23,6 +23,7 @@ import {
   Wallet,
   Trophy,
   Activity,
+  Gem,
   LogOut,
   Shield,
   Gavel,
@@ -38,6 +39,7 @@ const menuItems = [
   { title: "Auctions", href: "/auctions", icon: Gavel },
   { title: "Wallet", href: "/wallet", icon: Wallet },
   { title: "Account", href: "/account", icon: Bell },
+  { title: "Card Lab", href: "/card-lab", icon: Gem },
 ];
 
 export function AppSidebar() {
@@ -107,11 +109,9 @@ export function AppSidebar() {
           variant="ghost"
           size="sm"
           className="w-full justify-start text-muted-foreground"
-          onClick={() => {
-            // Logout and redirect to landing page
-            fetch("/api/logout", { credentials: "include" })
-              .then(() => { window.location.href = "/"; })
-              .catch(() => { window.location.href = "/"; });
+          onClick={async () => {
+            await Promise.resolve(logout());
+            window.location.assign("/");
           }}
           data-testid="button-logout"
         >

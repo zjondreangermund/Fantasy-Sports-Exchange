@@ -1,13 +1,14 @@
-import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 // Fixed: @/hooks -> ../hooks
 import { useAuth } from "../hooks/use-auth";
-// Fixed: @/components -> ../components
-import { AppSidebar } from "../components/app-sidebar";
-import Card3D from "../components/Card3D";
+import { queryClient } from "../lib/queryClient";
+import Metal3DCard from "../components/Metal3DCard";
+import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
 // Fixed: @shared -> ../../../shared
 import { type PlayerCardWithPlayer, type Wallet, type Lineup } from "../../../shared/schema";
@@ -26,13 +27,65 @@ import {
   DollarSign,
   CheckCircle2,
   Circle,
+  Timer,
+  MessageCircle,
+  Flame,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useToast } from "../hooks/use-toast";
+
+type OnboardingConfig = {
+  signupPacksEnabled: boolean;
+  requireTeamName: boolean;
+  teamNameMinLength: number;
+  onboardingEntryPath: string;
+  starterChecklistLabel: string;
+  packLabels: string[];
+};
+
+type LiveChatMessage = {
+  id: string;
+  userId: string;
+  userName: string;
+  text: string;
+  replyToMessageId?: string;
+  replyToUserId?: string;
+  replyToUserName?: string;
+  replyToText?: string;
+  createdAt: string;
+};
+
+type LivePointEvent = {
+  id: string;
+  gameId: number;
+  team: string;
+  delta: number;
+  reason: string;
+  createdAt: string;
+};
+
+type TournamentRewardStatus = {
+  available: boolean;
+  claimed: boolean;
+  rarity: "common" | "rare" | "unique" | "epic" | "legendary";
+  competitionName?: string;
+  competitionId?: number | null;
+  entryId?: number | null;
+  cardId?: number | null;
+  rank?: number;
+  prizeAmount?: number;
+  hasMoney?: boolean;
+  hasCard?: boolean;
+};
 
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [, navigate] = useLocation();
+  const [cheers, setCheers] = useState(182);
+  const [chatInput, setChatInput] = useState("");
+  const [replyTarget, setReplyTarget] = useState<LiveChatMessage | null>(null);
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
@@ -65,7 +118,107 @@ export default function DashboardPage() {
     },
   });
 
+  const { data: onboardingConfig } = useQuery<OnboardingConfig>({
+    queryKey: ["/api/onboarding/config"],
+  });
+
+  const { data: tournamentRewardStatus, refetch: refetchTournamentReward } = useQuery<TournamentRewardStatus | null>({
+    queryKey: ["/api/rewards/tournament-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/rewards/tournament-status", { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+
+  const {
+    data: liveChatMessages,
+    refetch: refetchLiveChat,
+    isFetching: liveChatLoading,
+  } = useQuery<LiveChatMessage[]>({
+    queryKey: ["/api/live-chat/messages?limit=40"],
+    queryFn: async () => {
+      const res = await fetch("/api/live-chat/messages?limit=40", { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
+    refetchInterval: 5000,
+  });
+
+  const { data: livePointEvents } = useQuery<LivePointEvent[]>({
+    queryKey: ["/api/live/point-feed?limit=20"],
+    queryFn: async () => {
+      const res = await fetch("/api/live/point-feed?limit=20", { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
+    refetchInterval: 5000,
+  });
+
+  const sendLiveChatMutation = useMutation({
+    mutationFn: async ({ text, replyToMessageId }: { text: string; replyToMessageId?: string }) => {
+      const res = await fetch("/api/live-chat/messages", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, replyToMessageId }),
+      });
+      if (!res.ok) throw new Error("Failed to send message");
+      return res.json();
+    },
+    onSuccess: async () => {
+      setChatInput("");
+      setReplyTarget(null);
+      await refetchLiveChat();
+    },
+  });
+
+  const claimTournamentRewardMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/rewards/tournament-claim", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to claim tournament reward");
+      return res.json() as Promise<{
+        rarity: "common" | "rare" | "unique" | "epic" | "legendary";
+        cardId?: number | null;
+        prizeAmount?: number;
+        competitionName?: string;
+      }>;
+    },
+    onSuccess: async (data) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/wallet"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/rewards"] }),
+        refetchTournamentReward(),
+      ]);
+      const rarity = String(data?.rarity || "rare").toLowerCase();
+      const cardId = Number(data?.cardId || 0);
+      if (cardId > 0) {
+        navigate(`/card-reveal?source=tournament-reward&rarity=${encodeURIComponent(rarity)}&cardId=${cardId}`);
+        return;
+      }
+
+      toast({
+        title: "Congratulations! Reward claimed",
+        description: `Your ${data?.competitionName || "tournament"} cash reward of N$${Number(data?.prizeAmount || 0).toFixed(2)} has been added to your wallet.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Could not claim reward",
+        description: "Please try again in a moment.",
+        variant: "destructive",
+      });
+    },
+  });
+
   useEffect(() => {
+    if (onboardingConfig?.signupPacksEnabled === false) return;
     if (cardsLoading) return;
 
     if (Array.isArray(cards) && cards.length === 0) {
@@ -78,7 +231,7 @@ export default function DashboardPage() {
         }
       })();
     }
-  }, [cardsLoading, cards, navigate]);
+  }, [cardsLoading, cards, navigate, onboardingConfig?.signupPacksEnabled]);
 
   const totalScore = lineup?.cards?.reduce((sum, c) => {
     const scores = c.last5Scores as number[];
@@ -90,10 +243,21 @@ export default function DashboardPage() {
   const hasBalance = (wallet?.balance || 0) > 0;
 
   const checklist = [
-    { label: "Open starter packs", done: hasCards },
+    { label: onboardingConfig?.starterChecklistLabel || "Open starter packs", done: hasCards },
     { label: "Set your 5-card lineup", done: hasLineup },
     { label: "Fund wallet for market moves", done: hasBalance },
   ];
+
+  const onboardingEntryPath = onboardingConfig?.onboardingEntryPath || "/onboarding";
+
+  const weeklyEvents = useMemo(
+    () => [
+      { title: "Derby Week Boost", desc: "Manchester derby cards +10% market demand", endsIn: "2d 14h" },
+      { title: "Flash Volatility", desc: "Rare cards spread tightens for 6 hours", endsIn: "6h 08m" },
+      { title: "Weekend Tournament", desc: "Top 100 split bonus prize pool", endsIn: "3d 01h" },
+    ],
+    [],
+  );
 
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
@@ -108,6 +272,28 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
+
+        {Boolean(tournamentRewardStatus?.available) && (
+          <Card className="p-5 mb-6 border-amber-400/40 bg-gradient-to-r from-amber-500/10 to-yellow-400/10">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-amber-300 font-semibold">Tournament Winner Reward</p>
+                <h3 className="text-lg font-semibold text-foreground">Congratulations! Your reward is ready to claim</h3>
+                <p className="text-sm text-muted-foreground">
+                  {tournamentRewardStatus?.competitionName
+                    ? `${tournamentRewardStatus.competitionName} reward is waiting: ${tournamentRewardStatus?.hasMoney ? `N$${Number(tournamentRewardStatus?.prizeAmount || 0).toFixed(2)} cash` : ""}${tournamentRewardStatus?.hasMoney && tournamentRewardStatus?.hasCard ? " + " : ""}${tournamentRewardStatus?.hasCard ? `${String(tournamentRewardStatus?.rarity || "rare").toUpperCase()} card` : ""}.`
+                    : "Your tournament reward is ready to claim."}
+                </p>
+              </div>
+              <Button
+                onClick={() => claimTournamentRewardMutation.mutate()}
+                disabled={claimTournamentRewardMutation.isPending}
+              >
+                {claimTournamentRewardMutation.isPending ? "Claiming..." : tournamentRewardStatus?.hasCard ? "Claim & Reveal" : "Claim Reward"}
+              </Button>
+            </div>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <Card className="p-4">
@@ -205,7 +391,7 @@ export default function DashboardPage() {
             </p>
 
             {!hasCards ? (
-              <Button onClick={() => navigate("/onboarding")} data-testid="button-next-onboarding">
+              <Button onClick={() => navigate(onboardingEntryPath)} data-testid="button-next-onboarding">
                 Go to Onboarding
               </Button>
             ) : !hasLineup ? (
@@ -242,7 +428,7 @@ export default function DashboardPage() {
           ) : lineup?.cards && lineup.cards.length > 0 ? (
             <div className="flex flex-wrap gap-4">
               {lineup.cards.map((card) => (
-                <Card3D key={card.id} card={card} size="md" />
+                <Metal3DCard key={card.id} player={toFantasyCardData(card)} className="!w-[208px]" />
               ))}
             </div>
           ) : (
@@ -286,6 +472,151 @@ export default function DashboardPage() {
               </Card>
             </Link>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-8">
+          <Card className="p-5 border-primary/30 bg-primary/5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold flex items-center gap-2">
+                <Timer className="w-4 h-4 text-primary" />
+                Weekly Live Events
+              </h3>
+              <Badge variant="secondary">Live Economy</Badge>
+            </div>
+            <div className="space-y-3">
+              {weeklyEvents.map((evt) => (
+                <div key={evt.title} className="rounded-lg border border-border/60 p-3 bg-background/40">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-sm">{evt.title}</p>
+                    <Badge>{evt.endsIn}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{evt.desc}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-5 border-border/70">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold flex items-center gap-2">
+                <MessageCircle className="w-4 h-4 text-primary" />
+                Social Arena
+              </h3>
+              <Button size="sm" variant="outline" onClick={() => setCheers((v) => v + 1)}>
+                <Flame className="w-4 h-4 mr-1 text-orange-500" /> Cheer ({cheers})
+              </Button>
+            </div>
+
+            <div className="mb-3 rounded-md border border-border/60 bg-background/40 px-3 py-2">
+              <p className="text-xs font-medium mb-2 text-muted-foreground">Live Point Dots</p>
+              <div className="space-y-1.5 max-h-24 overflow-auto">
+                {(livePointEvents || []).slice().reverse().slice(0, 8).map((event) => (
+                  <div key={event.id} className="flex items-center gap-2 text-xs">
+                    <span className={`h-2.5 w-2.5 rounded-full ${event.delta >= 0 ? "bg-green-500" : "bg-red-500"}`} />
+                    <span className="text-foreground">{event.team}</span>
+                    <span className={event.delta >= 0 ? "text-green-500" : "text-red-500"}>
+                      {event.delta >= 0 ? `+${event.delta}` : event.delta}
+                    </span>
+                    <span className="text-muted-foreground">{event.reason}</span>
+                  </div>
+                ))}
+                {(!livePointEvents || livePointEvents.length === 0) && (
+                  <p className="text-xs text-muted-foreground">No point events yet.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2 mb-3 max-h-36 overflow-auto">
+              {(liveChatMessages || []).slice().reverse().slice(0, 8).map((message) => (
+                <div key={message.id} className="text-sm rounded-md border border-border/60 bg-background/40 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="font-medium text-xs text-foreground">{message.userName || "Manager"}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="text-[10px] text-primary hover:underline"
+                        onClick={() => {
+                          setReplyTarget(message);
+                          setChatInput((prev) => {
+                            const tag = `@${message.userName} `;
+                            if (prev.trim().length === 0) return tag;
+                            if (prev.startsWith(tag)) return prev;
+                            return `${tag}${prev}`;
+                          });
+                        }}
+                      >
+                        Reply
+                      </button>
+                      <span className="text-[10px] text-muted-foreground">
+                        {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  </div>
+                  {message.replyToMessageId && (
+                    <div className="mb-1 rounded border border-primary/30 bg-primary/10 px-2 py-1">
+                      <p className="text-[10px] text-primary font-medium">Replying to @{message.replyToUserName || "Manager"}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{message.replyToText || "Message"}</p>
+                    </div>
+                  )}
+                  <p className="text-xs text-foreground/90">{message.text}</p>
+                </div>
+              ))}
+              {(!liveChatMessages || liveChatMessages.length === 0) && (
+                <div className="text-xs rounded-md border border-border/60 bg-background/40 px-3 py-2 text-muted-foreground">
+                  No chat messages yet.
+                </div>
+              )}
+            </div>
+
+            {replyTarget && (
+              <div className="mb-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] text-primary font-medium">
+                    Replying to @{replyTarget.userName}
+                  </p>
+                  <button
+                    className="text-[10px] text-muted-foreground hover:text-foreground"
+                    onClick={() => setReplyTarget(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground truncate">{replyTarget.text}</p>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder={
+                  liveChatLoading
+                    ? "Refreshing chat..."
+                    : replyTarget
+                    ? `Reply to @${replyTarget.userName}`
+                    : "Send a live message"
+                }
+                maxLength={280}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const text = chatInput.trim();
+                    if (!text || sendLiveChatMutation.isPending) return;
+                    sendLiveChatMutation.mutate({ text, replyToMessageId: replyTarget?.id });
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                onClick={() => {
+                  const text = chatInput.trim();
+                  if (!text) return;
+                  sendLiveChatMutation.mutate({ text, replyToMessageId: replyTarget?.id });
+                }}
+                disabled={sendLiveChatMutation.isPending || chatInput.trim().length === 0}
+              >
+                Send
+              </Button>
+            </div>
+          </Card>
         </div>
 
         <div className="mt-10">

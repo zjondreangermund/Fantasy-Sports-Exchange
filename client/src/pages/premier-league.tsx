@@ -16,7 +16,6 @@ import {
   TableRow,
 } from "../components/ui/table";
 import { type EplPlayer, type EplFixture, type EplInjury, type EplStanding } from "../../../shared/schema";
-import Card3D from "../components/Card3D";
 import LiveGames from "../components/LiveGames";
 import {
   Trophy, Calendar, Users, AlertTriangle, Search, RefreshCw,
@@ -242,7 +241,7 @@ export default function PremierLeaguePage() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 {team.teamLogo && (
-                                  <img src={team.teamLogo} alt={team.teamName} className="w-6 h-6 object-contain" />
+                                  <img src={team.teamLogo} alt={team.teamName} className="w-6 h-6 object-contain" loading="lazy" decoding="async" />
                                 )}
                                 <span className="font-medium text-sm">{team.teamName}</span>
                               </div>
@@ -332,7 +331,7 @@ export default function PremierLeaguePage() {
                       </div>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 flex-1">
-                          {f.homeTeamLogo && <img src={f.homeTeamLogo} alt="" className="w-7 h-7 object-contain" />}
+                          {f.homeTeamLogo && <img src={f.homeTeamLogo} alt="" className="w-7 h-7 object-contain" loading="lazy" decoding="async" />}
                           <span className="font-medium text-sm">{f.homeTeam}</span>
                         </div>
                         <div className="px-4 text-center min-w-[80px]">
@@ -347,7 +346,7 @@ export default function PremierLeaguePage() {
                         </div>
                         <div className="flex items-center gap-2 flex-1 justify-end">
                           <span className="font-medium text-sm">{f.awayTeam}</span>
-                          {f.awayTeamLogo && <img src={f.awayTeamLogo} alt="" className="w-7 h-7 object-contain" />}
+                          {f.awayTeamLogo && <img src={f.awayTeamLogo} alt="" className="w-7 h-7 object-contain" loading="lazy" decoding="async" />}
                         </div>
                       </div>
                       {f.venue && (
@@ -389,7 +388,7 @@ export default function PremierLeaguePage() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 {inj.playerPhoto && (
-                                  <img src={inj.playerPhoto} alt="" className="w-8 h-8 rounded-full object-cover" />
+                                  <img src={inj.playerPhoto} alt="" className="w-8 h-8 rounded-full object-cover" loading="lazy" decoding="async" />
                                 )}
                                 <span className="font-medium text-sm">{inj.playerName}</span>
                               </div>

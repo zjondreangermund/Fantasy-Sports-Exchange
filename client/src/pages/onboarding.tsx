@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import Card3D from "../components/Card3D";
+import CardThumbnail from "../components/CardThumbnail";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 import { Package, ChevronRight, Check, Sparkles, Shield, Swords, Zap, Target, Flame } from "lucide-react";
 import { motion } from "framer-motion";
@@ -23,6 +23,15 @@ const packColors = [
 ];
 const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"];
 
+type OnboardingConfig = {
+  signupPacksEnabled: boolean;
+  requireTeamName: boolean;
+  teamNameMinLength: number;
+  onboardingEntryPath: string;
+  starterChecklistLabel: string;
+  packLabels: string[];
+};
+
 export default function OnboardingPage() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState<OnboardingStep>("teamName");
@@ -31,10 +40,17 @@ export default function OnboardingPage() {
   const [revealedPacks, setRevealedPacks] = useState<Set<number>>(new Set());
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<number>>(new Set());
 
+  const { data: onboardingConfig } = useQuery<OnboardingConfig>({
+    queryKey: ["/api/onboarding/config"],
+  });
+
+  const resolvedTeamNameMinLength = Math.max(2, Number(onboardingConfig?.teamNameMinLength || 3));
+
   // ✅ Ensure offer exists (safe even if dashboard already called it)
   useEffect(() => {
+    if (onboardingConfig?.signupPacksEnabled === false) return;
     apiRequest("POST", "/api/onboarding/create-offer", {}).catch(() => {});
-  }, []);
+  }, [onboardingConfig?.signupPacksEnabled]);
 
   const { data: onboardingData, isLoading, refetch } = useQuery<{
     packCards: number[][];
@@ -62,7 +78,13 @@ export default function OnboardingPage() {
     if (onboardingData?.completed) setStep("done");
   }, [onboardingData?.completed]);
 
-  // Turn players into "fake cards" so your existing <PlayerCard /> can render them
+  useEffect(() => {
+    if (onboardingConfig?.requireTeamName === false) {
+      setStep((prev) => (prev === "teamName" ? "packs" : prev));
+    }
+  }, [onboardingConfig?.requireTeamName]);
+
+  // Turn players into "fake cards" so CardThumbnail can render them
   const cardsByPlayerId = useMemo(() => {
     const map = new Map<number, PlayerCardWithPlayer>();
     const players = onboardingData?.players || [];
@@ -184,7 +206,7 @@ export default function OnboardingPage() {
 
   const handleContinueAfterTeamName = async () => {
     const trimmedName = teamName.trim();
-    if (trimmedName.length < 3) return;
+    if (trimmedName.length < resolvedTeamNameMinLength) return;
 
     try {
       await updateTeamNameMutation.mutateAsync(trimmedName);
@@ -211,11 +233,30 @@ export default function OnboardingPage() {
     );
   }
 
+  if (onboardingConfig?.signupPacksEnabled === false) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8">
+        <div className="text-center max-w-md space-y-3">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Starter packs are currently unavailable</h1>
+          <p className="text-muted-foreground">An admin has temporarily disabled signup packs. You can continue to the dashboard.</p>
+          <Button onClick={() => setLocation("/")}>Continue</Button>
+        </div>
+      </div>
+    );
+  }
+
   if (!onboardingData) return null;
 
-  const packLabels = defaultPackLabels;
+  const packLabels =
+    Array.isArray(onboardingConfig?.packLabels) && onboardingConfig.packLabels.length === 5
+      ? onboardingConfig.packLabels
+      : defaultPackLabels;
 
   if (step === "teamName") {
+    if (onboardingConfig?.requireTeamName === false) {
+      return null;
+    }
+
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8">
         <motion.div
@@ -246,7 +287,7 @@ export default function OnboardingPage() {
             
             <Button
               onClick={handleContinueAfterTeamName}
-              disabled={teamName.trim().length < 3 || updateTeamNameMutation.isPending || createOfferMutation.isPending}
+              disabled={teamName.trim().length < resolvedTeamNameMinLength || updateTeamNameMutation.isPending || createOfferMutation.isPending}
               size="lg"
               className="w-full text-lg"
             >
@@ -259,9 +300,9 @@ export default function OnboardingPage() {
               )}
             </Button>
             
-            {teamName.trim().length > 0 && teamName.trim().length < 3 && (
+            {teamName.trim().length > 0 && teamName.trim().length < resolvedTeamNameMinLength && (
               <p className="text-sm text-destructive">
-                Team name must be at least 3 characters
+                Team name must be at least {resolvedTeamNameMinLength} characters
               </p>
             )}
           </div>
@@ -331,7 +372,7 @@ export default function OnboardingPage() {
                   <div className="flex gap-2">
                     {pack.map((card) => (
                       <div key={card.id} className="transition-all duration-300">
-                        <Card3D card={card} size="sm" />
+                        <CardThumbnail card={card} size="sm" />
                       </div>
                     ))}
                   </div>
@@ -409,7 +450,7 @@ export default function OnboardingPage() {
                         }`}
                         onClick={() => toggleSelect(card.playerId, packIndex)}
                       >
-                        <Card3D card={card} size="md" selected={isSelected} selectable />
+                        <CardThumbnail card={card} size="md" selected={isSelected} selectable />
                       </div>
                     );
                   })}

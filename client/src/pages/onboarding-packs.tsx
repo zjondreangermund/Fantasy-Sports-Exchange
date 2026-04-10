@@ -1,6 +1,15 @@
-// onboarding-packs.tsx (fixed)
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import CardThumbnail from "../components/CardThumbnail";
+import RevealFrame from "../components/RevealFrame";
+import type { PlayerCardWithPlayer } from "../../../shared/schema";
 
-function OnboardingPacks() {
+type Pack = {
+  title: string;
+  cards: PlayerCardWithPlayer[];
+};
+
+export default function OnboardingPacksScene() {
   const [packs, setPacks] = useState<Pack[]>([]);
   const [activePack, setActivePack] = useState<number | null>(null);
   const [openedPacks, setOpenedPacks] = useState<Record<number, boolean>>({});
@@ -11,10 +20,10 @@ function OnboardingPacks() {
       .then((res) => res.json())
       .then((players) => {
         // Split into packs of 3
-        const nextPacks: Pack[] = [];
+        const packs: Pack[] = [];
         for (let i = 0; i < players.length; i += 3) {
-          nextPacks.push({
-            title: `PACK ${nextPacks.length + 1}`,
+          packs.push({
+            title: `PACK ${packs.length + 1}`,
             cards: players.slice(i, i + 3).map((p: any) => ({
               id: p.id,
               playerId: p.id,
@@ -34,7 +43,7 @@ function OnboardingPacks() {
             })),
           });
         }
-        setPacks(nextPacks);
+        setPacks(packs);
       })
       .catch((err) => {
         console.error("Failed to load players for packs:", err);
@@ -99,7 +108,7 @@ function OnboardingPacks() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <div className="text-xs text-white/60">REVEAL</div>
-                    <div className="text-2xl font-black">{packs[activePack]?.title}</div>
+                    <div className="text-2xl font-black">{packs[activePack].title}</div>
                   </div>
 
                   <button
@@ -113,17 +122,21 @@ function OnboardingPacks() {
                 {/* Pack opening animation */}
                 <PackOpenAnimation
                   opened={!!openedPacks[activePack]}
-                  onOpen={() => setOpenedPacks((prev) => ({ ...prev, [activePack]: true }))}
+                  onOpen={() =>
+                    setOpenedPacks((prev) => ({ ...prev, [activePack]: true }))
+                  }
                 />
 
                 {/* Cards reveal tray */}
                 <div className="mt-6">
-                  <div className="text-sm font-bold text-white/80 mb-3">
-                    Cards ({packs[activePack]?.cards.length || 0})
-                  </div>
+                  <div className="text-sm font-bold text-white/80 mb-3">Cards ({packs[activePack]?.cards.length || 0})</div>
                   <div className="flex flex-wrap gap-4">
-                    {packs[activePack]?.cards.map((card) => (
-                      <PlayerCard key={card.id} card={card} size="md" />
+                    {packs[activePack]?.cards.map((card, index) => (
+                      <div key={card.id} style={{ animationDelay: `${index * 80}ms` }}>
+                        <RevealFrame rarity={card.rarity} reveal={!!openedPacks[activePack]}>
+                          <CardThumbnail card={card} size="md" />
+                        </RevealFrame>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -134,9 +147,9 @@ function OnboardingPacks() {
       </div>
     </div>
   );
+
 }
 
-// ✅ MUST be outside OnboardingPacks()
 function PackOpenAnimation({ opened, onOpen }: { opened: boolean; onOpen: () => void }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6 overflow-hidden relative">
@@ -184,5 +197,3 @@ function PackOpenAnimation({ opened, onOpen }: { opened: boolean; onOpen: () => 
     </div>
   );
 }
-
-export default OnboardingPacks;

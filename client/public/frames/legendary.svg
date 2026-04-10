@@ -1,0 +1,11 @@
+<svg width="512" height="732" viewBox="0 0 512 732" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="legendaryStroke" x1="256" y1="0" x2="256" y2="732" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFDA7A"/>
+      <stop offset="0.45" stop-color="#FF9A2F"/>
+      <stop offset="1" stop-color="#FF6A00"/>
+    </linearGradient>
+  </defs>
+  <path d="M28 146L72 48L146 110L210 32L256 96L302 32L366 110L440 48L484 146V722H28V146Z" fill="none" stroke="url(#legendaryStroke)" stroke-width="20"/>
+  <path d="M42 158L82 66L150 124L212 48L256 112L300 48L362 124L430 66L470 158V706H42V158Z" fill="none" stroke="rgba(255,196,110,0.30)" stroke-width="3"/>
+</svg>

@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
-// IMPORT YOUR 3D CARD COMPONENT HERE
-import Card3D from "../components/Card3D";
+import CollectionPlayerCard from "../components/CollectionPlayerCard";
+import CardShowcase from "../components/CardShowcase";
+import SceneAtmosphere from "../components/SceneAtmosphere";
+import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -16,26 +18,24 @@ import {
   DialogTitle,
   DialogFooter,
 } from "../components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
 import { type PlayerCardWithPlayer, type Wallet, SITE_FEE_RATE } from "../../../shared/schema";
-import { Search, Filter, ShoppingCart, Tag, DollarSign, ArrowLeftRight, TrendingUp } from "lucide-react";
+import { Search, ShoppingCart, Tag, TrendingUp } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
+import { useUiSound } from "../hooks/use-ui-sound";
+import { useIsMobile } from "../hooks/use-mobile";
 
 export default function MarketplacePage() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
+  const { play } = useUiSound();
+  const previousBuyCardId = useRef<number | null>(null);
   const [search, setSearch] = useState("");
   const [rarityFilter, setRarityFilter] = useState("all");
   const [buyCard, setBuyCard] = useState<PlayerCardWithPlayer | null>(null);
-  const [sellCard, setSellCard] = useState<PlayerCardWithPlayer | null>(null);
-  const [sellPrice, setSellPrice] = useState("");
   const [activeTab, setActiveTab] = useState("buy");
+  const [buyVisibleCount, setBuyVisibleCount] = useState(12);
+  const [sellVisibleCount, setSellVisibleCount] = useState(12);
   
   const { data: listings, isLoading } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/marketplace"],
@@ -97,7 +97,7 @@ export default function MarketplacePage() {
   });
 
   // Sort listings: group by rarity, then by price (lowest first)
-  const sortedListings = filteredListings?.sort((a, b) => {
+  const sortedListings = [...(filteredListings || [])].sort((a, b) => {
     const rarityOrder = ["common", "rare", "unique", "epic", "legendary"];
     const rarityA = rarityOrder.indexOf(a.rarity);
     const rarityB = rarityOrder.indexOf(b.rarity);
@@ -111,9 +111,48 @@ export default function MarketplacePage() {
 
   // Filter user's listed cards
   const myListedCards = myCards?.filter(card => card.forSale);
+  const visibleBuyListings = isMobile ? sortedListings.slice(0, buyVisibleCount) : sortedListings;
+  const visibleSellListings = isMobile ? (myListedCards || []).slice(0, sellVisibleCount) : (myListedCards || []);
+
+  useEffect(() => {
+    setBuyVisibleCount(12);
+  }, [search, rarityFilter, activeTab, isMobile]);
+
+  useEffect(() => {
+    setSellVisibleCount(12);
+  }, [activeTab, isMobile, myListedCards?.length]);
+
+  useEffect(() => {
+    const currentId = buyCard?.id ?? null;
+    if (currentId && previousBuyCardId.current !== currentId) {
+      play("reveal");
+    }
+    previousBuyCardId.current = currentId;
+  }, [buyCard?.id, play]);
+
+  useEffect(() => {
+    if (!visibleBuyListings.length) return;
+    const snapshot = visibleBuyListings.slice(0, 5).map((card) => {
+      const fantasy = toFantasyCardData(card, { imageWidth: 1024 });
+      return {
+        id: card.id,
+        name: card.player?.name,
+        rarity: card.rarity,
+        image: fantasy.image,
+        candidates: fantasy.imageCandidates?.slice(0, 3),
+      };
+    });
+    console.info("[Marketplace] card render debug", snapshot);
+  }, [visibleBuyListings]);
+
+  const handleOpenBuyCard = (card: PlayerCardWithPlayer) => {
+    play("click");
+    setBuyCard(card);
+  };
 
   return (
-    <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+    <div className="relative flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+      <SceneAtmosphere variant="cabinet" />
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div>
@@ -159,28 +198,13 @@ export default function MarketplacePage() {
                 ))}
               </div>
             ) : sortedListings && sortedListings.length > 0 ? (
-              <div 
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 preserve-3d"
-                style={{ transformStyle: "preserve-3d" }}
-              >
-                {sortedListings.map((card) => (
-                  <div 
-                    key={card.id} 
-                    className="flex justify-center items-center card-3d-container bg-transparent shadow-none p-0"
-                    style={{ 
-                      transformStyle: "preserve-3d",
-                      minHeight: "380px",
-                      perspectiveOrigin: "center"
-                    }}
-                  >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
+                {visibleBuyListings.map((card) => (
+                  <div key={card.id} className="flex items-center justify-center min-h-[360px]">
                     <div className="flex flex-col items-center gap-2">
-                      <Card3D
-                        card={card}
-                        size="md"
-                        showSaleBadge={false}
-                        selectable
-                        onClick={() => setBuyCard(card)}
-                      />
+                      <button type="button" className="w-full text-left" onClick={() => handleOpenBuyCard(card)}>
+                        <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1024 })} className={isMobile ? "!w-[172px]" : "!w-[220px]"} />
+                      </button>
                       <p className="text-xs text-muted-foreground">
                         Seller: {card.ownerUsername || card.ownerName || "FantasyFC"}
                       </p>
@@ -190,6 +214,13 @@ export default function MarketplacePage() {
                     </div>
                   </div>
                 ))}
+                {isMobile && sortedListings.length > buyVisibleCount ? (
+                  <div className="col-span-full flex justify-center mt-2">
+                    <Button variant="outline" onClick={() => setBuyVisibleCount((prev) => prev + 12)}>
+                      Load More Listings
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <Card className="p-12 text-center bg-background/50 backdrop-blur-sm border-border/50">
@@ -203,32 +234,24 @@ export default function MarketplacePage() {
 
           <TabsContent value="sell">
             {myListedCards && myListedCards.length > 0 ? (
-              <div 
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 preserve-3d"
-                style={{ transformStyle: "preserve-3d" }}
-              >
-                {myListedCards.map((card) => (
-                  <div 
-                    key={card.id} 
-                    className="flex justify-center items-center card-3d-container bg-transparent shadow-none p-0 relative"
-                    style={{ 
-                      transformStyle: "preserve-3d",
-                      minHeight: "380px",
-                      perspectiveOrigin: "center"
-                    }}
-                  >
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
+                {visibleSellListings.map((card) => (
+                  <div key={card.id} className="relative flex items-center justify-center min-h-[360px]">
                     <div className="flex flex-col items-center gap-2">
-                      <Card3D
-                        card={card}
-                        size="md"
-                        showSaleBadge={false}
-                      />
+                      <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1024 })} className={isMobile ? "!w-[172px]" : "!w-[220px]"} />
                       <p className="text-sm font-semibold text-green-500">
                         N${(card.price || 0).toFixed(2)}
                       </p>
                     </div>
                   </div>
                 ))}
+                {isMobile && myListedCards.length > sellVisibleCount ? (
+                  <div className="col-span-full flex justify-center mt-2">
+                    <Button variant="outline" onClick={() => setSellVisibleCount((prev) => prev + 12)}>
+                      Load More My Listings
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <Card className="p-12 text-center bg-background/50 backdrop-blur-sm border-border/50">
@@ -246,12 +269,22 @@ export default function MarketplacePage() {
       </div>
 
       {/* Buy Dialog */}
-      <Dialog open={!!buyCard} onOpenChange={() => setBuyCard(null)}>
+      <Dialog
+        open={!!buyCard}
+        onOpenChange={(open) => {
+          if (!open) setBuyCard(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirm Purchase</DialogTitle>
           </DialogHeader>
           <div className="py-4">
+            {buyCard && (
+              <div className="mb-4 flex justify-center">
+                <CardShowcase card={buyCard} size="sm" />
+              </div>
+            )}
             <p>Are you sure you want to buy <strong>{buyCard?.player?.name}</strong> for N${buyCard?.price}?</p>
             <p className="text-sm text-muted-foreground mt-1">
               Seller: {buyCard?.ownerUsername || buyCard?.ownerName || "FantasyFC"}
@@ -259,9 +292,21 @@ export default function MarketplacePage() {
             <p className="text-sm text-muted-foreground mt-2">Your Balance: N${wallet?.balance || 0}</p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBuyCard(null)}>Cancel</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                play("click");
+                setBuyCard(null);
+              }}
+            >
+              Cancel
+            </Button>
             <Button 
-              onClick={() => buyCard && buyMutation.mutate(buyCard.id)}
+              onClick={() => {
+                if (!buyCard) return;
+                play("click");
+                buyMutation.mutate(buyCard.id);
+              }}
               disabled={buyMutation.isPending || (wallet?.balance || 0) < (buyCard?.price || 0)}
             >
               {buyMutation.isPending ? "Processing..." : "Confirm Purchase"}

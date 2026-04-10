@@ -4,9 +4,9 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes.js";
 import { serveStatic } from "./static.js";
 import { createServer } from "http";
+import fs from "fs";
+import path from "path";
 
-// ✅ EPL image proxy
-import axios from "axios";
 
 // ✅ Google Auth / Sessions
 import session from "express-session";
@@ -143,12 +143,9 @@ app.get("/api/image-proxy", async (req, res) => {
   }
 
   try {
-    const r = await axios.get(target.toString(), {
-      responseType: "arraybuffer",
-      timeout: 20000,
-      maxRedirects: 5,
-      decompress: true,
-      validateStatus: () => true,
+    const r = await fetch(target.toString(), {
+      method: "GET",
+      redirect: "follow",
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -161,8 +158,8 @@ app.get("/api/image-proxy", async (req, res) => {
       },
     });
 
-    const ct = String(r.headers["content-type"] || "");
-    const ok = r.status >= 200 && r.status < 300;
+    const ct = String(r.headers.get("content-type") || "");
+    const ok = r.ok;
 
     // ✅ PL sometimes returns XML/HTML "AccessDenied" — reject it
     if (!ok || !ct.startsWith("image/")) {
@@ -177,7 +174,8 @@ app.get("/api/image-proxy", async (req, res) => {
     res.setHeader("Content-Type", ct);
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-    return res.send(Buffer.from(r.data));
+    const data = Buffer.from(await r.arrayBuffer());
+    return res.send(data);
   } catch (e: any) {
     console.error("image-proxy error", e?.message);
     return res.status(502).json({ message: "Upstream image fetch failed" });
@@ -235,12 +233,15 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // Setup vite/static after routes
-  if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-  } else {
+  // Prefer static build assets whenever they exist (deployed/built runtime).
+  const builtClientIndex = path.resolve(process.cwd(), "dist", "public", "index.html");
+  const hasBuiltClient = fs.existsSync(builtClientIndex);
+
+  if (process.env.NODE_ENV === "development" && !hasBuiltClient) {
     const { setupVite } = await import("./vite.js");
     await setupVite(httpServer, app);
+  } else {
+    serveStatic(app);
   }
 
   const port = parseInt(process.env.PORT || "5000", 10);

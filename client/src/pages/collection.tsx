@@ -1,12 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 // Fixed: @/lib -> ../lib
 import { apiRequest, queryClient } from "../lib/queryClient";
-// Fixed: @/components -> ../components
-import Card3D from "../components/Card3D";
+import CollectionPlayerCard from "../components/CollectionPlayerCard";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
 import { Input } from "../components/ui/input";
 import {
@@ -19,13 +17,17 @@ import {
 } from "../components/ui/dialog";
 // Fixed: @shared -> ../../../shared
 import { type PlayerCardWithPlayer, type Lineup } from "../../../shared/schema";
-import { Filter, Save, Check, DollarSign } from "lucide-react";
+import { Filter, DollarSign } from "lucide-react";
 // Fixed: @/hooks -> ../hooks
 import { useToast } from "../hooks/use-toast";
+import { toFantasyCardData } from "../lib/fantasy-card-adapter";
+import { useIsMobile } from "../hooks/use-mobile";
 
 export default function CollectionPage() {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [filter, setFilter] = useState<string>("all");
+  const [visibleCount, setVisibleCount] = useState(12);
   const [editingLineup, setEditingLineup] = useState(false);
   const [selectedForLineup, setSelectedForLineup] = useState<Set<number>>(
     new Set(),
@@ -84,6 +86,7 @@ export default function CollectionPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
       setListCard(null);
       setListPrice("");
       toast({ title: "Card listed for sale!" });
@@ -104,6 +107,7 @@ export default function CollectionPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
       toast({ title: "Listing cancelled" });
     },
     onError: (error: any) => {
@@ -116,6 +120,14 @@ export default function CollectionPage() {
   });
 
   const handleListCard = (card: PlayerCardWithPlayer) => {
+    if (String(card.rarity || "").toLowerCase() === "common") {
+      toast({
+        title: "Cannot sell common cards",
+        description: "Common cards are tournament-only and can’t be sold.",
+        variant: "destructive",
+      });
+      return;
+    }
     setListCard(card);
     const basePrice = BASE_PRICES[card.rarity] || 0;
     setListPrice(basePrice.toString());
@@ -147,6 +159,27 @@ export default function CollectionPage() {
     if (filter === "all") return true;
     return c.rarity === filter;
   });
+
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [filter, isMobile, cards?.length]);
+
+  const visibleCards = isMobile ? (filteredCards || []).slice(0, visibleCount) : (filteredCards || []);
+
+  useEffect(() => {
+    if (!visibleCards.length) return;
+    const snapshot = visibleCards.slice(0, 5).map((card) => {
+      const fantasy = toFantasyCardData(card, { imageWidth: 1024 });
+      return {
+        id: card.id,
+        name: card.player?.name,
+        rarity: card.rarity,
+        image: fantasy.image,
+        candidates: fantasy.imageCandidates?.slice(0, 3),
+      };
+    });
+    console.info("[Collection] card render debug", snapshot);
+  }, [visibleCards]);
 
   const startEditLineup = () => {
     setEditingLineup(true);
@@ -209,24 +242,13 @@ export default function CollectionPage() {
             ))}
           </div>
         ) : filteredCards && filteredCards.length > 0 ? (
-          <div 
-            className="flex flex-wrap gap-8 justify-center preserve-3d"
-            style={{ transformStyle: "preserve-3d" }}
-          >
-            {filteredCards.map((card) => {
-              const isInLineup = lineupData?.lineup?.cardIds?.includes(card.id);
+          <div className="flex flex-wrap gap-4 md:gap-5 justify-center">
+            {visibleCards.map((card) => {
+              const fantasyCard = toFantasyCardData(card, { imageWidth: 1024 });
               return (
-                <div 
-                  key={card.id} 
-                  className="card-3d-container bg-transparent shadow-none p-0" 
-                  style={{ 
-                    transformStyle: "preserve-3d",
-                    minHeight: "380px",
-                    position: "relative"
-                  }}
-                >
-                  <Card3D card={card} />
-                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 z-30 flex gap-2">
+                <div key={card.id} className="flex min-h-[360px] flex-col items-center gap-2">
+                  <CollectionPlayerCard player={fantasyCard} className={isMobile ? "!w-[172px]" : "!w-[220px]"} />
+                  <div className="z-30 flex gap-2">
                     {card.forSale ? (
                       <Button
                         size="sm"
@@ -236,6 +258,10 @@ export default function CollectionPage() {
                         className="text-xs"
                       >
                         Cancel (N${card.price})
+                      </Button>
+                    ) : String(card.rarity || "").toLowerCase() === "common" ? (
+                      <Button size="sm" variant="outline" disabled className="text-xs">
+                        Tournament Only
                       </Button>
                     ) : (
                       <Button
@@ -252,6 +278,13 @@ export default function CollectionPage() {
                 </div>
               );
             })}
+            {isMobile && filteredCards.length > visibleCount ? (
+              <div className="w-full flex justify-center mt-2">
+                <Button variant="outline" onClick={() => setVisibleCount((prev) => prev + 12)}>
+                  Load More Cards
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : (
           <Card className="p-8 text-center">

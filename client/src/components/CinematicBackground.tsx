@@ -75,7 +75,7 @@ export default function CinematicBackground({
           muted
           loop
           playsInline
-          preload="auto"
+          preload="metadata"
           poster={posterSrc}
           onError={handleVideoError}
         >

@@ -3,7 +3,7 @@ import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Skeleton } from "./ui/skeleton";
 import { Activity, Clock, ShieldAlert, Save, Sparkles } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface LiveGame {
   id: number;
@@ -35,6 +35,9 @@ interface LiveGame {
 }
 
 export default function LiveGames() {
+  const previousSnapshot = useRef<Record<number, { hs: number; as: number; ha: number; aa: number }>>({});
+  const [burstState, setBurstState] = useState<Record<number, "goal" | "assist" | null>>({});
+
   const { data: liveGames = [], isLoading, refetch } = useQuery<LiveGame[]>({
     queryKey: ["/api/epl/live-games"],
     queryFn: async () => {
@@ -50,6 +53,45 @@ export default function LiveGames() {
   useEffect(() => {
     refetch();
   }, [refetch]);
+
+  useEffect(() => {
+    if (!liveGames?.length) return;
+
+    const nextBurst: Record<number, "goal" | "assist" | null> = {};
+    for (const game of liveGames) {
+      const homeAssists = Number(game.statsSummary?.assists?.home ?? 0);
+      const awayAssists = Number(game.statsSummary?.assists?.away ?? 0);
+      const prev = previousSnapshot.current[game.id];
+
+      if (prev) {
+        const goalIncreased = game.homeTeam.score > prev.hs || game.awayTeam.score > prev.as;
+        const assistIncreased = homeAssists > prev.ha || awayAssists > prev.aa;
+        if (goalIncreased) nextBurst[game.id] = "goal";
+        else if (assistIncreased) nextBurst[game.id] = "assist";
+      }
+
+      previousSnapshot.current[game.id] = {
+        hs: game.homeTeam.score,
+        as: game.awayTeam.score,
+        ha: homeAssists,
+        aa: awayAssists,
+      };
+    }
+
+    if (Object.keys(nextBurst).length) {
+      setBurstState((prev) => ({ ...prev, ...nextBurst }));
+      const timer = window.setTimeout(() => {
+        setBurstState((prev) => {
+          const copy = { ...prev };
+          for (const key of Object.keys(nextBurst)) {
+            delete copy[Number(key)];
+          }
+          return copy;
+        });
+      }, 4200);
+      return () => window.clearTimeout(timer);
+    }
+  }, [liveGames]);
 
   const getMinutesDisplay = (minutes: number) => {
     if (minutes === 0) return "Kick Off";
@@ -134,8 +176,13 @@ export default function LiveGames() {
           return (
         <Card
           key={game.id}
-          className="p-6 bg-gradient-to-br from-card/80 to-card/50 backdrop-blur-sm border-border/50 hover:border-purple-500/30 transition-all"
+          className={`p-6 bg-gradient-to-br from-card/80 to-card/50 backdrop-blur-sm border-border/50 hover:border-purple-500/30 transition-all relative overflow-hidden ${
+            burstState[game.id] ? "ring-2 ring-emerald-400/70" : ""
+          }`}
         >
+          {burstState[game.id] && (
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_45%,rgba(16,185,129,0.28),transparent_60%)] animate-pulse" />
+          )}
           <div className="flex flex-col gap-4">
             {/* Header with time */}
             <div className="flex items-center justify-between">
@@ -155,6 +202,13 @@ export default function LiveGames() {
                 })}
               </span>
             </div>
+
+            {burstState[game.id] === "goal" && (
+              <Badge className="w-fit bg-emerald-600 text-white animate-pulse">GOAL! Card glow activated ✨</Badge>
+            )}
+            {burstState[game.id] === "assist" && (
+              <Badge className="w-fit bg-cyan-600 text-white animate-pulse">ASSIST! Confetti moment 🎉</Badge>
+            )}
 
             {/* Score Display */}
             <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-center">

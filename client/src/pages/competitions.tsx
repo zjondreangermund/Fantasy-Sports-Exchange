@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 // Fixed: @/lib -> ../lib
 import { apiRequest, queryClient } from "../lib/queryClient";
 // Fixed: @/components -> ../components
-import Card3D from "../components/Card3D";
+import CardThumbnail from "../components/CardThumbnail";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -26,6 +26,8 @@ import RewardPopup from "../components/RewardPopup";
 
 type EnrichedEntry = CompetitionEntry & { userName: string; userImage: string | null };
 type CompetitionWithEntries = Competition & {
+  submissionClosesAt?: string;
+  entryOpen?: boolean;
   entries: EnrichedEntry[];
   entryCount: number;
   winner?: {
@@ -136,7 +138,17 @@ export default function CompetitionsPage() {
   const liveComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && (c.status === "open" || c.status === "active")) || [];
   const upcomingComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && c.status === "upcoming") || [];
   const completedComps = (Array.isArray(competitions) ? competitions : [])?.filter(c => c && c.status === "completed") || [];
-  const availableCards = (Array.isArray(myCards) ? myCards : [])?.filter(c => c && !c.forSale) || [];
+  const myEntryByCompetitionId = new Map(
+    ((Array.isArray(myEntries) ? myEntries : []) || []).map((entry) => [entry.competitionId, entry] as const),
+  );
+  const myLiveComps = liveComps.filter((comp) => myEntryByCompetitionId.has(comp.id));
+  const requiredTier = String(selectedComp?.tier || "").toLowerCase();
+  const availableCards = (Array.isArray(myCards) ? myCards : [])
+    ?.filter(c => c && !c.forSale)
+    .filter((card) => {
+      if (!requiredTier) return true;
+      return String(card.rarity || "common").toLowerCase() === requiredTier;
+    }) || [];
   const enteredCompetitionIds = new Set(((Array.isArray(myEntries) ? myEntries : []) || []).map((entry) => entry.competitionId));
 
   const handleViewUserTeam = async (competitionId: number, entryId: number) => {
@@ -158,7 +170,8 @@ export default function CompetitionsPage() {
     }
   };
 
-  const unclaimedRewards = (Array.isArray(rewards) ? rewards : [])?.filter(r => r && (r.prizeAmount > 0 || r.prizeCard)) || [];
+  const unclaimedRewards = (Array.isArray(rewards) ? rewards : [])
+    ?.filter((r) => r && !r.claimed && (Number(r.prizeAmount || 0) > 0 || r.prizeCard)) || [];
 
   const selectedCardObjects = availableCards.filter(c => selectedCards.includes(c.id));
   const positionCounts: Record<string, number> = {};
@@ -174,6 +187,25 @@ export default function CompetitionsPage() {
   const lineupError = selectedCards.length === 5 && !lineupValid
     ? "Lineup must have at least 1 GK, 1 DEF, 1 MID, and 1 FWD (5th card is utility)"
     : null;
+
+  const openCompetitionAction = (comp: CompetitionWithEntries) => {
+    const myEntry = myEntryByCompetitionId.get(comp.id);
+    if (comp.status === "open") {
+      if (comp.entryOpen === false) {
+        toast({ title: "Submission closed", description: "This gameweek is locked because kickoff has started." });
+        return;
+      }
+      setSelectedComp(comp);
+      setSelectedCards([]);
+      setCaptainId(null);
+      return;
+    }
+    if (comp.status === "active" && myEntry) {
+      handleViewUserTeam(comp.id, myEntry.id);
+      return;
+    }
+    toast({ title: "Tournament unavailable", description: "This tournament is not open for new entries." });
+  };
 
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
@@ -195,12 +227,34 @@ export default function CompetitionsPage() {
           )}
         </div>
 
-        <Tabs defaultValue="live" className="w-full">
+        <Tabs defaultValue={myLiveComps.length > 0 ? "my-live" : "live"} className="w-full">
           <TabsList className="mb-4">
+            <TabsTrigger value="my-live">⭐ My Live</TabsTrigger>
             <TabsTrigger value="live">🔴 Live Tournaments</TabsTrigger>
             <TabsTrigger value="upcoming">📅 Upcoming</TabsTrigger>
             <TabsTrigger value="completed">✅ Completed</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="my-live">
+            {myLiveComps.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {myLiveComps.map((comp) => (
+                  <CompetitionCard
+                    key={comp.id}
+                    comp={comp}
+                    canViewTeams={enteredCompetitionIds.has(comp.id)}
+                    myEntryId={myEntryByCompetitionId.get(comp.id)?.id}
+                    onViewTeam={handleViewUserTeam}
+                    onJoin={() => openCompetitionAction(comp)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Card className="p-8 text-center">
+                <p className="text-muted-foreground">You are not currently entered in a live tournament.</p>
+              </Card>
+            )}
+          </TabsContent>
 
           <TabsContent value="live">
             {isLoading ? (
@@ -214,8 +268,9 @@ export default function CompetitionsPage() {
                     key={comp.id}
                     comp={comp}
                     canViewTeams={enteredCompetitionIds.has(comp.id)}
+                    myEntryId={myEntryByCompetitionId.get(comp.id)?.id}
                     onViewTeam={handleViewUserTeam}
-                    onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }}
+                    onJoin={() => openCompetitionAction(comp)}
                   />
                 ))}
               </div>
@@ -238,8 +293,9 @@ export default function CompetitionsPage() {
                     key={comp.id}
                     comp={comp}
                     canViewTeams={enteredCompetitionIds.has(comp.id)}
+                    myEntryId={myEntryByCompetitionId.get(comp.id)?.id}
                     onViewTeam={handleViewUserTeam}
-                    onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }}
+                    onJoin={() => openCompetitionAction(comp)}
                   />
                 ))}
               </div>
@@ -262,8 +318,9 @@ export default function CompetitionsPage() {
                     key={comp.id}
                     comp={comp}
                     canViewTeams={enteredCompetitionIds.has(comp.id)}
+                    myEntryId={myEntryByCompetitionId.get(comp.id)?.id}
                     onViewTeam={handleViewUserTeam}
-                    onJoin={() => { setSelectedComp(comp); setSelectedCards([]); setCaptainId(null); }}
+                    onJoin={() => openCompetitionAction(comp)}
                   />
                 ))}
               </div>
@@ -294,7 +351,7 @@ export default function CompetitionsPage() {
                 </Badge>
                 {selectedComp.tier === "rare" && (
                   <Badge variant="outline" className="text-blue-400 border-blue-400">
-                    + Prize Pool (60/30/10 split)
+                    + Prize Pool (50/20/15/10/5 split)
                   </Badge>
                 )}
               </div>
@@ -303,6 +360,11 @@ export default function CompetitionsPage() {
                 Select 5 cards for your lineup (1 GK, 1 DEF, 1 MID, 1 FWD + 1 Utility), then choose a captain for a 10% score bonus.
                 {selectedCards.length}/5 selected.
               </p>
+              {selectedComp?.tier && (
+                <p className="text-xs text-muted-foreground mb-2">
+                  Tournament tier is <span className="font-semibold capitalize">{selectedComp.tier}</span>. Only {selectedComp.tier} cards are shown and allowed.
+                </p>
+              )}
               {lineupError && (
                 <p className="text-sm text-red-500 mb-2">{lineupError}</p>
               )}
@@ -328,7 +390,7 @@ export default function CompetitionsPage() {
                       minHeight: "300px"
                     }}
                   >
-                    <Card3D
+                    <CardThumbnail
                       card={card}
                       size="sm"
                       selected={selectedCards.includes(card.id)}
@@ -393,7 +455,7 @@ export default function CompetitionsPage() {
               <div className="flex flex-wrap gap-4 justify-center">
                 {(viewTeamData?.cards || []).map((card: any) => (
                   <div key={card.id} className="flex flex-col items-center gap-1 max-w-[180px]">
-                    <Card3D card={card} size="sm" selected={viewTeamData?.captainId === card.id} />
+                    <CardThumbnail card={card} size="sm" selected={viewTeamData?.captainId === card.id} />
                     <Badge variant="outline" className="text-xs">
                       {Number(card.points || 0).toFixed(1)} pts
                       {viewTeamData?.captainId === card.id ? ` (C +${Number(card.captainBonus || 0).toFixed(1)})` : ""}
@@ -449,6 +511,8 @@ function Leaderboard({ entries, canViewTeams, competitionId, onViewTeam }: { ent
               <img
                 src={entry.userImage}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="w-5 h-5 rounded-full object-cover"
               />
             ) : (
@@ -487,10 +551,24 @@ function Leaderboard({ entries, canViewTeams, competitionId, onViewTeam }: { ent
   );
 }
 
-function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam }: { comp: CompetitionWithEntries; onJoin: () => void; canViewTeams: boolean; onViewTeam: (competitionId: number, entryId: number) => void }) {
+function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam, myEntryId }: { comp: CompetitionWithEntries; onJoin: () => void; canViewTeams: boolean; onViewTeam: (competitionId: number, entryId: number) => void; myEntryId?: number }) {
   const endDate = new Date(comp.endDate);
   const now = new Date();
   const daysLeft = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  const isOpen = comp.status === "open";
+  const isActive = comp.status === "active";
+  const hasMyEntry = Number.isFinite(Number(myEntryId));
+  const submissionOpen = comp.entryOpen !== false;
+
+  const ctaLabel = isOpen
+    ? (submissionOpen ? (comp.entryFee > 0 ? `Enter (N$${comp.entryFee})` : "Enter Free") : "Submission Closed")
+    : isActive
+      ? (hasMyEntry ? "View My Live Lineup" : "Live (Entry Closed)")
+      : comp.status === "upcoming"
+        ? "Upcoming"
+        : "Completed";
+
+  const ctaDisabled = isOpen ? !submissionOpen : isActive ? !hasMyEntry : true;
 
   return (
     <Card className="p-5 hover:border-primary/50 transition-colors">
@@ -500,7 +578,7 @@ function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam }: { comp: Com
           <p className="text-sm text-muted-foreground">Game Week {comp.gameWeek}</p>
         </div>
         <Badge variant={comp.status === "open" ? "default" : comp.status === "active" ? "secondary" : "outline"}>
-          {comp.status === "open" ? "Open" : comp.status === "active" ? "Active" : "Completed"}
+          {comp.status === "open" ? "Open" : comp.status === "active" ? "Active" : comp.status === "upcoming" ? "Upcoming" : "Completed"}
         </Badge>
       </div>
 
@@ -526,6 +604,12 @@ function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam }: { comp: Com
           <span className="text-muted-foreground">{daysLeft} days left</span>
         </div>
       </div>
+
+      {comp.submissionClosesAt ? (
+        <div className="mb-3 text-xs text-muted-foreground">
+          Submission closes: {new Date(comp.submissionClosesAt).toLocaleString()}
+        </div>
+      ) : null}
 
       {comp.tier === "rare" && comp.entryCount > 0 && (
         <div className="mb-4 p-2 bg-muted/50 rounded-md">
@@ -571,9 +655,9 @@ function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam }: { comp: Com
       <Button
         className="w-full mt-4"
         onClick={onJoin}
-        disabled={comp.status !== "open"}
+        disabled={ctaDisabled}
       >
-        {comp.status === "open" ? (comp.entryFee > 0 ? `Enter (N$${comp.entryFee})` : "Enter Free") : "Closed"}
+        {ctaLabel}
       </Button>
     </Card>
   );

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "local-001",
+    "name": "Son Heung-min",
+    "position": "FWD",
+    "club": "Tottenham",
+    "rating": 87,
+    "rarity": "rare",
+    "serial": 12,
+    "maxSupply": 500,
+    "form": 84,
+    "image": "/images/player-1.png"
+  },
+  {
+    "id": "local-002",
+    "name": "Paulo Dybala",
+    "position": "FWD",
+    "club": "Roma",
+    "rating": 89,
+    "rarity": "unique",
+    "serial": 4,
+    "maxSupply": 120,
+    "form": 88,
+    "image": "/images/player-2.png"
+  },
+  {
+    "id": "local-003",
+    "name": "Virgil van Dijk",
+    "position": "DEF",
+    "club": "Liverpool",
+    "rating": 91,
+    "rarity": "legendary",
+    "serial": 1,
+    "maxSupply": 50,
+    "form": 90,
+    "image": "/images/player-3.png"
+  },
+  {
+    "id": "local-004",
+    "name": "Conor Gallagher",
+    "position": "MID",
+    "club": "Chelsea",
+    "rating": 79,
+    "rarity": "common",
+    "serial": 64,
+    "maxSupply": 1000,
+    "form": 76,
+    "image": "/images/player-4.png"
+  }
+]

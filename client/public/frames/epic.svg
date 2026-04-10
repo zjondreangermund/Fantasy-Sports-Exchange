@@ -1,0 +1,11 @@
+<svg width="512" height="732" viewBox="0 0 512 732" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="epicStroke" x1="256" y1="0" x2="256" y2="732" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFD76C"/>
+      <stop offset="0.55" stop-color="#E8B956"/>
+      <stop offset="1" stop-color="#8D57FF"/>
+    </linearGradient>
+  </defs>
+  <path d="M256 10L470 120L410 722H102L42 120L256 10Z" fill="none" stroke="url(#epicStroke)" stroke-width="20"/>
+  <path d="M256 28L452 130L394 704H118L60 130L256 28Z" fill="none" stroke="rgba(255,219,130,0.30)" stroke-width="3"/>
+</svg>
