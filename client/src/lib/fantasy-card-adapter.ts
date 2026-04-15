@@ -1,6 +1,7 @@
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 import { buildCardImageCandidates } from "./card-image";
 import { type PlayerCardData, type Rarity } from "../components/Metal3DCard";
+import { type PlayerCard3DData } from "../components/PlayerCard3D";
 
 type FantasyCardDataOptions = {
   imageWidth?: number;
@@ -12,11 +13,21 @@ function normalizeRarity(rarity?: string | null): Rarity {
   return "common";
 }
 
-export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCardDataOptions = {}): PlayerCardData {
+export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCardDataOptions = {}): PlayerCard3DData {
+  // Cast to any so we can safely read optional API-enriched fields (photo,
+  // photoUrl, imageUrl) that may be present at runtime even if not in the
+  // strict DB type.
   const player = card.player as any;
   const requestedWidth = Number(options.imageWidth) > 0 ? Number(options.imageWidth) : 1024;
   const imageWidth = Math.max(1024, requestedWidth);
   const candidates = buildCardImageCandidates(card, { thumb: false, width: imageWidth, format: "webp" });
+
+  // Collect raw image URLs from the player record so PlayerCard3D can try
+  // them as additional fallback candidates.
+  const rawImageUrl: string | null =
+    player?.imageUrl || player?.image_url || null;
+  const rawPhoto: string | null =
+    player?.photo || player?.photoUrl || null;
 
   return {
     id: String(card.id),
@@ -26,6 +37,9 @@ export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCa
     club: player?.team ? String(player.team) : undefined,
     image: candidates[0],
     imageCandidates: candidates,
+    // Pass raw image fields so PlayerCard3D can merge them into candidates
+    imageUrl: rawImageUrl ?? undefined,
+    photo: rawPhoto ?? undefined,
     rarity: normalizeRarity(card.rarity),
     serial: Number(card.serialNumber || 1),
     maxSupply: Number(card.maxSupply || 100),
