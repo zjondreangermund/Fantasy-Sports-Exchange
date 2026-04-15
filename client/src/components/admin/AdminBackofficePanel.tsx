@@ -33,8 +33,6 @@ export default function AdminBackofficePanel() {
   const [range, setRange] = useState("30d");
   const [search, setSearch] = useState("");
   const [activeEntity, setActiveEntity] = useState<EntityBucket>("cards");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [leagueFilter, setLeagueFilter] = useState("");
   const [detailView, setDetailView] = useState<{ label: string; payload: any } | null>(null);
 
   const { data, isLoading, refetch, isFetching } = useQuery<BackofficeResponse>({
@@ -55,30 +53,8 @@ export default function AdminBackofficePanel() {
     };
   }, [data, search]);
 
-  const entityQuery = `/api/admin/entities?entity=${encodeURIComponent(activeEntity)}&q=${encodeURIComponent(search)}&status=${encodeURIComponent(statusFilter)}&league=${encodeURIComponent(leagueFilter)}&limit=120`;
-  const { data: liveEntityData, isFetching: liveEntityLoading } = useQuery<{ items: any[]; total: number }>({
-    queryKey: [entityQuery],
-  });
-
-  const selectedRows: any[] = liveEntityData?.items || entities[activeEntity] || [];
+  const selectedRows: any[] = entities[activeEntity] || [];
   const overview = data?.overview;
-  const detailEntityKey = activeEntity === "users" ? "user" : activeEntity === "cards" ? "card" : activeEntity === "auctions" ? "auction" : activeEntity === "tournaments" ? "tournament" : activeEntity === "transactions" ? "transaction" : activeEntity === "withdrawals" ? "withdrawal" : "activity";
-
-  const openDetail = async (row: any, index: number) => {
-    const id = row?.id;
-    if (!id) {
-      setDetailView({ label: `${activeEntity} row ${index + 1}`, payload: row });
-      return;
-    }
-    try {
-      const response = await fetch(`/api/admin/entities/${detailEntityKey}/${encodeURIComponent(String(id))}`, { credentials: "include" });
-      if (!response.ok) throw new Error("Failed to fetch detail");
-      const detail = await response.json();
-      setDetailView({ label: `${detailEntityKey} #${id}`, payload: detail });
-    } catch {
-      setDetailView({ label: `${activeEntity} row ${index + 1}`, payload: row });
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -241,8 +217,6 @@ export default function AdminBackofficePanel() {
               <h4 className="font-semibold">Entity search & drill-down</h4>
               <div className="flex gap-2 flex-wrap">
                 <Input value={search} onChange={(e) => setSearch(e.target.value)} className="w-[260px]" placeholder="Search users, cards, tx, auctions, tournaments" />
-                <Input value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-[180px]" placeholder="Status/type filter" />
-                <Input value={leagueFilter} onChange={(e) => setLeagueFilter(e.target.value)} className="w-[180px]" placeholder="League filter" />
                 <Button size="sm" variant="outline" onClick={() => downloadCsv(`${activeEntity}-${range}.csv`, selectedRows)}>Export visible</Button>
               </div>
             </div>
@@ -260,7 +234,7 @@ export default function AdminBackofficePanel() {
                 <button
                   key={`${activeEntity}-${index}`}
                   className="w-full text-left px-3 py-2 text-xs border-b hover:bg-muted/40"
-                  onClick={() => openDetail(row, index)}
+                  onClick={() => setDetailView({ label: `${activeEntity} row ${index + 1}`, payload: row })}
                 >
                   {activeEntity === "cards" && `#${row.id} ${row.player} • ${row.league} • ${row.rarity} • owner ${row.ownerId}`}
                   {activeEntity === "users" && `${row.id} • ${row.email || "no-email"} • cards ${row.cardsOwned} • wallet N$${money.format(row.wallet || 0)}`}
@@ -271,7 +245,6 @@ export default function AdminBackofficePanel() {
                 </button>
               ))}
               {selectedRows.length === 0 ? <div className="px-3 py-6 text-xs text-muted-foreground">No results for this filter.</div> : null}
-              {liveEntityLoading ? <div className="px-3 py-2 text-xs text-muted-foreground">Refreshing entity feed…</div> : null}
             </div>
           </Card>
         </>
