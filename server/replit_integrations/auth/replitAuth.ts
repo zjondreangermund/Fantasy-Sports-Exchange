@@ -45,7 +45,7 @@ export async function setupAuth(app: Express) {
       {
         clientID: process.env.GOOGLE_CLIENT_ID!,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-        callbackURL: `${publicUrl}/api/callback`,
+        callbackURL: `${publicUrl}/api/auth/google/callback`,
       },
       async (_accessToken, _refreshToken, profile, done) => {
         try {
@@ -84,7 +84,7 @@ export async function setupAuth(app: Express) {
 
   // Google redirects back here
   app.get(
-    "/api/callback",
+    "/api/auth/google/callback",
     passport.authenticate("google", { failureRedirect: "/" }),
     (_req, res) => {
       res.redirect("/");
