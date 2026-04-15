@@ -14,10 +14,6 @@ function fitName(name: string, max = 18) {
   return `${clean.slice(0, max - 1)}…`;
 }
 
-function getRarityLabel(rarity: PlayerCardData["rarity"]) {
-  return String(rarity || "common").toUpperCase();
-}
-
 function getLast5(player: PlayerCardData) {
   const last5 = Array.isArray(player.last5Scores) ? player.last5Scores.slice(0, 5) : [];
   while (last5.length < 5) last5.push(0);
@@ -25,11 +21,15 @@ function getLast5(player: PlayerCardData) {
 }
 
 export default function SimpleCard({ player, className = "" }: SimpleCardProps) {
+  const visualRarity = normalizeVisualRarity(player.rarity);
+  const rarity = cardVisualTokens[player.rarity];
+
   const candidates = useMemo(() => {
-    const list = [player.image, ...(player.imageCandidates || []), CARD_IMAGE_FALLBACK]
+    const list = [player.image, player.imageUrl, player.photo, ...(player.imageCandidates || []), CARD_IMAGE_FALLBACK]
       .filter((value): value is string => Boolean(value));
     return Array.from(new Set(list));
-  }, [player.image, player.imageCandidates]);
+  }, [player.image, player.imageUrl, player.photo, player.imageCandidates]);
+
   const [candidateIndex, setCandidateIndex] = useState(0);
   const src = candidates[Math.min(candidateIndex, Math.max(0, candidates.length - 1))] || CARD_IMAGE_FALLBACK;
   const rarity = cardVisualTokens[player.rarity];
@@ -41,13 +41,14 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
   const club = String(player.club || player.team || "FantasyFC").toUpperCase();
   const league = String(player.league || "Global League").toUpperCase();
   const name = fitName(player.name, 18);
+  const rating = Math.max(0, Number(player.rating || 0));
+  const listedPrice = player.forSale && Number(player.price || 0) > 0 ? Number(player.price || 0) : null;
 
   return (
     <article
       className={[
-        "relative w-[148px] max-w-full aspect-[0.7/1] overflow-hidden rounded-[24px] border bg-gradient-to-b",
-        rarity.shell,
-        rarity.border,
+        "group relative w-[154px] max-w-full aspect-[0.7/1] rounded-[26px] p-[2px] transition-transform duration-300 hover:-translate-y-1 hover:[transform:perspective(900px)_rotateX(5deg)_rotateY(-4deg)]",
+        `bg-gradient-to-br ${rarity.frameOuter}`,
         rarity.glow,
         className,
       ].join(" ")}
@@ -57,15 +58,17 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
       <div className={`pointer-events-none absolute inset-[1px] rounded-[23px] bg-gradient-to-br ${rarity.frame}`} />
       <div className={`pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgba(255,255,255,0.14)_1px,transparent_1px)] bg-[length:3px_3px] ${rarity.grain}`} />
 
-      <div className="absolute left-3 top-3 z-20">
-        <div className="text-[34px] font-black leading-none tracking-[-0.04em] text-white">{player.rating}</div>
-        <div className="mt-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/90">{player.position}</div>
-      </div>
-      <div
-        className={`absolute right-3 top-3 z-20 rounded-full border px-3 py-[5px] text-[9px] font-extrabold uppercase tracking-[0.18em] backdrop-blur-md ${rarity.badge}`}
-      >
-        {rarityLabel}
-      </div>
+        <div className="absolute left-3 top-3 z-20 flex items-center gap-2">
+          <div className="rounded-xl border border-white/25 bg-black/35 px-2 py-1 backdrop-blur">
+            <div className="text-[30px] font-black leading-none tracking-[-0.04em] text-white">{rating}</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/80">OVR</div>
+          </div>
+          <div className={`rounded-full border px-2 py-[3px] text-[9px] font-extrabold uppercase tracking-[0.14em] ${rarity.badge}`}>{rarity.rarityLabel}</div>
+        </div>
+
+        <div className="absolute right-3 top-3 z-20 rounded-full border border-white/20 bg-black/35 px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.14em] text-white/85 backdrop-blur">
+          {player.position}
+        </div>
 
       <div className="absolute inset-x-[10%] top-[17%] z-10 flex h-[48%] items-center justify-center [mask-image:radial-gradient(circle_at_50%_42%,black_58%,transparent_100%)]">
         {candidates.length > 0 ? (
@@ -74,15 +77,21 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
             alt={player.name}
             loading="lazy"
             decoding="async"
-            className="max-h-full max-w-full object-contain drop-shadow-[0_16px_26px_rgba(0,0,0,0.55)]"
+            className="max-h-full max-w-full object-contain drop-shadow-[0_24px_28px_rgba(0,0,0,0.62)]"
             onError={() => {
-              if (candidateIndex < candidates.length - 1) {
-                setCandidateIndex((prev) => prev + 1);
-              }
+              if (candidateIndex < candidates.length - 1) setCandidateIndex((prev) => prev + 1);
             }}
           />
+        </div>
+
+        <div className={`pointer-events-none absolute left-[72%] top-[17%] z-20 h-2.5 w-2.5 rounded-full ${rarity.orb} shadow-[0_0_18px_rgba(255,255,255,0.9)]`} />
+        <div className={`pointer-events-none absolute left-[27%] top-[20%] z-20 h-1.5 w-1.5 rounded-full ${rarity.orb} shadow-[0_0_12px_rgba(255,255,255,0.85)]`} />
+
+        {listedPrice ? (
+          <div className="absolute left-3 top-[42%] z-20 rounded-full border border-emerald-200/40 bg-emerald-500/22 px-2 py-1 text-[10px] font-bold text-emerald-50 backdrop-blur">
+            Listed N${listedPrice.toFixed(0)}
+          </div>
         ) : null}
-      </div>
 
       <div className={`pointer-events-none absolute left-1/2 top-[44%] z-[11] h-[170px] w-[170px] -translate-x-1/2 -translate-y-1/2 rounded-full ${rarity.halo} blur-3xl`} />
 
@@ -126,6 +135,7 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
             </span>
           ))}
         </div>
+
       </div>
     </article>
   );

@@ -71,7 +71,7 @@ export default function PremierLeaguePage() {
   const search = playerSearch;
   const { data: players = [], isLoading: playersLoading, error: playersError } =
   useQuery<EplPlayer[]>({
-    queryKey: ["eplPlayers", page, limit, search, position, todayOnlyPlayers],
+    queryKey: ["leaguePlayers", leagueKey, page, limit, search, position, todayOnlyPlayers],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("page", String(page));
@@ -80,7 +80,7 @@ export default function PremierLeaguePage() {
       if (position?.trim()) params.set("position", position.trim());
       if (todayOnlyPlayers) params.set("today", "1");
 
-      const res = await fetch(`/api/epl/players?${params.toString()}`);
+      const res = await fetch(`/api/leagues/${leagueKey}/players?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch players");
 
       const data = await res.json();
@@ -99,7 +99,7 @@ export default function PremierLeaguePage() {
   });
 
   const { data: injuries, isLoading: injuriesLoading } = useQuery<EplInjury[]>({
-    queryKey: ["/api/epl/injuries"],
+    queryKey: [`/api/leagues/${leagueKey}/injuries`],
   });
 
   const filteredPlayers = useMemo(() => {

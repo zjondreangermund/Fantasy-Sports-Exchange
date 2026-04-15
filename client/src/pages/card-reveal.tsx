@@ -1,10 +1,20 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import CardRevealScene, { getRevealDuration, type RevealRarity } from "../components/CardRevealScene";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
+import CollectionPlayerCard from "../components/CollectionPlayerCard";
+import { toFantasyCardData } from "../lib/fantasy-card-adapter";
+
+type RevealRarity = "common" | "rare" | "epic" | "legendary";
+
+function getRevealDuration(rarity: RevealRarity) {
+  if (rarity === "legendary") return 6;
+  if (rarity === "epic") return 5;
+  if (rarity === "rare") return 4;
+  return 3;
+}
 
 export default function CardRevealPage() {
   const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
@@ -41,11 +51,7 @@ export default function CardRevealPage() {
   }, [cards, rarity, cardIdParam]);
 
   if (isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-black text-white/80">
-        Loading reveal scene...
-      </div>
-    );
+    return <div className="flex-1 flex items-center justify-center bg-black text-white/80">Loading reveal…</div>;
   }
 
   if (!card) {
@@ -58,14 +64,8 @@ export default function CardRevealPage() {
   }
 
   return (
-    <div className="relative w-full h-full min-h-[calc(100vh-4rem)] overflow-hidden bg-black">
-      <CardRevealScene
-        cardData={card}
-        rarity={rarity}
-        duration={getRevealDuration(rarity)}
-        replayKey={replayKey}
-        onComplete={() => setCompleted(true)}
-      />
+    <div className="relative w-full h-full min-h-[calc(100vh-4rem)] overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(143,89,255,0.22),transparent_42%),linear-gradient(180deg,#030712_0%,#020617_100%)]">
+      <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,0.06)_50%,transparent_100%)] animate-pulse" />
 
       {!rewardMode && (
         <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2">
@@ -88,30 +88,31 @@ export default function CardRevealPage() {
 
       <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
         <Badge variant="secondary">{rarity.toUpperCase()} • {getRevealDuration(rarity)}s</Badge>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            setCompleted(false);
-            setReplayKey((k) => k + 1);
-          }}
-        >
+        <Button size="sm" variant="outline" onClick={() => { setCompleted(false); setReplayKey((k) => k + 1); }}>
           Replay
         </Button>
+      </div>
+
+      <div className="relative z-10 flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-5">
+        <div key={replayKey} className="animate-[fadeIn_500ms_ease-out]">
+          <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1200 })} mode="css" className="!w-[260px]" />
+        </div>
+        <Badge className="bg-white/10 backdrop-blur-md">
+          {rewardMode ? "Tournament reward reveal" : "Pack reveal"} • 2D cinematic mode
+        </Badge>
       </div>
 
       <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3">
         {completed ? (
           <>
             <Badge>{rewardMode ? "Reward Claimed" : "Reveal Complete"}</Badge>
-            <Button onClick={() => setLocation(rewardMode ? "/dashboard" : "/collection")}>
-              {rewardMode ? "Continue" : "Back to Collection"}
-            </Button>
+            <Button onClick={() => setLocation(rewardMode ? "/dashboard" : "/collection")}>{rewardMode ? "Continue" : "Back to Collection"}</Button>
           </>
         ) : (
-          <Badge variant="secondary">
-            {rewardMode ? "Congratulations! Your tournament reward is revealing..." : "Cinematic reveal playing..."}
-          </Badge>
+          <>
+            <Badge variant="secondary">{rewardMode ? "Congratulations! Your reward is revealing..." : "Reveal in progress..."}</Badge>
+            <Button onClick={() => setCompleted(true)}>Finish</Button>
+          </>
         )}
       </div>
     </div>

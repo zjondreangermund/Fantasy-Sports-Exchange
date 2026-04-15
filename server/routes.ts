@@ -1028,6 +1028,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/live/hub", requireAuth, async (_req: any, res) => {
+    try {
+      pushLivePointEvent();
+      const [liveGames, listings, competitions] = await Promise.all([
+        fplApi.getLiveGames().catch(() => []),
+        storage.getMarketplaceListings().catch(() => []),
+        storage.getCompetitions().catch(() => []),
+      ]);
+
+      const { db } = await import("./db.js");
+      const { transactions } = await import("../shared/schema.js");
+      const recentTransactions = await db
+        .select()
+        .from(transactions)
+        .orderBy(sql`${transactions.createdAt} desc`)
+        .limit(40);
+
+      const recentSales = recentTransactions
+        .filter((tx: any) => String(tx.type) === "purchase")
+        .slice(0, 8)
+        .map((tx: any) => ({
+          id: tx.id,
+          userId: tx.userId,
+          amount: Number(tx.amount || 0),
+          description: String(tx.description || ""),
+          createdAt: tx.createdAt,
+        }));
+
+      return res.json({
+        updatedAt: new Date().toISOString(),
+        liveMatches: Array.isArray(liveGames) ? liveGames.length : 0,
+        activeListings: Array.isArray(listings) ? listings.length : 0,
+        liveCompetitions: (Array.isArray(competitions) ? competitions : []).filter((c: any) => String(c.status) === "active" || String(c.status) === "open").length,
+        pointFeed: livePointFeedStore.slice(-8),
+        chatHighlights: liveChatMessagesStore.slice(-6),
+        recentSales,
+      });
+    } catch (error: any) {
+      console.error("Failed to build live hub feed:", error);
+      return res.status(500).json({ message: "Failed to build live hub feed" });
+    }
+  });
+
   app.post("/api/ai/help", requireAuth, async (req: any, res) => {
     try {
       const message = String(req.body?.message || "").trim().toLowerCase();
