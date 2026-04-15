@@ -34,14 +34,14 @@ interface LiveGame {
   playerStats: any[];
 }
 
-export default function LiveGames() {
+export default function LiveGames({ endpoint = "/api/epl/live-games" }: { endpoint?: string }) {
   const previousSnapshot = useRef<Record<number, { hs: number; as: number; ha: number; aa: number }>>({});
   const [burstState, setBurstState] = useState<Record<number, "goal" | "assist" | null>>({});
 
   const { data: liveGames = [], isLoading, refetch } = useQuery<LiveGame[]>({
-    queryKey: ["/api/epl/live-games"],
+    queryKey: [endpoint],
     queryFn: async () => {
-      const res = await fetch("/api/epl/live-games", { credentials: "include" });
+      const res = await fetch(endpoint, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch live games");
       return res.json();
     },
