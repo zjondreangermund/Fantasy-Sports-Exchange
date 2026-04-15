@@ -5,6 +5,7 @@ import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth/index.
 import { seedDatabase, seedCompetitions } from "./seed.js";
 import { fplApi } from "./services/fplApi.js";
 import { fetchSorarePlayer } from "./services/sorare.js";
+import { MAJOR_LEAGUES, getMajorLeagueFixtures, getMajorLeagueLiveGames, getMajorLeagueStandings } from "./services/majorLeagueApi.js";
 import { ScoreUpdateService } from "./services/scoreUpdater.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats } from "./services/scoring.js";
 import { randomUUID } from "crypto";
@@ -1446,6 +1447,109 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       console.error("EPL live games:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch live games" });
+    }
+  });
+
+  app.get("/api/leagues/meta", async (_req, res) => {
+    const hasApiFootball = Boolean(process.env.API_FOOTBALL_KEY);
+    const leagues = Object.entries(MAJOR_LEAGUES).map(([key, league]) => ({
+      key,
+      ...league,
+      provider: key === "premier-league" ? "fpl" : "api-football",
+      liveEnabled: key === "premier-league" ? true : hasApiFootball,
+    }));
+    return res.json({ leagues, hasApiFootball });
+  });
+
+  app.get("/api/leagues/:leagueKey/standings", async (req: any, res) => {
+    try {
+      const leagueKey = String(req.params.leagueKey || "").toLowerCase();
+      if (leagueKey === "premier-league") {
+        const [bootstrap, fixtures] = await Promise.all([fplApi.bootstrap(), fplApi.fixtures()]);
+        const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+        const computedTable = new Map<number, { played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; points: number }>();
+        teams.forEach((team: any) => computedTable.set(Number(team.id), { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 }));
+        (Array.isArray(fixtures) ? fixtures : []).forEach((fixture: any) => {
+          if (!isFixtureInCurrentSeason(fixture) || !isFixtureLikelyFinished(fixture)) return;
+          const homeId = Number(fixture.team_h);
+          const awayId = Number(fixture.team_a);
+          const homeGoals = Number(fixture.team_h_score ?? 0);
+          const awayGoals = Number(fixture.team_a_score ?? 0);
+          const home = computedTable.get(homeId);
+          const away = computedTable.get(awayId);
+          if (!home || !away) return;
+          home.played += 1; away.played += 1;
+          home.goalsFor += homeGoals; home.goalsAgainst += awayGoals;
+          away.goalsFor += awayGoals; away.goalsAgainst += homeGoals;
+          if (homeGoals > awayGoals) { home.won += 1; away.lost += 1; home.points += 3; }
+          else if (homeGoals < awayGoals) { away.won += 1; home.lost += 1; away.points += 3; }
+          else { home.drawn += 1; away.drawn += 1; home.points += 1; away.points += 1; }
+        });
+        const standings = teams
+          .map((team: any) => ({
+            position: 0, rank: 0, teamId: Number(team.id), teamName: String(team.name || "Unknown"), played: computedTable.get(Number(team.id))?.played ?? 0,
+            won: computedTable.get(Number(team.id))?.won ?? 0, drawn: computedTable.get(Number(team.id))?.drawn ?? 0, lost: computedTable.get(Number(team.id))?.lost ?? 0,
+            goalsFor: computedTable.get(Number(team.id))?.goalsFor ?? 0, goalsAgainst: computedTable.get(Number(team.id))?.goalsAgainst ?? 0,
+            goalDifference: (computedTable.get(Number(team.id))?.goalsFor ?? 0) - (computedTable.get(Number(team.id))?.goalsAgainst ?? 0),
+            goalDiff: (computedTable.get(Number(team.id))?.goalsFor ?? 0) - (computedTable.get(Number(team.id))?.goalsAgainst ?? 0),
+            points: computedTable.get(Number(team.id))?.points ?? 0, form: String(team.form || "").replace(/\s+/g, ""), teamLogo: "", logo: "",
+          }))
+          .sort((a: any, b: any) => (b.points - a.points) || ((b.goalDiff ?? 0) - (a.goalDiff ?? 0)) || (b.goalsFor - a.goalsFor))
+          .map((row: any, idx: number) => ({ ...row, rank: idx + 1, position: idx + 1 }));
+        return res.json(standings);
+      }
+      if (!(leagueKey in MAJOR_LEAGUES)) return res.status(400).json({ message: "Unsupported league" });
+      const data = await getMajorLeagueStandings(leagueKey as any);
+      return res.json(data);
+    } catch (error: any) {
+      return res.status(500).json({ message: error?.message || "Failed to fetch standings" });
+    }
+  });
+
+  app.get("/api/leagues/:leagueKey/fixtures", async (req: any, res) => {
+    try {
+      const leagueKey = String(req.params.leagueKey || "").toLowerCase();
+      const status = String(req.query.status || "").toLowerCase();
+      if (leagueKey === "premier-league") {
+        const [fixtures, bootstrap] = await Promise.all([fplApi.fixtures(), fplApi.bootstrap()]);
+        const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+        const teamMap = new Map<number, any>(teams.map((t: any) => [Number(t.id), t]));
+        let filtered = (Array.isArray(fixtures) ? fixtures : []).filter((f: any) => isFixtureInCurrentSeason(f));
+        if (status === "upcoming") filtered = filtered.filter((f: any) => !isFixtureLikelyFinished(f) && !f.started);
+        else if (status === "live") filtered = filtered.filter((f: any) => f.started && !isFixtureLikelyFinished(f));
+        else if (status === "finished") filtered = filtered.filter((f: any) => isFixtureLikelyFinished(f));
+        const normalized = filtered.map((fixture: any) => ({
+          id: Number(fixture.id || 0),
+          matchId: Number(fixture.id || 0),
+          date: fixture.kickoff_time || null,
+          kickoffTime: fixture.kickoff_time || null,
+          status: isFixtureLikelyFinished(fixture) ? "FT" : fixture.started ? "LIVE" : "NS",
+          homeTeam: { id: Number(fixture.team_h || 0), name: String(teamMap.get(Number(fixture.team_h))?.name || "Home"), logo: "", score: Number(fixture.team_h_score ?? 0) },
+          awayTeam: { id: Number(fixture.team_a || 0), name: String(teamMap.get(Number(fixture.team_a))?.name || "Away"), logo: "", score: Number(fixture.team_a_score ?? 0) },
+          venue: "",
+        }));
+        return res.json(normalized);
+      }
+      if (!(leagueKey in MAJOR_LEAGUES)) return res.status(400).json({ message: "Unsupported league" });
+      const data = await getMajorLeagueFixtures(leagueKey as any, status);
+      return res.json(data);
+    } catch (error: any) {
+      return res.status(500).json({ message: error?.message || "Failed to fetch fixtures" });
+    }
+  });
+
+  app.get("/api/leagues/:leagueKey/live-games", async (req: any, res) => {
+    try {
+      const leagueKey = String(req.params.leagueKey || "").toLowerCase();
+      if (leagueKey === "premier-league") {
+        const liveGames = await fplApi.getLiveGames();
+        return res.json(liveGames);
+      }
+      if (!(leagueKey in MAJOR_LEAGUES)) return res.status(400).json({ message: "Unsupported league" });
+      const data = await getMajorLeagueLiveGames(leagueKey as any);
+      return res.json(data);
+    } catch (error: any) {
+      return res.status(500).json({ message: error?.message || "Failed to fetch live games" });
     }
   });
 
@@ -4223,6 +4327,296 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) {
       console.error("Failed to fetch stats:", error);
       res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+
+  app.get("/api/admin/backoffice", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const range = String(req.query.range || "30d").toLowerCase();
+      const now = Date.now();
+      const rangeMs =
+        range === "1d" ? 24 * 60 * 60 * 1000 :
+        range === "7d" ? 7 * 24 * 60 * 60 * 1000 :
+        range === "90d" ? 90 * 24 * 60 * 60 * 1000 :
+        30 * 24 * 60 * 60 * 1000;
+      const startMs = now - rangeMs;
+
+      const { db } = await import("./db.js");
+      const { users, wallets, playerCards, players, auctions, auctionBids, competitions, competitionEntries, transactions, auditLogs, withdrawalRequests } = await import("../shared/schema.js");
+      const allUsers = await db.select().from(users);
+      const allWallets = await db.select().from(wallets);
+      const allCards = await db.select().from(playerCards);
+      const allPlayers = await db.select().from(players);
+      const allAuctions = await db.select().from(auctions);
+      const allBids = await db.select().from(auctionBids);
+      const allCompetitions = await db.select().from(competitions);
+      const allEntries = await db.select().from(competitionEntries);
+      const allTransactions = await db.select().from(transactions);
+      const allLogs = await db.select().from(auditLogs);
+      const allWithdrawals = await db.select().from(withdrawalRequests);
+
+      const playerById = new Map<number, any>(allPlayers.map((p: any) => [Number(p.id), p]));
+      const cardById = new Map<number, any>(allCards.map((c: any) => [Number(c.id), c]));
+      const cardsByUser = new Map<string, any[]>();
+      allCards.forEach((card: any) => {
+        const userId = String(card.ownerId || "");
+        if (!cardsByUser.has(userId)) cardsByUser.set(userId, []);
+        cardsByUser.get(userId)!.push(card);
+      });
+
+      const txInRange = allTransactions.filter((tx: any) => {
+        const createdAtMs = tx.createdAt ? new Date(tx.createdAt as any).getTime() : 0;
+        return Number.isFinite(createdAtMs) && createdAtMs >= startMs;
+      });
+
+      const purchaseRows = txInRange.filter((tx: any) => String(tx.type) === "purchase");
+      const saleRows = txInRange.filter((tx: any) => String(tx.type) === "sale");
+      const entryFeeRows = txInRange.filter((tx: any) => String(tx.type) === "entry_fee");
+      const grossVolume = purchaseRows.reduce((sum: number, tx: any) => sum + Math.max(0, Number(tx.amount || 0)), 0);
+      const netSellerPayouts = Math.abs(saleRows.reduce((sum: number, tx: any) => sum + Math.min(0, Number(tx.amount || 0)), 0));
+      const platformFees = Math.max(0, grossVolume - netSellerPayouts);
+      const tournamentFees = entryFeeRows.reduce((sum: number, tx: any) => sum + Math.max(0, Number(tx.amount || 0)), 0);
+
+      const listingsCount = allCards.filter((c: any) => Boolean(c.forSale)).length;
+      const auctionsLive = allAuctions.filter((a: any) => String(a.status) === "live").length;
+      const competitionsLive = allCompetitions.filter((c: any) => String(c.status) === "active" || String(c.status) === "open").length;
+      const withdrawalsPending = allWithdrawals.filter((w: any) => String(w.status) === "pending" || String(w.status) === "processing").length;
+
+      const activeUsers = new Set<string>(txInRange.map((tx: any) => String(tx.userId || ""))).size;
+      const totalWalletBalances = allWallets.reduce((sum: number, w: any) => sum + Number(w.balance || 0) + Number(w.lockedBalance || 0), 0);
+      const soldCards = saleRows.length;
+
+      const raritySupply = new Map<string, number>();
+      const mintedByLeague = new Map<string, number>();
+      const topCardsByPrice: Array<{ cardId: number; player: string; rarity: string; amount: number }> = [];
+      const cardTrades = new Map<number, { count: number; high: number }>();
+      const buyVolumeByUser = new Map<string, number>();
+      const sellVolumeByUser = new Map<string, number>();
+      const leagueVolume = new Map<string, number>();
+      const rarityVolume = new Map<string, number>();
+
+      allCards.forEach((card: any) => {
+        const rarity = String(card.rarity || "common");
+        raritySupply.set(rarity, (raritySupply.get(rarity) || 0) + 1);
+        const league = String(playerById.get(Number(card.playerId))?.league || "Unknown");
+        mintedByLeague.set(league, (mintedByLeague.get(league) || 0) + 1);
+      });
+
+      purchaseRows.forEach((tx: any) => {
+        const desc = String(tx.description || "");
+        const cardIdMatch = desc.match(/card\s*#?(\d+)/i);
+        const sellerMatch = desc.match(/from\s+([a-zA-Z0-9_-]+)/i);
+        const cardId = cardIdMatch ? Number(cardIdMatch[1]) : 0;
+        const amount = Number(tx.amount || 0);
+        if (!Number.isFinite(amount) || amount <= 0) return;
+        buyVolumeByUser.set(String(tx.userId || ""), (buyVolumeByUser.get(String(tx.userId || "")) || 0) + amount);
+        if (sellerMatch?.[1]) {
+          const seller = String(sellerMatch[1]);
+          sellVolumeByUser.set(seller, (sellVolumeByUser.get(seller) || 0) + amount);
+        }
+        if (cardId > 0) {
+          const card = cardById.get(cardId);
+          const rarity = String(card?.rarity || "unknown");
+          rarityVolume.set(rarity, (rarityVolume.get(rarity) || 0) + amount);
+          const league = String(playerById.get(Number(card?.playerId || 0))?.league || "Unknown");
+          leagueVolume.set(league, (leagueVolume.get(league) || 0) + amount);
+          const trade = cardTrades.get(cardId) || { count: 0, high: 0 };
+          trade.count += 1;
+          trade.high = Math.max(trade.high, amount);
+          cardTrades.set(cardId, trade);
+          const playerName = String(playerById.get(Number(card?.playerId || 0))?.name || "Unknown");
+          topCardsByPrice.push({ cardId, player: playerName, rarity, amount });
+        }
+      });
+
+      const topSellingRarity = Array.from(rarityVolume.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "n/a";
+      const topLeagues = Array.from(leagueVolume.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([league, volume]) => ({ league, volume: Number(volume.toFixed(2)) }));
+      const topCards = topCardsByPrice.sort((a, b) => b.amount - a.amount).slice(0, 10);
+      const cardsNeverTraded = allCards.filter((card: any) => !cardTrades.has(Number(card.id))).slice(0, 50).map((card: any) => ({
+        cardId: Number(card.id),
+        player: String(playerById.get(Number(card.playerId))?.name || "Unknown"),
+        rarity: String(card.rarity || "common"),
+        ownerId: String(card.ownerId || ""),
+      }));
+      const mostTradedCards = Array.from(cardTrades.entries())
+        .map(([cardId, stats]) => ({
+          cardId,
+          player: String(playerById.get(Number(cardById.get(cardId)?.playerId || 0))?.name || "Unknown"),
+          count: stats.count,
+          highSale: stats.high,
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+      const cardsByOwner = Array.from(cardsByUser.entries()).map(([userId, cards]) => ({ userId, cards: cards.length })).sort((a, b) => b.cards - a.cards).slice(0, 20);
+
+      const competitionEntriesByUser = new Map<string, number>();
+      allEntries.forEach((entry: any) => {
+        const userId = String(entry.userId || "");
+        competitionEntriesByUser.set(userId, (competitionEntriesByUser.get(userId) || 0) + 1);
+      });
+      const suspiciousUsers = allUsers
+        .map((u: any) => {
+          const uid = String(u.id || "");
+          const buys = buyVolumeByUser.get(uid) || 0;
+          const sells = sellVolumeByUser.get(uid) || 0;
+          const cardCount = cardsByUser.get(uid)?.length || 0;
+          const flags: string[] = [];
+          if (buys > 300000) flags.push("high_buy_volume");
+          if (sells > 300000) flags.push("high_sell_volume");
+          if (cardCount > 300) flags.push("large_inventory");
+          return { userId: uid, flags, buys, sells, cardCount };
+        })
+        .filter((u) => u.flags.length > 0)
+        .slice(0, 20);
+
+      const fmtMap = (map: Map<string, number>, keyLabel: string, valueLabel: string) =>
+        Array.from(map.entries()).map(([k, v]) => ({ [keyLabel]: k, [valueLabel]: Number(v.toFixed(2)) }));
+      const registrationsOverTime = allUsers
+        .map((u: any) => {
+          const createdAt = u.createdAt ? new Date(u.createdAt as any) : null;
+          const bucket = createdAt ? `${createdAt.getUTCFullYear()}-${String(createdAt.getUTCMonth() + 1).padStart(2, "0")}` : "unknown";
+          return bucket;
+        })
+        .reduce((acc: Record<string, number>, bucket: string) => {
+          acc[bucket] = (acc[bucket] || 0) + 1;
+          return acc;
+        }, {});
+
+      return res.json({
+        range,
+        overview: {
+          totalUsers: allUsers.length,
+          activeUsers,
+          totalCardsMinted: allCards.length,
+          listedCards: listingsCount,
+          soldCards,
+          auctionsLive,
+          competitionsLive,
+          walletBalances: Number(totalWalletBalances.toFixed(2)),
+          grossMarketplaceVolume: Number(grossVolume.toFixed(2)),
+          netSellerPayouts: Number(netSellerPayouts.toFixed(2)),
+          platformFees: Number(platformFees.toFixed(2)),
+          tournamentFees: Number(tournamentFees.toFixed(2)),
+          withdrawalsPending,
+          aiMonitoring: {
+            requestsLastHour: requestEvents.length,
+            errorsLastHour: requestEvents.filter((event) => event.status >= 400).length,
+            onlineUsersLast10Minutes: Array.from(userLastSeen.entries()).filter(([, ts]) => now - ts <= 10 * 60 * 1000).length,
+          },
+        },
+        marketplaceAnalytics: {
+          dailyVolume: Number((grossVolume / Math.max(1, rangeMs / (24 * 60 * 60 * 1000))).toFixed(2)),
+          weeklyVolume: Number((grossVolume / Math.max(1, rangeMs / (7 * 24 * 60 * 60 * 1000))).toFixed(2)),
+          monthlyVolume: Number((grossVolume / Math.max(1, rangeMs / (30 * 24 * 60 * 60 * 1000))).toFixed(2)),
+          transactionCount: purchaseRows.length,
+          averageSalePrice: Number((grossVolume / Math.max(1, purchaseRows.length)).toFixed(2)),
+          topSellingRarity,
+          topLeagues,
+          topCards,
+          topBuyers: fmtMap(buyVolumeByUser, "userId", "volume").sort((a: any, b: any) => b.volume - a.volume).slice(0, 10),
+          topSellers: fmtMap(sellVolumeByUser, "userId", "volume").sort((a: any, b: any) => b.volume - a.volume).slice(0, 10),
+        },
+        cardAnalytics: {
+          supplyByRarity: fmtMap(raritySupply, "rarity", "count"),
+          mintedByLeague: fmtMap(mintedByLeague, "league", "count"),
+          ownershipStates: {
+            owned: allCards.length - listingsCount - auctionsLive,
+            listed: listingsCount,
+            inAuction: allAuctions.filter((a: any) => String(a.status) === "live").length,
+          },
+          mostTradedCards,
+          highestSaleCards: topCards,
+          cardsNeverTraded,
+          cardsByOwner,
+        },
+        userAnalytics: {
+          registrationsOverTime: Object.entries(registrationsOverTime).map(([bucket, count]) => ({ bucket, count })),
+          topBuyers: fmtMap(buyVolumeByUser, "userId", "volume").sort((a: any, b: any) => b.volume - a.volume).slice(0, 10),
+          topSellers: fmtMap(sellVolumeByUser, "userId", "volume").sort((a: any, b: any) => b.volume - a.volume).slice(0, 10),
+          highestWalletBalances: allWallets
+            .map((w: any) => ({ userId: String(w.userId || ""), balance: Number((Number(w.balance || 0) + Number(w.lockedBalance || 0)).toFixed(2)) }))
+            .sort((a: any, b: any) => b.balance - a.balance)
+            .slice(0, 10),
+          mostActiveTraders: fmtMap(
+            new Map(
+              Array.from(buyVolumeByUser.entries()).map(([k, v]) => [k, v + (sellVolumeByUser.get(k) || 0)]),
+            ),
+            "userId",
+            "activity",
+          ).sort((a: any, b: any) => b.activity - a.activity).slice(0, 10),
+          mostTournamentEntries: fmtMap(competitionEntriesByUser, "userId", "entries").sort((a: any, b: any) => b.entries - a.entries).slice(0, 10),
+          suspiciousActivityFlags: suspiciousUsers,
+        },
+        entities: {
+          cards: allCards.slice(0, 300).map((card: any) => ({
+            id: card.id,
+            player: String(playerById.get(Number(card.playerId))?.name || "Unknown"),
+            league: String(playerById.get(Number(card.playerId))?.league || "Unknown"),
+            rarity: String(card.rarity || "common"),
+            serialNumber: card.serialNumber,
+            maxSupply: card.maxSupply,
+            ownerId: card.ownerId,
+            listingStatus: Boolean(card.forSale),
+            auctionStatus: allAuctions.some((a: any) => Number(a.cardId) === Number(card.id) && String(a.status) === "live"),
+            highestSale: cardTrades.get(Number(card.id))?.high || 0,
+            tradeCount: cardTrades.get(Number(card.id))?.count || 0,
+          })),
+          users: allUsers.slice(0, 300).map((user: any) => ({
+            id: user.id,
+            email: user.email,
+            profile: user.name,
+            wallet: Number((Number(allWallets.find((w: any) => String(w.userId) === String(user.id))?.balance || 0)).toFixed(2)),
+            cardsOwned: cardsByUser.get(String(user.id))?.length || 0,
+            bidsPlaced: allBids.filter((b: any) => String(b.bidderUserId || "") === String(user.id)).length,
+            purchases: purchaseRows.filter((tx: any) => String(tx.userId || "") === String(user.id)).length,
+            sales: saleRows.filter((tx: any) => String(tx.userId || "") === String(user.id)).length,
+            tournamentEntries: competitionEntriesByUser.get(String(user.id)) || 0,
+            adminNotes: null,
+          })),
+          transactions: purchaseRows.slice(0, 400).map((tx: any) => ({
+            id: tx.id,
+            buyer: tx.userId,
+            seller: String(tx.description || "").match(/from\s+([a-zA-Z0-9_-]+)/i)?.[1] || "unknown",
+            card: String(tx.description || "").match(/card\s*#?(\d+)/i)?.[1] || "unknown",
+            grossAmount: Number(tx.amount || 0),
+            fees: Number((Number(tx.amount || 0) * 0.08).toFixed(2)),
+            sellerNet: Number((Number(tx.amount || 0) * 0.92).toFixed(2)),
+            timestamp: tx.createdAt,
+          })),
+          auctions: allAuctions.slice(0, 150).map((auction: any) => {
+            const bids = allBids.filter((bid: any) => Number(bid.auctionId) === Number(auction.id));
+            const winner = bids.sort((a: any, b: any) => Number(b.amount || 0) - Number(a.amount || 0))[0];
+            return {
+              id: auction.id,
+              seller: auction.sellerUserId,
+              bids: bids.length,
+              winner: winner?.bidderUserId || null,
+              reserve: Number(auction.reservePrice || 0),
+              buyNow: Number(auction.buyNowPrice || 0),
+              settlement: String(auction.status || ""),
+            };
+          }),
+          tournaments: allCompetitions.slice(0, 150).map((competition: any) => {
+            const entries = allEntries.filter((entry: any) => Number(entry.competitionId) === Number(competition.id));
+            return {
+              id: competition.id,
+              name: competition.name,
+              participants: entries.length,
+              prizePool: Number((Number(competition.entryFee || 0) * entries.length).toFixed(2)),
+              feeShare: Number((Number(competition.entryFee || 0) * entries.length * 0.2).toFixed(2)),
+              payoutBreakdown: "60/30/10",
+              winningLineups: entries.filter((e: any) => Number(e.rank || 99) <= 3).map((e: any) => ({ userId: e.userId, rank: e.rank, score: e.totalScore })),
+            };
+          }),
+          audit: allLogs
+            .sort((a: any, b: any) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime())
+            .slice(0, 200)
+            .map((log: any) => ({ id: log.id, action: log.action, userId: log.userId, at: log.createdAt, meta: log.meta })),
+        },
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch backoffice analytics:", error);
+      return res.status(500).json({ message: "Failed to fetch backoffice analytics" });
     }
   });
 

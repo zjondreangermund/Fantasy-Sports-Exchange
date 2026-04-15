@@ -24,6 +24,8 @@ export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCa
     rating: Number(player?.overall || card.decisiveScore || 0),
     position: String(player?.position || "N/A"),
     club: player?.team ? String(player.team) : undefined,
+    team: player?.team ? String(player.team) : undefined,
+    league: player?.league ? String(player.league) : undefined,
     image: candidates[0],
     imageUrl: player?.imageUrl ? String(player.imageUrl) : undefined,
     photo: player?.photo ? String(player.photo) : undefined,

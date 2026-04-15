@@ -1,6 +1,7 @@
 import { type PlayerCardData } from "./Metal3DCard";
 import { useMemo, useState } from "react";
 import { CARD_IMAGE_FALLBACK } from "../lib/card-image";
+import { cardVisualTokens } from "./cards/cardVisualTokens";
 
 type SimpleCardProps = {
   player: PlayerCardData;
@@ -23,57 +24,6 @@ function getLast5(player: PlayerCardData) {
   return last5;
 }
 
-const rarityStyles: Record<
-  PlayerCardData["rarity"],
-  { shell: string; border: string; glow: string; badge: string; orb: string; wash: string; halo: string }
-> = {
-  common: {
-    shell: "from-[#0c1420] via-[#08101a] to-[#03060c]",
-    border: "border-white/10",
-    glow: "shadow-[0_18px_45px_rgba(0,0,0,0.45)]",
-    badge: "bg-white/10 border-white/20 text-white/90",
-    orb: "bg-white",
-    wash: "from-white/5 via-transparent to-transparent",
-    halo: "bg-white/10",
-  },
-  rare: {
-    shell: "from-[#0b1d44] via-[#081428] to-[#03060c]",
-    border: "border-sky-300/50",
-    glow: "shadow-[0_18px_55px_rgba(36,99,235,0.45)]",
-    badge: "bg-sky-400/18 border-sky-200/40 text-white",
-    orb: "bg-sky-200",
-    wash: "from-sky-300/32 via-blue-300/12 to-transparent",
-    halo: "bg-sky-300/30",
-  },
-  unique: {
-    shell: "from-[#34104b] via-[#170d2d] to-[#03060c]",
-    border: "border-fuchsia-300/55",
-    glow: "shadow-[0_18px_55px_rgba(168,85,247,0.48)]",
-    badge: "bg-fuchsia-400/18 border-fuchsia-200/40 text-white",
-    orb: "bg-fuchsia-200",
-    wash: "from-fuchsia-300/34 via-purple-300/14 to-transparent",
-    halo: "bg-fuchsia-300/30",
-  },
-  epic: {
-    shell: "from-[#5b0f4a] via-[#2c0c2d] to-[#03060c]",
-    border: "border-pink-300/58",
-    glow: "shadow-[0_18px_58px_rgba(236,72,153,0.50)]",
-    badge: "bg-pink-400/18 border-pink-200/40 text-white",
-    orb: "bg-pink-200",
-    wash: "from-pink-300/36 via-fuchsia-300/14 to-transparent",
-    halo: "bg-pink-300/32",
-  },
-  legendary: {
-    shell: "from-[#5d3b00] via-[#2b1800] to-[#03060c]",
-    border: "border-amber-200/70",
-    glow: "shadow-[0_20px_60px_rgba(245,158,11,0.55)]",
-    badge: "bg-amber-300/18 border-amber-100/45 text-white",
-    orb: "bg-amber-200",
-    wash: "from-amber-200/40 via-yellow-300/16 to-transparent",
-    halo: "bg-amber-200/36",
-  },
-};
-
 export default function SimpleCard({ player, className = "" }: SimpleCardProps) {
   const candidates = useMemo(() => {
     const list = [player.image, ...(player.imageCandidates || []), CARD_IMAGE_FALLBACK]
@@ -82,13 +32,14 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
   }, [player.image, player.imageCandidates]);
   const [candidateIndex, setCandidateIndex] = useState(0);
   const src = candidates[Math.min(candidateIndex, Math.max(0, candidates.length - 1))] || CARD_IMAGE_FALLBACK;
-  const rarity = rarityStyles[player.rarity];
+  const rarity = cardVisualTokens[player.rarity];
   const rarityLabel = getRarityLabel(player.rarity);
   const level = Math.max(1, Number(player.level) || 1);
   const xp = Math.max(0, Number(player.xp) || 0);
   const xpMax = Math.max(100, Number(player.xpMax) || 1000);
   const last5 = getLast5(player);
   const club = String(player.club || player.team || "FantasyFC").toUpperCase();
+  const league = String(player.league || "Global League").toUpperCase();
   const name = fitName(player.name, 18);
 
   return (
@@ -103,7 +54,8 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,255,255,0.08),transparent_24%),linear-gradient(180deg,rgba(255,255,255,0.04),transparent_22%),linear-gradient(180deg,transparent_0%,rgba(0,0,0,0.08)_50%,rgba(0,0,0,0.24)_100%)]" />
       <div className={`absolute inset-0 bg-gradient-to-b ${rarity.wash}`} />
-      <div className="pointer-events-none absolute inset-[1px] rounded-[23px] bg-[linear-gradient(118deg,rgba(255,255,255,0.12)_0%,rgba(255,255,255,0.03)_18%,rgba(255,255,255,0)_42%)]" />
+      <div className={`pointer-events-none absolute inset-[1px] rounded-[23px] bg-gradient-to-br ${rarity.frame}`} />
+      <div className={`pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgba(255,255,255,0.14)_1px,transparent_1px)] bg-[length:3px_3px] ${rarity.grain}`} />
 
       <div className="absolute left-3 top-3 z-20">
         <div className="text-[34px] font-black leading-none tracking-[-0.04em] text-white">{player.rating}</div>
@@ -115,7 +67,7 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
         {rarityLabel}
       </div>
 
-      <div className="absolute inset-x-[10%] top-[17%] z-10 flex h-[48%] items-center justify-center">
+      <div className="absolute inset-x-[10%] top-[17%] z-10 flex h-[48%] items-center justify-center [mask-image:radial-gradient(circle_at_50%_42%,black_58%,transparent_100%)]">
         {candidates.length > 0 ? (
           <img
             src={src}
@@ -146,6 +98,10 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
       ) : null}
 
       <div className="absolute inset-x-3 bottom-3 z-20 text-center">
+        <div className="mb-2 flex items-center justify-between text-[8px] font-bold uppercase tracking-[0.11em] text-white/85">
+          <span className="rounded-full border border-white/20 px-2 py-[2px]">{league}</span>
+          <span className="rounded-full border border-white/20 px-2 py-[2px]">#{player.serial || 1}/{player.maxSupply || 0}</span>
+        </div>
         <div className="flex items-center justify-center gap-3 text-[8px] font-bold uppercase tracking-[0.08em] text-white/85">
           <span>
             <span className="text-white/55">LV</span> {level}

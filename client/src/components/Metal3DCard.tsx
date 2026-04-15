@@ -19,6 +19,7 @@ export type PlayerCardData = {
   serial?: number;
   maxSupply?: number;
   team?: string;
+  league?: string;
   nationality?: string;
   level?: number;
   xp?: number;
@@ -448,6 +449,7 @@ function getLast5(player: PlayerCardData) {
 }
 
 export default function Metal3DCard({ player, className = "" }: Metal3DCardProps) {
+  const forceSimple2D = true;
   const containerRef = useRef<HTMLDivElement>(null);
   const slabRef = useRef<THREE.Group | null>(null);
   const mousePosRef = useRef({ x: 0, y: 0 });
@@ -472,6 +474,7 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
   }, [isMobile, player.id, player.name, player.image, player.imageCandidates]);
 
   useEffect(() => {
+    if (forceSimple2D) return;
     if (isMobile || !containerRef.current) return;
 
     const width = containerRef.current.clientWidth;
@@ -805,6 +808,7 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
       renderer.dispose();
     };
   }, [
+    forceSimple2D,
     isMobile,
     player.id,
     player.name,
@@ -822,6 +826,10 @@ export default function Metal3DCard({ player, className = "" }: Metal3DCardProps
   }, [player.id]);
 
   if (isMobile) {
+    return <SimpleCard player={player} className={className} />;
+  }
+
+  if (forceSimple2D) {
     return <SimpleCard player={player} className={className} />;
   }
 
