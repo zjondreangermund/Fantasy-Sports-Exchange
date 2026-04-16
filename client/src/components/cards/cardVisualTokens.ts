@@ -1,71 +1,95 @@
-import { type PlayerCardData } from "../Metal3DCard";
+import { type PlayerCardData } from "./types";
 
 export type CardVisualToken = {
+  rarityLabel: string;
   shell: string;
-  border: string;
+  frameOuter: string;
+  frameInner: string;
+  innerGlow: string;
+  bevel: string;
   glow: string;
+  pattern: string;
   badge: string;
+  leagueBadge: string;
+  serialBadge: string;
   orb: string;
-  wash: string;
-  halo: string;
-  frame: string;
-  grain: string;
+  statChip: string;
+};
+
+const common: CardVisualToken = {
+  rarityLabel: "COMMON",
+  shell: "from-[#111827] via-[#0b1220] to-[#050912]",
+  frameOuter: "from-[#a7b1c2] via-[#6b7280] to-[#3f4b5f]",
+  frameInner: "from-[#1f2937] via-[#111827] to-[#0b1220]",
+  innerGlow: "shadow-[inset_0_0_26px_rgba(203,213,225,0.16)]",
+  bevel: "shadow-[inset_0_2px_0_rgba(255,255,255,0.38),inset_0_-3px_8px_rgba(0,0,0,0.55)]",
+  glow: "shadow-[0_14px_42px_rgba(45,212,191,0.18)]",
+  pattern: "bg-[radial-gradient(circle_at_18%_14%,rgba(148,163,184,0.16),transparent_46%),repeating-radial-gradient(circle_at_0_0,rgba(226,232,240,0.05)_0_1px,transparent_1px_4px)]",
+  badge: "bg-emerald-300/14 border-emerald-200/35 text-emerald-100",
+  leagueBadge: "bg-slate-700/50 border-slate-200/20 text-slate-100/90",
+  serialBadge: "bg-slate-800/70 border-slate-200/25 text-slate-100/95",
+  orb: "bg-emerald-200",
+  statChip: "bg-emerald-500/20 border-emerald-200/35 text-emerald-50",
+};
+
+const rare: CardVisualToken = {
+  rarityLabel: "RARE",
+  shell: "from-[#081935] via-[#0b1f43] to-[#071326]",
+  frameOuter: "from-[#7dd3fc] via-[#2563eb] to-[#1e3a8a]",
+  frameInner: "from-[#0e223f] via-[#0c1d33] to-[#081426]",
+  innerGlow: "shadow-[inset_0_0_28px_rgba(56,189,248,0.2)]",
+  bevel: "shadow-[inset_0_2px_0_rgba(255,255,255,0.44),inset_0_-4px_10px_rgba(2,6,23,0.62)]",
+  glow: "shadow-[0_14px_44px_rgba(59,130,246,0.4)]",
+  pattern: "bg-[radial-gradient(circle_at_78%_12%,rgba(125,211,252,0.24),transparent_42%),repeating-linear-gradient(52deg,rgba(56,189,248,0.09)_0_2px,transparent_2px_10px),linear-gradient(135deg,rgba(148,197,255,0.14),transparent_52%)]",
+  badge: "bg-sky-400/20 border-sky-200/40 text-sky-50",
+  leagueBadge: "bg-blue-700/45 border-sky-100/30 text-sky-50",
+  serialBadge: "bg-blue-950/70 border-sky-100/35 text-sky-50",
+  orb: "bg-sky-200",
+  statChip: "bg-sky-500/24 border-sky-200/45 text-sky-50",
+};
+
+const unique: CardVisualToken = {
+  rarityLabel: "UNIQUE",
+  shell: "from-[#200826] via-[#2b0d3d] to-[#120719]",
+  frameOuter: "from-[#f472b6] via-[#a855f7] to-[#6d28d9]",
+  frameInner: "from-[#2e0f45] via-[#210a34] to-[#13081f]",
+  innerGlow: "shadow-[inset_0_0_28px_rgba(217,70,239,0.24)]",
+  bevel: "shadow-[inset_0_2px_0_rgba(255,255,255,0.42),inset_0_-4px_10px_rgba(0,0,0,0.58)]",
+  glow: "shadow-[0_16px_48px_rgba(217,70,239,0.42)]",
+  pattern: "bg-[radial-gradient(circle_at_80%_16%,rgba(244,114,182,0.3),transparent_42%),radial-gradient(circle_at_20%_80%,rgba(168,85,247,0.24),transparent_50%),repeating-radial-gradient(circle_at_50%_30%,rgba(233,213,255,0.06)_0_2px,transparent_2px_10px)]",
+  badge: "bg-fuchsia-400/24 border-fuchsia-200/42 text-fuchsia-50",
+  leagueBadge: "bg-fuchsia-700/40 border-fuchsia-100/30 text-fuchsia-50",
+  serialBadge: "bg-violet-950/68 border-fuchsia-100/35 text-fuchsia-50",
+  orb: "bg-fuchsia-200",
+  statChip: "bg-fuchsia-500/24 border-fuchsia-200/42 text-fuchsia-50",
+};
+
+const legendary: CardVisualToken = {
+  rarityLabel: "LEGENDARY",
+  shell: "from-[#2b1700] via-[#3b2304] to-[#1a0f00]",
+  frameOuter: "from-[#fde68a] via-[#f59e0b] to-[#b45309]",
+  frameInner: "from-[#382107] via-[#261505] to-[#170d03]",
+  innerGlow: "shadow-[inset_0_0_34px_rgba(252,211,77,0.26)]",
+  bevel: "shadow-[inset_0_2px_0_rgba(255,255,255,0.5),inset_0_-4px_10px_rgba(0,0,0,0.58)]",
+  glow: "shadow-[0_18px_52px_rgba(245,158,11,0.5)]",
+  pattern: "bg-[radial-gradient(circle_at_75%_14%,rgba(253,224,71,0.32),transparent_40%),radial-gradient(circle_at_30%_70%,rgba(251,191,36,0.24),transparent_48%),repeating-linear-gradient(0deg,rgba(251,191,36,0.09)_0_1px,transparent_1px_14px),repeating-linear-gradient(90deg,rgba(251,191,36,0.06)_0_1px,transparent_1px_14px)]",
+  badge: "bg-amber-300/24 border-amber-100/50 text-amber-50",
+  leagueBadge: "bg-amber-700/44 border-amber-100/42 text-amber-50",
+  serialBadge: "bg-amber-950/72 border-amber-100/45 text-amber-50",
+  orb: "bg-amber-200",
+  statChip: "bg-amber-500/26 border-amber-100/50 text-amber-50",
 };
 
 export const cardVisualTokens: Record<PlayerCardData["rarity"], CardVisualToken> = {
-  common: {
-    shell: "from-[#0c1420] via-[#08101a] to-[#03060c]",
-    border: "border-white/15",
-    glow: "shadow-[0_18px_45px_rgba(0,0,0,0.45)]",
-    badge: "bg-white/10 border-white/20 text-white/90",
-    orb: "bg-white",
-    wash: "from-white/7 via-transparent to-transparent",
-    halo: "bg-white/10",
-    frame: "from-white/20 via-white/10 to-transparent",
-    grain: "opacity-20",
-  },
-  rare: {
-    shell: "from-[#0b1d44] via-[#081428] to-[#03060c]",
-    border: "border-sky-300/60",
-    glow: "shadow-[0_18px_55px_rgba(36,99,235,0.45)]",
-    badge: "bg-sky-400/18 border-sky-200/40 text-white",
-    orb: "bg-sky-200",
-    wash: "from-sky-300/32 via-blue-300/12 to-transparent",
-    halo: "bg-sky-300/30",
-    frame: "from-sky-200/30 via-sky-300/15 to-transparent",
-    grain: "opacity-25",
-  },
-  unique: {
-    shell: "from-[#34104b] via-[#170d2d] to-[#03060c]",
-    border: "border-fuchsia-300/55",
-    glow: "shadow-[0_18px_55px_rgba(168,85,247,0.48)]",
-    badge: "bg-fuchsia-400/18 border-fuchsia-200/40 text-white",
-    orb: "bg-fuchsia-200",
-    wash: "from-fuchsia-300/34 via-purple-300/14 to-transparent",
-    halo: "bg-fuchsia-300/30",
-    frame: "from-fuchsia-200/28 via-purple-300/16 to-transparent",
-    grain: "opacity-30",
-  },
-  epic: {
-    shell: "from-[#5b0f4a] via-[#2c0c2d] to-[#03060c]",
-    border: "border-pink-300/58",
-    glow: "shadow-[0_18px_58px_rgba(236,72,153,0.50)]",
-    badge: "bg-pink-400/18 border-pink-200/40 text-white",
-    orb: "bg-pink-200",
-    wash: "from-pink-300/36 via-fuchsia-300/14 to-transparent",
-    halo: "bg-pink-300/32",
-    frame: "from-pink-200/30 via-fuchsia-300/18 to-transparent",
-    grain: "opacity-30",
-  },
-  legendary: {
-    shell: "from-[#5d3b00] via-[#2b1800] to-[#03060c]",
-    border: "border-amber-200/75",
-    glow: "shadow-[0_20px_60px_rgba(245,158,11,0.55)]",
-    badge: "bg-amber-300/18 border-amber-100/45 text-white",
-    orb: "bg-amber-200",
-    wash: "from-amber-200/40 via-yellow-300/16 to-transparent",
-    halo: "bg-amber-200/36",
-    frame: "from-amber-100/35 via-amber-300/20 to-transparent",
-    grain: "opacity-35",
-  },
+  common,
+  rare,
+  unique,
+  epic: unique,
+  legendary,
 };
+
+export function normalizeVisualRarity(rarity: PlayerCardData["rarity"]): "common" | "rare" | "unique" | "legendary" {
+  if (rarity === "epic") return "unique";
+  if (rarity === "rare" || rarity === "unique" || rarity === "legendary") return rarity;
+  return "common";
+}

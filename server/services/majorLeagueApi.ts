@@ -144,3 +144,58 @@ export async function getMajorLeagueLiveGames(leagueKey: MajorLeagueKey) {
     },
   }));
 }
+
+export async function getMajorLeaguePlayers(leagueKey: MajorLeagueKey, options: { page?: number; limit?: number; search?: string; position?: string } = {}) {
+  const league = MAJOR_LEAGUES[leagueKey];
+  const season = currentSeasonYear();
+  const page = Math.max(1, Number(options.page || 1));
+  const payload = await fetchApi(`/players?league=${league.id}&season=${season}&page=${page}`);
+  const rows = Array.isArray(payload?.response) ? payload.response : [];
+  const search = String(options.search || "").toLowerCase();
+  const position = String(options.position || "").toUpperCase();
+  let normalized = rows.map((row: any) => ({
+    id: Number(row?.player?.id || 0),
+    playerId: Number(row?.player?.id || 0),
+    name: String(row?.player?.name || "Unknown"),
+    firstName: String(row?.player?.firstname || ""),
+    lastName: String(row?.player?.lastname || ""),
+    age: Number(row?.player?.age || 0),
+    nationality: String(row?.player?.nationality || ""),
+    team: String(row?.statistics?.[0]?.team?.name || "Unknown"),
+    position: String(row?.statistics?.[0]?.games?.position || "MID").replace("Attacker", "FWD").replace("Defender", "DEF").replace("Goalkeeper", "GK").replace("Midfielder", "MID"),
+    photo: String(row?.player?.photo || ""),
+    imageUrl: String(row?.player?.photo || ""),
+    rating: Number(row?.statistics?.[0]?.games?.rating || 0),
+    appearances: Number(row?.statistics?.[0]?.games?.appearences || 0),
+    goals: Number(row?.statistics?.[0]?.goals?.total || 0),
+    assists: Number(row?.statistics?.[0]?.goals?.assists || 0),
+    cleanSheets: Number(row?.statistics?.[0]?.goals?.conceded === 0 ? 1 : 0),
+    minutes: Number(row?.statistics?.[0]?.games?.minutes || 0),
+    league: league.name,
+  }));
+  if (search) normalized = normalized.filter((player: any) => String(player.name || "").toLowerCase().includes(search));
+  if (position) normalized = normalized.filter((player: any) => String(player.position || "").toUpperCase().includes(position));
+  const limit = Math.max(1, Math.min(100, Number(options.limit || 20)));
+  return normalized.slice(0, limit);
+}
+
+export async function getMajorLeagueInjuries(leagueKey: MajorLeagueKey) {
+  const league = MAJOR_LEAGUES[leagueKey];
+  const season = currentSeasonYear();
+  try {
+    const payload = await fetchApi(`/injuries?league=${league.id}&season=${season}`);
+    const rows = Array.isArray(payload?.response) ? payload.response : [];
+    return rows.slice(0, 80).map((row: any, index: number) => ({
+      id: index + 1,
+      playerId: Number(row?.player?.id || 0),
+      playerName: String(row?.player?.name || "Unknown"),
+      playerPhoto: String(row?.player?.photo || ""),
+      status: String(row?.player?.type || "unknown"),
+      expectedReturn: String(row?.player?.reason || "TBD"),
+      team: String(row?.team?.name || "Unknown"),
+      league: league.name,
+    }));
+  } catch {
+    return [];
+  }
+}

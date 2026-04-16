@@ -116,8 +116,8 @@ export default function PremierLeaguePage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/leagues/${leagueKey}/standings`] });
       queryClient.invalidateQueries({ queryKey: [`/api/leagues/${leagueKey}/fixtures`] });
-      queryClient.invalidateQueries({ queryKey: ["/api/epl/players"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/epl/injuries"] });
+      queryClient.invalidateQueries({ queryKey: ["leaguePlayers", leagueKey] });
+      queryClient.invalidateQueries({ queryKey: [`/api/leagues/${leagueKey}/injuries`] });
       toast({ title: data.message });
     },
     onError: (error) => {

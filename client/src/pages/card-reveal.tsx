@@ -95,7 +95,7 @@ export default function CardRevealPage() {
 
       <div className="relative z-10 flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-5">
         <div key={replayKey} className="animate-[fadeIn_500ms_ease-out]">
-          <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1200 })} mode="css" className="!w-[260px]" />
+          <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1200 })} className="!w-[260px]" />
         </div>
         <Badge className="bg-white/10 backdrop-blur-md">
           {rewardMode ? "Tournament reward reveal" : "Pack reveal"} • 2D cinematic mode
