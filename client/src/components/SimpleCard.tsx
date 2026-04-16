@@ -1,4 +1,4 @@
-import { type PlayerCardData } from "./Metal3DCard";
+import { type PlayerCardData } from "./cards/types";
 import { useMemo, useState } from "react";
 import { CARD_IMAGE_FALLBACK } from "../lib/card-image";
 import { cardVisualTokens } from "./cards/cardVisualTokens";

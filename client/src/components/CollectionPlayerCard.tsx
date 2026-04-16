@@ -1,10 +1,9 @@
 import SimpleCard from "./SimpleCard";
-import { type PlayerCardData } from "./Metal3DCard";
+import { type PlayerCardData } from "./cards/types";
 
 type CollectionPlayerCardProps = {
   player: PlayerCardData;
   className?: string;
-  mode?: "css" | "3d";
 };
 
 export default function CollectionPlayerCard({ player, className = "", mode = "3d" }: CollectionPlayerCardProps) {

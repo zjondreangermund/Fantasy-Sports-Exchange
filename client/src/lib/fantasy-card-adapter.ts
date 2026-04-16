@@ -1,6 +1,6 @@
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 import { buildCardImageCandidates } from "./card-image";
-import { type PlayerCardData, type Rarity } from "../components/Metal3DCard";
+import { type PlayerCardData, type Rarity } from "../components/cards/types";
 
 type FantasyCardDataOptions = {
   imageWidth?: number;
