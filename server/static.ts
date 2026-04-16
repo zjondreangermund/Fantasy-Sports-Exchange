@@ -20,6 +20,17 @@ export function serveStatic(app: Express) {
   }
 
   app.use(express.static(distPath));
+  app.get("/assets/*assetPath", (req, res, next) => {
+    const rel = String(req.params.assetPath || "");
+    const absolute = path.resolve(distPath, "assets", rel);
+    if (!absolute.startsWith(path.resolve(distPath, "assets"))) {
+      return res.status(400).send("Bad asset path");
+    }
+    if (!fs.existsSync(absolute)) {
+      return res.status(404).send("Asset not found");
+    }
+    return next();
+  });
   // FIX: Use named wildcard for Express v5
   app.get("/*splat", (_req, res) => res.sendFile(path.resolve(distPath, "index.html")));
 }
