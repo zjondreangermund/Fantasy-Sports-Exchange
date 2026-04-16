@@ -106,3 +106,34 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
     </SafeCardBoundary>
   );
 }
+
+export default function SimpleCard({ player, className = "" }: SimpleCardProps) {
+  const candidates = React.useMemo(() => getImageCandidates(player), [player]);
+  const [candidateIndex, setCandidateIndex] = React.useState(0);
+  const src = candidates[Math.min(candidateIndex, Math.max(0, candidates.length - 1))] || CARD_IMAGE_FALLBACK;
+
+  const last5 = getLast5(player);
+  const avgScore = Math.round(last5.reduce((sum, value) => sum + Number(value || 0), 0) / Math.max(1, last5.length));
+  const teamCode = String(player.club || player.team || "LIV").slice(0, 3).toUpperCase();
+
+  return (
+    <SafeCardBoundary fallback={<CardFallback player={player} className={className} />}>
+      <SlabCard
+        className={className}
+        name={String(player.name || "Alexis Mac Allister")}
+        rarity={toSlabRarity(player.rarity)}
+        avgScore={avgScore || Number(player.rating || 0) || 68}
+        serialNumber={`${player.serial || 25}/${player.maxSupply || 100}`}
+        imageSrc={src}
+        teamCode={teamCode}
+        shirtNumber={10}
+        age={25}
+        countryCode={getCountryFlag(player)}
+        last5={last5}
+        status={player.status}
+        competitionEligible={player.competitionEligible}
+        provenanceMarker={player.provenanceMarker}
+      />
+    </SafeCardBoundary>
+  );
+}
