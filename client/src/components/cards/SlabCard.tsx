@@ -26,79 +26,61 @@ const rarityStyles: Record<
   {
     frame: string;
     shell: string;
-    banner: string;
+    ring: string;
     glow: string;
     label: string;
-    texture: string;
+    banner: string;
     aura: string;
-    ring: string;
-    accent: string;
+    miniBar: string;
   }
 > = {
   common: {
-    frame: "from-zinc-100 via-slate-200 to-zinc-500",
-    shell: "from-[#6f7682] via-[#4a5160] to-[#1b1f28]",
-    banner: "bg-zinc-200/75 border-zinc-100/75 text-black",
-    glow: "shadow-[0_28px_56px_rgba(203,213,225,0.45)]",
+    frame: "from-[#f2f5fb] via-[#9aa4b8] to-[#465165]",
+    shell: "from-[#121826] via-[#0d1320] to-[#090e19]",
+    ring: "shadow-[0_0_0_1px_rgba(255,255,255,0.48),0_10px_24px_rgba(8,15,32,0.62)]",
+    glow: "shadow-[0_26px_56px_rgba(192,201,218,0.36)]",
     label: "COMMON",
-    texture:
-      "bg-[radial-gradient(circle_at_18%_20%,rgba(255,255,255,0.12),transparent_44%),repeating-radial-gradient(circle_at_30%_30%,rgba(148,163,184,0.08)_0_1px,transparent_1px_4px),linear-gradient(145deg,rgba(148,163,184,0.1),transparent_42%)]",
-    aura: "bg-emerald-200/22",
-    ring: "shadow-[0_0_0_1px_rgba(255,255,255,0.6),0_22px_44px_rgba(15,23,42,0.38)]",
-    accent: "from-white/45 via-white/25 to-slate-300/45",
+    banner: "from-[#b9c2d3]/78 via-[#9ea8ba]/72 to-[#7d8799]/80 border-white/45 text-white",
+    aura: "bg-slate-100/18",
+    miniBar: "bg-slate-200",
   },
   rare: {
-    frame: "from-rose-200 via-red-500 to-red-800",
-    shell: "from-[#4b0a0a] via-[#2f0505] to-[#140101]",
-    banner: "bg-red-400/30 border-red-100/60",
-    glow: "shadow-[0_30px_58px_rgba(239,68,68,0.48)]",
+    frame: "from-[#fecaca] via-[#ef4444] to-[#7f1d1d]",
+    shell: "from-[#1b0b12] via-[#14080e] to-[#0d0408]",
+    ring: "shadow-[0_0_0_1px_rgba(252,165,165,0.52),0_10px_26px_rgba(36,7,7,0.76)]",
+    glow: "shadow-[0_26px_56px_rgba(239,68,68,0.42)]",
     label: "RARE",
-    texture:
-      "bg-[radial-gradient(circle_at_80%_16%,rgba(125,211,252,0.28),transparent_44%),repeating-linear-gradient(56deg,rgba(125,211,252,0.08)_0_2px,transparent_2px_10px),linear-gradient(125deg,rgba(59,130,246,0.16),transparent_56%)]",
-    aura: "bg-sky-200/26",
-    ring: "shadow-[0_0_0_1px_rgba(248,113,113,0.42),0_0_36px_rgba(239,68,68,0.26),0_24px_48px_rgba(0,0,0,0.66)]",
-    accent: "from-red-300/30 via-white/12 to-red-600/30",
+    banner: "from-[#f97373]/76 via-[#ef4444]/70 to-[#dc2626]/76 border-red-100/40 text-white",
+    aura: "bg-rose-300/20",
+    miniBar: "bg-rose-300",
   },
   unique: {
-    frame: "from-fuchsia-200 via-violet-500 to-violet-950",
-    shell: "from-[#200826] via-[#17061f] to-[#09030f]",
-    banner: "bg-fuchsia-400/22 border-fuchsia-100/50",
-    glow: "shadow-[0_32px_60px_rgba(168,85,247,0.48)]",
+    frame: "from-[#d8b4fe] via-[#9333ea] to-[#581c87]",
+    shell: "from-[#15142b] via-[#101125] to-[#090b18]",
+    ring: "shadow-[0_0_0_1px_rgba(216,180,254,0.56),0_10px_26px_rgba(32,13,56,0.84)]",
+    glow: "shadow-[0_28px_62px_rgba(147,51,234,0.48)]",
     label: "UNIQUE",
-    texture:
-      "bg-[radial-gradient(circle_at_82%_14%,rgba(244,114,182,0.3),transparent_42%),radial-gradient(circle_at_18%_78%,rgba(168,85,247,0.24),transparent_52%),repeating-radial-gradient(circle_at_40%_30%,rgba(233,213,255,0.06)_0_2px,transparent_2px_10px)]",
-    aura: "bg-fuchsia-200/28",
-    ring: "shadow-[0_0_0_1px_rgba(233,213,255,0.3),0_0_38px_rgba(168,85,247,0.26),0_24px_48px_rgba(0,0,0,0.66)]",
-    accent: "from-fuchsia-300/30 via-white/14 to-violet-500/30",
+    banner: "from-[#c084fc]/76 via-[#a855f7]/68 to-[#7e22ce]/76 border-fuchsia-100/42 text-white",
+    aura: "bg-fuchsia-300/18",
+    miniBar: "bg-fuchsia-400",
   },
   legendary: {
-    frame: "from-amber-100 via-amber-500 to-yellow-700",
-    shell: "from-[#2b1800] via-[#1b1000] to-[#0d0700]",
-    banner: "bg-amber-400/24 border-amber-100/56",
-    glow: "shadow-[0_34px_64px_rgba(245,158,11,0.5)]",
+    frame: "from-[#fde68a] via-[#f59e0b] to-[#a16207]",
+    shell: "from-[#20160a] via-[#14100b] to-[#0d0a08]",
+    ring: "shadow-[0_0_0_1px_rgba(252,211,77,0.56),0_10px_28px_rgba(56,33,5,0.84)]",
+    glow: "shadow-[0_30px_64px_rgba(245,158,11,0.54)]",
     label: "LEGENDARY",
-    texture:
-      "bg-[radial-gradient(circle_at_76%_12%,rgba(253,224,71,0.32),transparent_40%),repeating-linear-gradient(0deg,rgba(251,191,36,0.09)_0_1px,transparent_1px_14px),repeating-linear-gradient(90deg,rgba(251,191,36,0.06)_0_1px,transparent_1px_14px)]",
-    aura: "bg-amber-200/30",
-    ring: "shadow-[0_0_0_1px_rgba(251,191,36,0.35),0_0_40px_rgba(251,191,36,0.26),0_26px_52px_rgba(0,0,0,0.66)]",
-    accent: "from-amber-300/32 via-white/12 to-yellow-500/30",
+    banner: "from-[#fcd34d]/76 via-[#f59e0b]/68 to-[#b45309]/78 border-amber-100/44 text-white",
+    aura: "bg-amber-300/20",
+    miniBar: "bg-amber-300",
   },
 };
 
-function barTone(value: number) {
-  if (value >= 70) return "bg-emerald-400";
-  if (value >= 45) return "bg-amber-400";
-  return "bg-rose-500";
-}
-
-function EngravedOverlay({ glow }: { glow: string }) {
-  return (
-    <>
-      <div className="pointer-events-none absolute inset-0 rounded-[1.75rem] opacity-35 mix-blend-screen [background-image:repeating-linear-gradient(120deg,rgba(255,255,255,0.05)_0px,rgba(255,255,255,0.05)_1px,transparent_1px,transparent_7px),repeating-linear-gradient(45deg,rgba(255,255,255,0.02)_0px,rgba(255,255,255,0.02)_1px,transparent_1px,transparent_12px)]" />
-      <div className={`pointer-events-none absolute inset-0 rounded-[1.75rem] bg-gradient-to-br ${glow}`} />
-      <div className="pointer-events-none absolute inset-[1px] rounded-[1.7rem] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-20px_40px_rgba(0,0,0,0.35)]" />
-    </>
-  );
+function scoreDots(values: number[]) {
+  return values.map((value, i) => {
+    const tone = value >= 70 ? "bg-emerald-400" : value >= 45 ? "bg-fuchsia-500" : "bg-rose-500";
+    return <span key={`dot-${i}`} className={`h-2.5 w-2.5 rounded-full ${tone}`} />;
+  });
 }
 
 export default function SlabCard({
@@ -114,10 +96,7 @@ export default function SlabCard({
   age = 25,
   countryCode = "🇦🇷",
   last5 = [62, 74, 55, 81, 68],
-  value,
-  status = "active",
-  competitionEligible = true,
-  provenanceMarker = "Recorded",
+  provenanceMarker = "Verified Holder",
 }: SlabCardProps) {
   const style = rarityStyles[rarity];
   const normalizedLast5 = useMemo(() => {
@@ -129,89 +108,79 @@ export default function SlabCard({
   return (
     <article
       className={[
-        "group relative w-[170px] max-w-full aspect-[0.71/1] rounded-[2rem] p-[3px]",
-        "transform-gpu [transform:perspective(1100px)_rotateX(0deg)_rotateY(0deg)_translateZ(0)]",
-        "transition-[transform,box-shadow,filter] duration-500 ease-out",
-        "hover:[transform:perspective(1100px)_rotateX(5deg)_rotateY(-6deg)_translateY(-3px)_scale(1.03)]",
-        `bg-gradient-to-br ${style.frame} ${style.glow} ${style.ring}`,
-        "border border-white/20",
+        "group relative w-[178px] max-w-full aspect-[0.705/1] rounded-[1.95rem] p-[3px]",
+        "border border-white/25 bg-gradient-to-b",
+        `bg-gradient-to-b ${style.frame} ${style.ring} ${style.glow}`,
+        "transition-transform duration-300 hover:-translate-y-1",
         className,
       ].join(" ")}
     >
-      <div className={`relative h-full overflow-hidden rounded-[1.75rem] border border-white/18 bg-gradient-to-b ${style.shell}`}>
-        <EngravedOverlay glow={style.accent} />
+      <div className={`relative h-full overflow-hidden rounded-[1.7rem] border border-white/20 bg-gradient-to-b ${style.shell}`}>
+        <div className="absolute inset-[4px] rounded-[1.45rem] border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.16),inset_0_-18px_36px_rgba(0,0,0,0.46)]" />
+        <div className="absolute inset-0 opacity-35 [background-image:radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.14),transparent_40%),repeating-radial-gradient(circle_at_30%_15%,rgba(255,255,255,0.04)_0_1px,transparent_1px_6px)]" />
 
-        <div className={`absolute inset-0 opacity-40 ${style.texture}`} />
-        <div className="absolute inset-[6px] rounded-[1.5rem] border border-white/22 shadow-[inset_0_0_20px_rgba(255,255,255,0.12)]" />
-
-        <div className="pointer-events-none absolute inset-x-[-22%] top-[-40%] z-10 h-[46%] rotate-[15deg] bg-gradient-to-b from-white/40 via-white/12 to-transparent blur-[2px] transition-opacity duration-500 group-hover:opacity-90" />
-
-        <div className="relative z-20 flex items-center justify-between px-4 pt-3 text-[10px] font-extrabold tracking-[0.14em] text-white/90">
+        <div className="relative z-20 flex items-center justify-between px-4 pt-3 text-[12px] font-extrabold tracking-[0.08em] text-white/92">
           <span>{season}</span>
           <span>{teamCode} #{shirtNumber}</span>
         </div>
 
-        <div className="absolute inset-x-[6%] top-[12%] z-20 flex h-[54%] items-end justify-center overflow-visible [mask-image:radial-gradient(98%_96%_at_50%_34%,black_70%,transparent_98%)]">
-          <div className={`absolute left-1/2 top-[48%] h-[50%] w-[66%] -translate-x-1/2 rounded-full blur-3xl ${style.aura}`} />
+        <div className="absolute inset-x-4 top-[12%] z-20 h-[35%] overflow-hidden rounded-[0.85rem] border border-white/18 bg-black/25 shadow-[inset_0_8px_20px_rgba(255,255,255,0.08)]">
+          <div className={`absolute left-1/2 top-[66%] h-[50%] w-[68%] -translate-x-1/2 rounded-full blur-2xl ${style.aura}`} />
           {imageSrc ? (
             <img
               src={imageSrc}
               alt={name}
               loading="lazy"
               decoding="async"
-              className="h-[122%] w-auto max-w-none object-contain object-top drop-shadow-[0_34px_26px_rgba(0,0,0,0.72)] transition-transform duration-500 group-hover:scale-[1.04]"
+              className="h-full w-full object-cover object-center"
             />
           ) : (
-            <div className="h-[120%] w-[78%] rounded-3xl bg-white/10" />
+            <div className="h-full w-full bg-white/10" />
           )}
         </div>
 
-        <div className={`absolute inset-x-4 top-[48%] z-30 rounded-full border px-3 py-1 text-center text-[10px] font-black tracking-[0.18em] text-white backdrop-blur ${style.banner}`}>
+        <div
+          className={`absolute inset-x-4 top-[50%] z-30 rounded-full border bg-gradient-to-r px-3 py-1 text-center text-[12px] font-black tracking-[0.2em] ${style.banner}`}
+        >
           {style.label}
         </div>
 
-        {value ? <div className="absolute left-4 top-[56%] z-30 rounded-full border border-emerald-100/45 bg-emerald-500/22 px-2 py-[2px] text-[9px] font-bold text-emerald-50">Value {value}</div> : null}
-
-        <div className="absolute right-4 top-[56%] z-30 flex gap-1">
-          <span className={`rounded-full border px-2 py-[2px] text-[8px] font-bold uppercase ${status === "active" ? "border-sky-200/45 bg-sky-500/20 text-sky-50" : status === "legacy" ? "border-amber-200/45 bg-amber-500/20 text-amber-50" : "border-zinc-200/35 bg-zinc-600/25 text-zinc-50"}`}>{status.replace("_", " ")}</span>
-          <span className={`rounded-full border px-2 py-[2px] text-[8px] font-bold ${competitionEligible ? "border-emerald-200/45 bg-emerald-500/20 text-emerald-50" : "border-rose-200/35 bg-rose-500/20 text-rose-50"}`}>{competitionEligible ? "Eligible" : "Limited"}</span>
-        </div>
-
-        <div className="absolute inset-x-4 bottom-[56px] z-30 rounded-xl border border-white/15 bg-black/24 px-2 py-1.5 backdrop-blur-md">
-          <div className="mb-1 flex items-center justify-between text-[8px] font-bold uppercase tracking-[0.12em] text-white/70">
-            <span>Last 5 Games</span>
-            <span>Average Score</span>
+        <section className="absolute inset-x-4 bottom-[58px] z-30 rounded-[0.95rem] border border-white/18 bg-black/52 px-2.5 py-1.5 backdrop-blur-sm">
+          <div className="mb-1.5 flex items-center justify-between text-[8.5px] font-bold uppercase tracking-[0.1em] text-white/78">
+            <span>LAST 5 GAMES</span>
+            <span>AVERAGE SCORE</span>
           </div>
-          <div className="flex items-end justify-between gap-1.5">
-            <div className="flex h-8 items-end gap-1">
-              {normalizedLast5.map((value, i) => (
-                <div key={`${name}-bar-${i}`} className="flex flex-col items-center gap-0.5">
-                  <span className="text-[7px] text-white/80">{value}</span>
-                  <span className={`w-2.5 rounded-sm ${barTone(value)}`} style={{ height: `${Math.max(8, Math.min(28, (value / 100) * 28))}px` }} />
-                </div>
-              ))}
-            </div>
-            <div className="rounded-lg border border-white/20 bg-white/8 px-2 py-1 text-right">
-              <div className="text-[7px] uppercase tracking-[0.1em] text-white/70">AVG</div>
-              <div className="text-sm font-black text-white">{Math.round(avgScore)}</div>
+          <div className="flex items-end justify-between gap-2">
+            <div className="flex items-center gap-1.5">{scoreDots(normalizedLast5)}</div>
+            <div className="rounded-[0.6rem] border border-white/28 bg-black/56 px-2 py-[3px] text-right">
+              <div className="text-[7px] font-bold uppercase tracking-[0.1em] text-white/70">AVG</div>
+              <div className="text-[27px] leading-none font-black text-white">{Math.round(avgScore)}</div>
             </div>
           </div>
-        </div>
+          <div className="mt-1 h-[2px] rounded-full bg-white/10">
+            <span
+              className={`block h-[2px] rounded-full ${style.miniBar}`}
+              style={{ width: `${Math.min(100, Math.max(10, Math.round((Math.round(avgScore) / 100) * 100)))}%` }}
+            />
+          </div>
+        </section>
 
-        <footer className="absolute inset-x-4 bottom-3 z-30 flex items-end justify-between">
+        <footer className="absolute inset-x-4 bottom-3 z-30 flex items-end justify-between text-white">
           <div>
-            <div className="truncate text-[12px] font-black uppercase tracking-[0.02em] text-white">{name}</div>
-            <div className="mt-0.5 text-[9px] font-semibold tracking-[0.12em] text-white/75">Age {age}</div>
+            <div className="truncate text-[12px] font-black uppercase leading-tight">{name}</div>
+            <div className="text-[11px] font-semibold text-white/85">Age {age}</div>
           </div>
           <div className="text-right">
-            <div className="rounded-full border border-white/30 bg-black/35 px-2 py-[2px] text-[8px] font-bold text-white/90">{serialNumber}</div>
-            <div className="mt-1 text-xs">{countryCode}</div>
-            <div className="mt-1 text-[8px] font-semibold text-white/75">{provenanceMarker}</div>
+            <div className="text-[9px] font-bold uppercase text-white/90">{serialNumber}</div>
+            <div className="text-[10px] font-semibold text-white/82">{countryCode}</div>
+            <div className="text-[8px] font-semibold text-white/72">{provenanceMarker}</div>
           </div>
         </footer>
 
-        <div className="pointer-events-none absolute -left-[120%] top-0 h-full w-[74%] rotate-[18deg] bg-slab-shine opacity-0 transition-all duration-700 group-hover:left-[140%] group-hover:opacity-100" />
+        <div className="pointer-events-none absolute left-[-120%] top-0 h-full w-[65%] rotate-[18deg] bg-gradient-to-r from-transparent via-white/24 to-transparent opacity-0 transition-all duration-700 group-hover:left-[140%] group-hover:opacity-100" />
       </div>
+
+      <div className="pointer-events-none absolute -bottom-10 left-1/2 h-16 w-[84%] -translate-x-1/2 rounded-full bg-black/55 blur-2xl" />
     </article>
   );
 }
