@@ -30,6 +30,8 @@ import {
   Timer,
   MessageCircle,
   Flame,
+  BellRing,
+  Target,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "../hooks/use-toast";
@@ -76,6 +78,14 @@ type TournamentRewardStatus = {
   prizeAmount?: number;
   hasMoney?: boolean;
   hasCard?: boolean;
+};
+
+type RetentionSummary = {
+  missions: Array<{ id: string; title: string; progress: number; target: number; completed: boolean }>;
+  reminders: Array<{ id: string; title: string; remindAt: string; enabled: boolean }>;
+  watchlist: { cardIds: number[]; alerts: Array<{ cardId: number; playerName: string; listedPrice: number; fairValue: number; status: string }> };
+  nextBestAction: { key: string; title: string; ctaPath: string };
+  deadline: null | { competitionId: number; competitionName: string; startsAt: string };
 };
 
 
@@ -155,6 +165,16 @@ export default function DashboardPage() {
       return Array.isArray(data) ? data : [];
     },
     refetchInterval: 5000,
+  });
+
+  const { data: retentionSummary } = useQuery<RetentionSummary>({
+    queryKey: ["/api/retention/summary"],
+    queryFn: async () => {
+      const res = await fetch("/api/retention/summary", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch retention summary");
+      return res.json();
+    },
+    refetchInterval: 30000,
   });
 
   const sendLiveChatMutation = useMutation({
@@ -351,8 +371,57 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
-          </Card>
-        </div>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <Card className="p-4 bg-background/70 border-border/60">
+          <div className="flex items-center gap-2 mb-2">
+            <Target className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold">Missions</h3>
+          </div>
+          <div className="space-y-2 text-sm">
+            {(retentionSummary?.missions || []).map((mission) => (
+              <div key={mission.id} className="flex items-center justify-between">
+                <span className={mission.completed ? "text-green-500" : "text-foreground"}>
+                  {mission.title}
+                </span>
+                <Badge variant={mission.completed ? "default" : "outline"}>
+                  {mission.progress}/{mission.target}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card className="p-4 bg-background/70 border-border/60">
+          <div className="flex items-center gap-2 mb-2">
+            <BellRing className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold">Deadline & Reminders</h3>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {retentionSummary?.deadline
+              ? `${retentionSummary.deadline.competitionName} starts ${new Date(retentionSummary.deadline.startsAt).toLocaleString()}`
+              : "No active deadline right now."}
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            {retentionSummary?.reminders?.length || 0} reminder(s) configured.
+          </p>
+        </Card>
+        <Card className="p-4 bg-background/70 border-border/60">
+          <h3 className="font-semibold mb-2">Next Best Action</h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            {retentionSummary?.nextBestAction?.title || "Review your lineup and card market opportunities."}
+          </p>
+          {retentionSummary?.nextBestAction?.ctaPath ? (
+            <Link href={retentionSummary.nextBestAction.ctaPath}>
+              <Button size="sm">Go now</Button>
+            </Link>
+          ) : null}
+          <div className="mt-3 text-xs text-muted-foreground">
+            {retentionSummary?.watchlist?.alerts?.length || 0} watchlist alert(s).
+          </div>
+        </Card>
+      </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
           <Card className="p-5 lg:col-span-2 border-primary/20 bg-primary/5">
