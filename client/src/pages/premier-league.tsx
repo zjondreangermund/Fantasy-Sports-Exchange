@@ -71,7 +71,7 @@ export default function PremierLeaguePage() {
   const search = playerSearch;
   const { data: players = [], isLoading: playersLoading, error: playersError } =
   useQuery<EplPlayer[]>({
-    queryKey: ["leaguePlayers", leagueKey, page, limit, search, position, todayOnlyPlayers],
+    queryKey: ["leaguePlayers", page, limit, search, position, todayOnlyPlayers],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("page", String(page));
@@ -114,10 +114,10 @@ export default function PremierLeaguePage() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/leagues/${leagueKey}/standings`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/leagues/${leagueKey}/fixtures`] });
-      queryClient.invalidateQueries({ queryKey: ["leaguePlayers", leagueKey] });
-      queryClient.invalidateQueries({ queryKey: [`/api/leagues/${leagueKey}/injuries`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/epl/standings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/epl/fixtures"] });
+      queryClient.invalidateQueries({ queryKey: ["leaguePlayers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/epl/injuries"] });
       toast({ title: data.message });
     },
     onError: (error) => {
@@ -172,26 +172,15 @@ export default function PremierLeaguePage() {
                 Top 5 Leagues
               </h1>
               <p className="text-muted-foreground text-sm mt-1">
-                Live tracking for Premier League, La Liga, Bundesliga, Serie A & Ligue 1 — {currentSeasonLabel} Season
+                Live tracking for Premier League — {currentSeasonLabel} Season
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {([
-                ["premier-league", "Premier League"],
-                ["la-liga", "La Liga"],
-                ["bundesliga", "Bundesliga"],
-                ["serie-a", "Serie A"],
-                ["ligue-1", "Ligue 1"],
-              ] as const).map(([key, label]) => (
-                <Button key={key} size="sm" variant={leagueKey === key ? "default" : "outline"} onClick={() => setLeagueKey(key)}>
-                  {label}
-                </Button>
-              ))}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => syncMutation.mutate()}
-                disabled={syncMutation.isPending || leagueKey !== "premier-league"}
+                disabled={syncMutation.isPending}
                 className="border-purple-500/30 hover:border-purple-400/50 hover:bg-purple-500/10"
               >
                 <RefreshCw className={`w-4 h-4 mr-1 ${syncMutation.isPending ? "animate-spin" : ""}`} />
@@ -217,7 +206,7 @@ export default function PremierLeaguePage() {
             </TabsList>
 
             <TabsContent value="live">
-              <LiveGames endpoint={`/api/leagues/${leagueKey}/live-games`} />
+              <LiveGames endpoint={"/api/epl/live-games"} />
             </TabsContent>
 
             <TabsContent value="standings">
