@@ -26,7 +26,7 @@ if ("serviceWorker" in navigator) {
 				if ("caches" in window) {
 					caches.keys().then((keys) => {
 						keys
-							.filter((key) => key !== "fantasy-site-v3")
+							.filter((key) => key !== "fantasy-site-v4")
 							.forEach((key) => caches.delete(key));
 					});
 				}
