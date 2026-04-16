@@ -29,6 +29,18 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || DEFAULT_ADMIN_EMAIL)
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
+const playerMergeCache = new Map<string, { expiresAt: number; value: any }>();
+
+function normalizePlayerName(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** True when deployed on Replit (has REPL_ID). Use Replit Auth there. */
 const isReplit = Boolean(process.env.REPL_ID);
 
@@ -1460,6 +1472,119 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       console.error("EPL players:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch players" });
+    }
+  });
+
+  /**
+   * Proxy endpoint for a single FPL player (prevents CORS issues from browser clients).
+   */
+  app.get("/api/proxy/fpl/player/:fplId", async (req, res) => {
+    try {
+      const fplId = Number(req.params.fplId || 0);
+      if (!fplId) return res.status(400).json({ message: "Invalid fplId" });
+
+      const bootstrap = await fplApi.bootstrap();
+      const player = (Array.isArray((bootstrap as any)?.elements) ? (bootstrap as any).elements : []).find(
+        (item: any) => Number(item.id) === fplId,
+      );
+      if (!player) return res.status(404).json({ message: "Player not found in FPL" });
+
+      const team = (Array.isArray((bootstrap as any)?.teams) ? (bootstrap as any).teams : []).find(
+        (item: any) => Number(item.id) === Number(player.team),
+      );
+
+      return res.json({
+        id: Number(player.id),
+        firstName: String(player.first_name || ""),
+        lastName: String(player.second_name || ""),
+        name: `${String(player.first_name || "").trim()} ${String(player.second_name || "").trim()}`.trim() || String(player.web_name || "Unknown"),
+        teamName: String(team?.name || ""),
+        teamCode: String(team?.short_name || ""),
+        totalPoints: Number(player.total_points || 0),
+        influence: Number(player.influence || 0),
+        ictIndex: Number(player.ict_index || 0),
+        form: Number(player.form || 0),
+        price: Number(player.now_cost || 0) / 10,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ message: error?.message || "Failed to fetch FPL player" });
+    }
+  });
+
+  /**
+   * Proxy endpoint that matches API-Football player info to an FPL player by name+team.
+   * Uses short-lived cache to reduce upstream traffic and prepare for future Postgres caching.
+   */
+  app.get("/api/proxy/api-football/by-fpl/:fplId", async (req, res) => {
+    try {
+      const fplId = Number(req.params.fplId || 0);
+      if (!fplId) return res.status(400).json({ message: "Invalid fplId" });
+
+      const cacheKey = `api-football:fpl:${fplId}`;
+      const cached = playerMergeCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return res.json(cached.value);
+      }
+
+      const apiKey = String(process.env.API_FOOTBALL_KEY || "").trim();
+      if (!apiKey) {
+        const fallback = { photo: "", nationality: "", flag: "", matched: false };
+        playerMergeCache.set(cacheKey, { value: fallback, expiresAt: Date.now() + 30 * 60 * 1000 });
+        return res.json(fallback);
+      }
+
+      const bootstrap = await fplApi.bootstrap();
+      const fplPlayer = (Array.isArray((bootstrap as any)?.elements) ? (bootstrap as any).elements : []).find(
+        (item: any) => Number(item.id) === fplId,
+      );
+      if (!fplPlayer) return res.status(404).json({ message: "Player not found in FPL" });
+      const fplTeam = (Array.isArray((bootstrap as any)?.teams) ? (bootstrap as any).teams : []).find(
+        (item: any) => Number(item.id) === Number(fplPlayer.team),
+      );
+
+      const fullName = `${String(fplPlayer.first_name || "").trim()} ${String(fplPlayer.second_name || "").trim()}`.trim();
+      const lastName = String(fplPlayer.second_name || fplPlayer.web_name || "").trim();
+      const searchTerm = encodeURIComponent(lastName || fullName);
+      const season = new Date().getUTCFullYear();
+      const url = `https://v3.football.api-sports.io/players?league=39&season=${season}&search=${searchTerm}`;
+
+      const response = await fetch(url, {
+        headers: {
+          "x-apisports-key": apiKey,
+        },
+      });
+      if (!response.ok) {
+        return res.status(502).json({ message: "Failed to fetch API-Football player" });
+      }
+
+      const json = (await response.json()) as any;
+      const candidates = Array.isArray(json?.response) ? json.response : [];
+      const normalizedName = normalizePlayerName(fullName || String(fplPlayer.web_name || ""));
+      const normalizedTeam = normalizePlayerName(String(fplTeam?.name || ""));
+
+      const best = candidates
+        .map((entry: any) => {
+          const playerName = normalizePlayerName(String(entry?.player?.name || ""));
+          const teamName = normalizePlayerName(String(entry?.statistics?.[0]?.team?.name || ""));
+          let score = 0;
+          if (playerName === normalizedName) score += 3;
+          if (playerName.includes(normalizedName) || normalizedName.includes(playerName)) score += 2;
+          if (teamName && normalizedTeam && teamName.includes(normalizedTeam)) score += 2;
+          return { score, entry };
+        })
+        .sort((a: any, b: any) => b.score - a.score)[0]?.entry;
+
+      const payload = {
+        photo: String(best?.player?.photo || ""),
+        nationality: String(best?.player?.nationality || ""),
+        flag: String(best?.player?.birth?.country ? "" : best?.player?.nationality || ""),
+        matched: Boolean(best),
+      };
+
+      playerMergeCache.set(cacheKey, { value: payload, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+      return res.json(payload);
+    } catch (error: any) {
+      return res.status(500).json({ message: error?.message || "Failed to fetch API-Football proxy" });
     }
   });
 

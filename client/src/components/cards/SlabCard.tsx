@@ -15,6 +15,7 @@ type SlabCardProps = {
   age?: number;
   countryCode?: string;
   last5?: number[];
+  value?: string;
 };
 
 const rarityStyles: Record<SlabRarity, { frame: string; slabSide: string; banner: string; glow: string; label: string }> = {
@@ -67,6 +68,7 @@ export default function SlabCard({
   age = 25,
   countryCode = "🇦🇷",
   last5 = [62, 74, 55, 81, 68],
+  value,
 }: SlabCardProps) {
   const style = rarityStyles[rarity];
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
@@ -127,6 +129,11 @@ export default function SlabCard({
         <div className={`absolute inset-x-4 top-[48%] z-30 rounded-full border px-3 py-1 text-center text-[10px] font-black tracking-[0.18em] text-white backdrop-blur ${style.banner}`}>
           {style.label}
         </div>
+        {value ? (
+          <div className="absolute left-4 top-[56%] z-30 rounded-full border border-emerald-100/45 bg-emerald-500/22 px-2 py-[2px] text-[9px] font-bold text-emerald-50">
+            Value {value}
+          </div>
+        ) : null}
 
         <div className="absolute inset-x-4 bottom-[56px] z-30 rounded-xl border border-white/15 bg-black/35 px-2 py-1.5 backdrop-blur-sm">
           <div className="mb-1 flex items-center justify-between text-[8px] font-bold uppercase tracking-[0.12em] text-white/70">
