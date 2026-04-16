@@ -25,6 +25,15 @@ import { useToast } from "../hooks/use-toast";
 
 type CardRarity = "common" | "rare" | "unique" | "epic" | "legendary";
 
+
+function asArray<T>(payload: any, keys: string[] = []): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) return payload[key] as T[];
+  }
+  return [];
+}
+
 function assignRarity(player: EplPlayer): CardRarity {
   const rating = player.rating ? parseFloat(String(player.rating)) : 0;
   const goals = player.goals ?? 0;
@@ -55,16 +64,31 @@ export default function PremierLeaguePage() {
     return `${startYear}/${String(startYear + 1).slice(-2)}`;
   }, []);
 
-  const { data: standings, isLoading: standingsLoading } = useQuery<EplStanding[]>({
-    queryKey: [`/api/leagues/${leagueKey}/standings`],
+  const { data: standings = [], isLoading: standingsLoading } = useQuery<EplStanding[]>({
+    queryKey: ["/api/epl/standings"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/epl/standings", { credentials: "include" });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return asArray<EplStanding>(data, ["standings", "response"]);
+      } catch {
+        return [];
+      }
+    },
   });
 
-  const { data: fixtures, isLoading: fixturesLoading } = useQuery<EplFixture[]>({
-    queryKey: [`/api/leagues/${leagueKey}/fixtures`, fixtureTab],
+  const { data: fixtures = [], isLoading: fixturesLoading } = useQuery<EplFixture[]>({
+    queryKey: ["/api/epl/fixtures", fixtureTab],
     queryFn: async () => {
-      const res = await fetch(`/api/leagues/${leagueKey}/fixtures?status=${fixtureTab}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch fixtures");
-      return res.json();
+      try {
+        const res = await fetch(`/api/epl/fixtures?status=${fixtureTab}`, { credentials: "include" });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return asArray<EplFixture>(data, ["fixtures", "response"]);
+      } catch {
+        return [];
+      }
     },
   });
 
@@ -98,8 +122,18 @@ export default function PremierLeaguePage() {
     },
   });
 
-  const { data: injuries, isLoading: injuriesLoading } = useQuery<EplInjury[]>({
-    queryKey: [`/api/leagues/${leagueKey}/injuries`],
+  const { data: injuries = [], isLoading: injuriesLoading } = useQuery<EplInjury[]>({
+    queryKey: ["/api/epl/injuries"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/epl/injuries", { credentials: "include" });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return asArray<EplInjury>(data, ["injuries", "response"]);
+      } catch {
+        return [];
+      }
+    },
   });
 
   const filteredPlayers = useMemo(() => {

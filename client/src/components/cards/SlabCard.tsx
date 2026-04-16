@@ -36,28 +36,28 @@ const rarityStyles: Record<
   }
 > = {
   common: {
-    frame: "from-slate-100 via-slate-300 to-slate-600",
-    shell: "from-slate-900 via-slate-950 to-black",
-    banner: "bg-slate-300/22 border-slate-100/45",
-    glow: "shadow-[0_28px_56px_rgba(148,163,184,0.3)]",
+    frame: "from-zinc-100 via-slate-200 to-zinc-500",
+    shell: "from-[#6f7682] via-[#4a5160] to-[#1b1f28]",
+    banner: "bg-zinc-200/75 border-zinc-100/75 text-black",
+    glow: "shadow-[0_28px_56px_rgba(203,213,225,0.45)]",
     label: "COMMON",
     texture:
       "bg-[radial-gradient(circle_at_18%_20%,rgba(255,255,255,0.12),transparent_44%),repeating-radial-gradient(circle_at_30%_30%,rgba(148,163,184,0.08)_0_1px,transparent_1px_4px),linear-gradient(145deg,rgba(148,163,184,0.1),transparent_42%)]",
     aura: "bg-emerald-200/22",
-    ring: "shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_22px_44px_rgba(0,0,0,0.62)]",
-    accent: "from-slate-400/25 via-white/10 to-slate-700/25",
+    ring: "shadow-[0_0_0_1px_rgba(255,255,255,0.6),0_22px_44px_rgba(15,23,42,0.38)]",
+    accent: "from-white/45 via-white/25 to-slate-300/45",
   },
   rare: {
-    frame: "from-sky-100 via-blue-400 to-blue-800",
-    shell: "from-[#0f1a33] via-[#0b1328] to-[#070a17]",
-    banner: "bg-blue-400/24 border-blue-100/55",
-    glow: "shadow-[0_30px_58px_rgba(59,130,246,0.42)]",
+    frame: "from-rose-200 via-red-500 to-red-800",
+    shell: "from-[#4b0a0a] via-[#2f0505] to-[#140101]",
+    banner: "bg-red-400/30 border-red-100/60",
+    glow: "shadow-[0_30px_58px_rgba(239,68,68,0.48)]",
     label: "RARE",
     texture:
       "bg-[radial-gradient(circle_at_80%_16%,rgba(125,211,252,0.28),transparent_44%),repeating-linear-gradient(56deg,rgba(125,211,252,0.08)_0_2px,transparent_2px_10px),linear-gradient(125deg,rgba(59,130,246,0.16),transparent_56%)]",
     aura: "bg-sky-200/26",
-    ring: "shadow-[0_0_0_1px_rgba(96,165,250,0.36),0_0_36px_rgba(59,130,246,0.24),0_24px_48px_rgba(0,0,0,0.66)]",
-    accent: "from-cyan-300/30 via-white/12 to-blue-500/28",
+    ring: "shadow-[0_0_0_1px_rgba(248,113,113,0.42),0_0_36px_rgba(239,68,68,0.26),0_24px_48px_rgba(0,0,0,0.66)]",
+    accent: "from-red-300/30 via-white/12 to-red-600/30",
   },
   unique: {
     frame: "from-fuchsia-200 via-violet-500 to-violet-950",
