@@ -1,6 +1,7 @@
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 import { buildCardImageCandidates } from "./card-image";
 import { type PlayerCardData, type Rarity } from "../components/cards/types";
+import { getCardStatus, getProvenanceMarker, isMainCompetitionEligible } from "../../../shared/card-economy";
 
 type FantasyCardDataOptions = {
   imageWidth?: number;
@@ -17,6 +18,13 @@ export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCa
   const requestedWidth = Number(options.imageWidth) > 0 ? Number(options.imageWidth) : 1024;
   const imageWidth = Math.max(1024, requestedWidth);
   const candidates = buildCardImageCandidates(card, { thumb: false, width: imageWidth, format: "webp" });
+
+  const status = getCardStatus({
+    league: player?.league,
+    hasProgression: Number(card.xp || 0) > 0 || Number(card.level || 0) > 1,
+  });
+  const competitionEligible = isMainCompetitionEligible({ rarity: normalizeRarity(card.rarity), status });
+  const provenanceMarker = getProvenanceMarker({ serialNumber: Number(card.serialNumber || 0), acquiredAt: card.acquiredAt as any });
 
   return {
     id: String(card.id),
@@ -39,6 +47,9 @@ export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCa
     form: Number(card.decisiveScore || 0),
     price: Number(card.price || 0),
     forSale: Boolean(card.forSale),
+    status,
+    competitionEligible,
+    provenanceMarker,
     last5Scores: Array.isArray(card.last5Scores)
       ? card.last5Scores.map((value: any) => Number(value || 0)).slice(0, 5)
       : [0, 0, 0, 0, 0],

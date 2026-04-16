@@ -55,6 +55,9 @@ export default function SimpleCard({ player, className = "" }: SimpleCardProps) 
       age={25}
       countryCode={getCountryFlag(player)}
       last5={last5}
+      status={player.status}
+      competitionEligible={player.competitionEligible}
+      provenanceMarker={player.provenanceMarker}
     />
   );
 }

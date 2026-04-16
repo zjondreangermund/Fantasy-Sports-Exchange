@@ -33,4 +33,7 @@ export type PlayerCardData = {
   listedPrice?: number;
   listed?: boolean;
   last5Scores?: number[];
+  status?: "active" | "legacy" | "uncovered_league";
+  competitionEligible?: boolean;
+  provenanceMarker?: string;
 };

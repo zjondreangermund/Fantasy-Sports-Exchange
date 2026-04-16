@@ -16,6 +16,9 @@ type SlabCardProps = {
   countryCode?: string;
   last5?: number[];
   value?: string;
+  status?: "active" | "legacy" | "uncovered_league";
+  competitionEligible?: boolean;
+  provenanceMarker?: string;
 };
 
 const rarityStyles: Record<SlabRarity, { frame: string; slabSide: string; banner: string; glow: string; label: string }> = {
@@ -69,6 +72,9 @@ export default function SlabCard({
   countryCode = "🇦🇷",
   last5 = [62, 74, 55, 81, 68],
   value,
+  status = "active",
+  competitionEligible = true,
+  provenanceMarker = "Recorded",
 }: SlabCardProps) {
   const style = rarityStyles[rarity];
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
@@ -134,6 +140,14 @@ export default function SlabCard({
             Value {value}
           </div>
         ) : null}
+        <div className="absolute right-4 top-[56%] z-30 flex gap-1">
+          <span className={`rounded-full border px-2 py-[2px] text-[8px] font-bold uppercase ${status === "active" ? "border-sky-200/45 bg-sky-500/20 text-sky-50" : status === "legacy" ? "border-amber-200/45 bg-amber-500/20 text-amber-50" : "border-zinc-200/35 bg-zinc-600/25 text-zinc-50"}`}>
+            {status.replace("_", " ")}
+          </span>
+          <span className={`rounded-full border px-2 py-[2px] text-[8px] font-bold ${competitionEligible ? "border-emerald-200/45 bg-emerald-500/20 text-emerald-50" : "border-rose-200/35 bg-rose-500/20 text-rose-50"}`}>
+            {competitionEligible ? "Eligible" : "Limited"}
+          </span>
+        </div>
 
         <div className="absolute inset-x-4 bottom-[56px] z-30 rounded-xl border border-white/15 bg-black/35 px-2 py-1.5 backdrop-blur-sm">
           <div className="mb-1 flex items-center justify-between text-[8px] font-bold uppercase tracking-[0.12em] text-white/70">
@@ -164,6 +178,7 @@ export default function SlabCard({
           <div className="text-right">
             <div className="rounded-full border border-white/30 bg-black/35 px-2 py-[2px] text-[8px] font-bold text-white/90">{serialNumber}</div>
             <div className="mt-1 text-xs">{countryCode}</div>
+            <div className="mt-1 text-[8px] font-semibold text-white/75">{provenanceMarker}</div>
           </div>
         </footer>
 

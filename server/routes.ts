@@ -18,6 +18,7 @@ import { registerMarketplaceRoutes } from "./routes/marketplace.routes.js";
 import { registerAdminRoutes } from "./routes/admin.routes.js";
 import { registerAuctionsRoutes } from "./routes/auctions.routes.js";
 import { registerAuthModeRoutes } from "./routes/auth.routes.js";
+import { getCardStatus, isMainCompetitionEligible, normalizeRarityTier } from "../shared/card-economy.js";
 
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
 import passport from "passport";
@@ -4804,6 +4805,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
         entities: {
           cards: allCards.slice(0, 300).map((card: any) => ({
+            ...(function () {
+              const league = String(playerById.get(Number(card.playerId))?.league || "");
+              const status = getCardStatus({ league, hasProgression: Number(card.xp || 0) > 0 || Number(card.level || 0) > 1 });
+              return {
+                cardStatus: status,
+                competitionEligible: isMainCompetitionEligible({ rarity: normalizeRarityTier(String(card.rarity || "common")), status }),
+              };
+            })(),
             id: card.id,
             player: String(playerById.get(Number(card.playerId))?.name || "Unknown"),
             league: String(playerById.get(Number(card.playerId))?.league || "Unknown"),
@@ -4923,11 +4932,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         let data = cardRows.map((card: any) => {
           const player = playerById.get(Number(card.playerId));
           const cardTx = txRows.filter((tx: any) => String(tx.description || "").toLowerCase().includes(`card ${card.id}`));
+          const cardStatus = getCardStatus({
+            league: String(player?.league || ""),
+            hasProgression: Number(card.xp || 0) > 0 || Number(card.level || 0) > 1,
+          });
           return {
             id: card.id,
             player: String(player?.name || "Unknown"),
             league: String(player?.league || "Unknown"),
             rarity: card.rarity,
+            cardStatus,
+            competitionEligible: isMainCompetitionEligible({ rarity: normalizeRarityTier(String(card.rarity || "common")), status: cardStatus }),
             serialNumber: card.serialNumber,
             maxSupply: card.maxSupply,
             ownerId: card.ownerId,
