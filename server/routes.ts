@@ -5,6 +5,7 @@ import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth/index.
 import { seedDatabase, seedCompetitions } from "./seed.js";
 import { fplApi } from "./services/fplApi.js";
 import { fetchSorarePlayer } from "./services/sorare.js";
+import { MAJOR_LEAGUES, getMajorLeagueFixtures, getMajorLeagueInjuries, getMajorLeagueLiveGames, getMajorLeaguePlayers, getMajorLeagueStandings } from "./services/majorLeagueApi.js";
 import { ScoreUpdateService } from "./services/scoreUpdater.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats } from "./services/scoring.js";
 import { randomUUID } from "crypto";
@@ -1615,6 +1616,196 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       console.error("EPL live games:", e);
       res.status(500).json({ message: e?.message || "Failed to fetch live games" });
+    }
+  });
+
+  app.get("/api/leagues/meta", async (_req, res) => {
+    const hasApiFootball = Boolean(process.env.API_FOOTBALL_KEY);
+    const leagues = Object.entries(MAJOR_LEAGUES).map(([key, league]) => ({
+      key,
+      ...league,
+      provider: key === "premier-league" ? "fpl" : "api-football",
+      liveEnabled: key === "premier-league" ? true : hasApiFootball,
+    }));
+    return res.json({ leagues, hasApiFootball });
+  });
+
+  app.get("/api/leagues/:leagueKey/standings", async (req: any, res) => {
+    try {
+      const leagueKey = String(req.params.leagueKey || "").toLowerCase();
+      if (leagueKey === "premier-league") {
+        const [bootstrap, fixtures] = await Promise.all([fplApi.bootstrap(), fplApi.fixtures()]);
+        const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+        const computedTable = new Map<number, { played: number; won: number; drawn: number; lost: number; goalsFor: number; goalsAgainst: number; points: number }>();
+        teams.forEach((team: any) => computedTable.set(Number(team.id), { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0 }));
+        (Array.isArray(fixtures) ? fixtures : []).forEach((fixture: any) => {
+          if (!isFixtureInCurrentSeason(fixture) || !isFixtureLikelyFinished(fixture)) return;
+          const homeId = Number(fixture.team_h);
+          const awayId = Number(fixture.team_a);
+          const homeGoals = Number(fixture.team_h_score ?? 0);
+          const awayGoals = Number(fixture.team_a_score ?? 0);
+          const home = computedTable.get(homeId);
+          const away = computedTable.get(awayId);
+          if (!home || !away) return;
+          home.played += 1; away.played += 1;
+          home.goalsFor += homeGoals; home.goalsAgainst += awayGoals;
+          away.goalsFor += awayGoals; away.goalsAgainst += homeGoals;
+          if (homeGoals > awayGoals) { home.won += 1; away.lost += 1; home.points += 3; }
+          else if (homeGoals < awayGoals) { away.won += 1; home.lost += 1; away.points += 3; }
+          else { home.drawn += 1; away.drawn += 1; home.points += 1; away.points += 1; }
+        });
+        const standings = teams
+          .map((team: any) => ({
+            position: 0, rank: 0, teamId: Number(team.id), teamName: String(team.name || "Unknown"), played: computedTable.get(Number(team.id))?.played ?? 0,
+            won: computedTable.get(Number(team.id))?.won ?? 0, drawn: computedTable.get(Number(team.id))?.drawn ?? 0, lost: computedTable.get(Number(team.id))?.lost ?? 0,
+            goalsFor: computedTable.get(Number(team.id))?.goalsFor ?? 0, goalsAgainst: computedTable.get(Number(team.id))?.goalsAgainst ?? 0,
+            goalDifference: (computedTable.get(Number(team.id))?.goalsFor ?? 0) - (computedTable.get(Number(team.id))?.goalsAgainst ?? 0),
+            goalDiff: (computedTable.get(Number(team.id))?.goalsFor ?? 0) - (computedTable.get(Number(team.id))?.goalsAgainst ?? 0),
+            points: computedTable.get(Number(team.id))?.points ?? 0, form: String(team.form || "").replace(/\s+/g, ""), teamLogo: "", logo: "",
+          }))
+          .sort((a: any, b: any) => (b.points - a.points) || ((b.goalDiff ?? 0) - (a.goalDiff ?? 0)) || (b.goalsFor - a.goalsFor))
+          .map((row: any, idx: number) => ({ ...row, rank: idx + 1, position: idx + 1 }));
+        return res.json(standings);
+      }
+      if (!(leagueKey in MAJOR_LEAGUES)) return res.status(400).json({ message: "Unsupported league" });
+      const data = await getMajorLeagueStandings(leagueKey as any);
+      return res.json(data);
+    } catch (error: any) {
+      return res.status(500).json({ message: error?.message || "Failed to fetch standings" });
+    }
+  });
+
+  app.get("/api/leagues/:leagueKey/fixtures", async (req: any, res) => {
+    try {
+      const leagueKey = String(req.params.leagueKey || "").toLowerCase();
+      const status = String(req.query.status || "").toLowerCase();
+      if (leagueKey === "premier-league") {
+        const [fixtures, bootstrap] = await Promise.all([fplApi.fixtures(), fplApi.bootstrap()]);
+        const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+        const teamMap = new Map<number, any>(teams.map((t: any) => [Number(t.id), t]));
+        let filtered = (Array.isArray(fixtures) ? fixtures : []).filter((f: any) => isFixtureInCurrentSeason(f));
+        if (status === "upcoming") filtered = filtered.filter((f: any) => !isFixtureLikelyFinished(f) && !f.started);
+        else if (status === "live") filtered = filtered.filter((f: any) => f.started && !isFixtureLikelyFinished(f));
+        else if (status === "finished") filtered = filtered.filter((f: any) => isFixtureLikelyFinished(f));
+        const normalized = filtered.map((fixture: any) => ({
+          id: Number(fixture.id || 0),
+          matchId: Number(fixture.id || 0),
+          date: fixture.kickoff_time || null,
+          kickoffTime: fixture.kickoff_time || null,
+          status: isFixtureLikelyFinished(fixture) ? "FT" : fixture.started ? "LIVE" : "NS",
+          homeTeam: { id: Number(fixture.team_h || 0), name: String(teamMap.get(Number(fixture.team_h))?.name || "Home"), logo: "", score: Number(fixture.team_h_score ?? 0) },
+          awayTeam: { id: Number(fixture.team_a || 0), name: String(teamMap.get(Number(fixture.team_a))?.name || "Away"), logo: "", score: Number(fixture.team_a_score ?? 0) },
+          venue: "",
+        }));
+        return res.json(normalized);
+      }
+      if (!(leagueKey in MAJOR_LEAGUES)) return res.status(400).json({ message: "Unsupported league" });
+      const data = await getMajorLeagueFixtures(leagueKey as any, status);
+      return res.json(data);
+    } catch (error: any) {
+      return res.status(500).json({ message: error?.message || "Failed to fetch fixtures" });
+    }
+  });
+
+  app.get("/api/leagues/:leagueKey/live-games", async (req: any, res) => {
+    try {
+      const leagueKey = String(req.params.leagueKey || "").toLowerCase();
+      if (leagueKey === "premier-league") {
+        const liveGames = await fplApi.getLiveGames();
+        return res.json(liveGames);
+      }
+      if (!(leagueKey in MAJOR_LEAGUES)) return res.status(400).json({ message: "Unsupported league" });
+      const data = await getMajorLeagueLiveGames(leagueKey as any);
+      return res.json(data);
+    } catch (error: any) {
+      return res.status(500).json({ message: error?.message || "Failed to fetch live games" });
+    }
+  });
+
+  app.get("/api/leagues/:leagueKey/players", async (req: any, res) => {
+    try {
+      const leagueKey = String(req.params.leagueKey || "").toLowerCase();
+      const page = Number(req.query.page || 1);
+      const limit = Number(req.query.limit || 20);
+      const search = String(req.query.search || "");
+      const position = String(req.query.position || "");
+      const todayOnly = String(req.query.today || "") === "1";
+
+      if (leagueKey === "premier-league") {
+        const [fplPlayers, bootstrap, fixtures] = await Promise.all([fplApi.getPlayers(), fplApi.bootstrap(), fplApi.fixtures()]);
+        const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+        const teamMap = new Map<number, any>(teams.map((team: any) => [Number(team.id), team]));
+        const positionMap: Record<number, string> = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
+        let normalized = (Array.isArray(fplPlayers) ? fplPlayers : []).map((player: any) => ({
+          id: Number(player.id || 0),
+          playerId: Number(player.id || 0),
+          name: `${String(player.first_name || "").trim()} ${String(player.second_name || "").trim()}`.trim() || String(player.web_name || "Unknown"),
+          firstName: String(player.first_name || ""),
+          lastName: String(player.second_name || ""),
+          age: 0,
+          nationality: "",
+          team: String(teamMap.get(Number(player.team))?.name || "Unknown"),
+          position: positionMap[Number(player.element_type)] || "MID",
+          photo: fplApi.playerPhotoUrl(player, 250),
+          imageUrl: fplApi.playerPhotoUrl(player, 250),
+          rating: Number(player.form || 0),
+          appearances: Number(player.starts || 0),
+          goals: Number(player.goals_scored || 0),
+          assists: Number(player.assists || 0),
+          cleanSheets: Number(player.clean_sheets || 0),
+          minutes: Number(player.minutes || 0),
+          league: "Premier League",
+          _teamId: Number(player.team || 0),
+        }));
+        if (search.trim()) normalized = normalized.filter((p: any) => String(p.name || "").toLowerCase().includes(search.toLowerCase()));
+        if (position.trim()) normalized = normalized.filter((p: any) => String(p.position || "").toUpperCase() === position.toUpperCase());
+        if (todayOnly) {
+          const now = new Date();
+          const sameUtcDay = (dateStr: string) => {
+            const d = new Date(dateStr);
+            return d.getUTCFullYear() === now.getUTCFullYear() && d.getUTCMonth() === now.getUTCMonth() && d.getUTCDate() === now.getUTCDate();
+          };
+          const teamIds = new Set<number>();
+          (Array.isArray(fixtures) ? fixtures : []).forEach((fixture: any) => {
+            if (!fixture?.kickoff_time || !sameUtcDay(String(fixture.kickoff_time))) return;
+            teamIds.add(Number(fixture.team_h));
+            teamIds.add(Number(fixture.team_a));
+          });
+          normalized = normalized.filter((p: any) => teamIds.has(Number(p._teamId || 0)));
+        }
+        const start = Math.max(0, (Math.max(1, page) - 1) * Math.max(1, limit));
+        const items = normalized.slice(start, start + Math.max(1, limit)).map(({ _teamId, ...clean }: any) => clean);
+        return res.json({ response: items, results: items.length, paging: { current: page, total: Math.max(1, Math.ceil(normalized.length / Math.max(1, limit))) }, total: normalized.length });
+      }
+
+      if (!(leagueKey in MAJOR_LEAGUES)) return res.status(400).json({ message: "Unsupported league" });
+      const items = await getMajorLeaguePlayers(leagueKey as any, { page, limit, search, position });
+      return res.json({ response: items, results: items.length, paging: { current: page, total: 1 }, total: items.length });
+    } catch (error: any) {
+      return res.status(500).json({ message: error?.message || "Failed to fetch players" });
+    }
+  });
+
+  app.get("/api/leagues/:leagueKey/injuries", async (req: any, res) => {
+    try {
+      const leagueKey = String(req.params.leagueKey || "").toLowerCase();
+      if (leagueKey === "premier-league") {
+        const data = await fplApi.getInjuries();
+        const injuries = (Array.isArray(data) ? data : []).map((inj: any, index: number) => ({
+          id: index + 1,
+          playerId: Number(inj.playerId) || 0,
+          playerName: String(inj.name || "Unknown"),
+          playerPhoto: "",
+          status: String(inj.status || "unknown"),
+          expectedReturn: String(inj.news || "TBD"),
+        }));
+        return res.json(injuries);
+      }
+      if (!(leagueKey in MAJOR_LEAGUES)) return res.status(400).json({ message: "Unsupported league" });
+      const data = await getMajorLeagueInjuries(leagueKey as any);
+      return res.json(data);
+    } catch (error: any) {
+      return res.status(500).json({ message: error?.message || "Failed to fetch injuries" });
     }
   });
 
