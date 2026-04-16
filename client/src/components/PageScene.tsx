@@ -25,6 +25,10 @@ type SceneMood = {
   textureOpacity: number;
 };
 
+function sceneArtworkSrc(variant: PageSceneVariant) {
+  return `/page-scenes/${variant}.svg`;
+}
+
 const MOODS: Record<PageSceneVariant, SceneMood> = {
   landing: {
     base: "radial-gradient(140% 120% at 50% 4%, rgba(94, 134, 255, 0.18), transparent 56%), linear-gradient(160deg, rgba(8, 12, 32, 0.98), rgba(18, 16, 40, 0.92) 38%, rgba(8, 10, 24, 0.98))",
@@ -170,6 +174,7 @@ export function routeToPageSceneVariant(pathname: string, isAuthenticated = true
 
 export default function PageScene({ variant, children, className }: PageSceneProps) {
   const mood = MOODS[variant] ?? MOODS.dashboard;
+  const artwork = sceneArtworkSrc(variant);
   const [parallax, setParallax] = React.useState({ x: 0, y: 0 });
 
   React.useEffect(() => {
@@ -207,6 +212,7 @@ export default function PageScene({ variant, children, className }: PageScenePro
     <div className={`page-scene ${className ?? ""}`.trim()} data-scene={variant}>
       <div className="page-scene__atmosphere" style={parallaxStyle} aria-hidden="true">
         <div className="page-scene__base" />
+        <img className="page-scene__artwork" src={artwork} alt="" loading="eager" decoding="async" />
         <div className="page-scene__spotlight" />
         <div className="page-scene__beam" />
         <div className="page-scene__texture" />

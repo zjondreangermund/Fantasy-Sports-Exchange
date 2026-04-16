@@ -1548,6 +1548,7 @@
 }
 
 .page-scene__base,
+.page-scene__artwork,
 .page-scene__spotlight,
 .page-scene__beam,
 .page-scene__texture,
@@ -1559,6 +1560,16 @@
 
 .page-scene__base {
   background: var(--scene-base);
+}
+
+.page-scene__artwork {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.3;
+  mix-blend-mode: screen;
+  filter: saturate(1.08) blur(0.2px);
+  transform: scale(1.06) translate3d(calc(var(--scene-shift-x) * 0.1), calc(var(--scene-shift-y) * 0.1), 0);
 }
 
 .page-scene__spotlight {
