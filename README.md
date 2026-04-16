@@ -254,6 +254,7 @@ To switch accounts, change `MOCK_USER_ID` in `.env` and restart server.
    railway variables set GOOGLE_CLIENT_SECRET="your-secret"
    railway variables set APP_URL="https://your-app.railway.app"
    railway variables set ADMIN_USER_IDS="your-google-user-id"
+   railway variables set API_FOOTBALL_KEY="optional-for-top5-leagues-live"
    ```
 
 4. **Deploy**
