@@ -6,6 +6,9 @@ type CollectionPlayerCardProps = {
   className?: string;
 };
 
-export default function CollectionPlayerCard({ player, className = "" }: CollectionPlayerCardProps) {
+export default function CollectionPlayerCard({ player, className = "", mode = "3d" }: CollectionPlayerCardProps) {
+  if (mode === "3d") {
+    return <SimpleCard player={player} className={`!w-[220px] ${className}`.trim()} />;
+  }
   return <SimpleCard player={player} className={`!w-[220px] ${className}`.trim()} />;
 }
