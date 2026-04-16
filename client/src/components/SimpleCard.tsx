@@ -26,6 +26,9 @@ function getCountryFlag(player: PlayerCardData) {
 }
 
 export default function SimpleCard({ player, className = "" }: SimpleCardProps) {
+  // SAFE rarity normalization
+  const visualRarity = normalizeVisualRarity(player.rarity);
+
   const candidates = useMemo(() => {
     const list = [player.image, player.imageUrl, player.photo, ...(player.imageCandidates || []), CARD_IMAGE_FALLBACK]
       .filter((value): value is string => Boolean(value));
