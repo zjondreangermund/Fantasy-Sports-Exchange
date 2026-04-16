@@ -42,6 +42,7 @@ import { useEffect, useState } from "react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
 import { Link } from "wouter";
+import AdminBackofficePanel from "../components/admin/AdminBackofficePanel";
 
 type TournamentEntry = {
   id: number;
@@ -805,8 +806,12 @@ export default function AdminPage() {
           </Card>
         </div>
 
-        <Tabs defaultValue="withdrawals" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+        <Tabs defaultValue="backoffice" className="w-full">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="backoffice">
+              <Building2 className="w-4 h-4 mr-2" />
+              Back Office
+            </TabsTrigger>
             <TabsTrigger value="withdrawals">
               <DollarSign className="w-4 h-4 mr-2" />
               Withdrawals
@@ -824,6 +829,10 @@ export default function AdminPage() {
               Onboarding
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="backoffice">
+            <AdminBackofficePanel />
+          </TabsContent>
 
           <TabsContent value="withdrawals">
             <Tabs defaultValue="pending">

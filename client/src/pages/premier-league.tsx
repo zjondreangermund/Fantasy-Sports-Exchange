@@ -46,6 +46,7 @@ export default function PremierLeaguePage() {
   const [limit, setLimit] = useState(20);
   const [position, setPosition] = useState("");
   const [todayOnlyPlayers, setTodayOnlyPlayers] = useState(false);
+  const [leagueKey, setLeagueKey] = useState<"premier-league" | "la-liga" | "bundesliga" | "serie-a" | "ligue-1">("premier-league");
 
   const currentSeasonLabel = useMemo(() => {
     const now = new Date();
@@ -55,13 +56,13 @@ export default function PremierLeaguePage() {
   }, []);
 
   const { data: standings, isLoading: standingsLoading } = useQuery<EplStanding[]>({
-    queryKey: ["/api/epl/standings"],
+    queryKey: [`/api/leagues/${leagueKey}/standings`],
   });
 
   const { data: fixtures, isLoading: fixturesLoading } = useQuery<EplFixture[]>({
-    queryKey: ["/api/epl/fixtures", fixtureTab],
+    queryKey: [`/api/leagues/${leagueKey}/fixtures`, fixtureTab],
     queryFn: async () => {
-      const res = await fetch(`/api/epl/fixtures?status=${fixtureTab}`, { credentials: "include" });
+      const res = await fetch(`/api/leagues/${leagueKey}/fixtures?status=${fixtureTab}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch fixtures");
       return res.json();
     },
@@ -70,7 +71,7 @@ export default function PremierLeaguePage() {
   const search = playerSearch;
   const { data: players = [], isLoading: playersLoading, error: playersError } =
   useQuery<EplPlayer[]>({
-    queryKey: ["eplPlayers", page, limit, search, position, todayOnlyPlayers],
+    queryKey: ["leaguePlayers", leagueKey, page, limit, search, position, todayOnlyPlayers],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("page", String(page));
@@ -79,7 +80,7 @@ export default function PremierLeaguePage() {
       if (position?.trim()) params.set("position", position.trim());
       if (todayOnlyPlayers) params.set("today", "1");
 
-      const res = await fetch(`/api/epl/players?${params.toString()}`);
+      const res = await fetch(`/api/leagues/${leagueKey}/players?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch players");
 
       const data = await res.json();
@@ -98,7 +99,7 @@ export default function PremierLeaguePage() {
   });
 
   const { data: injuries, isLoading: injuriesLoading } = useQuery<EplInjury[]>({
-    queryKey: ["/api/epl/injuries"],
+    queryKey: [`/api/leagues/${leagueKey}/injuries`],
   });
 
   const filteredPlayers = useMemo(() => {
@@ -113,10 +114,10 @@ export default function PremierLeaguePage() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/epl/standings"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/epl/fixtures"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/epl/players"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/epl/injuries"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/leagues/${leagueKey}/standings`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/leagues/${leagueKey}/fixtures`] });
+      queryClient.invalidateQueries({ queryKey: ["leaguePlayers", leagueKey] });
+      queryClient.invalidateQueries({ queryKey: [`/api/leagues/${leagueKey}/injuries`] });
       toast({ title: data.message });
     },
     onError: (error) => {
@@ -168,22 +169,35 @@ export default function PremierLeaguePage() {
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center shadow-lg shadow-purple-900/30">
                   <Activity className="w-5 h-5 text-white" />
                 </div>
-                Premier League
+                Top 5 Leagues
               </h1>
               <p className="text-muted-foreground text-sm mt-1">
-                Live stats, fixtures, injuries & player cards — {currentSeasonLabel} Season
+                Live tracking for Premier League, La Liga, Bundesliga, Serie A & Ligue 1 — {currentSeasonLabel} Season
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
-              className="border-purple-500/30 hover:border-purple-400/50 hover:bg-purple-500/10"
-            >
-              <RefreshCw className={`w-4 h-4 mr-1 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-              {syncMutation.isPending ? "Syncing..." : "Refresh Data"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {([
+                ["premier-league", "Premier League"],
+                ["la-liga", "La Liga"],
+                ["bundesliga", "Bundesliga"],
+                ["serie-a", "Serie A"],
+                ["ligue-1", "Ligue 1"],
+              ] as const).map(([key, label]) => (
+                <Button key={key} size="sm" variant={leagueKey === key ? "default" : "outline"} onClick={() => setLeagueKey(key)}>
+                  {label}
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending || leagueKey !== "premier-league"}
+                className="border-purple-500/30 hover:border-purple-400/50 hover:bg-purple-500/10"
+              >
+                <RefreshCw className={`w-4 h-4 mr-1 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                {syncMutation.isPending ? "Syncing..." : "Refresh Data"}
+              </Button>
+            </div>
           </div>
 
           <Tabs defaultValue="live" className="w-full">
@@ -203,7 +217,7 @@ export default function PremierLeaguePage() {
             </TabsList>
 
             <TabsContent value="live">
-              <LiveGames />
+              <LiveGames endpoint={`/api/leagues/${leagueKey}/live-games`} />
             </TabsContent>
 
             <TabsContent value="standings">
