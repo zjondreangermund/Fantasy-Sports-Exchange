@@ -18,6 +18,7 @@ import { registerMarketplaceRoutes } from "./routes/marketplace.routes.js";
 import { registerAdminRoutes } from "./routes/admin.routes.js";
 import { registerAuctionsRoutes } from "./routes/auctions.routes.js";
 import { registerAuthModeRoutes } from "./routes/auth.routes.js";
+import { registerRetentionRoutes } from "./routes/retention.routes.js";
 import { getCardStatus, isMainCompetitionEligible, normalizeRarityTier } from "../shared/card-economy.js";
 
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
@@ -495,6 +496,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerCardsRoutes(app, { requireAuth, storage });
   registerOnboardingRoutes(app, { requireAuth, storage, fplApi });
   registerMarketplaceRoutes(app, { requireAuth });
+  registerRetentionRoutes(app, { requireAuth, storage });
   registerAdminRoutes(app, {
     requireAuth,
     isAdmin,
