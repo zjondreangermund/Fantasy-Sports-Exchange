@@ -1,6 +1,7 @@
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 import { buildCardImageCandidates } from "./card-image";
-import { type PlayerCardData, type Rarity } from "../components/Metal3DCard";
+import { type PlayerCardData, type Rarity } from "../components/cards/types";
+import { getCardStatus, getProvenanceMarker, isMainCompetitionEligible } from "../../../shared/card-economy";
 
 type FantasyCardDataOptions = {
   imageWidth?: number;
@@ -18,12 +19,21 @@ export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCa
   const imageWidth = Math.max(1024, requestedWidth);
   const candidates = buildCardImageCandidates(card, { thumb: false, width: imageWidth, format: "webp" });
 
+  const status = getCardStatus({
+    league: player?.league,
+    hasProgression: Number(card.xp || 0) > 0 || Number(card.level || 0) > 1,
+  });
+  const competitionEligible = isMainCompetitionEligible({ rarity: normalizeRarity(card.rarity), status });
+  const provenanceMarker = getProvenanceMarker({ serialNumber: Number(card.serialNumber || 0), acquiredAt: card.acquiredAt as any });
+
   return {
     id: String(card.id),
     name: String(player?.name || "Unknown Player"),
     rating: Number(player?.overall || card.decisiveScore || 0),
     position: String(player?.position || "N/A"),
     club: player?.team ? String(player.team) : undefined,
+    team: player?.team ? String(player.team) : undefined,
+    league: player?.league ? String(player.league) : undefined,
     image: candidates[0],
     imageUrl: player?.imageUrl ? String(player.imageUrl) : undefined,
     photo: player?.photo ? String(player.photo) : undefined,
@@ -35,6 +45,11 @@ export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCa
     xp: Number(card.xp || 0),
     xpMax: Number(card.maxSupply && Number(card.maxSupply) > 0 ? card.maxSupply : 1000),
     form: Number(card.decisiveScore || 0),
+    price: Number(card.price || 0),
+    forSale: Boolean(card.forSale),
+    status,
+    competitionEligible,
+    provenanceMarker,
     last5Scores: Array.isArray(card.last5Scores)
       ? card.last5Scores.map((value: any) => Number(value || 0)).slice(0, 5)
       : [0, 0, 0, 0, 0],
