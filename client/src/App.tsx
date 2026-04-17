@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 
@@ -11,6 +11,8 @@ import { ThemeProvider, ThemeToggle } from "./components/ThemeProvider";
 import StadiumAmbientLayer from "./components/StadiumAmbientLayer";
 import FloatingSupportWidget from "./components/FloatingSupportWidget";
 import FloatingEventNotifications from "./components/FloatingEventNotifications";
+import LivePulseDock from "./components/LivePulseDock";
+import PageScene, { routeToPageSceneVariant } from "./components/PageScene";
 import { useAuth } from "./hooks/use-auth";
 import { Skeleton } from "./components/ui/skeleton";
 
@@ -94,6 +96,7 @@ function AuthenticatedRouter() {
 }
 
 function AuthenticatedApp() {
+  const [location] = useLocation();
   const style = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
@@ -116,8 +119,11 @@ function AuthenticatedApp() {
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <ThemeToggle />
           </header>
+          <LivePulseDock />
           <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative z-10">
-            <AuthenticatedRouter />
+            <PageScene variant={routeToPageSceneVariant(location, true)} className="flex-1">
+              <AuthenticatedRouter />
+            </PageScene>
           </main>
           <FloatingEventNotifications />
           <FloatingSupportWidget />
@@ -167,10 +173,13 @@ function AppContent() {
   }
 
   if (!user) {
+    const pathname = window.location.pathname || "/";
     return (
-      <React.Suspense fallback={<RouteFallback />}>
-        <LandingPage />
-      </React.Suspense>
+      <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen">
+        <React.Suspense fallback={<RouteFallback />}>
+          <LandingPage />
+        </React.Suspense>
+      </PageScene>
     );
   }
 
