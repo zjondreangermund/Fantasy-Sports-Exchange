@@ -36,13 +36,14 @@ const rarityThemes: Record<
     muted: string;
     topTone: string;
     divider: string;
+    panel: string;
   }
 > = {
   common: {
     frame: "from-zinc-100 via-white to-zinc-200",
     border: "border-zinc-300",
     glow: "shadow-[0_10px_30px_rgba(255,255,255,0.18)]",
-    glowColor: "rgba(255,255,255,0.28)",
+    glowColor: "rgba(255,255,255,0.24)",
     badge: "bg-zinc-100 text-zinc-700 border-zinc-300",
     bg: "from-zinc-50 via-white to-zinc-200",
     label: "COMMON",
@@ -50,6 +51,7 @@ const rarityThemes: Record<
     muted: "text-zinc-600",
     topTone: "text-zinc-800",
     divider: "border-zinc-400/70",
+    panel: "bg-white/55 border-zinc-300/50",
   },
   rare: {
     frame: "from-red-700 via-red-600 to-red-800",
@@ -63,6 +65,7 @@ const rarityThemes: Record<
     muted: "text-white/75",
     topTone: "text-white/90",
     divider: "border-white/20",
+    panel: "bg-black/18 border-white/12",
   },
   unique: {
     frame: "from-violet-950 via-indigo-900 to-purple-950",
@@ -76,6 +79,7 @@ const rarityThemes: Record<
     muted: "text-white/75",
     topTone: "text-white/90",
     divider: "border-white/20",
+    panel: "bg-black/18 border-white/12",
   },
   legendary: {
     frame: "from-yellow-200 via-amber-400 to-yellow-700",
@@ -89,6 +93,7 @@ const rarityThemes: Record<
     muted: "text-black/70",
     topTone: "text-black/80",
     divider: "border-black/20",
+    panel: "bg-black/8 border-black/10",
   },
 };
 
@@ -258,51 +263,54 @@ export default function SlabCard({
             <Shield className={`h-3 w-3 ${theme.topTone}`} />
           </div>
 
-          {/* image area */}
-          <div className="absolute inset-x-3 top-[14%] z-20 h-[95px] overflow-hidden rounded-xl border border-white/10 bg-black/10">
-            <img
-              src={`/rarity/${rarity}-bg.png`}
-              alt={`${rarity} background`}
-              className="absolute inset-0 h-full w-full object-cover opacity-30"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.16),transparent_68%)]" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-white/8" />
-
-            {imageSrc ? (
+          {/* main player stage */}
+          <div className="absolute inset-x-0 top-[15%] z-20 flex justify-center">
+            <div className="relative h-[142px] w-[86%]">
               <img
-                src={imageSrc}
-                alt={name}
-                className="absolute bottom-0 left-1/2 z-10 h-[110px] -translate-x-1/2 object-contain drop-shadow-[0_10px_14px_rgba(0,0,0,0.55)]"
-                loading="lazy"
-                decoding="async"
+                src={`/rarity/${rarity}-bg.png`}
+                alt={`${rarity} background`}
+                className="absolute inset-0 h-full w-full object-contain opacity-34"
                 onError={(e) => {
-                  e.currentTarget.src = "/images/player-placeholder.png";
+                  e.currentTarget.style.display = "none";
                 }}
               />
-            ) : (
-              <img
-                src="/images/player-placeholder.png"
-                alt="Player placeholder"
-                className="absolute bottom-0 left-1/2 z-10 h-[92px] -translate-x-1/2 object-contain opacity-90"
-                loading="lazy"
-                decoding="async"
-              />
-            )}
+
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.18),transparent_68%)]" />
+
+              {imageSrc ? (
+                <img
+                  src={imageSrc}
+                  alt={name}
+                  className="absolute bottom-0 left-1/2 z-10 h-[142px] -translate-x-1/2 object-contain drop-shadow-[0_14px_20px_rgba(0,0,0,0.7)]"
+                  loading="lazy"
+                  decoding="async"
+                  onError={(e) => {
+                    e.currentTarget.src = "/images/player-placeholder.png";
+                  }}
+                />
+              ) : (
+                <img
+                  src="/images/player-placeholder.png"
+                  alt="Player placeholder"
+                  className="absolute bottom-0 left-1/2 z-10 h-[122px] -translate-x-1/2 object-contain opacity-92"
+                  loading="lazy"
+                  decoding="async"
+                />
+              )}
+            </div>
           </div>
 
-          <div className="absolute inset-x-3 top-[47%] z-20">
+          <div className="absolute inset-x-3 top-[58%] z-20 flex justify-center">
             <div
-              className={`mx-auto inline-flex items-center rounded-full border px-1.5 py-0.5 text-[6px] font-black tracking-wide ${theme.badge}`}
+              className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[6px] font-black tracking-wide ${theme.badge}`}
             >
               {theme.label}
             </div>
           </div>
 
-          <div className={`absolute inset-x-3 top-[55%] z-20 flex items-end justify-between ${theme.text}`}>
+          <div
+            className={`absolute inset-x-3 top-[65%] z-20 flex items-end justify-between rounded-[10px] border px-2 py-2 ${theme.text} ${theme.panel}`}
+          >
             <div>
               <div className={`mb-1 text-[6px] font-bold tracking-[0.16em] ${theme.muted}`}>
                 LAST 5 GAMES
@@ -318,9 +326,9 @@ export default function SlabCard({
             </div>
           </div>
 
-          <div className={`absolute inset-x-3 bottom-[26%] z-20 border-t ${theme.divider}`} />
+          <div className={`absolute inset-x-3 bottom-[18%] z-20 border-t ${theme.divider}`} />
 
-          <div className={`absolute inset-x-3 bottom-[13%] z-20 ${theme.text}`}>
+          <div className={`absolute inset-x-3 bottom-[9.5%] z-20 ${theme.text}`}>
             <div className="text-center leading-[0.92]">
               <div className="truncate text-[10px] font-black tracking-wide">
                 {firstName}
@@ -342,13 +350,15 @@ export default function SlabCard({
             {String(countryCode).slice(0, 3).toUpperCase()}
           </div>
 
-          <div className={`absolute right-3 top-[78.5%] z-20 flex items-center gap-1 text-[7px] font-black ${theme.text}`}>
+          <div
+            className={`absolute right-3 top-[84%] z-20 flex items-center gap-1 text-[7px] font-black ${theme.text}`}
+          >
             <Star className="h-2.5 w-2.5" />
             <span>{serialNumber}</span>
           </div>
 
           {provenanceMarker ? (
-            <div className="absolute right-3 top-[84%] z-20 text-[6px] text-white/70">
+            <div className="absolute right-3 top-[88%] z-20 text-[6px] text-white/70">
               {provenanceMarker}
             </div>
           ) : null}
