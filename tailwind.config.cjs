@@ -99,6 +99,14 @@ module.exports = {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
       },
+      backgroundImage: {
+        "slab-crystal":
+          "linear-gradient(135deg, rgba(255,255,255,0.9) 1px, transparent 1px), linear-gradient(45deg, rgba(255,255,255,0.7) 1px, transparent 1px), radial-gradient(circle at 18% 20%, rgba(255,255,255,0.4), transparent 46%), radial-gradient(circle at 82% 28%, rgba(255,255,255,0.3), transparent 42%)",
+        "slab-shine": "linear-gradient(90deg, transparent, rgba(255,255,255,0.34), transparent)",
+      },
+      backgroundSize: {
+        slab: "24px 24px, 24px 24px, 100% 100%, 100% 100%",
+      },
     },
   },
   plugins: [require("tailwindcss-animate"), require("@tailwindcss/typography")],

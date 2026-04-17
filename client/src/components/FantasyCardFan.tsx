@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import Metal3DCard, { type PlayerCardData } from "./Metal3DCard";
+import Metal3DCard from "./Metal3DCard";
+import { type PlayerCardData } from "./cards/types";
 
 type FantasyCardFanProps = {
   cards: PlayerCardData[];

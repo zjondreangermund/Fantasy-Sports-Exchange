@@ -25,6 +25,15 @@ import { useToast } from "../hooks/use-toast";
 
 type CardRarity = "common" | "rare" | "unique" | "epic" | "legendary";
 
+
+function asArray<T>(payload: any, keys: string[] = []): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) return payload[key] as T[];
+  }
+  return [];
+}
+
 function assignRarity(player: EplPlayer): CardRarity {
   const rating = player.rating ? parseFloat(String(player.rating)) : 0;
   const goals = player.goals ?? 0;
@@ -54,23 +63,38 @@ export default function PremierLeaguePage() {
     return `${startYear}/${String(startYear + 1).slice(-2)}`;
   }, []);
 
-  const { data: standings, isLoading: standingsLoading } = useQuery<EplStanding[]>({
+  const { data: standings = [], isLoading: standingsLoading } = useQuery<EplStanding[]>({
     queryKey: ["/api/epl/standings"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/epl/standings", { credentials: "include" });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return asArray<EplStanding>(data, ["standings", "response"]);
+      } catch {
+        return [];
+      }
+    },
   });
 
-  const { data: fixtures, isLoading: fixturesLoading } = useQuery<EplFixture[]>({
+  const { data: fixtures = [], isLoading: fixturesLoading } = useQuery<EplFixture[]>({
     queryKey: ["/api/epl/fixtures", fixtureTab],
     queryFn: async () => {
-      const res = await fetch(`/api/epl/fixtures?status=${fixtureTab}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch fixtures");
-      return res.json();
+      try {
+        const res = await fetch(`/api/epl/fixtures?status=${fixtureTab}`, { credentials: "include" });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return asArray<EplFixture>(data, ["fixtures", "response"]);
+      } catch {
+        return [];
+      }
     },
   });
 
   const search = playerSearch;
   const { data: players = [], isLoading: playersLoading, error: playersError } =
   useQuery<EplPlayer[]>({
-    queryKey: ["eplPlayers", page, limit, search, position, todayOnlyPlayers],
+    queryKey: ["leaguePlayers", page, limit, search, position, todayOnlyPlayers],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("page", String(page));
@@ -97,8 +121,18 @@ export default function PremierLeaguePage() {
     },
   });
 
-  const { data: injuries, isLoading: injuriesLoading } = useQuery<EplInjury[]>({
+  const { data: injuries = [], isLoading: injuriesLoading } = useQuery<EplInjury[]>({
     queryKey: ["/api/epl/injuries"],
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/epl/injuries", { credentials: "include" });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return asArray<EplInjury>(data, ["injuries", "response"]);
+      } catch {
+        return [];
+      }
+    },
   });
 
   const filteredPlayers = useMemo(() => {
@@ -115,7 +149,7 @@ export default function PremierLeaguePage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/epl/standings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/epl/fixtures"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/epl/players"] });
+      queryClient.invalidateQueries({ queryKey: ["leaguePlayers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/epl/injuries"] });
       toast({ title: data.message });
     },
@@ -171,19 +205,21 @@ export default function PremierLeaguePage() {
                 Premier League
               </h1>
               <p className="text-muted-foreground text-sm mt-1">
-                Live stats, fixtures, injuries & player cards — {currentSeasonLabel} Season
+                Live tracking for Premier League — {currentSeasonLabel} Season
               </p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
-              className="border-purple-500/30 hover:border-purple-400/50 hover:bg-purple-500/10"
-            >
-              <RefreshCw className={`w-4 h-4 mr-1 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-              {syncMutation.isPending ? "Syncing..." : "Refresh Data"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending}
+                className="border-purple-500/30 hover:border-purple-400/50 hover:bg-purple-500/10"
+              >
+                <RefreshCw className={`w-4 h-4 mr-1 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                {syncMutation.isPending ? "Syncing..." : "Refresh Data"}
+              </Button>
+            </div>
           </div>
 
           <Tabs defaultValue="live" className="w-full">
@@ -203,7 +239,7 @@ export default function PremierLeaguePage() {
             </TabsList>
 
             <TabsContent value="live">
-              <LiveGames />
+              <LiveGames endpoint={"/api/epl/live-games"} />
             </TabsContent>
 
             <TabsContent value="standings">
