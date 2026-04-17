@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Shield, Star } from "lucide-react";
 
 export type SlabRarity = "common" | "rare" | "unique" | "legendary";
 
@@ -21,66 +22,104 @@ type SlabCardProps = {
   provenanceMarker?: string;
 };
 
-const rarityStyles: Record<
+const rarityThemes: Record<
   SlabRarity,
   {
     frame: string;
-    shell: string;
-    ring: string;
+    border: string;
     glow: string;
+    badge: string;
+    bg: string;
     label: string;
-    banner: string;
-    aura: string;
-    miniBar: string;
+    octagon: string;
   }
 > = {
   common: {
-    frame: "from-[#f2f5fb] via-[#9aa4b8] to-[#465165]",
-    shell: "from-[#121826] via-[#0d1320] to-[#090e19]",
-    ring: "shadow-[0_0_0_1px_rgba(255,255,255,0.48),0_10px_24px_rgba(8,15,32,0.62)]",
-    glow: "shadow-[0_26px_56px_rgba(192,201,218,0.36)]",
+    frame: "from-zinc-100 via-white to-zinc-200",
+    border: "border-zinc-300",
+    glow: "shadow-[0_10px_30px_rgba(255,255,255,0.18)]",
+    badge: "bg-zinc-100 text-zinc-700 border-zinc-300",
+    bg: "from-zinc-50 via-white to-zinc-200",
     label: "COMMON",
-    banner: "from-[#b9c2d3]/78 via-[#9ea8ba]/72 to-[#7d8799]/80 border-white/45 text-white",
-    aura: "bg-slate-100/18",
-    miniBar: "bg-slate-200",
+    octagon: "from-zinc-200 via-zinc-50 to-zinc-300",
   },
   rare: {
-    frame: "from-[#fecaca] via-[#ef4444] to-[#7f1d1d]",
-    shell: "from-[#1b0b12] via-[#14080e] to-[#0d0408]",
-    ring: "shadow-[0_0_0_1px_rgba(252,165,165,0.52),0_10px_26px_rgba(36,7,7,0.76)]",
-    glow: "shadow-[0_26px_56px_rgba(239,68,68,0.42)]",
+    frame: "from-red-700 via-red-600 to-red-800",
+    border: "border-red-400/60",
+    glow: "shadow-[0_18px_40px_rgba(220,38,38,0.35)]",
+    badge: "bg-white/10 text-white border-white/25",
+    bg: "from-red-950 via-red-700 to-red-900",
     label: "RARE",
-    banner: "from-[#f97373]/76 via-[#ef4444]/70 to-[#dc2626]/76 border-red-100/40 text-white",
-    aura: "bg-rose-300/20",
-    miniBar: "bg-rose-300",
+    octagon: "from-red-900 via-red-500 to-rose-700",
   },
   unique: {
-    frame: "from-[#d8b4fe] via-[#9333ea] to-[#581c87]",
-    shell: "from-[#15142b] via-[#101125] to-[#090b18]",
-    ring: "shadow-[0_0_0_1px_rgba(216,180,254,0.56),0_10px_26px_rgba(32,13,56,0.84)]",
-    glow: "shadow-[0_28px_62px_rgba(147,51,234,0.48)]",
+    frame: "from-violet-950 via-indigo-900 to-purple-950",
+    border: "border-fuchsia-300/30",
+    glow: "shadow-[0_18px_40px_rgba(139,92,246,0.38)]",
+    badge: "bg-white/10 text-white border-white/20",
+    bg: "from-violet-950 via-indigo-900 to-fuchsia-900",
     label: "UNIQUE",
-    banner: "from-[#c084fc]/76 via-[#a855f7]/68 to-[#7e22ce]/76 border-fuchsia-100/42 text-white",
-    aura: "bg-fuchsia-300/18",
-    miniBar: "bg-fuchsia-400",
+    octagon: "from-fuchsia-500 via-violet-700 to-amber-200",
   },
   legendary: {
-    frame: "from-[#fde68a] via-[#f59e0b] to-[#a16207]",
-    shell: "from-[#20160a] via-[#14100b] to-[#0d0a08]",
-    ring: "shadow-[0_0_0_1px_rgba(252,211,77,0.56),0_10px_28px_rgba(56,33,5,0.84)]",
-    glow: "shadow-[0_30px_64px_rgba(245,158,11,0.54)]",
+    frame: "from-yellow-200 via-amber-400 to-yellow-700",
+    border: "border-yellow-200/60",
+    glow: "shadow-[0_18px_40px_rgba(245,158,11,0.35)]",
+    badge: "bg-black/10 text-black border-black/15",
+    bg: "from-yellow-300 via-amber-400 to-yellow-700",
     label: "LEGENDARY",
-    banner: "from-[#fcd34d]/76 via-[#f59e0b]/68 to-[#b45309]/78 border-amber-100/44 text-white",
-    aura: "bg-amber-300/20",
-    miniBar: "bg-amber-300",
+    octagon: "from-yellow-900 via-yellow-500 to-amber-200",
   },
 };
 
-function scoreDots(values: number[]) {
-  return values.map((value, i) => {
-    const tone = value >= 70 ? "bg-emerald-400" : value >= 45 ? "bg-fuchsia-500" : "bg-rose-500";
-    return <span key={`dot-${i}`} className={`h-2.5 w-2.5 rounded-full ${tone}`} />;
-  });
+function splitName(name: string) {
+  const parts = String(name || "PLAYER NAME")
+    .trim()
+    .toUpperCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length <= 1) return { firstName: parts[0] || "PLAYER", lastName: "NAME" };
+  return { firstName: parts.slice(0, -1).join(" "), lastName: parts.slice(-1).join(" ") };
+}
+
+function StatBars({ form }: { form: number[] }) {
+  return (
+    <div className="flex items-end gap-1">
+      {form.map((value, index) => (
+        <div
+          key={`bar-${index}`}
+          className="w-1.5 rounded-sm bg-white/85"
+          style={{ height: `${Math.max(8, Math.min(26, value * 0.24))}px` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function OctagonBackdrop({ rarity }: { rarity: SlabRarity }) {
+  const theme = rarityThemes[rarity];
+  return (
+    <div className="absolute inset-x-2.5 top-[16%] h-[40%]">
+      <div
+        className={`absolute inset-0 rounded-[1.1rem] bg-gradient-to-br ${theme.octagon} opacity-95`}
+        style={{ clipPath: "polygon(18% 0%,82% 0%,100% 16%,100% 84%,82% 100%,18% 100%,0% 84%,0% 16%)" }}
+      />
+      <div
+        className="absolute inset-[6px] opacity-35"
+        style={{
+          clipPath: "polygon(18% 0%,82% 0%,100% 16%,100% 84%,82% 100%,18% 100%,0% 84%,0% 16%)",
+          backgroundImage:
+            "radial-gradient(circle at 25% 20%, rgba(255,255,255,0.85) 0 2px, transparent 3px), linear-gradient(135deg, rgba(255,255,255,0.25) 25%, transparent 25%), linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%)",
+          backgroundSize: "28px 28px, 28px 28px, 28px 28px",
+          backgroundPosition: "0 0, 0 0, 14px 14px",
+        }}
+      />
+      <div
+        className="absolute inset-[12px] border border-white/30"
+        style={{ clipPath: "polygon(18% 0%,82% 0%,100% 16%,100% 84%,82% 100%,18% 100%,0% 84%,0% 16%)" }}
+      />
+    </div>
+  );
 }
 
 export default function SlabCard({
@@ -90,97 +129,101 @@ export default function SlabCard({
   serialNumber,
   className = "",
   imageSrc,
-  season = "2024-25",
+  season = "2026-27",
   teamCode = "LIV",
   shirtNumber = "10",
-  age = 25,
-  countryCode = "🇦🇷",
-  last5 = [62, 74, 55, 81, 68],
-  provenanceMarker = "Verified Holder",
+  age = 24,
+  countryCode = "ARG",
+  last5 = [65, 78, 72, 85, 80],
+  provenanceMarker = "",
 }: SlabCardProps) {
-  const style = rarityStyles[rarity];
-  const normalizedLast5 = useMemo(() => {
+  const theme = rarityThemes[rarity] ?? rarityThemes.common;
+  const bars = useMemo(() => {
     const values = Array.isArray(last5) ? last5.slice(0, 5).map((v) => Number(v || 0)) : [];
-    while (values.length < 5) values.push(0);
+    while (values.length < 5) values.push(50);
     return values;
   }, [last5]);
+
+  const { firstName, lastName } = splitName(name);
+  const textTone = rarity === "common" ? "text-zinc-900" : rarity === "legendary" ? "text-black" : "text-white";
+  const mutedTone = rarity === "common" ? "text-zinc-600" : rarity === "legendary" ? "text-black/70" : "text-white/75";
+  const divider = rarity === "common" ? "border-zinc-400/70" : rarity === "legendary" ? "border-black/20" : "border-white/20";
+  const topTone = rarity === "common" ? "text-zinc-800" : rarity === "legendary" ? "text-black/80" : "text-white/90";
 
   return (
     <article
       className={[
-        "group relative w-[178px] max-w-full aspect-[0.705/1] rounded-[1.95rem] p-[3px]",
-        "border border-white/25 bg-gradient-to-b",
-        `bg-gradient-to-b ${style.frame} ${style.ring} ${style.glow}`,
-        "transition-transform duration-300 hover:-translate-y-1",
+        "relative w-[176px] max-w-full aspect-[0.57/1] overflow-hidden rounded-[1.35rem] border bg-gradient-to-b",
+        theme.frame,
+        theme.border,
+        theme.glow,
         className,
       ].join(" ")}
     >
-      <div className={`relative h-full overflow-hidden rounded-[1.7rem] border border-white/20 bg-gradient-to-b ${style.shell}`}>
-        <div className="absolute inset-[4px] rounded-[1.45rem] border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.16),inset_0_-18px_36px_rgba(0,0,0,0.46)]" />
-        <div className="absolute inset-0 opacity-35 [background-image:radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.14),transparent_40%),repeating-radial-gradient(circle_at_30%_15%,rgba(255,255,255,0.04)_0_1px,transparent_1px_6px)]" />
+      <div className={`absolute inset-[4px] rounded-[1.15rem] bg-gradient-to-b ${theme.bg}`} />
 
-        <div className="relative z-20 flex items-center justify-between px-4 pt-3 text-[12px] font-extrabold tracking-[0.08em] text-white/92">
-          <span>{season}</span>
-          <span>{teamCode} #{shirtNumber}</span>
+      <div className={`absolute inset-x-2.5 top-2 z-20 flex items-center justify-between text-[8px] font-black tracking-wide ${topTone}`}>
+        <div>{season}</div>
+        <div className="flex items-center gap-1">
+          <span>{teamCode}</span>
+          {!!shirtNumber && <span>#{shirtNumber}</span>}
         </div>
-
-        <div className="absolute inset-x-4 top-[12%] z-20 h-[35%] overflow-hidden rounded-[0.85rem] border border-white/18 bg-black/25 shadow-[inset_0_8px_20px_rgba(255,255,255,0.08)]">
-          <div className={`absolute left-1/2 top-[66%] h-[50%] w-[68%] -translate-x-1/2 rounded-full blur-2xl ${style.aura}`} />
-          {imageSrc ? (
-            <img
-              src={imageSrc}
-              alt={name}
-              loading="lazy"
-              decoding="async"
-              className="h-full w-full object-cover object-center"
-            />
-          ) : (
-            <div className="h-full w-full bg-white/10" />
-          )}
-        </div>
-
-        <div
-          className={`absolute inset-x-4 top-[50%] z-30 rounded-full border bg-gradient-to-r px-3 py-1 text-center text-[12px] font-black tracking-[0.2em] ${style.banner}`}
-        >
-          {style.label}
-        </div>
-
-        <section className="absolute inset-x-4 bottom-[58px] z-30 rounded-[0.95rem] border border-white/18 bg-black/52 px-2.5 py-1.5 backdrop-blur-sm">
-          <div className="mb-1.5 flex items-center justify-between text-[8.5px] font-bold uppercase tracking-[0.1em] text-white/78">
-            <span>LAST 5 GAMES</span>
-            <span>AVERAGE SCORE</span>
-          </div>
-          <div className="flex items-end justify-between gap-2">
-            <div className="flex items-center gap-1.5">{scoreDots(normalizedLast5)}</div>
-            <div className="rounded-[0.6rem] border border-white/28 bg-black/56 px-2 py-[3px] text-right">
-              <div className="text-[7px] font-bold uppercase tracking-[0.1em] text-white/70">AVG</div>
-              <div className="text-[27px] leading-none font-black text-white">{Math.round(avgScore)}</div>
-            </div>
-          </div>
-          <div className="mt-1 h-[2px] rounded-full bg-white/10">
-            <span
-              className={`block h-[2px] rounded-full ${style.miniBar}`}
-              style={{ width: `${Math.min(100, Math.max(10, Math.round((Math.round(avgScore) / 100) * 100)))}%` }}
-            />
-          </div>
-        </section>
-
-        <footer className="absolute inset-x-4 bottom-3 z-30 flex items-end justify-between text-white">
-          <div>
-            <div className="truncate text-[12px] font-black uppercase leading-tight">{name}</div>
-            <div className="text-[11px] font-semibold text-white/85">Age {age}</div>
-          </div>
-          <div className="text-right">
-            <div className="text-[9px] font-bold uppercase text-white/90">{serialNumber}</div>
-            <div className="text-[10px] font-semibold text-white/82">{countryCode}</div>
-            <div className="text-[8px] font-semibold text-white/72">{provenanceMarker}</div>
-          </div>
-        </footer>
-
-        <div className="pointer-events-none absolute left-[-120%] top-0 h-full w-[65%] rotate-[18deg] bg-gradient-to-r from-transparent via-white/24 to-transparent opacity-0 transition-all duration-700 group-hover:left-[140%] group-hover:opacity-100" />
       </div>
 
-      <div className="pointer-events-none absolute -bottom-10 left-1/2 h-16 w-[84%] -translate-x-1/2 rounded-full bg-black/55 blur-2xl" />
+      <div className="absolute left-2.5 top-6 z-20 opacity-90">
+        <Shield className={`h-3 w-3 ${topTone}`} />
+      </div>
+
+      <OctagonBackdrop rarity={rarity} />
+
+      <div className="absolute inset-x-2 top-[20%] z-20 flex justify-center">
+        {imageSrc ? (
+          <img
+            src={imageSrc}
+            alt={name}
+            className="h-[43%] w-[80%] object-contain drop-shadow-[0_10px_12px_rgba(0,0,0,0.35)]"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <div className="h-24 w-20 rounded-xl bg-white/20" />
+        )}
+      </div>
+
+      <div className={`absolute inset-x-3 top-[60%] z-20 flex items-end justify-between ${textTone}`}>
+        <div>
+          <div className={`mb-1 text-[6px] font-bold tracking-[0.16em] ${mutedTone}`}>LAST 5 GAMES</div>
+          <StatBars form={bars} />
+        </div>
+        <div className="text-right">
+          <div className={`text-[6px] font-semibold ${mutedTone}`}>AVERAGE</div>
+          <div className="text-[17px] font-black leading-none tracking-tight">{Number(avgScore || 0).toFixed(0)}</div>
+        </div>
+      </div>
+
+      <div className={`absolute inset-x-3 bottom-[24%] z-20 border-t ${divider}`} />
+
+      <div className={`absolute inset-x-3 bottom-[11%] z-20 ${textTone}`}>
+        <div className="text-center leading-[0.92]">
+          <div className="truncate text-[10px] font-black tracking-wide">{firstName}</div>
+          <div className="mt-0.5 truncate text-[11px] font-black tracking-wide">{lastName}</div>
+          <div className={`mt-1 text-[7px] font-bold tracking-[0.2em] ${mutedTone}`}>{season}</div>
+        </div>
+      </div>
+
+      <div className={`absolute bottom-2.5 left-3 z-20 text-[7px] font-bold ${mutedTone}`}>AGE {age}</div>
+      <div className={`absolute bottom-2.5 right-3 z-20 text-[7px] font-bold ${mutedTone}`}>{String(countryCode).slice(0, 3).toUpperCase()}</div>
+
+      <div className="absolute left-3 top-[79%] z-20 flex items-center gap-2">
+        <div className={`rounded-full border px-1.5 py-0.5 text-[6px] font-black tracking-wide ${theme.badge}`}>{theme.label}</div>
+      </div>
+
+      <div className={`absolute right-3 top-[79%] z-20 flex items-center gap-1 text-[7px] font-black ${textTone}`}>
+        <Star className="h-2.5 w-2.5" />
+        <span>{serialNumber}</span>
+      </div>
+
+      {provenanceMarker ? <div className="absolute right-3 top-[84%] z-20 text-[6px] text-white/70">{provenanceMarker}</div> : null}
     </article>
   );
 }
