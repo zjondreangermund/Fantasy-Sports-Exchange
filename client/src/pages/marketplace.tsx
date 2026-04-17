@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
-import CollectionPlayerCard from "../components/CollectionPlayerCard";
 import CardShowcase from "../components/CardShowcase";
 import SceneAtmosphere from "../components/SceneAtmosphere";
-import { toFantasyCardData } from "../lib/fantasy-card-adapter";
+import { MarketplaceCardGrid, mapMarketplaceListingToCard } from "../components/cards/PlayerCard";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -19,7 +18,7 @@ import {
   DialogFooter,
 } from "../components/ui/dialog";
 import { type PlayerCardWithPlayer, type Wallet, SITE_FEE_RATE } from "../../../shared/schema";
-import { BookmarkPlus, Heart, Search, ShieldCheck, ShoppingCart, SlidersHorizontal, Tag, TrendingUp } from "lucide-react";
+import { BookmarkPlus, Search, ShieldCheck, ShoppingCart, SlidersHorizontal, Tag, TrendingUp } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
 import { useUiSound } from "../hooks/use-ui-sound";
@@ -155,6 +154,8 @@ export default function MarketplacePage() {
   const myListedCards = myCards?.filter(card => card.forSale);
   const visibleBuyListings = isMobile ? sortedListings.slice(0, buyVisibleCount) : sortedListings;
   const visibleSellListings = isMobile ? (myListedCards || []).slice(0, sellVisibleCount) : (myListedCards || []);
+  const marketplaceBuyCards = useMemo(() => visibleBuyListings.map(mapMarketplaceListingToCard), [visibleBuyListings]);
+  const marketplaceSellCards = useMemo(() => visibleSellListings.map(mapMarketplaceListingToCard), [visibleSellListings]);
 
   useEffect(() => {
     setBuyVisibleCount(12);
@@ -171,21 +172,6 @@ export default function MarketplacePage() {
     }
     previousBuyCardId.current = currentId;
   }, [buyCard?.id, play]);
-
-  useEffect(() => {
-    if (!visibleBuyListings.length) return;
-    const snapshot = visibleBuyListings.slice(0, 5).map((card) => {
-      const fantasy = toFantasyCardData(card, { imageWidth: 1024 });
-      return {
-        id: card.id,
-        name: card.player?.name,
-        rarity: card.rarity,
-        image: fantasy.image,
-        candidates: fantasy.imageCandidates?.slice(0, 3),
-      };
-    });
-    console.info("[Marketplace] card render debug", snapshot);
-  }, [visibleBuyListings]);
 
   const handleOpenBuyCard = (card: PlayerCardWithPlayer) => {
     play("click");
@@ -293,32 +279,24 @@ export default function MarketplacePage() {
                 ))}
               </div>
             ) : sortedListings && sortedListings.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
-                {visibleBuyListings.map((card) => (
-                  <div key={card.id} className="flex items-center justify-center min-h-[360px]">
-                    <div className="flex flex-col items-center gap-2">
-                      <button type="button" className="w-full text-left" onClick={() => handleOpenBuyCard(card)}>
-                        <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1024 })} className={isMobile ? "!w-[172px]" : "!w-[220px]"} />
-                      </button>
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" variant="outline" onClick={() => setDetailCard(card)}>
-                          Details
-                        </Button>
-                        <Button size="icon" variant="ghost" onClick={() => toggleWatchlist(card.id)}>
-                          <Heart className={`w-4 h-4 ${watchlist.includes(card.id) ? "fill-current text-red-500" : "text-muted-foreground"}`} />
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Seller: {card.ownerUsername || card.ownerName || "FantasyFC"}
-                      </p>
-                      <p className="text-sm font-semibold text-green-500">
-                        N${(card.price || 0).toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-4">
+                <MarketplaceCardGrid
+                  players={marketplaceBuyCards}
+                  watchedIds={watchlist}
+                  onCardClick={(player) => {
+                    const listing = visibleBuyListings.find((item) => item.id === player.id);
+                    if (!listing) return;
+                    handleOpenBuyCard(listing);
+                  }}
+                  onDetails={(player) => {
+                    const listing = visibleBuyListings.find((item) => item.id === player.id);
+                    if (!listing) return;
+                    setDetailCard(listing);
+                  }}
+                  onToggleWatchlist={(player) => toggleWatchlist(player.id)}
+                />
                 {isMobile && sortedListings.length > buyVisibleCount ? (
-                  <div className="col-span-full flex justify-center mt-2">
+                  <div className="flex justify-center mt-2">
                     <Button variant="outline" onClick={() => setBuyVisibleCount((prev) => prev + 12)}>
                       Load More Listings
                     </Button>
@@ -337,19 +315,10 @@ export default function MarketplacePage() {
 
           <TabsContent value="sell">
             {myListedCards && myListedCards.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
-                {visibleSellListings.map((card) => (
-                  <div key={card.id} className="relative flex items-center justify-center min-h-[360px]">
-                    <div className="flex flex-col items-center gap-2">
-                      <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1024 })} className={isMobile ? "!w-[172px]" : "!w-[220px]"} />
-                      <p className="text-sm font-semibold text-green-500">
-                        N${(card.price || 0).toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-4">
+                <MarketplaceCardGrid players={marketplaceSellCards} watchedIds={watchlist} />
                 {isMobile && myListedCards.length > sellVisibleCount ? (
-                  <div className="col-span-full flex justify-center mt-2">
+                  <div className="flex justify-center mt-2">
                     <Button variant="outline" onClick={() => setSellVisibleCount((prev) => prev + 12)}>
                       Load More My Listings
                     </Button>
