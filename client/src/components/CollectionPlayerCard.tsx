@@ -13,7 +13,7 @@ const FALLBACK_PLAYER: PlayerCardData = {
   rating: 0,
   rarity: "common",
   serial: 0,
-  maxSupply: 0,
+  maxSupply: 100,
 };
 
 export default function CollectionPlayerCard({
