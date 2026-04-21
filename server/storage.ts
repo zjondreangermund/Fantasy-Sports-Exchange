@@ -535,12 +535,12 @@ async getPlayerCount(): Promise<number> {
   }
 
   async getAllPendingWithdrawals(): Promise<WithdrawalRequest[]> {
-    return db
-      .select()
-      .from(withdrawalRequests)
-      .where(sql`${withdrawalRequests.status} in ('pending', 'approved')`)
-      .orderBy(desc(withdrawalRequests.createdAt));
-  }
+  return db
+    .select()
+    .from(withdrawalRequests)
+    .where(eq(withdrawalRequests.status, "pending"))
+    .orderBy(desc(withdrawalRequests.createdAt));
+}
 
   async getAllWithdrawals(): Promise<WithdrawalRequest[]> {
     return db.select().from(withdrawalRequests).orderBy(desc(withdrawalRequests.createdAt));

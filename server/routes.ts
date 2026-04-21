@@ -654,15 +654,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { and, eq, lte, sql } = await import("drizzle-orm");
 
       const eligible = await db
-        .select()
-        .from(withdrawalRequests)
-        .where(
-          and(
-            eq(withdrawalRequests.status, "approved" as any),
-            eq(withdrawalRequests.destinationVerified, true),
-            lte(withdrawalRequests.releaseAfter, new Date()),
-          ),
-        );
+  .select()
+  .from(withdrawalRequests)
+  .where(
+    and(
+      eq(withdrawalRequests.status, "pending" as any),
+      eq(withdrawalRequests.destinationVerified, true),
+      lte(withdrawalRequests.releaseAfter, new Date()),
+    ),
+  );
 
       for (const withdrawal of eligible) {
         await db.transaction(async (tx) => {
@@ -672,7 +672,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             .where(eq(withdrawalRequests.id, withdrawal.id))
             .for("update");
 
-          if (!fresh || fresh.status !== "approved" || !fresh.destinationVerified) return;
+          if (!fresh || fresh.status !== "pending" || !fresh.destinationVerified) return;
 
           await tx
             .update(wallets)
@@ -4691,7 +4691,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const listingsCount = allCards.filter((c: any) => Boolean(c.forSale)).length;
       const auctionsLive = allAuctions.filter((a: any) => String(a.status) === "live").length;
       const competitionsLive = allCompetitions.filter((c: any) => String(c.status) === "active" || String(c.status) === "open").length;
-      const withdrawalsPending = allWithdrawals.filter((w: any) => ["pending", "approved"].includes(String(w.status))).length;
+      const withdrawalsPending = allWithdrawals.filter((w: any) => String(w.status) === "pending").length;
 
       const activeUsers = new Set<string>(txInRange.map((tx: any) => String(tx.userId || ""))).size;
       const totalWalletBalances = allWallets.reduce((sum: number, w: any) => sum + Number(w.balance || 0) + Number(w.lockedBalance || 0), 0);
@@ -5848,9 +5848,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const withdrawalId = parseInt(req.params.id, 10);
       const { status, adminNotes } = req.body;
       
-      if (!["approved", "paid", "rejected"].includes(status)) {
-        return res.status(400).json({ message: "Status must be 'approved', 'paid', or 'rejected'" });
-      }
+      if (!["paid", "rejected"].includes(status)) {
+  return res.status(400).json({ message: "Status must be 'paid' or 'rejected'" });
+}
       
       const { db } = await import("./db.js");
       const { withdrawalRequests, wallets, transactions } = await import("../shared/schema.js");
@@ -5865,9 +5865,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Withdrawal request not found" });
       }
       
-      if (!["pending", "approved"].includes(String(withdrawal.status))) {
-        return res.status(400).json({ message: "Withdrawal already processed" });
-      }
+      if (String(withdrawal.status) !== "pending") {
+  return res.status(400).json({ message: "Withdrawal already processed" });
+}
       
       await db.transaction(async (tx) => {
         if (status === "paid") {
