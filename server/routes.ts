@@ -1937,60 +1937,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(400).json({ message: "Invalid player id" });
     }
 
-    const requestedWidth = parseImageWidth(req.query.w);
-    const requestedFormat = parseImageFormat(req.query.format);
-
-    const player = await storage.getPlayer(playerId);
-    if (!player) {
-      return res.status(404).json({ message: "Player not found" });
-    }
-
-    const imageUrl = String(player.imageUrl || "").trim();
-    let photoCode = extractPhotoCode(imageUrl);
-
-    // ✅ fallback image (ALWAYS SAFE)
     const fallbackPath = path.join(process.cwd(), "dist/public/images/player-1.png");
 
-    // ✅ try local built cache first
-    if (photoCode) {
-      const cachePath = path.join(
-        process.cwd(),
-        "dist/public/player-cache",
-        `${photoCode}.png`
-      );
+    try {
+      const buffer = await fs.readFile(fallbackPath);
 
-      try {
-        await fs.access(cachePath);
-
-        const buffer = await fs.readFile(cachePath);
-
-        const transformed = await transformImageBuffer(buffer, "image/png", {
-          width: requestedWidth,
-          format: requestedFormat,
-        });
-
-        res.setHeader("Content-Type", transformed.contentType);
-        return res.send(transformed.buffer);
-
-      } catch {
-        // ignore → move to fallback
-      }
+      res.setHeader("Content-Type", "image/png");
+      return res.send(buffer);
+    } catch {
+      return res.status(404).json({ message: "Fallback image missing" });
     }
 
-    // ✅ fallback image
-    const fallbackBuffer = await fs.readFile(fallbackPath);
-
-    const transformed = await transformImageBuffer(fallbackBuffer, "image/png", {
-      width: requestedWidth,
-      format: requestedFormat,
-    });
-
-    res.setHeader("Content-Type", transformed.contentType);
-    return res.send(transformed.buffer);
-
-  } catch (error) {
-    console.error("Player photo error:", error);
-    return res.status(500).json({ message: "Failed to serve player photo" });
+  } catch (err) {
+    console.error("Photo route error:", err);
+    return res.status(500).json({ message: "Failed to serve photo" });
   }
 });
 
