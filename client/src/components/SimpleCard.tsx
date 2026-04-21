@@ -61,9 +61,6 @@ function getImageCandidates(player: PlayerCardData) {
 function CardFallback({ player, className = "" }: SimpleCardProps) {
   const teamCode = String(player.club || player.team || "TEAM").slice(0, 4).toUpperCase();
   const rarity = normalizeVisualRarity(player.rarity);
-
-function CardFallback({ player, className = "" }: SimpleCardProps) {
-  const rarity = normalizeVisualRarity(player.rarity);
   return (
     <div
       className={[
