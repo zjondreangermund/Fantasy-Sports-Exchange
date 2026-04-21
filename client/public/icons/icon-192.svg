@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="FantasyFC icon">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="36" fill="#0f172a"/>
+  <rect x="18" y="18" width="156" height="156" rx="30" fill="url(#g)"/>
+  <path d="M96 36 146 62v48c0 29-20 45-50 57-30-12-50-28-50-57V62z" fill="rgba(15,23,42,.88)"/>
+  <path d="M96 63v62" stroke="#e2e8f0" stroke-width="11" stroke-linecap="round"/>
+  <path d="M70 84h52" stroke="#e2e8f0" stroke-width="11" stroke-linecap="round"/>
+</svg>

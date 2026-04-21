@@ -42,6 +42,7 @@ import { useEffect, useState } from "react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
 import { Link } from "wouter";
+import AdminBackofficePanel from "../components/admin/AdminBackofficePanel";
 
 type TournamentEntry = {
   id: number;
@@ -98,6 +99,23 @@ type TournamentRewardClaim = {
     name: string;
     team: string;
   } | null;
+};
+
+type RiskFlagRow = {
+  id: number;
+  userId: string;
+  action: string;
+  meta?: Record<string, any>;
+  createdAt?: string;
+};
+
+type SuspiciousUserRow = {
+  userId: string;
+  email?: string;
+  name?: string;
+  riskScore: number;
+  flags: string[];
+  recent: any[];
 };
 
 export default function AdminPage() {
@@ -203,6 +221,12 @@ export default function AdminPage() {
   const { data: pendingWithdrawals, refetch: refetchPendingWithdrawals } = useQuery<WithdrawalRequest[]>({
     queryKey: ["/api/admin/withdrawals/pending"],
   });
+  const { data: riskFlags, isLoading: riskLoading } = useQuery<RiskFlagRow[]>({
+    queryKey: ["/api/admin/risk/flags"],
+  });
+  const { data: suspiciousUsers } = useQuery<SuspiciousUserRow[]>({
+    queryKey: ["/api/admin/risk/users"],
+  });
 
   // Competitions
   const { data: competitions, isLoading: compLoading, refetch: refetchComps } = useQuery<TournamentWithStats[]>({
@@ -211,8 +235,8 @@ export default function AdminPage() {
 
   // Mutations
   const actionMutation = useMutation({
-    mutationFn: async (data: { id: number; action: "approve" | "reject"; adminNotes?: string }) => {
-      const status = data.action === "approve" ? "completed" : "rejected";
+    mutationFn: async (data: { id: number; action: "approve" | "pay" | "reject"; adminNotes?: string }) => {
+      const status = data.action === "approve" ? "approved" : data.action === "pay" ? "paid" : "rejected";
       const res = await apiRequest("POST", `/api/admin/withdrawals/${data.id}/review`, {
         status,
         adminNotes: data.adminNotes,
@@ -542,8 +566,8 @@ export default function AdminPage() {
   const statusBadge = (status: string) => {
     switch (status) {
       case "pending": return <Badge variant="outline" className="text-yellow-500 border-yellow-500"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
-      case "processing": return <Badge variant="outline" className="text-blue-500 border-blue-500"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Processing</Badge>;
-      case "completed": return <Badge variant="outline" className="text-green-500 border-green-500"><CheckCircle2 className="w-3 h-3 mr-1" />Completed</Badge>;
+      case "approved": return <Badge variant="outline" className="text-blue-500 border-blue-500"><Loader2 className="w-3 h-3 mr-1" />Approved</Badge>;
+      case "paid": return <Badge variant="outline" className="text-green-500 border-green-500"><CheckCircle2 className="w-3 h-3 mr-1" />Paid</Badge>;
       case "rejected": return <Badge variant="outline" className="text-red-500 border-red-500"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
       default: return <Badge variant="outline">{status}</Badge>;
     }
@@ -705,7 +729,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {showActions && (wr.status === "pending" || wr.status === "processing") && (
+        {showActions && (wr.status === "pending" || wr.status === "approved") && (
           <div className="flex items-center gap-2 pt-2 border-t border-border">
             <Input
               placeholder="Admin notes (optional)..."
@@ -717,11 +741,21 @@ export default function AdminPage() {
               size="sm"
               variant="default"
               onClick={() => actionMutation.mutate({ id: wr.id, action: "approve", adminNotes: adminNotes[wr.id] })}
-              disabled={actionMutation.isPending}
+              disabled={actionMutation.isPending || wr.status !== "pending"}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Loader2 className="w-3 h-3 mr-1" />
+              Approve
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => actionMutation.mutate({ id: wr.id, action: "pay", adminNotes: adminNotes[wr.id] })}
+              disabled={actionMutation.isPending || (wr.status !== "approved" && wr.status !== "pending")}
               className="bg-green-600 hover:bg-green-700"
             >
               <CheckCircle2 className="w-3 h-3 mr-1" />
-              Approve
+              Mark Paid
             </Button>
             <Button
               size="sm"
@@ -805,8 +839,12 @@ export default function AdminPage() {
           </Card>
         </div>
 
-        <Tabs defaultValue="withdrawals" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+        <Tabs defaultValue="backoffice" className="w-full">
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="backoffice">
+              <Building2 className="w-4 h-4 mr-2" />
+              Back Office
+            </TabsTrigger>
             <TabsTrigger value="withdrawals">
               <DollarSign className="w-4 h-4 mr-2" />
               Withdrawals
@@ -823,7 +861,15 @@ export default function AdminPage() {
               <Users className="w-4 h-4 mr-2" />
               Onboarding
             </TabsTrigger>
+            <TabsTrigger value="risk">
+              <AlertTriangle className="w-4 h-4 mr-2" />
+              Risk
+            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="backoffice">
+            <AdminBackofficePanel />
+          </TabsContent>
 
           <TabsContent value="withdrawals">
             <Tabs defaultValue="pending">
@@ -1753,6 +1799,57 @@ export default function AdminPage() {
                     </div>
                   </>
                 )}
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="risk">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  Suspicious Users
+                </h3>
+                <div className="space-y-2 max-h-[420px] overflow-auto">
+                  {(suspiciousUsers || []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No suspicious users detected.</p>
+                  ) : (
+                    (suspiciousUsers || []).slice(0, 50).map((u) => (
+                      <div key={u.userId} className="rounded-md border p-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{u.name || u.userId}</span>
+                          <Badge variant="outline" className="text-red-500 border-red-500">Risk {u.riskScore}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{u.email || "no-email"}</p>
+                        <p className="text-xs mt-1 text-muted-foreground">{u.flags.slice(0, 3).join(", ")}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Card>
+
+              <Card className="p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-purple-500" />
+                  Recent Risk Flags
+                </h3>
+                <div className="space-y-2 max-h-[420px] overflow-auto">
+                  {riskLoading ? (
+                    <Skeleton className="h-20 w-full" />
+                  ) : (riskFlags || []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No risk flags logged yet.</p>
+                  ) : (
+                    (riskFlags || []).slice(0, 60).map((row) => (
+                      <div key={row.id} className="rounded-md border p-2 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{row.action}</span>
+                          <span className="text-muted-foreground">{row.createdAt ? new Date(row.createdAt).toLocaleString() : ""}</span>
+                        </div>
+                        <p className="text-muted-foreground mt-1">user: {row.userId || "n/a"}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
               </Card>
             </div>
           </TabsContent>

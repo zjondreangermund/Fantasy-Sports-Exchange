@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
+import { DEPOSIT_FEE_FREE_THRESHOLD, MIN_WITHDRAWAL_AMOUNT, SMALL_DEPOSIT_FEE_RATE, WITHDRAWAL_FEE_RATE } from "../../../shared/card-economy";
 
 export default function WalletPage() {
   const { toast } = useToast();
@@ -119,6 +120,13 @@ export default function WalletPage() {
   });
 
   const presetAmounts = [10, 25, 50, 100];
+  const depositValue = Number.parseFloat(depositAmount || "0");
+  const depositFeeRate = depositValue > 0 && depositValue < DEPOSIT_FEE_FREE_THRESHOLD ? SMALL_DEPOSIT_FEE_RATE : 0;
+  const depositFee = Math.max(0, depositValue * depositFeeRate);
+  const depositNet = Math.max(0, depositValue - depositFee);
+  const withdrawValue = Number.parseFloat(withdrawAmount || "0");
+  const withdrawalFee = Math.max(0, withdrawValue * WITHDRAWAL_FEE_RATE);
+  const withdrawNet = Math.max(0, withdrawValue - withdrawalFee);
 
   const handleDeposit = () => {
     const amount = parseFloat(depositAmount);
@@ -133,6 +141,10 @@ export default function WalletPage() {
   const handleWithdraw = () => {
     const amount = parseFloat(withdrawAmount);
     if (isNaN(amount) || amount <= 0) return;
+    if (amount < MIN_WITHDRAWAL_AMOUNT) {
+      toast({ title: "Minimum withdrawal", description: `Minimum withdrawal is N$${MIN_WITHDRAWAL_AMOUNT.toFixed(2)}`, variant: "destructive" });
+      return;
+    }
     withdrawMutation.mutate({
       amount,
       paymentMethod: withdrawMethod,
@@ -146,6 +158,12 @@ export default function WalletPage() {
     withdrawal: { icon: ArrowUpCircle, color: "text-orange-500", label: "Withdrawal" },
     purchase: { icon: ShoppingCart, color: "text-blue-500", label: "Purchase" },
     sale: { icon: DollarSign, color: "text-green-500", label: "Sale" },
+    marketplace_buy: { icon: ShoppingCart, color: "text-blue-500", label: "Marketplace Buy" },
+    marketplace_sale: { icon: DollarSign, color: "text-green-500", label: "Marketplace Sale" },
+    tournament_entry: { icon: CreditCard, color: "text-purple-500", label: "Tournament Entry" },
+    tournament_payout: { icon: CheckCircle2, color: "text-yellow-500", label: "Tournament Payout" },
+    admin_adjustment: { icon: Plus, color: "text-sky-500", label: "Admin Adjustment" },
+    bonus_credit: { icon: CheckCircle2, color: "text-emerald-500", label: "Bonus Credit" },
     entry_fee: { icon: CreditCard, color: "text-purple-500", label: "Entry Fee" },
     prize: { icon: CheckCircle2, color: "text-yellow-500", label: "Prize" },
     swap_fee: { icon: ArrowUpCircle, color: "text-red-500", label: "Swap Fee" },
@@ -154,8 +172,8 @@ export default function WalletPage() {
   const statusBadge = (status: string) => {
     switch (status) {
       case "pending": return <Badge variant="outline" className="text-yellow-500 border-yellow-500"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
-      case "processing": return <Badge variant="outline" className="text-blue-500 border-blue-500"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Processing</Badge>;
-      case "completed": return <Badge variant="outline" className="text-green-500 border-green-500"><CheckCircle2 className="w-3 h-3 mr-1" />Completed</Badge>;
+      case "approved": return <Badge variant="outline" className="text-blue-500 border-blue-500"><Loader2 className="w-3 h-3 mr-1" />Approved</Badge>;
+      case "paid": return <Badge variant="outline" className="text-green-500 border-green-500"><CheckCircle2 className="w-3 h-3 mr-1" />Paid</Badge>;
       case "rejected": return <Badge variant="outline" className="text-red-500 border-red-500"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
       default: return <Badge variant="outline">{status}</Badge>;
     }
@@ -205,7 +223,10 @@ export default function WalletPage() {
             )}
           </div>
           <p className="text-xs text-muted-foreground mb-0">
-            8% platform fee applies to all deposits & withdrawals
+            Deposits below N${DEPOSIT_FEE_FREE_THRESHOLD.toFixed(0)} are charged {(SMALL_DEPOSIT_FEE_RATE * 100).toFixed(0)}%. Deposits at or above N${DEPOSIT_FEE_FREE_THRESHOLD.toFixed(0)} are free.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Withdrawals are charged {(WITHDRAWAL_FEE_RATE * 100).toFixed(1)}% with a minimum of N${MIN_WITHDRAWAL_AMOUNT.toFixed(0)}. Withdrawals are reviewed and usually paid in 24–72 hours.
           </p>
         </Card>
 
@@ -279,11 +300,11 @@ export default function WalletPage() {
                   />
                 </div>
 
-                {depositAmount && parseFloat(depositAmount) > 0 && (
+                {depositAmount && depositValue > 0 && (
                   <div className="bg-muted/50 rounded-md p-3 text-sm space-y-1">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Amount:</span><span>N${parseFloat(depositAmount).toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Fee (8%):</span><span className="text-red-500">-N${(parseFloat(depositAmount) * 0.08).toFixed(2)}</span></div>
-                    <div className="flex justify-between font-semibold border-t border-border pt-1"><span>You receive:</span><span className="text-green-500">N${(parseFloat(depositAmount) * 0.92).toFixed(2)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Gross amount:</span><span>N${depositValue.toFixed(2)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Fee ({(depositFeeRate * 100).toFixed(0)}%):</span><span className="text-red-500">-N${depositFee.toFixed(2)}</span></div>
+                    <div className="flex justify-between font-semibold border-t border-border pt-1"><span>Net credited:</span><span className="text-green-500">N${depositNet.toFixed(2)}</span></div>
                   </div>
                 )}
 
@@ -379,17 +400,18 @@ export default function WalletPage() {
                   </div>
                 )}
 
-                {withdrawAmount && parseFloat(withdrawAmount) > 0 && (
+                {withdrawAmount && withdrawValue > 0 && (
                   <div className="bg-muted/50 rounded-md p-3 text-sm space-y-1">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Withdrawal amount:</span><span>N${parseFloat(withdrawAmount).toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Fee (8%):</span><span className="text-red-500">-N${(parseFloat(withdrawAmount) * 0.08).toFixed(2)}</span></div>
-                    <div className="flex justify-between font-semibold border-t border-border pt-1"><span>You will receive:</span><span className="text-green-500">N${(parseFloat(withdrawAmount) * 0.92).toFixed(2)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Gross withdrawal:</span><span>N${withdrawValue.toFixed(2)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Fee ({(WITHDRAWAL_FEE_RATE * 100).toFixed(1)}%):</span><span className="text-red-500">-N${withdrawalFee.toFixed(2)}</span></div>
+                    <div className="flex justify-between font-semibold border-t border-border pt-1"><span>Net payout:</span><span className="text-green-500">N${withdrawNet.toFixed(2)}</span></div>
+                    {withdrawValue < MIN_WITHDRAWAL_AMOUNT ? <p className="text-xs text-red-500">Minimum withdrawal is N${MIN_WITHDRAWAL_AMOUNT.toFixed(2)}.</p> : null}
                   </div>
                 )}
 
                 <Button
                   onClick={handleWithdraw}
-                  disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || withdrawMutation.isPending}
+                  disabled={!withdrawAmount || withdrawValue < MIN_WITHDRAWAL_AMOUNT || withdrawMutation.isPending}
                   className="w-full"
                   variant="outline"
                 >
@@ -441,7 +463,7 @@ export default function WalletPage() {
                   {transactions.map((tx) => {
                     const config = txTypeConfig[tx.type] || txTypeConfig.deposit;
                     const TxIcon = config.icon;
-                    const isPositive = tx.type === "deposit" || tx.type === "sale" || tx.type === "prize";
+                    const isPositive = tx.type === "deposit" || tx.type === "sale" || tx.type === "prize" || tx.type === "marketplace_sale" || tx.type === "tournament_payout" || tx.type === "bonus_credit" || tx.type === "admin_adjustment";
                     return (
                       <Card key={tx.id} className="p-3 flex items-center gap-3">
                         <div className={`w-9 h-9 rounded-md flex items-center justify-center ${config.color} bg-current/10`}>
