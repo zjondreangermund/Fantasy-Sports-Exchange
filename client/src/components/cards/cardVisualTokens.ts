@@ -1,3 +1,4 @@
+import { normalizeVisualRarity } from "@/components/cards/cardVisualTokens";
 import { type PlayerCardData } from "./types";
 
 export type CardVisualToken = {
