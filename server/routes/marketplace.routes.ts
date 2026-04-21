@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { db } from "../db.js";
-import { playerCards, transactions, wallets } from "../../shared/schema.js";
-import { eq, sql } from "drizzle-orm";
+import { auditLogs, playerCards, transactions, users, wallets } from "../../shared/schema.js";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 
 interface RegisterMarketplaceRoutesDeps {
   requireAuth: any;
@@ -46,6 +46,75 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
       if (sellerId === buyerId) throw new Error("Cannot buy your own card");
       if (price <= 0) throw new Error("Card has invalid price");
 
+      const [buyerUser] = await tx.select().from(users).where(eq(users.id, buyerId));
+      const [sellerUser] = await tx.select().from(users).where(eq(users.id, sellerId));
+      if (
+        buyerUser &&
+        sellerUser &&
+        buyerUser.email &&
+        sellerUser.email &&
+        String(buyerUser.email).trim().toLowerCase() === String(sellerUser.email).trim().toLowerCase()
+      ) {
+        throw new Error("Potential linked-account trade blocked");
+      }
+
+      // Wash-trade / circular-trade checks
+      const pairTx = await tx
+        .select()
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.type, "marketplace_buy" as any),
+            sql`${transactions.createdAt} >= now() - interval '7 days'`,
+            or(
+              sql`${transactions.description} ilike ${`%buyer:${buyerId}% seller:${sellerId}%`}`,
+              sql`${transactions.description} ilike ${`%buyer:${sellerId}% seller:${buyerId}%`}`,
+            ),
+          ),
+        )
+        .orderBy(desc(transactions.createdAt))
+        .limit(25);
+
+      const sameCardPairTx = pairTx.filter((row: any) => String(row.description || "").includes(`card:${cardId}`));
+      const excessivePairVolume = pairTx.length >= 6;
+      const repeatedSameCard = sameCardPairTx.length >= 2;
+
+      if (excessivePairVolume || repeatedSameCard) {
+        await tx.insert(auditLogs).values({
+          userId: buyerId,
+          action: "risk.wash_trade_blocked",
+          meta: {
+            cardId,
+            buyerId,
+            sellerId,
+            pairTrades7d: pairTx.length,
+            sameCardPairTrades7d: sameCardPairTx.length,
+            reason: excessivePairVolume ? "pair_velocity" : "same_card_loop",
+          },
+        } as any);
+        throw new Error("Trade blocked by anti-abuse controls");
+      }
+
+      const saleHistory = await tx
+        .select()
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.type, "marketplace_sale" as any),
+            sql`${transactions.description} ilike ${`%card:${cardId}%`}`,
+          ),
+        )
+        .orderBy(desc(transactions.createdAt))
+        .limit(5);
+      const lastSale = Number(saleHistory[0]?.grossAmount || saleHistory[0]?.amount || 0);
+      if (lastSale > 0 && price > lastSale * 3) {
+        await tx.insert(auditLogs).values({
+          userId: buyerId,
+          action: "risk.price_spike_trade",
+          meta: { cardId, buyerId, sellerId, listedPrice: price, lastSale },
+        } as any);
+      }
+
       const [buyerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, buyerId));
       if (!buyerWallet || toMoney(buyerWallet.balance || 0) < price) {
         throw new Error("Insufficient balance");
@@ -75,16 +144,26 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
 
       await tx.insert(transactions).values({
         userId: buyerId,
-        type: "purchase",
+        type: "marketplace_buy",
         amount: -price,
-        description: `Purchased card #${cardId} (${formatMoney(price)})`,
+        grossAmount: price,
+        feeAmount: 0,
+        netAmount: -price,
+        sourceType: "marketplace_buy",
+        status: "completed",
+        description: `marketplace card:${cardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)}`,
       } as any);
 
       await tx.insert(transactions).values({
         userId: sellerId,
-        type: "sale",
+        type: "marketplace_sale",
         amount: sellerReceives,
-        description: `Sold card #${cardId} (${formatMoney(price)} - ${formatMoney(fee)} fee)`,
+        grossAmount: price,
+        feeAmount: fee,
+        netAmount: sellerReceives,
+        sourceType: "marketplace_sale",
+        status: "completed",
+        description: `marketplace card:${cardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}`,
       } as any);
     });
 

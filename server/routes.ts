@@ -5740,6 +5740,83 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ message: "Failed to fetch pending withdrawals" });
     }
   });
+
+  app.get("/api/admin/risk/flags", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const limit = Math.min(500, Math.max(20, Number(req.query.limit || 200)));
+      const { db } = await import("./db.js");
+      const { auditLogs } = await import("../shared/schema.js");
+      const { desc, sql } = await import("drizzle-orm");
+      const rows = await db
+        .select()
+        .from(auditLogs)
+        .where(sql`${auditLogs.action} like 'risk.%'`)
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(limit);
+      res.json(rows);
+    } catch (error: any) {
+      console.error("Failed to fetch risk flags:", error);
+      res.status(500).json({ message: "Failed to fetch risk flags" });
+    }
+  });
+
+  app.get("/api/admin/risk/users", requireAuth, isAdmin, async (_req: any, res) => {
+    try {
+      const { db } = await import("./db.js");
+      const { auditLogs, users, transactions } = await import("../shared/schema.js");
+      const { desc, sql } = await import("drizzle-orm");
+      const [riskLogs, allUsers, txRows] = await Promise.all([
+        db.select().from(auditLogs).where(sql`${auditLogs.action} like 'risk.%'`).orderBy(desc(auditLogs.createdAt)).limit(5000),
+        db.select().from(users),
+        db.select().from(transactions).where(sql`${transactions.status} in ('failed','rejected')`).orderBy(desc(transactions.createdAt)).limit(5000),
+      ]);
+
+      const riskByUser = new Map<string, { score: number; flags: Set<string>; recent: any[] }>();
+      const addRisk = (userId: string, points: number, flag: string, meta: any) => {
+        if (!userId) return;
+        const row = riskByUser.get(userId) || { score: 0, flags: new Set<string>(), recent: [] };
+        row.score += points;
+        row.flags.add(flag);
+        if (row.recent.length < 5) row.recent.push(meta);
+        riskByUser.set(userId, row);
+      };
+
+      for (const log of riskLogs as any[]) {
+        const userId = String(log.userId || "");
+        const action = String(log.action || "");
+        addRisk(userId, action.includes("blocked") ? 40 : action.includes("wash") ? 35 : 20, action, log.meta || {});
+        const buyerId = String((log.meta as any)?.buyerId || "");
+        const sellerId = String((log.meta as any)?.sellerId || "");
+        if (buyerId && buyerId !== userId) addRisk(buyerId, 20, `${action}:buyer`, log.meta || {});
+        if (sellerId) addRisk(sellerId, 20, `${action}:seller`, log.meta || {});
+      }
+
+      for (const tx of txRows as any[]) {
+        const uid = String(tx.userId || "");
+        if (!uid) continue;
+        addRisk(uid, 6, `tx_${String(tx.status || "").toLowerCase()}`, { txId: tx.id, status: tx.status, sourceType: tx.sourceType });
+      }
+
+      const usersById = new Map(allUsers.map((u: any) => [String(u.id), u]));
+      const suspiciousUsers = Array.from(riskByUser.entries())
+        .map(([userId, data]) => ({
+          userId,
+          email: usersById.get(userId)?.email || "",
+          name: usersById.get(userId)?.name || "",
+          riskScore: data.score,
+          flags: Array.from(data.flags).slice(0, 10),
+          recent: data.recent,
+        }))
+        .filter((u) => u.riskScore >= 20)
+        .sort((a, b) => b.riskScore - a.riskScore)
+        .slice(0, 300);
+
+      res.json(suspiciousUsers);
+    } catch (error: any) {
+      console.error("Failed to fetch suspicious users:", error);
+      res.status(500).json({ message: "Failed to fetch suspicious users" });
+    }
+  });
   
   // Approve/reject withdrawal request
   app.post("/api/admin/withdrawals/:id/review", requireAuth, isAdmin, async (req: any, res) => {

@@ -101,6 +101,23 @@ type TournamentRewardClaim = {
   } | null;
 };
 
+type RiskFlagRow = {
+  id: number;
+  userId: string;
+  action: string;
+  meta?: Record<string, any>;
+  createdAt?: string;
+};
+
+type SuspiciousUserRow = {
+  userId: string;
+  email?: string;
+  name?: string;
+  riskScore: number;
+  flags: string[];
+  recent: any[];
+};
+
 export default function AdminPage() {
   const { toast } = useToast();
   const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
@@ -203,6 +220,12 @@ export default function AdminPage() {
 
   const { data: pendingWithdrawals, refetch: refetchPendingWithdrawals } = useQuery<WithdrawalRequest[]>({
     queryKey: ["/api/admin/withdrawals/pending"],
+  });
+  const { data: riskFlags, isLoading: riskLoading } = useQuery<RiskFlagRow[]>({
+    queryKey: ["/api/admin/risk/flags"],
+  });
+  const { data: suspiciousUsers } = useQuery<SuspiciousUserRow[]>({
+    queryKey: ["/api/admin/risk/users"],
   });
 
   // Competitions
@@ -817,7 +840,7 @@ export default function AdminPage() {
         </div>
 
         <Tabs defaultValue="backoffice" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="backoffice">
               <Building2 className="w-4 h-4 mr-2" />
               Back Office
@@ -837,6 +860,10 @@ export default function AdminPage() {
             <TabsTrigger value="onboarding">
               <Users className="w-4 h-4 mr-2" />
               Onboarding
+            </TabsTrigger>
+            <TabsTrigger value="risk">
+              <AlertTriangle className="w-4 h-4 mr-2" />
+              Risk
             </TabsTrigger>
           </TabsList>
 
@@ -1772,6 +1799,57 @@ export default function AdminPage() {
                     </div>
                   </>
                 )}
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="risk">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card className="p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  Suspicious Users
+                </h3>
+                <div className="space-y-2 max-h-[420px] overflow-auto">
+                  {(suspiciousUsers || []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No suspicious users detected.</p>
+                  ) : (
+                    (suspiciousUsers || []).slice(0, 50).map((u) => (
+                      <div key={u.userId} className="rounded-md border p-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{u.name || u.userId}</span>
+                          <Badge variant="outline" className="text-red-500 border-red-500">Risk {u.riskScore}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{u.email || "no-email"}</p>
+                        <p className="text-xs mt-1 text-muted-foreground">{u.flags.slice(0, 3).join(", ")}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Card>
+
+              <Card className="p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-purple-500" />
+                  Recent Risk Flags
+                </h3>
+                <div className="space-y-2 max-h-[420px] overflow-auto">
+                  {riskLoading ? (
+                    <Skeleton className="h-20 w-full" />
+                  ) : (riskFlags || []).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No risk flags logged yet.</p>
+                  ) : (
+                    (riskFlags || []).slice(0, 60).map((row) => (
+                      <div key={row.id} className="rounded-md border p-2 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">{row.action}</span>
+                          <span className="text-muted-foreground">{row.createdAt ? new Date(row.createdAt).toLocaleString() : ""}</span>
+                        </div>
+                        <p className="text-muted-foreground mt-1">user: {row.userId || "n/a"}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
               </Card>
             </div>
           </TabsContent>
