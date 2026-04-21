@@ -1,271 +1,100 @@
-import * as React from "react";
-import { ShieldCheck } from "lucide-react";
-import { CARD_IMAGE_FALLBACK } from "../../lib/card-image";
-import { cardVisualTokens, normalizeVisualRarity } from "./cardVisualTokens";
-import { type PlayerCardData } from "./types";
+import type { PlayerCardData } from "./types";
 
-type UnifiedPlayerCardProps = {
-  player: PlayerCardData;
-  className?: string;
+export type VisualRarity = "common" | "rare" | "unique" | "legendary";
+
+export type CardVisualTokenSet = {
+  rarityLabel: string;
+  frameOuter: string;
+  frameInner: string;
+  shell: string;
+  innerGlow: string;
+  bevel: string;
+  pattern: string;
+  glow: string;
+  badge: string;
+  serialBadge: string;
+  leagueBadge: string;
+  statChip: string;
 };
 
-function safeText(value: unknown, fallback = ""): string {
-  const text = String(value ?? "").trim();
-  return text || fallback;
-}
-
-function teamCode(player: PlayerCardData): string {
-  return safeText(player.team || player.club, "TEAM").slice(0, 3).toUpperCase();
-}
-
-function last5(player: PlayerCardData): number[] {
-  const values = Array.isArray(player.last5Scores)
-    ? player.last5Scores.map((v) => Number(v || 0)).slice(0, 5)
-    : [];
-  while (values.length < 5) values.push(0);
-  return values;
-}
-
-function avgScore(values: number[], fallback: number): number {
-  const valid = values.filter((v) => Number.isFinite(v));
-  if (!valid.length) return Math.max(0, Math.round(Number(fallback || 0)));
-  return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
-}
-
-function totalPoints(values: number[]): number {
-  return values.reduce((sum, value) => sum + Number(value || 0), 0);
-}
-
-function imageSrc(player: PlayerCardData): string {
-  const candidates = [
-    safeText(player.image),
-    safeText(player.imageUrl),
-    safeText(player.photo),
-    ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : []),
-  ].filter(Boolean) as string[];
-
-  const real = candidates.find(
-    (src) =>
-      src &&
-      src !== CARD_IMAGE_FALLBACK &&
-      !src.includes("/players/fallback") &&
-      !src.includes("/images/player-1") &&
-      !src.includes("fallback")
-  );
-
-  return real || candidates[0] || CARD_IMAGE_FALLBACK;
-}
-
-function glowForRarity(rarity: string): string {
-  switch (rarity) {
-    case "legendary":
-      return "shadow-[0_0_38px_rgba(245,158,11,0.28)]";
-    case "unique":
-      return "shadow-[0_0_34px_rgba(217,70,239,0.24)]";
+export function normalizeVisualRarity(
+  rarity: PlayerCardData["rarity"],
+): VisualRarity {
+  switch (String(rarity || "").toLowerCase()) {
     case "rare":
-      return "shadow-[0_0_32px_rgba(59,130,246,0.22)]";
+      return "rare";
+    case "unique":
+    case "epic":
+      return "unique";
+    case "legendary":
+      return "legendary";
     default:
-      return "shadow-[0_0_22px_rgba(255,255,255,0.10)]";
+      return "common";
   }
 }
 
-export default function UnifiedPlayerCard({
-  player,
-  className = "",
-}: UnifiedPlayerCardProps) {
-  const rarity = normalizeVisualRarity(player.rarity);
-  const tokens = cardVisualTokens[player.rarity] || cardVisualTokens.common;
+export const cardVisualTokens: Record<VisualRarity, CardVisualTokenSet> = {
+  common: {
+    rarityLabel: "Common",
+    frameOuter: "from-slate-300 via-zinc-200 to-slate-500",
+    frameInner: "from-slate-100/70 via-zinc-100/40 to-slate-400/35",
+    shell: "from-slate-900 via-zinc-900 to-slate-950",
+    innerGlow: "shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]",
+    bevel: "shadow-[inset_0_-12px_24px_rgba(0,0,0,0.35)]",
+    pattern:
+      "bg-[radial-gradient(circle_at_50%_15%,rgba(255,255,255,0.10),transparent_38%),linear-gradient(135deg,rgba(255,255,255,0.04)_0,transparent_35%,rgba(255,255,255,0.03)_65%,transparent_100%)]",
+    glow: "shadow-[0_0_26px_rgba(255,255,255,0.12)]",
+    badge: "border-white/20 bg-white/10 text-white/90",
+    serialBadge: "border-white/15 bg-black/25 text-white/80",
+    leagueBadge: "border-white/15 bg-white/8 text-white/85",
+    statChip: "border-white/15 bg-white/8 text-white/85",
+  },
 
-  const values = last5(player);
-  const average = avgScore(values, Number(player.rating || 0));
-  const total = totalPoints(values);
-  const img = imageSrc(player);
+  rare: {
+    rarityLabel: "Rare",
+    frameOuter: "from-sky-400 via-blue-500 to-indigo-700",
+    frameInner: "from-sky-200/45 via-blue-300/25 to-indigo-500/25",
+    shell: "from-slate-950 via-blue-950 to-indigo-950",
+    innerGlow: "shadow-[inset_0_1px_0_rgba(191,219,254,0.22)]",
+    bevel: "shadow-[inset_0_-14px_28px_rgba(3,7,18,0.45)]",
+    pattern:
+      "bg-[radial-gradient(circle_at_50%_15%,rgba(147,197,253,0.14),transparent_38%),linear-gradient(135deg,rgba(96,165,250,0.06)_0,transparent_35%,rgba(129,140,248,0.05)_65%,transparent_100%)]",
+    glow: "shadow-[0_0_30px_rgba(59,130,246,0.20)]",
+    badge: "border-sky-200/25 bg-sky-300/10 text-sky-100",
+    serialBadge: "border-sky-200/20 bg-slate-950/35 text-sky-100/85",
+    leagueBadge: "border-sky-200/18 bg-sky-300/8 text-sky-100/85",
+    statChip: "border-sky-200/18 bg-sky-300/8 text-sky-100/85",
+  },
 
-  const fullName = safeText(player.name, "Unknown Player");
-  const nameParts = fullName.split(/\s+/).filter(Boolean);
-  const firstLine =
-    nameParts.length > 1 ? nameParts.slice(0, -1).join(" ") : fullName;
-  const secondLine =
-    nameParts.length > 1
-      ? nameParts[nameParts.length - 1]
-      : safeText(player.position, "PLAYER");
+  unique: {
+    rarityLabel: "Unique",
+    frameOuter: "from-fuchsia-400 via-violet-500 to-purple-800",
+    frameInner: "from-fuchsia-200/45 via-violet-300/25 to-purple-500/25",
+    shell: "from-slate-950 via-purple-950 to-fuchsia-950",
+    innerGlow: "shadow-[inset_0_1px_0_rgba(233,213,255,0.22)]",
+    bevel: "shadow-[inset_0_-14px_28px_rgba(17,0,32,0.48)]",
+    pattern:
+      "bg-[radial-gradient(circle_at_50%_15%,rgba(216,180,254,0.14),transparent_38%),linear-gradient(135deg,rgba(232,121,249,0.06)_0,transparent_35%,rgba(167,139,250,0.05)_65%,transparent_100%)]",
+    glow: "shadow-[0_0_34px_rgba(217,70,239,0.22)]",
+    badge: "border-fuchsia-200/25 bg-fuchsia-300/10 text-fuchsia-50",
+    serialBadge: "border-fuchsia-200/18 bg-slate-950/35 text-fuchsia-50/85",
+    leagueBadge: "border-fuchsia-200/18 bg-fuchsia-300/8 text-fuchsia-50/85",
+    statChip: "border-fuchsia-200/18 bg-fuchsia-300/8 text-fuchsia-50/85",
+  },
 
-  const club = safeText(player.club || player.team, "Fantasy FC");
-  const season = safeText(player.season, "2026-27");
-  const serial = `${Number(player.serial || 1)}/${Number(player.maxSupply || 100)}`;
-  const nationality = safeText(player.nationality, "");
-  const statusLabel = player.competitionEligible ? "Eligible" : "Training";
-
-  return (
-    <article
-      className={[
-        "group relative w-[220px] aspect-[0.7/1] max-w-full overflow-hidden rounded-[28px]",
-        "transition-all duration-300 hover:scale-[1.04] hover:-rotate-[1deg]",
-        glowForRarity(rarity),
-        className,
-      ].join(" ")}
-      style={{ transformStyle: "preserve-3d" }}
-    >
-      {/* Outer frame */}
-      <div
-        className={`absolute inset-0 rounded-[28px] bg-gradient-to-br ${tokens.frameOuter}`}
-      />
-      <div className="absolute inset-[3px] rounded-[25px] bg-black/90" />
-      <div
-        className={`absolute inset-[6px] rounded-[23px] bg-gradient-to-b ${tokens.frameInner} ${tokens.innerGlow} ${tokens.bevel}`}
-      />
-      <div
-        className={`absolute inset-[10px] rounded-[20px] bg-gradient-to-b ${tokens.shell}`}
-      />
-
-      {/* Engraved pattern - stronger */}
-      <div
-        className="absolute inset-[10px] rounded-[20px] opacity-40"
-        style={{
-          backgroundImage: `
-            repeating-linear-gradient(
-              135deg,
-              rgba(255,255,255,0.055) 0px,
-              rgba(255,255,255,0.055) 1px,
-              transparent 1px,
-              transparent 11px
-            ),
-            radial-gradient(
-              circle at 50% 35%,
-              rgba(255,255,255,0.12),
-              transparent 52%
-            )
-          `,
-          backgroundSize: "100% 100%, 100% 100%",
-        }}
-      />
-
-      {/* Border + lighting */}
-      <div className="absolute inset-[10px] rounded-[20px] border border-white/10" />
-      <div className="absolute inset-0 rounded-[28px] bg-gradient-to-t from-black/40 via-transparent to-white/10 pointer-events-none" />
-      <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/12 via-transparent to-transparent opacity-70" />
-      <div className="absolute inset-x-5 top-[54px] h-[44%] rounded-[22px] border border-white/10 bg-gradient-to-b from-white/10 via-white/[0.03] to-transparent" />
-
-      {/* Content */}
-      <div className="relative z-10 flex h-full flex-col px-4 pb-4 pt-3 text-white">
-        {/* Top meta */}
-        <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.16em] text-white/80">
-          <span>{season}</span>
-          <span>{teamCode(player)}</span>
-        </div>
-
-        {/* Badge row */}
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span
-            className={[
-              "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em]",
-              tokens.badge,
-            ].join(" ")}
-          >
-            {safeText(player.rarity, "common")}
-          </span>
-          <span
-            className={[
-              "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold",
-              tokens.serialBadge,
-            ].join(" ")}
-          >
-            {serial}
-          </span>
-        </div>
-
-        {/* Image */}
-        <div className="relative mt-3 h-[46%] shrink-0 overflow-hidden rounded-[16px]">
-          <img
-            src={img}
-            alt={fullName}
-            loading="lazy"
-            decoding="async"
-            onError={(e) => {
-              const target = e.currentTarget;
-              if (target.src !== CARD_IMAGE_FALLBACK) {
-                target.src = CARD_IMAGE_FALLBACK;
-              }
-            }}
-            className="absolute inset-x-0 bottom-0 mx-auto h-[98%] w-full object-cover object-top scale-[1.08] drop-shadow-[0_25px_35px_rgba(0,0,0,0.70)]"
-          />
-        </div>
-
-        {/* Mid strip */}
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <span
-            className={[
-              "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold",
-              tokens.leagueBadge,
-            ].join(" ")}
-          >
-            {statusLabel}
-          </span>
-          <span className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">
-            {safeText(player.league, "Premier League")}
-          </span>
-        </div>
-
-        {/* Stats */}
-        <div className="mt-3 rounded-[16px] border border-white/10 bg-black/22 px-3 py-2.5">
-          <div className="grid grid-cols-[1fr_auto_auto] items-end gap-3">
-            <div>
-              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/50">
-                Last 5
-              </div>
-              <div className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-white/78">
-                {values.map((score, index) => (
-                  <span
-                    key={`${fullName}-${index}`}
-                    className="inline-flex min-w-[20px] items-center justify-center rounded-md bg-white/8 px-1.5 py-0.5"
-                  >
-                    {score}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="text-right">
-              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/50">
-                Avg
-              </div>
-              <div className="mt-1 text-[24px] font-black leading-none tracking-tight">
-                {average}
-              </div>
-            </div>
-
-            <div className="text-right">
-              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/50">
-                Total
-              </div>
-              <div className="mt-1 text-[16px] font-black leading-none tracking-tight">
-                {total}
-              </div>
-              <div className="mt-1 text-[10px] font-medium uppercase text-white/60">
-                {safeText(player.position, "POS")}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Name */}
-        <div className="mt-auto pt-4">
-          <div className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-white/55">
-            {firstLine}
-          </div>
-          <div className="truncate text-[18px] font-black uppercase leading-none tracking-[0.04em]">
-            {secondLine}
-          </div>
-
-          <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-medium text-white/70">
-            <span className="truncate">{club}</span>
-            <span className="inline-flex items-center gap-1">
-              <ShieldCheck size={12} />
-              {nationality}
-            </span>
-          </div>
-        </div>
-      </div>
-    </article>
-  );
-}
+  legendary: {
+    rarityLabel: "Legendary",
+    frameOuter: "from-amber-200 via-yellow-400 to-orange-600",
+    frameInner: "from-yellow-100/55 via-amber-200/25 to-orange-400/25",
+    shell: "from-stone-950 via-amber-950 to-orange-950",
+    innerGlow: "shadow-[inset_0_1px_0_rgba(254,240,138,0.24)]",
+    bevel: "shadow-[inset_0_-14px_28px_rgba(35,20,0,0.52)]",
+    pattern:
+      "bg-[radial-gradient(circle_at_50%_15%,rgba(253,224,71,0.14),transparent_38%),linear-gradient(135deg,rgba(251,191,36,0.07)_0,transparent_35%,rgba(251,146,60,0.05)_65%,transparent_100%)]",
+    glow: "shadow-[0_0_36px_rgba(245,158,11,0.24)]",
+    badge: "border-yellow-100/30 bg-amber-300/12 text-yellow-50",
+    serialBadge: "border-yellow-100/20 bg-stone-950/35 text-yellow-50/85",
+    leagueBadge: "border-yellow-100/20 bg-amber-300/8 text-yellow-50/85",
+    statChip: "border-yellow-100/20 bg-amber-300/8 text-yellow-50/85",
+  },
+};
