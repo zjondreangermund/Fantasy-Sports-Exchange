@@ -1,7 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-// Fixed: @/lib -> ../lib
 import { apiRequest, queryClient } from "../lib/queryClient";
-// Fixed: @/components -> ../components
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -15,7 +13,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "../components/ui/dialog";
-// Fixed: @shared -> ../../../shared
 import { type WithdrawalRequest, type Competition } from "../../../shared/schema";
 import {
   Shield,
@@ -213,34 +210,16 @@ export default function AdminPage() {
     queryKey: ["/api/admin/onboarding-config"],
   });
 
-  // Withdrawals
-  const { data: allWithdrawals, isLoading } = useQuery<WithdrawalRequest[]>({
-    queryKey: ["/api/admin/withdrawals"],
-  });
+  const { data: allWithdrawals, isLoading } = useQuery<WithdrawalRequest[]>({ queryKey: ["/api/admin/withdrawals"] });
+  const { data: pendingWithdrawals, refetch: refetchPendingWithdrawals } = useQuery<WithdrawalRequest[]>({ queryKey: ["/api/admin/withdrawals/pending"] });
+  const { data: riskFlags, isLoading: riskLoading } = useQuery<RiskFlagRow[]>({ queryKey: ["/api/admin/risk/flags"] });
+  const { data: suspiciousUsers } = useQuery<SuspiciousUserRow[]>({ queryKey: ["/api/admin/risk/users"] });
+  const { data: competitions, isLoading: compLoading, refetch: refetchComps } = useQuery<TournamentWithStats[]>({ queryKey: ["/api/competitions"] });
 
-  const { data: pendingWithdrawals, refetch: refetchPendingWithdrawals } = useQuery<WithdrawalRequest[]>({
-    queryKey: ["/api/admin/withdrawals/pending"],
-  });
-  const { data: riskFlags, isLoading: riskLoading } = useQuery<RiskFlagRow[]>({
-    queryKey: ["/api/admin/risk/flags"],
-  });
-  const { data: suspiciousUsers } = useQuery<SuspiciousUserRow[]>({
-    queryKey: ["/api/admin/risk/users"],
-  });
-
-  // Competitions
-  const { data: competitions, isLoading: compLoading, refetch: refetchComps } = useQuery<TournamentWithStats[]>({
-    queryKey: ["/api/competitions"],
-  });
-
-  // Mutations
   const actionMutation = useMutation({
     mutationFn: async (data: { id: number; action: "approve" | "pay" | "reject"; adminNotes?: string }) => {
       const status = data.action === "approve" ? "approved" : data.action === "pay" ? "paid" : "rejected";
-      const res = await apiRequest("POST", `/api/admin/withdrawals/${data.id}/review`, {
-        status,
-        adminNotes: data.adminNotes,
-      });
+      const res = await apiRequest("POST", `/api/admin/withdrawals/${data.id}/review`, { status, adminNotes: data.adminNotes });
       return res.json();
     },
     onSuccess: () => {
@@ -257,28 +236,18 @@ export default function AdminPage() {
     },
   });
 
-  // Scoring mutations
   const updateScoresMutation = useMutation({
     mutationFn: async (competitionId?: number) => {
-      const endpoint = competitionId 
-        ? `/api/admin/scores/update/${competitionId}`
-        : `/api/admin/scores/update-all`;
+      const endpoint = competitionId ? `/api/admin/scores/update/${competitionId}` : `/api/admin/scores/update-all`;
       const res = await apiRequest("POST", endpoint, {});
       return res.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
-      toast({ 
-        title: "Scores Updated", 
-        description: data.message || "Score update triggered successfully" 
-      });
+      toast({ title: "Scores Updated", description: data.message || "Score update triggered successfully" });
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to update scores", 
-        variant: "destructive" 
-      });
+      toast({ title: "Error", description: error.message || "Failed to update scores", variant: "destructive" });
     },
   });
 
@@ -289,17 +258,10 @@ export default function AdminPage() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/scores/auto-update"] });
-      toast({ 
-        title: "Auto-Update Toggled", 
-        description: data.message 
-      });
+      toast({ title: "Auto-Update Toggled", description: data.message });
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to toggle auto-update", 
-        variant: "destructive" 
-      });
+      toast({ title: "Error", description: error.message || "Failed to toggle auto-update", variant: "destructive" });
     },
   });
 
@@ -313,11 +275,7 @@ export default function AdminPage() {
       toast({ title: "Competition Settled", description: "Prize distribution complete" });
     },
     onError: (error: any) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to settle competition", 
-        variant: "destructive" 
-      });
+      toast({ title: "Error", description: error.message || "Failed to settle competition", variant: "destructive" });
     },
   });
 
@@ -333,12 +291,10 @@ export default function AdminPage() {
         endDate: tournamentForm.endDate,
         prizeCardRarity: tournamentForm.prizeCardRarity,
       };
-
       if (editingTournamentId) {
         const res = await apiRequest("PATCH", `/api/admin/competitions/${editingTournamentId}`, payload);
         return res.json();
       }
-
       const res = await apiRequest("POST", "/api/admin/competitions", payload);
       return res.json();
     },
@@ -349,11 +305,7 @@ export default function AdminPage() {
       toast({ title: "Tournament saved" });
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to save tournament",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message || "Failed to save tournament", variant: "destructive" });
     },
   });
 
@@ -364,10 +316,7 @@ export default function AdminPage() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
-      toast({
-        title: "Cards Granted",
-        description: data?.message || "5 common cards granted per registered user",
-      });
+      toast({ title: "Cards Granted", description: data?.message || "5 common cards granted per registered user" });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to grant cards", variant: "destructive" });
@@ -382,10 +331,7 @@ export default function AdminPage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
-      toast({
-        title: "Sample Cards Added",
-        description: data?.message || "Added one of each rarity to your collection",
-      });
+      toast({ title: "Sample Cards Added", description: data?.message || "Added one of each rarity to your collection" });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to grant sample cards", variant: "destructive" });
@@ -446,9 +392,7 @@ export default function AdminPage() {
 
   const removeListingMutation = useMutation({
     mutationFn: async ({ cardId, reason }: { cardId: number; reason?: string }) => {
-      const res = await apiRequest("POST", `/api/admin/marketplace/remove-listing/${cardId}`, {
-        reason: reason || "",
-      });
+      const res = await apiRequest("POST", `/api/admin/marketplace/remove-listing/${cardId}`, { reason: reason || "" });
       return res.json();
     },
     onSuccess: () => {
@@ -465,9 +409,7 @@ export default function AdminPage() {
 
   const reopenTournamentClaimMutation = useMutation({
     mutationFn: async ({ claimId, reason }: { claimId: number; reason?: string }) => {
-      const res = await apiRequest("POST", `/api/admin/rewards/tournament-claims/${claimId}/reopen`, {
-        reason: reason || "",
-      });
+      const res = await apiRequest("POST", `/api/admin/rewards/tournament-claims/${claimId}/reopen`, { reason: reason || "" });
       return res.json();
     },
     onSuccess: () => {
@@ -488,10 +430,7 @@ export default function AdminPage() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/logs"] });
-      toast({
-        title: "Player Photos Backfilled",
-        description: data?.message || `Updated ${data?.updated ?? 0} players`,
-      });
+      toast({ title: "Player Photos Backfilled", description: data?.message || `Updated ${data?.updated ?? 0} players` });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to backfill player photos", variant: "destructive" });
@@ -505,10 +444,7 @@ export default function AdminPage() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/logs"] });
-      toast({
-        title: "Player Images Cached",
-        description: data?.message || `Cached ${data?.cached ?? 0} images`,
-      });
+      toast({ title: "Player Images Cached", description: data?.message || `Cached ${data?.cached ?? 0} images` });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to cache player images", variant: "destructive" });
@@ -557,9 +493,7 @@ export default function AdminPage() {
     if (!onboardingConfig) return;
     setOnboardingDraft({
       ...onboardingConfig,
-      packLabels: Array.isArray(onboardingConfig.packLabels)
-        ? onboardingConfig.packLabels
-        : ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"],
+      packLabels: Array.isArray(onboardingConfig.packLabels) ? onboardingConfig.packLabels : ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"],
     });
   }, [onboardingConfig]);
 
@@ -603,19 +537,14 @@ export default function AdminPage() {
     }
   };
 
-  const paymentIcon = (m: string) => {
-    return m === "ewallet" || m === "mobile_money" ? Smartphone : Building2;
-  };
-
+  const paymentIcon = (m: string) => (m === "ewallet" || m === "mobile_money" ? Smartphone : Building2);
   const sparklineData = trafficData?.perMinuteSeries || [];
   const sparklineMax = Math.max(1, ...sparklineData.map((p) => p.count || 0));
-  const sparklinePoints = sparklineData
-    .map((point, index) => {
-      const x = sparklineData.length <= 1 ? 0 : (index / (sparklineData.length - 1)) * 100;
-      const y = 32 - ((point.count || 0) / sparklineMax) * 32;
-      return `${x},${y}`;
-    })
-    .join(" ");
+  const sparklinePoints = sparklineData.map((point, index) => {
+    const x = sparklineData.length <= 1 ? 0 : (index / (sparklineData.length - 1)) * 100;
+    const y = 32 - ((point.count || 0) / sparklineMax) * 32;
+    return `${x},${y}`;
+  }).join(" ");
 
   const filteredCompetitions = (competitions || []).filter((comp) => {
     if (competitionFilter === "all") return true;
@@ -635,7 +564,6 @@ export default function AdminPage() {
     const now = new Date();
     const nextWeek = new Date(now);
     nextWeek.setDate(nextWeek.getDate() + 7);
-
     setEditingTournamentId(null);
     setTournamentForm({
       name: "",
@@ -671,9 +599,7 @@ export default function AdminPage() {
       <Card key={wr.id} className="p-4">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-orange-500/10 flex items-center justify-center">
-              <Send className="w-5 h-5 text-orange-500" />
-            </div>
+            <div className="w-10 h-10 rounded-md bg-orange-500/10 flex items-center justify-center"><Send className="w-5 h-5 text-orange-500" /></div>
             <div>
               <p className="text-sm font-semibold">Withdrawal #{wr.id}</p>
               <p className="text-xs text-muted-foreground">User: {wr.userId.substring(0, 12)}...</p>
@@ -681,27 +607,13 @@ export default function AdminPage() {
           </div>
           {statusBadge(wr.status)}
         </div>
-
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm mb-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Amount</p>
-            <p className="font-semibold">N${wr.amount.toFixed(2)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Fee</p>
-            <p className="font-semibold text-red-500">N${wr.fee.toFixed(2)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Net Payout</p>
-            <p className="font-semibold text-green-500">N${wr.netAmount.toFixed(2)}</p>
-          </div>
+          <div><p className="text-xs text-muted-foreground">Amount</p><p className="font-semibold">N${wr.amount.toFixed(2)}</p></div>
+          <div><p className="text-xs text-muted-foreground">Fee</p><p className="font-semibold text-red-500">N${wr.fee.toFixed(2)}</p></div>
+          <div><p className="text-xs text-muted-foreground">Net Payout</p><p className="font-semibold text-green-500">N${wr.netAmount.toFixed(2)}</p></div>
         </div>
-
         <div className="bg-muted/50 rounded-md p-3 mb-3 text-xs space-y-1">
-          <div className="flex items-center gap-2 mb-2">
-            <PayIcon className="w-4 h-4 text-muted-foreground" />
-            <span className="font-medium">{paymentMethodLabel(wr.paymentMethod)}</span>
-          </div>
+          <div className="flex items-center gap-2 mb-2"><PayIcon className="w-4 h-4 text-muted-foreground" /><span className="font-medium">{paymentMethodLabel(wr.paymentMethod)}</span></div>
           {wr.paymentMethod === "ewallet" ? (
             <>
               {wr.ewalletProvider && <div className="flex justify-between"><span className="text-muted-foreground">Provider:</span><span>{wr.ewalletProvider}</span></div>}
@@ -717,55 +629,14 @@ export default function AdminPage() {
             </>
           )}
         </div>
-
-        <div className="text-xs text-muted-foreground mb-2">
-          Requested: {wr.createdAt ? new Date(wr.createdAt).toLocaleString() : "N/A"}
-          {wr.reviewedAt && <> | Reviewed: {new Date(wr.reviewedAt).toLocaleString()}</>}
-        </div>
-
-        {wr.adminNotes && (
-          <div className="text-xs bg-muted/30 p-2 rounded mb-2">
-            <span className="text-muted-foreground">Admin notes:</span> {wr.adminNotes}
-          </div>
-        )}
-
+        <div className="text-xs text-muted-foreground mb-2">Requested: {wr.createdAt ? new Date(wr.createdAt).toLocaleString() : "N/A"}{wr.reviewedAt && <> | Reviewed: {new Date(wr.reviewedAt).toLocaleString()}</>}</div>
+        {wr.adminNotes && <div className="text-xs bg-muted/30 p-2 rounded mb-2"><span className="text-muted-foreground">Admin notes:</span> {wr.adminNotes}</div>}
         {showActions && (wr.status === "pending" || wr.status === "approved") && (
           <div className="flex items-center gap-2 pt-2 border-t border-border">
-            <Input
-              placeholder="Admin notes (optional)..."
-              value={adminNotes[wr.id] || ""}
-              onChange={(e) => setAdminNotes({ ...adminNotes, [wr.id]: e.target.value })}
-              className="text-xs h-8"
-            />
-            <Button
-              size="sm"
-              variant="default"
-              onClick={() => actionMutation.mutate({ id: wr.id, action: "approve", adminNotes: adminNotes[wr.id] })}
-              disabled={actionMutation.isPending || wr.status !== "pending"}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              <Loader2 className="w-3 h-3 mr-1" />
-              Approve
-            </Button>
-            <Button
-              size="sm"
-              variant="default"
-              onClick={() => actionMutation.mutate({ id: wr.id, action: "pay", adminNotes: adminNotes[wr.id] })}
-              disabled={actionMutation.isPending || (wr.status !== "approved" && wr.status !== "pending")}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              <CheckCircle2 className="w-3 h-3 mr-1" />
-              Mark Paid
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => actionMutation.mutate({ id: wr.id, action: "reject", adminNotes: adminNotes[wr.id] })}
-              disabled={actionMutation.isPending}
-            >
-              <XCircle className="w-3 h-3 mr-1" />
-              Reject
-            </Button>
+            <Input placeholder="Admin notes (optional)..." value={adminNotes[wr.id] || ""} onChange={(e) => setAdminNotes({ ...adminNotes, [wr.id]: e.target.value })} className="text-xs h-8" />
+            <Button size="sm" variant="default" onClick={() => actionMutation.mutate({ id: wr.id, action: "approve", adminNotes: adminNotes[wr.id] })} disabled={actionMutation.isPending || wr.status !== "pending"} className="bg-blue-600 hover:bg-blue-700"><Loader2 className="w-3 h-3 mr-1" />Approve</Button>
+            <Button size="sm" variant="default" onClick={() => actionMutation.mutate({ id: wr.id, action: "pay", adminNotes: adminNotes[wr.id] })} disabled={actionMutation.isPending || (wr.status !== "approved" && wr.status !== "pending")} className="bg-green-600 hover:bg-green-700"><CheckCircle2 className="w-3 h-3 mr-1" />Mark Paid</Button>
+            <Button size="sm" variant="destructive" onClick={() => actionMutation.mutate({ id: wr.id, action: "reject", adminNotes: adminNotes[wr.id] })} disabled={actionMutation.isPending}><XCircle className="w-3 h-3 mr-1" />Reject</Button>
           </div>
         )}
       </Card>
@@ -777,1188 +648,59 @@ export default function AdminPage() {
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between gap-3 mb-6 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-purple-500/10 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-purple-500" />
-            </div>
+            <div className="w-10 h-10 rounded-md bg-purple-500/10 flex items-center justify-center"><Shield className="w-5 h-5 text-purple-500" /></div>
             <div>
               <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
               <p className="text-sm text-muted-foreground">Manage withdrawal requests and platform operations</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/auctions">
-              <Button variant="outline">
-                <Gavel className="w-4 h-4 mr-2" />
-                Open Auctions
-              </Button>
-            </Link>
-            <Link href="/marketplace">
-              <Button variant="outline">
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Open Marketplace
-              </Button>
-            </Link>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                const ok = window.confirm("This will remove ALL users, balances, onboarding data, and force everyone to sign in again. Continue?");
-                if (ok) resetUsersMutation.mutate();
-              }}
-              disabled={resetUsersMutation.isPending}
-            >
-              <XCircle className="w-4 h-4 mr-2" />
-              Reset Users Now
-            </Button>
+            <Link href="/auctions"><Button variant="outline"><Gavel className="w-4 h-4 mr-2" />Open Auctions</Button></Link>
+            <Link href="/marketplace"><Button variant="outline"><ExternalLink className="w-4 h-4 mr-2" />Open Marketplace</Button></Link>
+            <Button variant="destructive" onClick={() => { const ok = window.confirm("This will remove ALL users, balances, onboarding data, and force everyone to sign in again. Continue?"); if (ok) resetUsersMutation.mutate(); }} disabled={resetUsersMutation.isPending}><XCircle className="w-4 h-4 mr-2" />Reset Users Now</Button>
           </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-          <Card className="p-4 text-center">
-            <p className="text-2xl font-bold text-blue-500">
-              {adminStats ? `${adminStats.dau || 0}/${adminStats.wau || 0}/${adminStats.mau || 0}` : "0/0/0"}
-            </p>
-            <p className="text-xs text-muted-foreground">DAU / WAU / MAU</p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-2xl font-bold text-green-500">{adminStats?.newSignups24h || 0}</p>
-            <p className="text-xs text-muted-foreground">New Signups (24h)</p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-2xl font-bold text-purple-500">
-              N${(adminStats?.marketplaceVolume || 0).toFixed(0)} / N${(adminStats?.marketplaceFees || 0).toFixed(0)}
-            </p>
-            <p className="text-xs text-muted-foreground">Marketplace Volume / Fees</p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-2xl font-bold text-orange-500">{adminStats?.activeListings || 0}</p>
-            <p className="text-xs text-muted-foreground">Active Listings</p>
-          </Card>
-          <Card className="p-4 text-center">
-            <p className="text-2xl font-bold text-red-500">{adminStats?.errorsLast24h || 0}</p>
-            <p className="text-xs text-muted-foreground">Errors (24h)</p>
-          </Card>
+          <Card className="p-4 text-center"><p className="text-2xl font-bold text-blue-500">{adminStats ? `${adminStats.dau || 0}/${adminStats.wau || 0}/${adminStats.mau || 0}` : "0/0/0"}</p><p className="text-xs text-muted-foreground">DAU / WAU / MAU</p></Card>
+          <Card className="p-4 text-center"><p className="text-2xl font-bold text-green-500">{adminStats?.newSignups24h || 0}</p><p className="text-xs text-muted-foreground">New Signups (24h)</p></Card>
+          <Card className="p-4 text-center"><p className="text-2xl font-bold text-purple-500">N${(adminStats?.marketplaceVolume || 0).toFixed(0)} / N${(adminStats?.marketplaceFees || 0).toFixed(0)}</p><p className="text-xs text-muted-foreground">Marketplace Volume / Fees</p></Card>
+          <Card className="p-4 text-center"><p className="text-2xl font-bold text-orange-500">{adminStats?.activeListings || 0}</p><p className="text-xs text-muted-foreground">Active Listings</p></Card>
+          <Card className="p-4 text-center"><p className="text-2xl font-bold text-red-500">{adminStats?.errorsLast24h || 0}</p><p className="text-xs text-muted-foreground">Errors (24h)</p></Card>
         </div>
 
         <Tabs defaultValue="backoffice" className="w-full">
           <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="backoffice">
-              <Building2 className="w-4 h-4 mr-2" />
-              Back Office
-            </TabsTrigger>
-            <TabsTrigger value="withdrawals">
-              <DollarSign className="w-4 h-4 mr-2" />
-              Withdrawals
-            </TabsTrigger>
-            <TabsTrigger value="competitions">
-              <Trophy className="w-4 h-4 mr-2" />
-              Tournaments
-            </TabsTrigger>
-            <TabsTrigger value="management">
-              <Shield className="w-4 h-4 mr-2" />
-              Management
-            </TabsTrigger>
-            <TabsTrigger value="onboarding">
-              <Users className="w-4 h-4 mr-2" />
-              Onboarding
-            </TabsTrigger>
-            <TabsTrigger value="risk">
-              <AlertTriangle className="w-4 h-4 mr-2" />
-              Risk
-            </TabsTrigger>
+            <TabsTrigger value="backoffice"><Building2 className="w-4 h-4 mr-2" />Back Office</TabsTrigger>
+            <TabsTrigger value="withdrawals"><DollarSign className="w-4 h-4 mr-2" />Withdrawals</TabsTrigger>
+            <TabsTrigger value="competitions"><Trophy className="w-4 h-4 mr-2" />Tournaments</TabsTrigger>
+            <TabsTrigger value="management"><Shield className="w-4 h-4 mr-2" />Management</TabsTrigger>
+            <TabsTrigger value="onboarding"><Users className="w-4 h-4 mr-2" />Onboarding</TabsTrigger>
+            <TabsTrigger value="risk"><AlertTriangle className="w-4 h-4 mr-2" />Risk</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="backoffice">
-            <AdminBackofficePanel />
-          </TabsContent>
-
+          <TabsContent value="backoffice"><AdminBackofficePanel /></TabsContent>
           <TabsContent value="withdrawals">
             <Tabs defaultValue="pending">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="pending">
-                  Pending Review ({pendingWithdrawals?.length || 0})
-                </TabsTrigger>
-                <TabsTrigger value="all">
-                  All Requests ({allWithdrawals?.length || 0})
-                </TabsTrigger>
+                <TabsTrigger value="pending">Pending Review ({pendingWithdrawals?.length || 0})</TabsTrigger>
+                <TabsTrigger value="all">All Requests ({allWithdrawals?.length || 0})</TabsTrigger>
               </TabsList>
-
-              <TabsContent value="pending">
-                {isLoading ? (
-                  <div className="space-y-3">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <Skeleton key={i} className="h-48 w-full rounded-md" />
-                    ))}
-                  </div>
-                ) : pendingWithdrawals && pendingWithdrawals.length > 0 ? (
-                  <div className="space-y-3">
-                    {pendingWithdrawals.map((wr) => renderWithdrawalCard(wr, true))}
-                  </div>
-                ) : (
-                  <Card className="p-8 text-center">
-                    <CheckCircle2 className="w-12 h-12 mx-auto text-green-500 mb-3 opacity-50" />
-                    <p className="text-muted-foreground">No pending withdrawal requests.</p>
-                  </Card>
-                )}
-              </TabsContent>
-
-              <TabsContent value="all">
-                {isLoading ? (
-                  <div className="space-y-3">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <Skeleton key={i} className="h-48 w-full rounded-md" />
-                    ))}
-                  </div>
-                ) : allWithdrawals && allWithdrawals.length > 0 ? (
-                  <div className="space-y-3">
-                    {allWithdrawals.map((wr) => renderWithdrawalCard(wr, false))}
-                  </div>
-                ) : (
-                  <Card className="p-8 text-center">
-                    <p className="text-muted-foreground">No withdrawal requests yet.</p>
-                  </Card>
-                )}
-              </TabsContent>
+              <TabsContent value="pending">{isLoading ? <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-48 w-full rounded-md" />)}</div> : pendingWithdrawals && pendingWithdrawals.length > 0 ? <div className="space-y-3">{pendingWithdrawals.map((wr) => renderWithdrawalCard(wr, true))}</div> : <Card className="p-8 text-center"><CheckCircle2 className="w-12 h-12 mx-auto text-green-500 mb-3 opacity-50" /><p className="text-muted-foreground">No pending withdrawal requests.</p></Card>}</TabsContent>
+              <TabsContent value="all">{isLoading ? <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-48 w-full rounded-md" />)}</div> : allWithdrawals && allWithdrawals.length > 0 ? <div className="space-y-3">{allWithdrawals.map((wr) => renderWithdrawalCard(wr, false))}</div> : <Card className="p-8 text-center"><p className="text-muted-foreground">No withdrawal requests yet.</p></Card>}</TabsContent>
             </Tabs>
           </TabsContent>
 
-          <TabsContent value="competitions">
-            <div className="space-y-6">
-              {/* Score Management */}
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <Zap className="w-5 h-5 text-blue-500" />
-                    <h3 className="text-lg font-semibold">Score Management</h3>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => updateScoresMutation.mutate(undefined)}
-                      disabled={updateScoresMutation.isPending}
-                    >
-                      <RefreshCw className={`w-4 h-4 mr-1 ${updateScoresMutation.isPending ? 'animate-spin' : ''}`} />
-                      Update All Scores
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={autoUpdateEnabled ? "default" : "outline"}
-                      onClick={() => toggleAutoUpdateMutation.mutate(!autoUpdateEnabled)}
-                      disabled={toggleAutoUpdateMutation.isPending}
-                    >
-                      <Activity className="w-4 h-4 mr-1" />
-                      {autoUpdateEnabled ? "Auto-Update ON" : "Auto-Update OFF"}
-                    </Button>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Automatically updates tournament scores every 5 minutes from live FPL data. 
-                  Scores include decisive actions (goals, assists), performance metrics, and captain bonuses.
-                </p>
-              </Card>
+          <TabsContent value="competitions"><div className="space-y-6"><Card className="p-6"><div className="flex items-center justify-between mb-4"><div className="flex items-center gap-3"><Zap className="w-5 h-5 text-blue-500" /><h3 className="text-lg font-semibold">Score Management</h3></div><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => updateScoresMutation.mutate(undefined)} disabled={updateScoresMutation.isPending}><RefreshCw className={`w-4 h-4 mr-1 ${updateScoresMutation.isPending ? 'animate-spin' : ''}`} />Update All Scores</Button><Button size="sm" variant={autoUpdateEnabled ? "default" : "outline"} onClick={() => toggleAutoUpdateMutation.mutate(!autoUpdateEnabled)} disabled={toggleAutoUpdateMutation.isPending}><Activity className="w-4 h-4 mr-1" />{autoUpdateEnabled ? "Auto-Update ON" : "Auto-Update OFF"}</Button></div></div><p className="text-sm text-muted-foreground mb-4">Automatically updates tournament scores every 5 minutes from live FPL data. Scores include decisive actions (goals, assists), performance metrics, and captain bonuses.</p></Card><Card className="p-6"><div className="flex items-center justify-between gap-3 mb-4"><div className="flex items-center gap-3"><Trophy className="w-5 h-5 text-purple-500" /><h3 className="text-lg font-semibold">Active Tournaments</h3></div><Button size="sm" onClick={openCreateTournament}>Create Tournament</Button></div><div className="flex flex-wrap gap-2 mb-4"><Button size="sm" variant={competitionFilter === "all" ? "default" : "outline"} onClick={() => setCompetitionFilter("all")}>All</Button><Button size="sm" variant={competitionFilter === "active" ? "default" : "outline"} onClick={() => setCompetitionFilter("active")}>Live</Button><Button size="sm" variant={competitionFilter === "upcoming" ? "default" : "outline"} onClick={() => setCompetitionFilter("upcoming")}>Upcoming</Button><Button size="sm" variant={competitionFilter === "completed" ? "default" : "outline"} onClick={() => setCompetitionFilter("completed")}>Completed</Button></div>{compLoading ? <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-md" />)}</div> : filteredCompetitions.length > 0 ? <div className="space-y-3">{filteredCompetitions.map((comp) => (<div key={comp.id} className="border rounded-lg p-4"><div className="flex items-start justify-between mb-3"><div className="flex-1"><div className="flex items-center gap-2 mb-2"><h4 className="font-semibold">{comp.name}</h4>{competitionStatusBadge(comp.status)}{tierBadge(comp.tier)}</div><p className="text-sm text-muted-foreground">Game Week {comp.gameWeek} • Entry Fee: N${comp.entryFee} • Prize: {comp.prizeCardRarity}</p>{comp.status === "completed" && <p className="text-xs text-muted-foreground mt-1">Winner: {comp.winner?.userName || "N/A"} • Reward: N${Number(comp.winner?.prizeAmount || 0).toFixed(2)}{comp.winner?.prizeCardId ? ` + Card #${comp.winner.prizeCardId}` : ""}</p>}</div></div><div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">{(() => { const entries = comp.entryCount ?? comp.entries?.length ?? 0; const prizePool = Number(comp.entryFee || 0) * entries; const scores = (comp.entries || []).map((entry) => Number(entry.totalScore || 0)).filter((value) => Number.isFinite(value)); const avgScore = scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0; return (<><div><p className="text-xs text-muted-foreground">Entries</p><p className="font-semibold">{entries}</p></div><div><p className="text-xs text-muted-foreground">Prize Pool</p><p className="font-semibold">N${prizePool.toFixed(2)}</p></div><div><p className="text-xs text-muted-foreground">Avg Score</p><p className="font-semibold">{avgScore > 0 ? avgScore.toFixed(1) : "-"}</p></div><div><p className="text-xs text-muted-foreground">Duration</p><p className="font-semibold">GW {comp.gameWeek}</p></div></>); })()}</div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => openEditTournament(comp)}>Edit</Button><Button size="sm" variant="outline" onClick={() => updateScoresMutation.mutate(comp.id)} disabled={updateScoresMutation.isPending}><BarChart3 className="w-4 h-4 mr-1" />Update Scores</Button>{comp.status !== "completed" && <Button size="sm" variant="outline" onClick={() => settleCompetitionMutation.mutate(comp.id)} disabled={settleCompetitionMutation.isPending}><CheckCircle2 className="w-4 h-4 mr-1" />Settle & Award Prizes</Button>}</div></div>))}</div> : <p className="text-sm text-muted-foreground text-center py-8">No tournaments found</p>}</Card><Card className="p-6"><div className="flex items-center gap-3 mb-4"><BarChart3 className="w-5 h-5 text-green-500" /><h3 className="text-lg font-semibold">Scoring System</h3></div><div className="space-y-3 text-sm"><div className="grid md:grid-cols-2 gap-4"><div><p className="font-semibold text-green-600 mb-2">Positive Actions</p><ul className="space-y-1 text-xs"><li>• Goals: 8 points each</li><li>• Assists: 6 points each</li><li>• Clean Sheet (GK/DEF): 10/8 points</li><li>• Penalty Save: 12 points</li><li>• Performance: up to 40 points</li></ul></div><div><p className="font-semibold text-red-600 mb-2">Negative Actions</p><ul className="space-y-1 text-xs"><li>• Own Goal: -10 points</li><li>• Missed Penalty: -8 points</li><li>• Yellow Card: -3 points</li><li>• Red Card: -10 points</li><li>• Goals Conceded: -2 each</li></ul></div></div><div className="pt-3 border-t"><p className="font-semibold mb-2">Special Features</p><ul className="space-y-1 text-xs"><li>• Captain Bonus: 10% multiplier (1.1x) on captain's score</li><li>• All-Around (AA): Score ≥60 points marked as exceptional</li><li>• Scale: 0-100 points per player per gameweek</li></ul></div></div></Card></div></TabsContent>
 
-              {/* Tournaments List */}
-              <Card className="p-6">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-3">
-                    <Trophy className="w-5 h-5 text-purple-500" />
-                    <h3 className="text-lg font-semibold">Active Tournaments</h3>
-                  </div>
-                  <Button size="sm" onClick={openCreateTournament}>Create Tournament</Button>
-                </div>
+          <TabsContent value="management"><div className="space-y-6"><Card className="p-6"><div className="flex items-center gap-3 mb-4"><Activity className="w-5 h-5 text-green-500" /><h3 className="text-lg font-semibold">System Health</h3></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><div className="p-3 bg-green-500/10 rounded-lg"><p className="text-xs text-muted-foreground">Server Status</p><p className="text-lg font-bold text-green-500">Online</p></div><div className="p-3 bg-blue-500/10 rounded-lg"><p className="text-xs text-muted-foreground">Active Users</p><p className="text-lg font-bold text-blue-500">{usersResponse?.total ?? 0}</p></div><div className="p-3 bg-purple-500/10 rounded-lg"><p className="text-xs text-muted-foreground">Total Trades</p><p className="text-lg font-bold text-purple-500">{adminStats?.transactions ?? 0}</p></div><div className="p-3 bg-orange-500/10 rounded-lg"><p className="text-xs text-muted-foreground">Marketplace Volume</p><p className="text-lg font-bold text-orange-500">{marketListings?.length ?? 0}</p></div></div></Card><Card className="p-6"><div className="flex items-center justify-between mb-4 gap-2"><div className="flex items-center gap-3"><Activity className="w-5 h-5 text-cyan-500" /><h3 className="text-lg font-semibold">Traffic & Online Users</h3></div><Button variant="outline" size="sm" onClick={() => refetchTraffic()}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button></div><div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"><div className="p-3 bg-cyan-500/10 rounded-lg"><p className="text-xs text-muted-foreground">Req / 1 min</p><p className="text-lg font-bold text-cyan-500">{trafficData?.requestsLastMinute ?? 0}</p></div><div className="p-3 bg-blue-500/10 rounded-lg"><p className="text-xs text-muted-foreground">Req / 5 min</p><p className="text-lg font-bold text-blue-500">{trafficData?.requestsLast5Minutes ?? 0}</p></div><div className="p-3 bg-purple-500/10 rounded-lg"><p className="text-xs text-muted-foreground">Req / 60 min</p><p className="text-lg font-bold text-purple-500">{trafficData?.requestsLastHour ?? 0}</p></div><div className="p-3 bg-green-500/10 rounded-lg"><p className="text-xs text-muted-foreground">Online (10 min)</p><p className="text-lg font-bold text-green-500">{trafficData?.onlineUsersLast10Minutes ?? 0}</p></div></div><div className="grid md:grid-cols-2 gap-4"><div><p className="text-sm font-medium mb-2">Top API Flows</p><div className="space-y-2 max-h-56 overflow-auto">{(trafficData?.topRoutes || []).map((route) => (<div key={route.route} className="p-2 border rounded-md text-xs"><p className="font-semibold truncate">{route.route}</p><p className="text-muted-foreground">{route.count} req • {route.avgDurationMs}ms avg • {route.errorRate}% errors</p></div>))}{(!trafficData?.topRoutes || trafficData.topRoutes.length === 0) && <p className="text-xs text-muted-foreground">No traffic yet.</p>}</div></div><div><p className="text-sm font-medium mb-2">Recently Active Users</p><div className="space-y-2 max-h-56 overflow-auto">{(trafficData?.activeUsers || []).map((u) => (<div key={u.userId} className="p-2 border rounded-md text-xs flex items-center justify-between gap-2"><span className="font-semibold truncate">{u.userId}</span><span className="text-muted-foreground">{u.lastSeenSecondsAgo}s ago</span></div>))}{(!trafficData?.activeUsers || trafficData.activeUsers.length === 0) && <p className="text-xs text-muted-foreground">No active users in last 10 minutes.</p>}</div></div></div><div className="mt-4"><p className="text-sm font-medium mb-2">Requests Trend (Last 15 min)</p><div className="border rounded-md p-3 bg-muted/20">{sparklineData.length > 1 ? <svg viewBox="0 0 100 32" className="w-full h-20" preserveAspectRatio="none"><polyline fill="none" stroke="currentColor" strokeWidth="1.8" className="text-cyan-400" points={sparklinePoints} /></svg> : <p className="text-xs text-muted-foreground">Not enough traffic data yet.</p>}</div></div></Card><Card className="p-6"><div className="flex items-center gap-3 mb-4"><Users className="w-5 h-5 text-blue-500" /><h3 className="text-lg font-semibold">User Search</h3></div><div className="flex flex-wrap gap-2 mb-4"><Input value={userSearchInput} onChange={(e) => setUserSearchInput(e.target.value)} placeholder="Search by email or user ID" className="max-w-sm" /><Button variant="outline" onClick={() => { setUserSearchTerm(userSearchInput.trim()); if (userSearchInput.trim()) refetchUserSearch(); }} disabled={searchingUsers}>Search</Button></div><div className="space-y-2 max-h-64 overflow-auto mb-4">{(searchedUsers?.users || []).map((user) => (<div key={user.id} className="border rounded-md p-3 flex flex-wrap items-center justify-between gap-2 text-sm"><div><p className="font-semibold">{user.email || user.id}</p><p className="text-xs text-muted-foreground">Cards: {user.cardsCount || 0} • Listings: {user.listingsCount || 0} • Purchases: {user.purchasesCount || 0}</p></div><div className="flex items-center gap-2">{user.isBanned ? <Badge variant="destructive">Banned</Badge> : <Badge variant="outline">Active</Badge>}<Button size="sm" variant="outline" onClick={() => setSelectedUserId(user.id)}>View</Button>{user.isBanned ? <Button size="sm" variant="outline" onClick={() => unbanUserMutation.mutate(user.id)} disabled={unbanUserMutation.isPending}>Unban</Button> : <Button size="sm" variant="destructive" onClick={() => { const reason = window.prompt("Ban reason (optional):") || ""; banUserMutation.mutate({ userId: user.id, reason }); }} disabled={banUserMutation.isPending}>Ban</Button>}</div></div>))}{userSearchTerm && (searchedUsers?.users || []).length === 0 && <p className="text-xs text-muted-foreground">No users found.</p>}</div>{selectedUserDetails && <div className="border rounded-md p-3 text-sm"><p className="font-semibold mb-1">Selected User: {selectedUserDetails?.user?.email || selectedUserDetails?.user?.id}</p><p className="text-xs text-muted-foreground">Cards: {selectedUserDetails?.cards?.length || 0} • Listings: {selectedUserDetails?.listings?.length || 0} • Purchases: {selectedUserDetails?.purchases?.length || 0}</p></div>}</Card><Card className="p-6"><div className="flex items-center justify-between mb-4 gap-2"><div className="flex items-center gap-3"><TrendingUp className="w-5 h-5 text-orange-500" /><h3 className="text-lg font-semibold">Marketplace Monitor</h3></div><Button size="sm" variant="outline" onClick={() => refetchMarketListings()}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button></div><div className="flex flex-wrap gap-2 mb-4"><select value={listingFilterRarity} onChange={(e) => setListingFilterRarity(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm"><option value="all">All rarities</option><option value="common">common</option><option value="rare">rare</option><option value="unique">unique</option><option value="epic">epic</option><option value="legendary">legendary</option></select><Input value={listingFilterOwner} onChange={(e) => setListingFilterOwner(e.target.value)} placeholder="Filter by owner ID" className="max-w-xs" /></div><div className="space-y-2 max-h-72 overflow-auto">{filteredListings.map((listing) => (<div key={listing.id} className="border rounded-md p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2 mb-2"><p className="font-semibold">Card #{listing.id} • {listing.player?.name || "Unknown"}</p><Badge variant="outline">N${Number(listing.price || 0).toFixed(2)}</Badge></div><p className="text-xs text-muted-foreground mb-2">Owner: {listing.ownerId} • Rarity: {listing.rarity}</p><div className="flex flex-wrap gap-2"><Input value={listingRemovalReason[listing.id] || ""} onChange={(e) => setListingRemovalReason((prev) => ({ ...prev, [listing.id]: e.target.value }))} placeholder="Removal reason for audit" className="max-w-xs" /><Button size="sm" variant="destructive" onClick={() => removeListingMutation.mutate({ cardId: listing.id, reason: listingRemovalReason[listing.id] || "" })} disabled={removeListingMutation.isPending}>Remove Listing</Button></div></div>))}{filteredListings.length === 0 && <p className="text-xs text-muted-foreground">No active listings match the filters.</p>}</div></Card><Card className="p-6"><div className="flex items-center justify-between mb-4 gap-2"><div className="flex items-center gap-3"><Trophy className="w-5 h-5 text-amber-500" /><h3 className="text-lg font-semibold">Tournament Reward Claims</h3></div><Button size="sm" variant="outline" onClick={() => refetchAdminTournamentClaims()}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button></div><div className="flex flex-wrap gap-2 mb-4"><Input value={rewardClaimUserFilter} onChange={(e) => setRewardClaimUserFilter(e.target.value)} placeholder="Filter by user ID" className="max-w-xs" /><Input value={rewardClaimCompetitionFilter} onChange={(e) => setRewardClaimCompetitionFilter(e.target.value)} placeholder="Filter by competition ID" className="max-w-xs" /><Button size="sm" variant="outline" onClick={() => refetchAdminTournamentClaims()}>Apply Filters</Button></div><div className="space-y-2 max-h-80 overflow-auto">{claimsLoading ? <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-md" />)}</div> : (adminTournamentClaims?.claims || []).length > 0 ? (adminTournamentClaims?.claims || []).map((claim) => (<div key={claim.claimId} className="border rounded-md p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2 mb-1"><p className="font-semibold">Claim #{claim.claimId} • {String(claim.rarity || "rare").toUpperCase()} • Card #{claim.cardId}</p><Badge variant="outline">Entry #{claim.entryId}</Badge></div><p className="text-xs text-muted-foreground mb-1">User: {claim.userEmail || claim.userId} • Competition: {claim.competitionName || `#${claim.competitionId || "-"}`}</p><p className="text-xs text-muted-foreground mb-2">Player: {claim.player?.name || "Unknown"} ({claim.player?.team || "N/A"}) • Claimed: {new Date(claim.claimedAt).toLocaleString()}</p><div className="flex flex-wrap gap-2"><Input value={reopenReasonByClaimId[claim.claimId] || ""} onChange={(e) => setReopenReasonByClaimId((prev) => ({ ...prev, [claim.claimId]: e.target.value }))} placeholder="Reason (audit note)" className="max-w-xs" /><Button size="sm" variant="outline" onClick={() => reopenTournamentClaimMutation.mutate({ claimId: claim.claimId, reason: reopenReasonByClaimId[claim.claimId] || "" })} disabled={reopenTournamentClaimMutation.isPending}>Reopen Claim</Button></div></div>)) : <p className="text-xs text-muted-foreground">No tournament reward claims found for current filters.</p>}</div></Card><Card className="p-6"><div className="flex items-center justify-between mb-4 gap-2"><div className="flex items-center gap-3"><Activity className="w-5 h-5 text-purple-500" /><h3 className="text-lg font-semibold">Audit Log</h3></div><Button size="sm" variant="outline" onClick={() => refetchAdminLogs()}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button></div><div className="flex gap-2 mb-4"><Input value={auditActionFilter} onChange={(e) => setAuditActionFilter(e.target.value)} placeholder="Filter by action" className="max-w-sm" /></div><div className="space-y-2 max-h-72 overflow-auto">{(adminLogs?.logs || []).map((log) => (<div key={log.id} className="border rounded-md p-3 text-xs"><p className="font-semibold">{log.action}</p><p className="text-muted-foreground">Actor: {log.userId || "system"}</p><p className="text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</p></div>))}{(adminLogs?.logs || []).length === 0 && <p className="text-xs text-muted-foreground">No admin actions logged yet.</p>}</div></Card><Card className="p-6"><div className="flex items-center gap-3 mb-4"><Shield className="w-5 h-5 text-blue-500" /><h3 className="text-lg font-semibold">Quick Actions</h3></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Button variant="outline" className="justify-start" onClick={async () => { const result = await refetchUsers(); toast({ title: "User Management", description: `Loaded ${result.data?.total ?? 0} users` }); }}><Users className="w-4 h-4 mr-2" />User Management</Button><Button variant="outline" className="justify-start" onClick={async () => { await Promise.all([refetchAdminStats(), refetchMarketListings()]); toast({ title: "Market Analytics", description: "Marketplace and trade metrics refreshed" }); }}><TrendingUp className="w-4 h-4 mr-2" />Market Analytics</Button><Button variant="outline" className="justify-start" onClick={async () => { const result = await refetchPendingWithdrawals(); toast({ title: "Reports & Flags", description: `${result.data?.length ?? 0} pending withdrawal reports` }); }}><AlertTriangle className="w-4 h-4 mr-2" />Reports & Flags</Button><Button variant="outline" className="justify-start" onClick={async () => { const result = await refetchAdminLogs(); toast({ title: "System Logs", description: `Loaded ${result.data?.total ?? 0} logs` }); }}><Activity className="w-4 h-4 mr-2" />System Logs</Button><Button variant="outline" className="justify-start" onClick={() => { window.open("/api/admin/check", "_blank", "noopener,noreferrer"); }}><ExternalLink className="w-4 h-4 mr-2" />Open Admin Health API</Button><Button variant="outline" className="justify-start" onClick={() => { window.open("/api/epl/players?limit=25", "_blank", "noopener,noreferrer"); }}><ExternalLink className="w-4 h-4 mr-2" />Open EPL Players Feed</Button><Button variant="outline" className="justify-start" onClick={() => grantTodayCardsMutation.mutate()} disabled={grantTodayCardsMutation.isPending}><Zap className="w-4 h-4 mr-2" />Grant 5 Mixed-Rarity Today Cards</Button><Button variant="outline" className="justify-start" onClick={() => grantRaritySamplesMutation.mutate()} disabled={grantRaritySamplesMutation.isPending}><Trophy className="w-4 h-4 mr-2" />Add 1 Card Per Rarity (Mine)</Button><Button variant="outline" className="justify-start" onClick={() => backfillPlayerPhotosMutation.mutate()} disabled={backfillPlayerPhotosMutation.isPending}><RefreshCw className={`w-4 h-4 mr-2 ${backfillPlayerPhotosMutation.isPending ? "animate-spin" : ""}`} />Backfill EPL Player Photos</Button><Button variant="outline" className="justify-start" onClick={() => cachePlayerImagesMutation.mutate()} disabled={cachePlayerImagesMutation.isPending}><RefreshCw className={`w-4 h-4 mr-2 ${cachePlayerImagesMutation.isPending ? "animate-spin" : ""}`} />Cache Player Images Locally</Button><Button variant="destructive" className="justify-start" onClick={() => { const ok = window.confirm("This will remove ALL users and user-owned data. Continue?"); if (ok) resetUsersMutation.mutate(); }} disabled={resetUsersMutation.isPending}><XCircle className="w-4 h-4 mr-2" />Reset All Users</Button></div></Card><Card className="p-6"><div className="flex items-center gap-3 mb-4"><AlertTriangle className="w-5 h-5 text-yellow-500" /><h3 className="text-lg font-semibold">Admin Notes</h3></div><p className="text-sm text-muted-foreground">Use this section to monitor site activity, review user reports, and manage administrative tasks.</p><ul className="mt-4 space-y-2 text-sm"><li className="flex items-start gap-2"><CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5" /><span>Base prices enforced: Rare N$20, Unique N$50, Legendary N$100</span></li><li className="flex items-start gap-2"><CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5" /><span>Trading system active with same-rarity restrictions</span></li><li className="flex items-start gap-2"><CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5" /><span>Card fusion available: 5 cards → 1 higher rarity</span></li><li className="flex items-start gap-2"><Clock className="w-4 h-4 text-yellow-500 mt-0.5" /><span>Monitor high-value trades for suspicious activity</span></li></ul></Card></div></TabsContent>
 
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <Button size="sm" variant={competitionFilter === "all" ? "default" : "outline"} onClick={() => setCompetitionFilter("all")}>All</Button>
-                  <Button size="sm" variant={competitionFilter === "active" ? "default" : "outline"} onClick={() => setCompetitionFilter("active")}>Live</Button>
-                  <Button size="sm" variant={competitionFilter === "upcoming" ? "default" : "outline"} onClick={() => setCompetitionFilter("upcoming")}>Upcoming</Button>
-                  <Button size="sm" variant={competitionFilter === "completed" ? "default" : "outline"} onClick={() => setCompetitionFilter("completed")}>Completed</Button>
-                </div>
+          <TabsContent value="onboarding"><div className="space-y-6"><Card className="p-6 space-y-4"><div className="flex items-center justify-between gap-3"><div><h3 className="text-lg font-semibold">Signup Onboarding Controls</h3><p className="text-sm text-muted-foreground">Manage starter packs, team-name requirements, and user entry paths.</p></div><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => refetchOnboardingConfig()}><RefreshCw className="w-4 h-4 mr-1" />Refresh</Button><Button size="sm" variant="outline" onClick={() => resetOnboardingConfigMutation.mutate()} disabled={resetOnboardingConfigMutation.isPending}>Reset Defaults</Button></div></div>{!onboardingDraft ? <Skeleton className="h-44 w-full" /> : <><div className="grid md:grid-cols-2 gap-4"><label className="flex items-center justify-between rounded-lg border p-3 text-sm"><span>Enable signup starter packs</span><input type="checkbox" checked={Boolean(onboardingDraft.signupPacksEnabled)} onChange={(e) => setOnboardingDraft((prev) => prev ? { ...prev, signupPacksEnabled: e.target.checked } : prev)} /></label><label className="flex items-center justify-between rounded-lg border p-3 text-sm"><span>Require team name on onboarding</span><input type="checkbox" checked={Boolean(onboardingDraft.requireTeamName)} onChange={(e) => setOnboardingDraft((prev) => prev ? { ...prev, requireTeamName: e.target.checked } : prev)} /></label></div><div className="grid md:grid-cols-2 gap-4"><div><label className="text-xs text-muted-foreground">Minimum team-name length</label><Input type="number" min={2} max={30} value={onboardingDraft.teamNameMinLength} onChange={(e) => setOnboardingDraft((prev) => prev ? { ...prev, teamNameMinLength: Math.max(2, Math.min(30, Number(e.target.value || 3))) } : prev)} /></div><div><label className="text-xs text-muted-foreground">Onboarding entry path</label><Input value={onboardingDraft.onboardingEntryPath} onChange={(e) => setOnboardingDraft((prev) => prev ? { ...prev, onboardingEntryPath: e.target.value } : prev)} placeholder="/onboarding" /></div></div><div><label className="text-xs text-muted-foreground">Dashboard checklist label</label><Input value={onboardingDraft.starterChecklistLabel} onChange={(e) => setOnboardingDraft((prev) => prev ? { ...prev, starterChecklistLabel: e.target.value } : prev)} placeholder="Open starter packs" /></div><div><label className="text-xs text-muted-foreground block mb-2">Pack labels (5)</label><div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">{Array.from({ length: 5 }).map((_, i) => (<Input key={i} value={onboardingDraft.packLabels?.[i] || ""} onChange={(e) => setOnboardingDraft((prev) => { if (!prev) return prev; const labels = [...(prev.packLabels || [])]; while (labels.length < 5) labels.push(""); labels[i] = e.target.value; return { ...prev, packLabels: labels }; })} placeholder={`Pack ${i + 1}`} />))}</div></div><div className="flex flex-wrap gap-2 pt-2"><Button onClick={() => onboardingDraft && saveOnboardingConfigMutation.mutate(onboardingDraft)} disabled={saveOnboardingConfigMutation.isPending}>Save Onboarding Settings</Button><Button variant="outline" onClick={() => window.open(onboardingDraft.onboardingEntryPath || "/onboarding", "_blank", "noopener,noreferrer")}><ExternalLink className="w-4 h-4 mr-2" />Open Entry Link</Button><Button variant="outline" onClick={() => window.open("/", "_blank", "noopener,noreferrer")}><ExternalLink className="w-4 h-4 mr-2" />Open Dashboard</Button></div></>}</Card></div></TabsContent>
 
-                {compLoading ? (
-                  <div className="space-y-3">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <Skeleton key={i} className="h-24 w-full rounded-md" />
-                    ))}
-                  </div>
-                ) : filteredCompetitions.length > 0 ? (
-                  <div className="space-y-3">
-                    {filteredCompetitions.map((comp) => (
-                      <div key={comp.id} className="border rounded-lg p-4">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h4 className="font-semibold">{comp.name}</h4>
-                              {competitionStatusBadge(comp.status)}
-                              {tierBadge(comp.tier)}
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              Game Week {comp.gameWeek} • Entry Fee: N${comp.entryFee} • Prize: {comp.prizeCardRarity}
-                            </p>
-                            {comp.status === "completed" && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Winner: {comp.winner?.userName || "N/A"} • Reward: N${Number(comp.winner?.prizeAmount || 0).toFixed(2)}
-                                {comp.winner?.prizeCardId ? ` + Card #${comp.winner.prizeCardId}` : ""}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
-                          {(() => {
-                            const entries = comp.entryCount ?? comp.entries?.length ?? 0;
-                            const prizePool = Number(comp.entryFee || 0) * entries;
-                            const scores = (comp.entries || [])
-                              .map((entry) => Number(entry.totalScore || 0))
-                              .filter((value) => Number.isFinite(value));
-                            const avgScore = scores.length
-                              ? scores.reduce((sum, score) => sum + score, 0) / scores.length
-                              : 0;
-
-                            return (
-                              <>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Entries</p>
-                                  <p className="font-semibold">{entries}</p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Prize Pool</p>
-                                  <p className="font-semibold">N${prizePool.toFixed(2)}</p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Avg Score</p>
-                                  <p className="font-semibold">{avgScore > 0 ? avgScore.toFixed(1) : "-"}</p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-muted-foreground">Duration</p>
-                                  <p className="font-semibold">GW {comp.gameWeek}</p>
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openEditTournament(comp)}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => updateScoresMutation.mutate(comp.id)}
-                            disabled={updateScoresMutation.isPending}
-                          >
-                            <BarChart3 className="w-4 h-4 mr-1" />
-                            Update Scores
-                          </Button>
-                          {comp.status !== "completed" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => settleCompetitionMutation.mutate(comp.id)}
-                              disabled={settleCompetitionMutation.isPending}
-                            >
-                              <CheckCircle2 className="w-4 h-4 mr-1" />
-                              Settle & Award Prizes
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8">No tournaments found</p>
-                )}
-              </Card>
-
-              {/* Scoring Information */}
-              <Card className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <BarChart3 className="w-5 h-5 text-green-500" />
-                  <h3 className="text-lg font-semibold">Scoring System</h3>
-                </div>
-                <div className="space-y-3 text-sm">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <p className="font-semibold text-green-600 mb-2">Positive Actions</p>
-                      <ul className="space-y-1 text-xs">
-                        <li>• Goals: 8 points each</li>
-                        <li>• Assists: 6 points each</li>
-                        <li>• Clean Sheet (GK/DEF): 10/8 points</li>
-                        <li>• Penalty Save: 12 points</li>
-                        <li>• Performance: up to 40 points</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-red-600 mb-2">Negative Actions</p>
-                      <ul className="space-y-1 text-xs">
-                        <li>• Own Goal: -10 points</li>
-                        <li>• Missed Penalty: -8 points</li>
-                        <li>• Yellow Card: -3 points</li>
-                        <li>• Red Card: -10 points</li>
-                        <li>• Goals Conceded: -2 each</li>
-                      </ul>
-                    </div>
-                  </div>
-                  <div className="pt-3 border-t">
-                    <p className="font-semibold mb-2">Special Features</p>
-                    <ul className="space-y-1 text-xs">
-                      <li>• Captain Bonus: 10% multiplier (1.1x) on captain's score</li>
-                      <li>• All-Around (AA): Score ≥60 points marked as exceptional</li>
-                      <li>• Scale: 0-100 points per player per gameweek</li>
-                    </ul>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="management">
-            <div className="space-y-6">
-              {/* System Health Dashboard */}
-              <Card className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Activity className="w-5 h-5 text-green-500" />
-                  <h3 className="text-lg font-semibold">System Health</h3>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-3 bg-green-500/10 rounded-lg">
-                    <p className="text-xs text-muted-foreground">Server Status</p>
-                    <p className="text-lg font-bold text-green-500">Online</p>
-                  </div>
-                  <div className="p-3 bg-blue-500/10 rounded-lg">
-                    <p className="text-xs text-muted-foreground">Active Users</p>
-                    <p className="text-lg font-bold text-blue-500">{usersResponse?.total ?? 0}</p>
-                  </div>
-                  <div className="p-3 bg-purple-500/10 rounded-lg">
-                    <p className="text-xs text-muted-foreground">Total Trades</p>
-                    <p className="text-lg font-bold text-purple-500">{adminStats?.transactions ?? 0}</p>
-                  </div>
-                  <div className="p-3 bg-orange-500/10 rounded-lg">
-                    <p className="text-xs text-muted-foreground">Marketplace Volume</p>
-                    <p className="text-lg font-bold text-orange-500">{marketListings?.length ?? 0}</p>
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <Activity className="w-5 h-5 text-cyan-500" />
-                    <h3 className="text-lg font-semibold">Traffic & Online Users</h3>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => refetchTraffic()}>
-                    <RefreshCw className="w-4 h-4 mr-1" />
-                    Refresh
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                  <div className="p-3 bg-cyan-500/10 rounded-lg">
-                    <p className="text-xs text-muted-foreground">Req / 1 min</p>
-                    <p className="text-lg font-bold text-cyan-500">{trafficData?.requestsLastMinute ?? 0}</p>
-                  </div>
-                  <div className="p-3 bg-blue-500/10 rounded-lg">
-                    <p className="text-xs text-muted-foreground">Req / 5 min</p>
-                    <p className="text-lg font-bold text-blue-500">{trafficData?.requestsLast5Minutes ?? 0}</p>
-                  </div>
-                  <div className="p-3 bg-purple-500/10 rounded-lg">
-                    <p className="text-xs text-muted-foreground">Req / 60 min</p>
-                    <p className="text-lg font-bold text-purple-500">{trafficData?.requestsLastHour ?? 0}</p>
-                  </div>
-                  <div className="p-3 bg-green-500/10 rounded-lg">
-                    <p className="text-xs text-muted-foreground">Online (10 min)</p>
-                    <p className="text-lg font-bold text-green-500">{trafficData?.onlineUsersLast10Minutes ?? 0}</p>
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium mb-2">Top API Flows</p>
-                    <div className="space-y-2 max-h-56 overflow-auto">
-                      {(trafficData?.topRoutes || []).map((route) => (
-                        <div key={route.route} className="p-2 border rounded-md text-xs">
-                          <p className="font-semibold truncate">{route.route}</p>
-                          <p className="text-muted-foreground">
-                            {route.count} req • {route.avgDurationMs}ms avg • {route.errorRate}% errors
-                          </p>
-                        </div>
-                      ))}
-                      {(!trafficData?.topRoutes || trafficData.topRoutes.length === 0) && (
-                        <p className="text-xs text-muted-foreground">No traffic yet.</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-medium mb-2">Recently Active Users</p>
-                    <div className="space-y-2 max-h-56 overflow-auto">
-                      {(trafficData?.activeUsers || []).map((u) => (
-                        <div key={u.userId} className="p-2 border rounded-md text-xs flex items-center justify-between gap-2">
-                          <span className="font-semibold truncate">{u.userId}</span>
-                          <span className="text-muted-foreground">{u.lastSeenSecondsAgo}s ago</span>
-                        </div>
-                      ))}
-                      {(!trafficData?.activeUsers || trafficData.activeUsers.length === 0) && (
-                        <p className="text-xs text-muted-foreground">No active users in last 10 minutes.</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <p className="text-sm font-medium mb-2">Requests Trend (Last 15 min)</p>
-                  <div className="border rounded-md p-3 bg-muted/20">
-                    {sparklineData.length > 1 ? (
-                      <svg viewBox="0 0 100 32" className="w-full h-20" preserveAspectRatio="none">
-                        <polyline
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          className="text-cyan-400"
-                          points={sparklinePoints}
-                        />
-                      </svg>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Not enough traffic data yet.</p>
-                    )}
-                  </div>
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Users className="w-5 h-5 text-blue-500" />
-                  <h3 className="text-lg font-semibold">User Search</h3>
-                </div>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <Input
-                    value={userSearchInput}
-                    onChange={(e) => setUserSearchInput(e.target.value)}
-                    placeholder="Search by email or user ID"
-                    className="max-w-sm"
-                  />
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setUserSearchTerm(userSearchInput.trim());
-                      if (userSearchInput.trim()) refetchUserSearch();
-                    }}
-                    disabled={searchingUsers}
-                  >
-                    Search
-                  </Button>
-                </div>
-
-                <div className="space-y-2 max-h-64 overflow-auto mb-4">
-                  {(searchedUsers?.users || []).map((user) => (
-                    <div key={user.id} className="border rounded-md p-3 flex flex-wrap items-center justify-between gap-2 text-sm">
-                      <div>
-                        <p className="font-semibold">{user.email || user.id}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Cards: {user.cardsCount || 0} • Listings: {user.listingsCount || 0} • Purchases: {user.purchasesCount || 0}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {user.isBanned ? <Badge variant="destructive">Banned</Badge> : <Badge variant="outline">Active</Badge>}
-                        <Button size="sm" variant="outline" onClick={() => setSelectedUserId(user.id)}>
-                          View
-                        </Button>
-                        {user.isBanned ? (
-                          <Button size="sm" variant="outline" onClick={() => unbanUserMutation.mutate(user.id)} disabled={unbanUserMutation.isPending}>
-                            Unban
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => {
-                              const reason = window.prompt("Ban reason (optional):") || "";
-                              banUserMutation.mutate({ userId: user.id, reason });
-                            }}
-                            disabled={banUserMutation.isPending}
-                          >
-                            Ban
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {userSearchTerm && (searchedUsers?.users || []).length === 0 && (
-                    <p className="text-xs text-muted-foreground">No users found.</p>
-                  )}
-                </div>
-
-                {selectedUserDetails && (
-                  <div className="border rounded-md p-3 text-sm">
-                    <p className="font-semibold mb-1">Selected User: {selectedUserDetails?.user?.email || selectedUserDetails?.user?.id}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Cards: {selectedUserDetails?.cards?.length || 0} • Listings: {selectedUserDetails?.listings?.length || 0} • Purchases: {selectedUserDetails?.purchases?.length || 0}
-                    </p>
-                  </div>
-                )}
-              </Card>
-
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4 gap-2">
-                  <div className="flex items-center gap-3">
-                    <TrendingUp className="w-5 h-5 text-orange-500" />
-                    <h3 className="text-lg font-semibold">Marketplace Monitor</h3>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => refetchMarketListings()}>
-                    <RefreshCw className="w-4 h-4 mr-1" />
-                    Refresh
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <select
-                    value={listingFilterRarity}
-                    onChange={(e) => setListingFilterRarity(e.target.value)}
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    <option value="all">All rarities</option>
-                    <option value="common">common</option>
-                    <option value="rare">rare</option>
-                    <option value="unique">unique</option>
-                    <option value="epic">epic</option>
-                    <option value="legendary">legendary</option>
-                  </select>
-                  <Input
-                    value={listingFilterOwner}
-                    onChange={(e) => setListingFilterOwner(e.target.value)}
-                    placeholder="Filter by owner ID"
-                    className="max-w-xs"
-                  />
-                </div>
-
-                <div className="space-y-2 max-h-72 overflow-auto">
-                  {filteredListings.map((listing) => (
-                    <div key={listing.id} className="border rounded-md p-3 text-sm">
-                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                        <p className="font-semibold">Card #{listing.id} • {listing.player?.name || "Unknown"}</p>
-                        <Badge variant="outline">N${Number(listing.price || 0).toFixed(2)}</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mb-2">Owner: {listing.ownerId} • Rarity: {listing.rarity}</p>
-                      <div className="flex flex-wrap gap-2">
-                        <Input
-                          value={listingRemovalReason[listing.id] || ""}
-                          onChange={(e) => setListingRemovalReason((prev) => ({ ...prev, [listing.id]: e.target.value }))}
-                          placeholder="Removal reason for audit"
-                          className="max-w-xs"
-                        />
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() =>
-                            removeListingMutation.mutate({
-                              cardId: listing.id,
-                              reason: listingRemovalReason[listing.id] || "",
-                            })
-                          }
-                          disabled={removeListingMutation.isPending}
-                        >
-                          Remove Listing
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                  {filteredListings.length === 0 && (
-                    <p className="text-xs text-muted-foreground">No active listings match the filters.</p>
-                  )}
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4 gap-2">
-                  <div className="flex items-center gap-3">
-                    <Trophy className="w-5 h-5 text-amber-500" />
-                    <h3 className="text-lg font-semibold">Tournament Reward Claims</h3>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => refetchAdminTournamentClaims()}>
-                    <RefreshCw className="w-4 h-4 mr-1" />
-                    Refresh
-                  </Button>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <Input
-                    value={rewardClaimUserFilter}
-                    onChange={(e) => setRewardClaimUserFilter(e.target.value)}
-                    placeholder="Filter by user ID"
-                    className="max-w-xs"
-                  />
-                  <Input
-                    value={rewardClaimCompetitionFilter}
-                    onChange={(e) => setRewardClaimCompetitionFilter(e.target.value)}
-                    placeholder="Filter by competition ID"
-                    className="max-w-xs"
-                  />
-                  <Button size="sm" variant="outline" onClick={() => refetchAdminTournamentClaims()}>
-                    Apply Filters
-                  </Button>
-                </div>
-
-                <div className="space-y-2 max-h-80 overflow-auto">
-                  {claimsLoading ? (
-                    <div className="space-y-2">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <Skeleton key={i} className="h-20 w-full rounded-md" />
-                      ))}
-                    </div>
-                  ) : (adminTournamentClaims?.claims || []).length > 0 ? (
-                    (adminTournamentClaims?.claims || []).map((claim) => (
-                      <div key={claim.claimId} className="border rounded-md p-3 text-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-                          <p className="font-semibold">Claim #{claim.claimId} • {String(claim.rarity || "rare").toUpperCase()} • Card #{claim.cardId}</p>
-                          <Badge variant="outline">Entry #{claim.entryId}</Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground mb-1">
-                          User: {claim.userEmail || claim.userId} • Competition: {claim.competitionName || `#${claim.competitionId || "-"}`}
-                        </p>
-                        <p className="text-xs text-muted-foreground mb-2">
-                          Player: {claim.player?.name || "Unknown"} ({claim.player?.team || "N/A"}) • Claimed: {new Date(claim.claimedAt).toLocaleString()}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          <Input
-                            value={reopenReasonByClaimId[claim.claimId] || ""}
-                            onChange={(e) =>
-                              setReopenReasonByClaimId((prev) => ({ ...prev, [claim.claimId]: e.target.value }))
-                            }
-                            placeholder="Reason (audit note)"
-                            className="max-w-xs"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              reopenTournamentClaimMutation.mutate({
-                                claimId: claim.claimId,
-                                reason: reopenReasonByClaimId[claim.claimId] || "",
-                              })
-                            }
-                            disabled={reopenTournamentClaimMutation.isPending}
-                          >
-                            Reopen Claim
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-muted-foreground">No tournament reward claims found for current filters.</p>
-                  )}
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4 gap-2">
-                  <div className="flex items-center gap-3">
-                    <Activity className="w-5 h-5 text-purple-500" />
-                    <h3 className="text-lg font-semibold">Audit Log</h3>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => refetchAdminLogs()}>
-                    <RefreshCw className="w-4 h-4 mr-1" />
-                    Refresh
-                  </Button>
-                </div>
-                <div className="flex gap-2 mb-4">
-                  <Input
-                    value={auditActionFilter}
-                    onChange={(e) => setAuditActionFilter(e.target.value)}
-                    placeholder="Filter by action"
-                    className="max-w-sm"
-                  />
-                </div>
-                <div className="space-y-2 max-h-72 overflow-auto">
-                  {(adminLogs?.logs || []).map((log) => (
-                    <div key={log.id} className="border rounded-md p-3 text-xs">
-                      <p className="font-semibold">{log.action}</p>
-                      <p className="text-muted-foreground">Actor: {log.userId || "system"}</p>
-                      <p className="text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</p>
-                    </div>
-                  ))}
-                  {(adminLogs?.logs || []).length === 0 && (
-                    <p className="text-xs text-muted-foreground">No admin actions logged yet.</p>
-                  )}
-                </div>
-              </Card>
-
-              {/* Quick Actions */}
-              <Card className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Shield className="w-5 h-5 text-blue-500" />
-                  <h3 className="text-lg font-semibold">Quick Actions</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={async () => {
-                      const result = await refetchUsers();
-                      toast({
-                        title: "User Management",
-                        description: `Loaded ${result.data?.total ?? 0} users`,
-                      });
-                    }}
-                  >
-                    <Users className="w-4 h-4 mr-2" />
-                    User Management
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={async () => {
-                      await Promise.all([refetchAdminStats(), refetchMarketListings()]);
-                      toast({
-                        title: "Market Analytics",
-                        description: "Marketplace and trade metrics refreshed",
-                      });
-                    }}
-                  >
-                    <TrendingUp className="w-4 h-4 mr-2" />
-                    Market Analytics
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={async () => {
-                      const result = await refetchPendingWithdrawals();
-                      toast({
-                        title: "Reports & Flags",
-                        description: `${result.data?.length ?? 0} pending withdrawal reports`,
-                      });
-                    }}
-                  >
-                    <AlertTriangle className="w-4 h-4 mr-2" />
-                    Reports & Flags
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={async () => {
-                      const result = await refetchAdminLogs();
-                      toast({
-                        title: "System Logs",
-                        description: `Loaded ${result.data?.total ?? 0} logs`,
-                      });
-                    }}
-                  >
-                    <Activity className="w-4 h-4 mr-2" />
-                    System Logs
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={() => {
-                      window.open("/api/admin/check", "_blank", "noopener,noreferrer");
-                    }}
-                  >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Open Admin Health API
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={() => {
-                      window.open("/api/epl/players?limit=25", "_blank", "noopener,noreferrer");
-                    }}
-                  >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Open EPL Players Feed
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={() => grantTodayCardsMutation.mutate()}
-                    disabled={grantTodayCardsMutation.isPending}
-                  >
-                    <Zap className="w-4 h-4 mr-2" />
-                    Grant 5 Mixed-Rarity Today Cards
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={() => grantRaritySamplesMutation.mutate()}
-                    disabled={grantRaritySamplesMutation.isPending}
-                  >
-                    <Trophy className="w-4 h-4 mr-2" />
-                    Add 1 Card Per Rarity (Mine)
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={() => backfillPlayerPhotosMutation.mutate()}
-                    disabled={backfillPlayerPhotosMutation.isPending}
-                  >
-                    <RefreshCw className={`w-4 h-4 mr-2 ${backfillPlayerPhotosMutation.isPending ? "animate-spin" : ""}`} />
-                    Backfill EPL Player Photos
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={() => cachePlayerImagesMutation.mutate()}
-                    disabled={cachePlayerImagesMutation.isPending}
-                  >
-                    <RefreshCw className={`w-4 h-4 mr-2 ${cachePlayerImagesMutation.isPending ? "animate-spin" : ""}`} />
-                    Cache Player Images Locally
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    className="justify-start"
-                    onClick={() => {
-                      const ok = window.confirm("This will remove ALL users and user-owned data. Continue?");
-                      if (ok) resetUsersMutation.mutate();
-                    }}
-                    disabled={resetUsersMutation.isPending}
-                  >
-                    <XCircle className="w-4 h-4 mr-2" />
-                    Reset All Users
-                  </Button>
-                </div>
-              </Card>
-
-              {/* Admin Notes */}
-              <Card className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <AlertTriangle className="w-5 h-5 text-yellow-500" />
-                  <h3 className="text-lg font-semibold">Admin Notes</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Use this section to monitor site activity, review user reports, and manage administrative tasks.
-                </p>
-                <ul className="mt-4 space-y-2 text-sm">
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5" />
-                    <span>Base prices enforced: Rare N$100, Unique N$250, Legendary N$500</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5" />
-                    <span>Trading system active with same-rarity restrictions</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5" />
-                    <span>Card fusion available: 5 cards → 1 higher rarity</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <Clock className="w-4 h-4 text-yellow-500 mt-0.5" />
-                    <span>Monitor high-value trades for suspicious activity</span>
-                  </li>
-                </ul>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="onboarding">
-            <div className="space-y-6">
-              <Card className="p-6 space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-semibold">Signup Onboarding Controls</h3>
-                    <p className="text-sm text-muted-foreground">Manage starter packs, team-name requirements, and user entry paths.</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => refetchOnboardingConfig()}>
-                      <RefreshCw className="w-4 h-4 mr-1" />
-                      Refresh
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => resetOnboardingConfigMutation.mutate()}
-                      disabled={resetOnboardingConfigMutation.isPending}
-                    >
-                      Reset Defaults
-                    </Button>
-                  </div>
-                </div>
-
-                {!onboardingDraft ? (
-                  <Skeleton className="h-44 w-full" />
-                ) : (
-                  <>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <label className="flex items-center justify-between rounded-lg border p-3 text-sm">
-                        <span>Enable signup starter packs</span>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(onboardingDraft.signupPacksEnabled)}
-                          onChange={(e) =>
-                            setOnboardingDraft((prev) =>
-                              prev ? { ...prev, signupPacksEnabled: e.target.checked } : prev,
-                            )
-                          }
-                        />
-                      </label>
-
-                      <label className="flex items-center justify-between rounded-lg border p-3 text-sm">
-                        <span>Require team name on onboarding</span>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(onboardingDraft.requireTeamName)}
-                          onChange={(e) =>
-                            setOnboardingDraft((prev) =>
-                              prev ? { ...prev, requireTeamName: e.target.checked } : prev,
-                            )
-                          }
-                        />
-                      </label>
-                    </div>
-
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs text-muted-foreground">Minimum team-name length</label>
-                        <Input
-                          type="number"
-                          min={2}
-                          max={30}
-                          value={onboardingDraft.teamNameMinLength}
-                          onChange={(e) =>
-                            setOnboardingDraft((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    teamNameMinLength: Math.max(2, Math.min(30, Number(e.target.value || 3))),
-                                  }
-                                : prev,
-                            )
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-muted-foreground">Onboarding entry path</label>
-                        <Input
-                          value={onboardingDraft.onboardingEntryPath}
-                          onChange={(e) =>
-                            setOnboardingDraft((prev) =>
-                              prev ? { ...prev, onboardingEntryPath: e.target.value } : prev,
-                            )
-                          }
-                          placeholder="/onboarding"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs text-muted-foreground">Dashboard checklist label</label>
-                      <Input
-                        value={onboardingDraft.starterChecklistLabel}
-                        onChange={(e) =>
-                          setOnboardingDraft((prev) =>
-                            prev ? { ...prev, starterChecklistLabel: e.target.value } : prev,
-                          )
-                        }
-                        placeholder="Open starter packs"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs text-muted-foreground block mb-2">Pack labels (5)</label>
-                      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Input
-                            key={i}
-                            value={onboardingDraft.packLabels?.[i] || ""}
-                            onChange={(e) =>
-                              setOnboardingDraft((prev) => {
-                                if (!prev) return prev;
-                                const labels = [...(prev.packLabels || [])];
-                                while (labels.length < 5) labels.push("");
-                                labels[i] = e.target.value;
-                                return { ...prev, packLabels: labels };
-                              })
-                            }
-                            placeholder={`Pack ${i + 1}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      <Button
-                        onClick={() => onboardingDraft && saveOnboardingConfigMutation.mutate(onboardingDraft)}
-                        disabled={saveOnboardingConfigMutation.isPending}
-                      >
-                        Save Onboarding Settings
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => window.open(onboardingDraft.onboardingEntryPath || "/onboarding", "_blank", "noopener,noreferrer")}
-                      >
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Open Entry Link
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => window.open("/", "_blank", "noopener,noreferrer")}
-                      >
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Open Dashboard
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="risk">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card className="p-4">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-500" />
-                  Suspicious Users
-                </h3>
-                <div className="space-y-2 max-h-[420px] overflow-auto">
-                  {(suspiciousUsers || []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No suspicious users detected.</p>
-                  ) : (
-                    (suspiciousUsers || []).slice(0, 50).map((u) => (
-                      <div key={u.userId} className="rounded-md border p-2 text-sm">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{u.name || u.userId}</span>
-                          <Badge variant="outline" className="text-red-500 border-red-500">Risk {u.riskScore}</Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">{u.email || "no-email"}</p>
-                        <p className="text-xs mt-1 text-muted-foreground">{u.flags.slice(0, 3).join(", ")}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Card>
-
-              <Card className="p-4">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-purple-500" />
-                  Recent Risk Flags
-                </h3>
-                <div className="space-y-2 max-h-[420px] overflow-auto">
-                  {riskLoading ? (
-                    <Skeleton className="h-20 w-full" />
-                  ) : (riskFlags || []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No risk flags logged yet.</p>
-                  ) : (
-                    (riskFlags || []).slice(0, 60).map((row) => (
-                      <div key={row.id} className="rounded-md border p-2 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{row.action}</span>
-                          <span className="text-muted-foreground">{row.createdAt ? new Date(row.createdAt).toLocaleString() : ""}</span>
-                        </div>
-                        <p className="text-muted-foreground mt-1">user: {row.userId || "n/a"}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Card>
-            </div>
-          </TabsContent>
+          <TabsContent value="risk"><div className="grid grid-cols-1 lg:grid-cols-2 gap-4"><Card className="p-4"><h3 className="font-semibold mb-3 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-amber-500" />Suspicious Users</h3><div className="space-y-2 max-h-[420px] overflow-auto">{(suspiciousUsers || []).length === 0 ? <p className="text-sm text-muted-foreground">No suspicious users detected.</p> : (suspiciousUsers || []).slice(0, 50).map((u) => (<div key={u.userId} className="rounded-md border p-2 text-sm"><div className="flex items-center justify-between"><span className="font-medium">{u.name || u.userId}</span><Badge variant="outline" className="text-red-500 border-red-500">Risk {u.riskScore}</Badge></div><p className="text-xs text-muted-foreground">{u.email || "no-email"}</p><p className="text-xs mt-1 text-muted-foreground">{u.flags.slice(0, 3).join(", ")}</p></div>))}</div></Card><Card className="p-4"><h3 className="font-semibold mb-3 flex items-center gap-2"><Shield className="w-4 h-4 text-purple-500" />Recent Risk Flags</h3><div className="space-y-2 max-h-[420px] overflow-auto">{riskLoading ? <Skeleton className="h-20 w-full" /> : (riskFlags || []).length === 0 ? <p className="text-sm text-muted-foreground">No risk flags logged yet.</p> : (riskFlags || []).slice(0, 60).map((row) => (<div key={row.id} className="rounded-md border p-2 text-xs"><div className="flex items-center justify-between"><span className="font-medium">{row.action}</span><span className="text-muted-foreground">{row.createdAt ? new Date(row.createdAt).toLocaleString() : ""}</span></div><p className="text-muted-foreground mt-1">user: {row.userId || "n/a"}</p></div>))}</div></Card></div></TabsContent>
         </Tabs>
 
-        <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
-              <DialogTitle>{editingTournamentId ? "Edit Tournament" : "Create Tournament"}</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
-              <div className="sm:col-span-2">
-                <label className="text-xs text-muted-foreground">Name</label>
-                <Input
-                  value={tournamentForm.name}
-                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="Common Tournament - GW27"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground">Tier</label>
-                <select
-                  value={tournamentForm.tier}
-                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, tier: e.target.value }))}
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="common">common</option>
-                  <option value="rare">rare</option>
-                  <option value="unique">unique</option>
-                  <option value="legendary">legendary</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground">Status</label>
-                <select
-                  value={tournamentForm.status}
-                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, status: e.target.value }))}
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="open">open</option>
-                  <option value="upcoming">upcoming</option>
-                  <option value="active">active</option>
-                  <option value="completed">completed</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground">Entry Fee</label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={tournamentForm.entryFee}
-                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, entryFee: e.target.value }))}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground">Game Week</label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={tournamentForm.gameWeek}
-                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, gameWeek: e.target.value }))}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground">Start</label>
-                <Input
-                  type="datetime-local"
-                  value={tournamentForm.startDate}
-                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, startDate: e.target.value }))}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground">End</label>
-                <Input
-                  type="datetime-local"
-                  value={tournamentForm.endDate}
-                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, endDate: e.target.value }))}
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="text-xs text-muted-foreground">Prize Card Rarity</label>
-                <select
-                  value={tournamentForm.prizeCardRarity}
-                  onChange={(e) => setTournamentForm((prev) => ({ ...prev, prizeCardRarity: e.target.value }))}
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="common">common</option>
-                  <option value="rare">rare</option>
-                  <option value="unique">unique</option>
-                  <option value="epic">epic</option>
-                  <option value="legendary">legendary</option>
-                </select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setEditorOpen(false)}>Cancel</Button>
-              <Button onClick={() => saveTournamentMutation.mutate()} disabled={saveTournamentMutation.isPending}>
-                {saveTournamentMutation.isPending ? "Saving..." : "Save Tournament"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Dialog open={editorOpen} onOpenChange={setEditorOpen}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>{editingTournamentId ? "Edit Tournament" : "Create Tournament"}</DialogTitle></DialogHeader><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2"><div className="sm:col-span-2"><label className="text-xs text-muted-foreground">Name</label><Input value={tournamentForm.name} onChange={(e) => setTournamentForm((prev) => ({ ...prev, name: e.target.value }))} placeholder="Common Tournament - GW27" /></div><div><label className="text-xs text-muted-foreground">Tier</label><select value={tournamentForm.tier} onChange={(e) => setTournamentForm((prev) => ({ ...prev, tier: e.target.value }))} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"><option value="common">common</option><option value="rare">rare</option><option value="unique">unique</option><option value="legendary">legendary</option></select></div><div><label className="text-xs text-muted-foreground">Status</label><select value={tournamentForm.status} onChange={(e) => setTournamentForm((prev) => ({ ...prev, status: e.target.value }))} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"><option value="open">open</option><option value="upcoming">upcoming</option><option value="active">active</option><option value="completed">completed</option></select></div><div><label className="text-xs text-muted-foreground">Entry Fee</label><Input type="number" min="0" value={tournamentForm.entryFee} onChange={(e) => setTournamentForm((prev) => ({ ...prev, entryFee: e.target.value }))} /></div><div><label className="text-xs text-muted-foreground">Game Week</label><Input type="number" min="1" value={tournamentForm.gameWeek} onChange={(e) => setTournamentForm((prev) => ({ ...prev, gameWeek: e.target.value }))} /></div><div><label className="text-xs text-muted-foreground">Start</label><Input type="datetime-local" value={tournamentForm.startDate} onChange={(e) => setTournamentForm((prev) => ({ ...prev, startDate: e.target.value }))} /></div><div><label className="text-xs text-muted-foreground">End</label><Input type="datetime-local" value={tournamentForm.endDate} onChange={(e) => setTournamentForm((prev) => ({ ...prev, endDate: e.target.value }))} /></div><div className="sm:col-span-2"><label className="text-xs text-muted-foreground">Prize Card Rarity</label><select value={tournamentForm.prizeCardRarity} onChange={(e) => setTournamentForm((prev) => ({ ...prev, prizeCardRarity: e.target.value }))} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"><option value="common">common</option><option value="rare">rare</option><option value="unique">unique</option><option value="epic">epic</option><option value="legendary">legendary</option></select></div></div><DialogFooter><Button variant="outline" onClick={() => setEditorOpen(false)}>Cancel</Button><Button onClick={() => saveTournamentMutation.mutate()} disabled={saveTournamentMutation.isPending}>{saveTournamentMutation.isPending ? "Saving..." : "Save Tournament"}</Button></DialogFooter></DialogContent></Dialog>
       </div>
     </div>
   );
