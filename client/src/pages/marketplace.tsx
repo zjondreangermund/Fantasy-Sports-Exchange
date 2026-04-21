@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
-import CollectionPlayerCard from "../components/CollectionPlayerCard";
 import CardShowcase from "../components/CardShowcase";
 import SceneAtmosphere from "../components/SceneAtmosphere";
-import { toFantasyCardData } from "../lib/fantasy-card-adapter";
+import { MarketplaceCardGrid, mapMarketplaceListingToCard } from "../components/cards/PlayerCard";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -19,7 +18,7 @@ import {
   DialogFooter,
 } from "../components/ui/dialog";
 import { type PlayerCardWithPlayer, type Wallet, SITE_FEE_RATE } from "../../../shared/schema";
-import { Search, ShoppingCart, Tag, TrendingUp } from "lucide-react";
+import { BookmarkPlus, Search, ShieldCheck, ShoppingCart, SlidersHorizontal, Tag, TrendingUp } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
 import { useUiSound } from "../hooks/use-ui-sound";
@@ -33,9 +32,33 @@ export default function MarketplacePage() {
   const [search, setSearch] = useState("");
   const [rarityFilter, setRarityFilter] = useState("all");
   const [buyCard, setBuyCard] = useState<PlayerCardWithPlayer | null>(null);
+  const [detailCard, setDetailCard] = useState<PlayerCardWithPlayer | null>(null);
   const [activeTab, setActiveTab] = useState("buy");
   const [buyVisibleCount, setBuyVisibleCount] = useState(12);
   const [sellVisibleCount, setSellVisibleCount] = useState(12);
+  const [sortBy, setSortBy] = useState<"priceAsc" | "priceDesc" | "rarity" | "performance">("priceAsc");
+  const [eligibilityOnly, setEligibilityOnly] = useState(false);
+  const [watchlist, setWatchlist] = useState<number[]>([]);
+  const [savedFilters, setSavedFilters] = useState<Array<{ name: string; search: string; rarity: string; sortBy: string; eligibilityOnly: boolean }>>([]);
+
+  const { data: marketSignal } = useQuery<{
+    listedPrice: number;
+    lastSale: number;
+    avgSale: number;
+    salesCount30d: number;
+    tradeCount: number;
+    listedSinceDays: number | null;
+    velocity: "low" | "medium" | "high";
+    confidence: "low" | "medium" | "strong";
+  }>({
+    queryKey: ["/api/marketplace/signals", detailCard?.id],
+    enabled: !!detailCard?.id,
+    queryFn: async () => {
+      const res = await fetch(`/api/marketplace/signals/${detailCard?.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch listing signals");
+      return res.json();
+    },
+  });
   
   const { data: listings, isLoading } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/marketplace"],
@@ -87,36 +110,56 @@ export default function MarketplacePage() {
     },
   });
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("market_watchlist_card_ids");
+      if (raw) setWatchlist(JSON.parse(raw));
+      const rawFilters = localStorage.getItem("market_saved_filters");
+      if (rawFilters) setSavedFilters(JSON.parse(rawFilters));
+    } catch {
+      // ignore parse issues
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("market_watchlist_card_ids", JSON.stringify(watchlist));
+  }, [watchlist]);
+
+  useEffect(() => {
+    localStorage.setItem("market_saved_filters", JSON.stringify(savedFilters));
+  }, [savedFilters]);
+
   const filteredListings = listings?.filter((card) => {
     const matchesSearch =
       !search ||
       card.player?.name?.toLowerCase().includes(search.toLowerCase()) ||
       card.player?.team?.toLowerCase().includes(search.toLowerCase());
     const matchesRarity = rarityFilter === "all" || card.rarity === rarityFilter;
-    return matchesSearch && matchesRarity;
+    const isEligible = (card.decisiveScore || 0) >= 60;
+    const matchesEligibility = !eligibilityOnly || isEligible;
+    return matchesSearch && matchesRarity && matchesEligibility;
   });
 
-  // Sort listings: group by rarity, then by price (lowest first)
+  // Sort listings based on selected strategy
   const sortedListings = [...(filteredListings || [])].sort((a, b) => {
+    if (sortBy === "priceAsc") return (a.price || 0) - (b.price || 0);
+    if (sortBy === "priceDesc") return (b.price || 0) - (a.price || 0);
+    if (sortBy === "performance") return (b.decisiveScore || 0) - (a.decisiveScore || 0);
+
     const rarityOrder = ["common", "rare", "unique", "epic", "legendary"];
-    const rarityA = rarityOrder.indexOf(a.rarity);
-    const rarityB = rarityOrder.indexOf(b.rarity);
-    
-    if (rarityA !== rarityB) {
-      return rarityA - rarityB;
-    }
-    
-    return (a.price || 0) - (b.price || 0);
+    return rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity);
   });
 
   // Filter user's listed cards
   const myListedCards = myCards?.filter(card => card.forSale);
   const visibleBuyListings = isMobile ? sortedListings.slice(0, buyVisibleCount) : sortedListings;
   const visibleSellListings = isMobile ? (myListedCards || []).slice(0, sellVisibleCount) : (myListedCards || []);
+  const marketplaceBuyCards = useMemo(() => visibleBuyListings.map(mapMarketplaceListingToCard), [visibleBuyListings]);
+  const marketplaceSellCards = useMemo(() => visibleSellListings.map(mapMarketplaceListingToCard), [visibleSellListings]);
 
   useEffect(() => {
     setBuyVisibleCount(12);
-  }, [search, rarityFilter, activeTab, isMobile]);
+  }, [search, rarityFilter, activeTab, isMobile, sortBy, eligibilityOnly]);
 
   useEffect(() => {
     setSellVisibleCount(12);
@@ -130,24 +173,22 @@ export default function MarketplacePage() {
     previousBuyCardId.current = currentId;
   }, [buyCard?.id, play]);
 
-  useEffect(() => {
-    if (!visibleBuyListings.length) return;
-    const snapshot = visibleBuyListings.slice(0, 5).map((card) => {
-      const fantasy = toFantasyCardData(card, { imageWidth: 1024 });
-      return {
-        id: card.id,
-        name: card.player?.name,
-        rarity: card.rarity,
-        image: fantasy.image,
-        candidates: fantasy.imageCandidates?.slice(0, 3),
-      };
-    });
-    console.info("[Marketplace] card render debug", snapshot);
-  }, [visibleBuyListings]);
-
   const handleOpenBuyCard = (card: PlayerCardWithPlayer) => {
     play("click");
     setBuyCard(card);
+  };
+
+  const toggleWatchlist = (cardId: number) => {
+    setWatchlist((prev) => (prev.includes(cardId) ? prev.filter((id) => id !== cardId) : [...prev, cardId]));
+  };
+
+  const saveCurrentFilter = () => {
+    const name = `Filter ${savedFilters.length + 1}`;
+    setSavedFilters((prev) => {
+      const next = [...prev, { name, search, rarity: rarityFilter, sortBy, eligibilityOnly }];
+      return next.slice(-5);
+    });
+    toast({ title: "Filter saved", description: "Saved to local watch settings." });
   };
 
   return (
@@ -179,7 +220,7 @@ export default function MarketplacePage() {
 
           <TabsContent value="buy">
             {/* Filters */}
-            <div className="flex flex-wrap items-center gap-3 mb-6">
+            <div className="flex flex-wrap items-center gap-3 mb-4">
               <div className="relative flex-1 min-w-[200px] max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -189,6 +230,46 @@ export default function MarketplacePage() {
                   className="pl-9"
                 />
               </div>
+              <Button
+                variant={eligibilityOnly ? "default" : "outline"}
+                onClick={() => setEligibilityOnly((v) => !v)}
+                className="gap-2"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Eligible (60+)
+              </Button>
+              <Button variant="outline" onClick={saveCurrentFilter} className="gap-2">
+                <BookmarkPlus className="w-4 h-4" />
+                Save Filter
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 mb-6">
+              <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
+              {(["priceAsc", "priceDesc", "rarity", "performance"] as const).map((opt) => (
+                <Button
+                  key={opt}
+                  size="sm"
+                  variant={sortBy === opt ? "default" : "outline"}
+                  onClick={() => setSortBy(opt)}
+                >
+                  {opt === "priceAsc" ? "Price ↑" : opt === "priceDesc" ? "Price ↓" : opt === "rarity" ? "Rarity" : "Performance"}
+                </Button>
+              ))}
+              {savedFilters.map((f, i) => (
+                <Button
+                  key={`${f.name}-${i}`}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setSearch(f.search);
+                    setRarityFilter(f.rarity);
+                    setSortBy(f.sortBy as "priceAsc" | "priceDesc" | "rarity" | "performance");
+                    setEligibilityOnly(f.eligibilityOnly);
+                  }}
+                >
+                  {f.name}
+                </Button>
+              ))}
             </div>
 
             {isLoading ? (
@@ -198,24 +279,24 @@ export default function MarketplacePage() {
                 ))}
               </div>
             ) : sortedListings && sortedListings.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
-                {visibleBuyListings.map((card) => (
-                  <div key={card.id} className="flex items-center justify-center min-h-[360px]">
-                    <div className="flex flex-col items-center gap-2">
-                      <button type="button" className="w-full text-left" onClick={() => handleOpenBuyCard(card)}>
-                        <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1024 })} className={isMobile ? "!w-[172px]" : "!w-[220px]"} />
-                      </button>
-                      <p className="text-xs text-muted-foreground">
-                        Seller: {card.ownerUsername || card.ownerName || "FantasyFC"}
-                      </p>
-                      <p className="text-sm font-semibold text-green-500">
-                        N${(card.price || 0).toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-4">
+                <MarketplaceCardGrid
+                  players={marketplaceBuyCards}
+                  watchedIds={watchlist}
+                  onCardClick={(player) => {
+                    const listing = visibleBuyListings.find((item) => item.id === player.id);
+                    if (!listing) return;
+                    handleOpenBuyCard(listing);
+                  }}
+                  onDetails={(player) => {
+                    const listing = visibleBuyListings.find((item) => item.id === player.id);
+                    if (!listing) return;
+                    setDetailCard(listing);
+                  }}
+                  onToggleWatchlist={(player) => toggleWatchlist(player.id)}
+                />
                 {isMobile && sortedListings.length > buyVisibleCount ? (
-                  <div className="col-span-full flex justify-center mt-2">
+                  <div className="flex justify-center mt-2">
                     <Button variant="outline" onClick={() => setBuyVisibleCount((prev) => prev + 12)}>
                       Load More Listings
                     </Button>
@@ -234,19 +315,10 @@ export default function MarketplacePage() {
 
           <TabsContent value="sell">
             {myListedCards && myListedCards.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-5">
-                {visibleSellListings.map((card) => (
-                  <div key={card.id} className="relative flex items-center justify-center min-h-[360px]">
-                    <div className="flex flex-col items-center gap-2">
-                      <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1024 })} className={isMobile ? "!w-[172px]" : "!w-[220px]"} />
-                      <p className="text-sm font-semibold text-green-500">
-                        N${(card.price || 0).toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+              <div className="space-y-4">
+                <MarketplaceCardGrid players={marketplaceSellCards} watchedIds={watchlist} />
                 {isMobile && myListedCards.length > sellVisibleCount ? (
-                  <div className="col-span-full flex justify-center mt-2">
+                  <div className="flex justify-center mt-2">
                     <Button variant="outline" onClick={() => setSellVisibleCount((prev) => prev + 12)}>
                       Load More My Listings
                     </Button>
@@ -312,6 +384,35 @@ export default function MarketplacePage() {
               {buyMutation.isPending ? "Processing..." : "Confirm Purchase"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!detailCard}
+        onOpenChange={(open) => {
+          if (!open) setDetailCard(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Card Details</DialogTitle>
+          </DialogHeader>
+          {detailCard ? (
+            <div className="space-y-3">
+              <p className="text-sm">
+                <strong>{detailCard.player?.name}</strong> · {detailCard.player?.team}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Decisive Score: {detailCard.decisiveScore || 0} · Last 5: {(detailCard.last5Scores || []).join(", ")}
+              </p>
+              <div className="rounded-lg border p-3 text-sm space-y-1">
+                <p>Listed: N${(marketSignal?.listedPrice || detailCard.price || 0).toFixed(2)}</p>
+                <p>Last Sale: N${(marketSignal?.lastSale || 0).toFixed(2)} · Avg Sale: N${(marketSignal?.avgSale || 0).toFixed(2)}</p>
+                <p>Velocity: {marketSignal?.velocity || "low"} · Confidence: {marketSignal?.confidence || "low"}</p>
+                <p>Sales (30d): {marketSignal?.salesCount30d || 0} · Listed Days: {marketSignal?.listedSinceDays ?? "—"}</p>
+              </div>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

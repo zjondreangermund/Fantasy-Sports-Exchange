@@ -108,6 +108,45 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
 export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplaceRoutesDeps) {
   const { requireAuth } = deps;
 
+  app.get("/api/marketplace/signals/:cardId", requireAuth, async (req: any, res) => {
+    const cardId = Number(req.params.cardId || 0);
+    if (!Number.isInteger(cardId) || cardId <= 0) {
+      return res.status(400).json({ message: "Invalid cardId" });
+    }
+
+    const [card] = await db.select().from(playerCards).where(eq(playerCards.id, cardId));
+    if (!card) return res.status(404).json({ message: "Card not found" });
+
+    const cardTx = await db
+      .select()
+      .from(transactions)
+      .where(sql`lower(${transactions.description}) like ${`%card #${cardId}%`}`)
+      .orderBy(sql`${transactions.createdAt} desc`)
+      .limit(20);
+
+    const saleRows = cardTx.filter((tx: any) => String(tx.type || "").toLowerCase() === "sale");
+    const saleAmounts = saleRows.map((tx: any) => toMoney(tx.amount || 0)).filter((value: number) => value > 0);
+    const avgSale = saleAmounts.length ? toMoney(saleAmounts.reduce((sum: number, value: number) => sum + value, 0) / saleAmounts.length) : 0;
+    const lastSale = saleAmounts[0] || 0;
+
+    const now = Date.now();
+    const listedSince = card.forSale && card.acquiredAt ? Math.max(0, Math.floor((now - new Date(card.acquiredAt as any).getTime()) / (1000 * 60 * 60 * 24))) : null;
+    const velocity = saleRows.length >= 5 ? "high" : saleRows.length >= 2 ? "medium" : "low";
+    const confidence = saleRows.length >= 4 ? "strong" : saleRows.length >= 2 ? "medium" : "low";
+
+    return res.json({
+      cardId,
+      listedPrice: toMoney(card.price || 0),
+      lastSale,
+      avgSale,
+      salesCount30d: saleRows.filter((tx: any) => now - new Date(tx.createdAt as any).getTime() < 1000 * 60 * 60 * 24 * 30).length,
+      tradeCount: saleRows.length,
+      listedSinceDays: listedSince,
+      velocity,
+      confidence,
+    });
+  });
+
   app.post("/api/marketplace/buy/:cardId", requireAuth, async (req: any, res) => {
     const buyerId = req.authUserId;
     const result = await processMarketplacePurchase(buyerId, req.params.cardId);

@@ -28,6 +28,15 @@ export const positionEnum = pgEnum("position", ["GK", "DEF", "MID", "FWD"]);
 export const transactionTypeEnum = pgEnum("transaction_type", [
   "deposit",
   "withdrawal",
+  "marketplace_buy",
+  "marketplace_sale",
+  "auction_bid_lock",
+  "auction_bid_release",
+  "auction_sale",
+  "tournament_entry",
+  "tournament_payout",
+  "admin_adjustment",
+  "bonus_credit",
   "purchase",
   "sale",
   "entry_fee",
@@ -39,8 +48,9 @@ export const transactionTypeEnum = pgEnum("transaction_type", [
 export const competitionTierEnum = pgEnum("competition_tier", ["common", "rare", "unique", "legendary"]);
 export const competitionStatusEnum = pgEnum("competition_status", ["open", "upcoming", "active", "completed"]);
 export const swapStatusEnum = pgEnum("swap_status", ["pending", "accepted", "rejected", "cancelled"]);
-export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "processing", "completed", "rejected"]);
+export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "approved", "paid", "rejected"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["eft", "ewallet", "bank_transfer", "mobile_money", "other"]);
+export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "completed", "failed", "cancelled", "rejected"]);
 export const notificationTypeEnum = pgEnum("notification_type", ["win", "runner_up", "system"]);
 
 export const auctionStatusEnum = pgEnum("auction_status", ["draft", "live", "ended", "cancelled", "settled"]);
@@ -116,6 +126,11 @@ export const transactions = appSchema.table("transactions", {
   userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
   type: transactionTypeEnum("type").notNull(),
   amount: real("amount").notNull(),
+  grossAmount: real("gross_amount").default(0),
+  feeAmount: real("fee_amount").default(0),
+  netAmount: real("net_amount").default(0),
+  sourceType: text("source_type").default(""),
+  status: transactionStatusEnum("status").notNull().default("completed"),
   description: text("description"),
   paymentMethod: text("payment_method"),
   externalTransactionId: text("external_transaction_id"),
