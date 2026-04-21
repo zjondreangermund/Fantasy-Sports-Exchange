@@ -8,9 +8,18 @@ export const DEPOSIT_FEE_FREE_THRESHOLD = 200;
 export const SMALL_DEPOSIT_FEE_RATE = 0.02;
 export const WITHDRAWAL_FEE_RATE = 0.035;
 export const MIN_WITHDRAWAL_AMOUNT = 50;
+export const WITHDRAWAL_PAYOUT_SLA_TEXT = "Withdrawals are usually processed within 24–72 hours.";
+export const DEPOSIT_FEE_POLICY_TEXT = `Deposits under N$${DEPOSIT_FEE_FREE_THRESHOLD.toFixed(0)} are charged ${(SMALL_DEPOSIT_FEE_RATE * 100).toFixed(0)}%. Deposits at or above N$${DEPOSIT_FEE_FREE_THRESHOLD.toFixed(0)} are free.`;
+export const WITHDRAWAL_FEE_POLICY_TEXT = `Withdrawals are charged ${(WITHDRAWAL_FEE_RATE * 100).toFixed(1)}% with a minimum withdrawal amount of N$${MIN_WITHDRAWAL_AMOUNT.toFixed(0)}.`;
 
 export const TOURNAMENT_ENTRY_BY_RARITY: Record<RarityTier, number> = {
   common: 0,
+  rare: 20,
+  unique: 50,
+  legendary: 100,
+};
+
+export const MARKETPLACE_FLOOR_BY_RARITY: Partial<Record<RarityTier, number>> = {
   rare: 20,
   unique: 50,
   legendary: 100,
@@ -30,6 +39,16 @@ export function normalizeRarityTier(rarity: string): RarityTier {
   if (value === "unique" || value === "epic") return "unique";
   if (value === "rare") return "rare";
   return "common";
+}
+
+export function getMarketplaceFloorPrice(rarity: string): number {
+  const tier = normalizeRarityTier(rarity);
+  return Number(MARKETPLACE_FLOOR_BY_RARITY[tier] || 0);
+}
+
+export function isMarketplaceTradableRarity(rarity: string): boolean {
+  const tier = normalizeRarityTier(rarity);
+  return tier !== "common";
 }
 
 export function getCardStatus(input: { league?: string | null; hasProgression?: boolean }): CardStatus {
