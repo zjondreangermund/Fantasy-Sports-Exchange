@@ -19,7 +19,15 @@ import { registerAdminRoutes } from "./routes/admin.routes.js";
 import { registerAuctionsRoutes } from "./routes/auctions.routes.js";
 import { registerAuthModeRoutes } from "./routes/auth.routes.js";
 import { registerRetentionRoutes } from "./routes/retention.routes.js";
-import { getCardStatus, isMainCompetitionEligible, normalizeRarityTier } from "../shared/card-economy.js";
+import {
+  getCardStatus,
+  getDepositBreakdown,
+  getWithdrawalBreakdown,
+  isMainCompetitionEligible,
+  MIN_WITHDRAWAL_AMOUNT,
+  normalizeRarityTier,
+  TOURNAMENT_ENTRY_BY_RARITY,
+} from "../shared/card-economy.js";
 
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
 import passport from "passport";
@@ -650,7 +658,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .from(withdrawalRequests)
         .where(
           and(
-            eq(withdrawalRequests.status, "processing" as any),
+            eq(withdrawalRequests.status, "approved" as any),
             eq(withdrawalRequests.destinationVerified, true),
             lte(withdrawalRequests.releaseAfter, new Date()),
           ),
@@ -664,7 +672,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             .where(eq(withdrawalRequests.id, withdrawal.id))
             .for("update");
 
-          if (!fresh || fresh.status !== "processing" || !fresh.destinationVerified) return;
+          if (!fresh || fresh.status !== "approved" || !fresh.destinationVerified) return;
 
           await tx
             .update(wallets)
@@ -675,13 +683,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             userId: fresh.userId,
             type: "withdrawal",
             amount: -fresh.amount,
+            grossAmount: fresh.amount,
+            feeAmount: fresh.fee,
+            netAmount: fresh.netAmount,
+            sourceType: "withdrawal",
+            status: "completed",
             description: `Withdrawal auto-approved: ${fresh.netAmount} (fee: ${fresh.fee})`,
           } as any);
 
           await tx
             .update(withdrawalRequests)
             .set({
-              status: "completed",
+              status: "paid",
               adminNotes: "Auto-approved after 24h destination hold + email verification",
               reviewedAt: new Date(),
               verificationToken: null,
@@ -709,6 +722,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await db.execute(sql`ALTER TABLE IF EXISTS app.withdrawal_requests ADD COLUMN IF NOT EXISTS destination_verified boolean NOT NULL DEFAULT false`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.withdrawal_requests ADD COLUMN IF NOT EXISTS verification_token text`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.withdrawal_requests ADD COLUMN IF NOT EXISTS release_after timestamp`);
+      await db.execute(sql`ALTER TABLE IF EXISTS app.transactions ADD COLUMN IF NOT EXISTS gross_amount real DEFAULT 0`);
+      await db.execute(sql`ALTER TABLE IF EXISTS app.transactions ADD COLUMN IF NOT EXISTS fee_amount real DEFAULT 0`);
+      await db.execute(sql`ALTER TABLE IF EXISTS app.transactions ADD COLUMN IF NOT EXISTS net_amount real DEFAULT 0`);
+      await db.execute(sql`ALTER TABLE IF EXISTS app.transactions ADD COLUMN IF NOT EXISTS source_type text DEFAULT ''`);
 
       await db.execute(sql`
         CREATE TABLE IF NOT EXISTS app.notifications (
@@ -2190,29 +2207,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Valid positive amount required" });
       }
       
-      //Calculate fee (8%)
-      const fee = amount * 0.08;
-      const netAmount = amount - fee;
+      const { gross, feeRate, fee, net } = getDepositBreakdown(amount);
       
       // In a real app, you would integrate with a payment processor here
       // For now, just credit the wallet with net amount after fee (dev/testing only)
       
-      await storage.updateWalletBalance(userId, netAmount);
+      await storage.updateWalletBalance(userId, net);
       await storage.createTransaction({
         userId,
         type: "deposit",
-        amount: netAmount,
-        description: `Deposit via ${paymentMethod || "manual"} (N$${amount.toFixed(2)} - N$${fee.toFixed(2)} fee)`,
+        amount: net,
+        grossAmount: gross,
+        feeAmount: fee,
+        netAmount: net,
+        sourceType: "deposit",
+        status: "completed",
+        description: `Deposit via ${paymentMethod || "manual"} (gross ${formatMoney(gross)}, fee ${formatMoney(fee)} at ${(feeRate * 100).toFixed(1)}%)`,
         paymentMethod: paymentMethod || "manual",
         externalTransactionId,
-      });
+      } as any);
       
       res.json({ 
         success: true,
         message: "Deposit processed successfully",
-        amount,
+        amount: gross,
         fee,
-        netAmount
+        netAmount: net,
+        feeRate
       });
     } catch (error: any) {
       console.error("Failed to process deposit:", error);
@@ -2239,6 +2260,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (typeof amount !== "number" || amount <= 0) {
         return res.status(400).json({ message: "Valid positive amount required" });
       }
+      if (amount < MIN_WITHDRAWAL_AMOUNT) {
+        return res.status(400).json({ message: `Minimum withdrawal is ${formatMoney(MIN_WITHDRAWAL_AMOUNT)}` });
+      }
 
       if (!user?.email) {
         return res.status(400).json({ message: "Email required before withdrawing. Please set and verify your email." });
@@ -2258,9 +2282,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ message: "Insufficient balance" });
       }
       
-      // Calculate fee (8%)
-      const fee = amount * 0.08;
-      const netAmount = amount - fee;
+      const { gross, fee, net, feeRate } = getWithdrawalBreakdown(amount);
 
       const destinationKey = normalizeWithdrawalDestination(method, {
         bankName,
@@ -2273,7 +2295,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const userWithdrawals = await storage.getUserWithdrawalRequests(userId);
       const hasTrustedDestination = userWithdrawals.some(
-        (w: any) => w.status === "completed" && String(w.destinationKey || "") === destinationKey,
+        (w: any) => w.status === "paid" && String(w.destinationKey || "") === destinationKey,
       );
 
       if (hasTrustedDestination) {
@@ -2283,9 +2305,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
         const withdrawal = await storage.createWithdrawalRequest({
           userId,
-          amount,
+          amount: gross,
           fee,
-          netAmount,
+          netAmount: net,
           paymentMethod: method,
           bankName,
           accountHolder,
@@ -2296,7 +2318,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ewalletId,
           destinationKey,
           destinationVerified: true,
-          status: "completed",
+          status: "paid",
           reviewedAt: new Date(),
           adminNotes: "Auto-approved trusted payout destination",
         } as any);
@@ -2310,8 +2332,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           await tx.insert(transactions).values({
             userId,
             type: "withdrawal",
-            amount: -amount,
-            description: `Instant withdrawal auto-approved: ${netAmount} (fee: ${fee})`,
+            amount: -gross,
+            grossAmount: gross,
+            feeAmount: fee,
+            netAmount: net,
+            sourceType: "withdrawal",
+            status: "completed",
+            description: `Instant withdrawal auto-approved: ${net} (fee: ${fee})`,
           } as any);
         });
 
@@ -2327,12 +2354,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           message: "Withdrawal processed instantly to your trusted payout destination.",
           withdrawalId: withdrawal.id,
           fee,
-          netAmount,
+          netAmount: net,
+          feeRate,
         });
       }
 
       // Lock funds immediately until approved/rejected
-      await storage.lockFunds(userId, amount);
+      await storage.lockFunds(userId, gross);
 
       const releaseAfter = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const verificationToken = randomUUID().replace(/-/g, "");
@@ -2340,9 +2368,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Create withdrawal request
       const withdrawal = await storage.createWithdrawalRequest({
         userId,
-        amount,
+        amount: gross,
         fee,
-        netAmount,
+        netAmount: net,
         paymentMethod: method,
         bankName,
         accountHolder,
@@ -2355,7 +2383,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         destinationVerified: false,
         verificationToken,
         releaseAfter,
-        status: "processing",
+        status: "pending",
       });
 
       const baseUrl = process.env.PUBLIC_BASE_URL || "https://fantasy-sports-exchange-production-b10a.up.railway.app";
@@ -2371,7 +2399,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         message: "New payout destination detected. Funds are locked for 24h pending email verification.",
         withdrawalId: withdrawal.id,
         fee,
-        netAmount,
+        netAmount: net,
+        feeRate,
         releaseAfter,
       });
     } catch (error: any) {
@@ -2392,7 +2421,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const [withdrawal] = await db
         .select()
         .from(withdrawalRequests)
-        .where(and(eq(withdrawalRequests.verificationToken, token), eq(withdrawalRequests.status, "processing" as any)));
+        .where(and(eq(withdrawalRequests.verificationToken, token), eq(withdrawalRequests.status, "pending" as any)));
 
       if (!withdrawal) {
         return res.status(404).send("Invalid or expired verification token.");
@@ -4638,7 +4667,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const listingsCount = allCards.filter((c: any) => Boolean(c.forSale)).length;
       const auctionsLive = allAuctions.filter((a: any) => String(a.status) === "live").length;
       const competitionsLive = allCompetitions.filter((c: any) => String(c.status) === "active" || String(c.status) === "open").length;
-      const withdrawalsPending = allWithdrawals.filter((w: any) => String(w.status) === "pending" || String(w.status) === "processing").length;
+      const withdrawalsPending = allWithdrawals.filter((w: any) => ["pending", "approved"].includes(String(w.status))).length;
 
       const activeUsers = new Set<string>(txInRange.map((tx: any) => String(tx.userId || ""))).size;
       const totalWalletBalances = allWallets.reduce((sum: number, w: any) => sum + Number(w.balance || 0) + Number(w.lockedBalance || 0), 0);
@@ -5718,8 +5747,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const withdrawalId = parseInt(req.params.id, 10);
       const { status, adminNotes } = req.body;
       
-      if (!["completed", "rejected"].includes(status)) {
-        return res.status(400).json({ message: "Status must be 'completed' or 'rejected'" });
+      if (!["approved", "paid", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "Status must be 'approved', 'paid', or 'rejected'" });
       }
       
       const { db } = await import("./db.js");
@@ -5735,24 +5764,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ message: "Withdrawal request not found" });
       }
       
-      if (!["pending", "processing"].includes(String(withdrawal.status))) {
+      if (!["pending", "approved"].includes(String(withdrawal.status))) {
         return res.status(400).json({ message: "Withdrawal already processed" });
       }
       
       await db.transaction(async (tx) => {
-        if (status === "completed") {
-          // Funds already moved to locked balance at request time; finalize by reducing locked
+        if (status === "paid") {
+          // Funds were moved to locked balance at request time; settle payout now
           await tx
             .update(wallets)
             .set({ lockedBalance: sql`${wallets.lockedBalance} - ${withdrawal.amount}` } as any)
             .where(eq(wallets.userId, withdrawal.userId));
           
-          // Create transaction
+          // Create ledger transaction
           await tx.insert(transactions).values({
             userId: withdrawal.userId,
             type: "withdrawal",
             amount: -withdrawal.amount,
-            description: `Withdrawal approved: ${withdrawal.netAmount} (fee: ${withdrawal.fee})`,
+            grossAmount: withdrawal.amount,
+            feeAmount: withdrawal.fee,
+            netAmount: withdrawal.netAmount,
+            sourceType: "withdrawal",
+            status: "completed",
+            description: `Withdrawal paid: ${withdrawal.netAmount} (fee: ${withdrawal.fee})`,
           } as any);
         } else if (status === "rejected") {
           // Return locked funds back to available balance

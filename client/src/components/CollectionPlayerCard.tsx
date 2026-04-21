@@ -13,17 +13,9 @@ const FALLBACK_PLAYER: PlayerCardData = {
   rating: 0,
   rarity: "common",
   serial: 0,
-  maxSupply: 100,
+  maxSupply: 0,
 };
 
-export default function CollectionPlayerCard({
-  player,
-  className = "",
-}: CollectionPlayerCardProps) {
-  return (
-    <SimpleCard
-      player={player || FALLBACK_PLAYER}
-      className={className}
-    />
-  );
+export default function CollectionPlayerCard({ player, className = "" }: CollectionPlayerCardProps) {
+  return <SimpleCard player={player || FALLBACK_PLAYER} className={`!w-[220px] ${className}`.trim()} />;
 }

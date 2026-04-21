@@ -2,6 +2,20 @@ export type CardStatus = "active" | "legacy" | "uncovered_league";
 export type RarityTier = "common" | "rare" | "unique" | "legendary";
 export type ScarcityBand = "abundant" | "balanced" | "tight" | "critical";
 
+export const MARKETPLACE_FEE_RATE = 0.08;
+export const TOURNAMENT_PLATFORM_FEE_RATE = 0.2;
+export const DEPOSIT_FEE_FREE_THRESHOLD = 200;
+export const SMALL_DEPOSIT_FEE_RATE = 0.02;
+export const WITHDRAWAL_FEE_RATE = 0.035;
+export const MIN_WITHDRAWAL_AMOUNT = 50;
+
+export const TOURNAMENT_ENTRY_BY_RARITY: Record<RarityTier, number> = {
+  common: 0,
+  rare: 20,
+  unique: 50,
+  legendary: 100,
+};
+
 const COVERED_LEAGUES = new Set(["premier league", "epl"]);
 const RARITY_WEIGHTS: Record<RarityTier, number> = {
   common: 1,
@@ -72,4 +86,24 @@ export function getLiquidityScore(input: { salesCount30d: number; tradeCount: nu
 export function getReplacementOverallWindow(overall: number): { min: number; max: number } {
   const base = Math.max(45, Math.min(99, Number(overall || 70)));
   return { min: Math.max(45, base - 4), max: Math.min(99, base + 4) };
+}
+
+export function getDepositFeeRate(amount: number): number {
+  const value = Math.max(0, Number(amount || 0));
+  return value < DEPOSIT_FEE_FREE_THRESHOLD ? SMALL_DEPOSIT_FEE_RATE : 0;
+}
+
+export function getDepositBreakdown(amount: number) {
+  const gross = Math.max(0, Number(amount || 0));
+  const feeRate = getDepositFeeRate(gross);
+  const fee = Math.round(gross * feeRate * 100) / 100;
+  const net = Math.round((gross - fee) * 100) / 100;
+  return { gross, feeRate, fee, net };
+}
+
+export function getWithdrawalBreakdown(amount: number) {
+  const gross = Math.max(0, Number(amount || 0));
+  const fee = Math.round(gross * WITHDRAWAL_FEE_RATE * 100) / 100;
+  const net = Math.round((gross - fee) * 100) / 100;
+  return { gross, feeRate: WITHDRAWAL_FEE_RATE, fee, net };
 }

@@ -212,8 +212,8 @@ export default function AdminPage() {
 
   // Mutations
   const actionMutation = useMutation({
-    mutationFn: async (data: { id: number; action: "approve" | "reject"; adminNotes?: string }) => {
-      const status = data.action === "approve" ? "completed" : "rejected";
+    mutationFn: async (data: { id: number; action: "approve" | "pay" | "reject"; adminNotes?: string }) => {
+      const status = data.action === "approve" ? "approved" : data.action === "pay" ? "paid" : "rejected";
       const res = await apiRequest("POST", `/api/admin/withdrawals/${data.id}/review`, {
         status,
         adminNotes: data.adminNotes,
@@ -543,8 +543,8 @@ export default function AdminPage() {
   const statusBadge = (status: string) => {
     switch (status) {
       case "pending": return <Badge variant="outline" className="text-yellow-500 border-yellow-500"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
-      case "processing": return <Badge variant="outline" className="text-blue-500 border-blue-500"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Processing</Badge>;
-      case "completed": return <Badge variant="outline" className="text-green-500 border-green-500"><CheckCircle2 className="w-3 h-3 mr-1" />Completed</Badge>;
+      case "approved": return <Badge variant="outline" className="text-blue-500 border-blue-500"><Loader2 className="w-3 h-3 mr-1" />Approved</Badge>;
+      case "paid": return <Badge variant="outline" className="text-green-500 border-green-500"><CheckCircle2 className="w-3 h-3 mr-1" />Paid</Badge>;
       case "rejected": return <Badge variant="outline" className="text-red-500 border-red-500"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
       default: return <Badge variant="outline">{status}</Badge>;
     }
@@ -706,7 +706,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {showActions && (wr.status === "pending" || wr.status === "processing") && (
+        {showActions && (wr.status === "pending" || wr.status === "approved") && (
           <div className="flex items-center gap-2 pt-2 border-t border-border">
             <Input
               placeholder="Admin notes (optional)..."
@@ -718,11 +718,21 @@ export default function AdminPage() {
               size="sm"
               variant="default"
               onClick={() => actionMutation.mutate({ id: wr.id, action: "approve", adminNotes: adminNotes[wr.id] })}
-              disabled={actionMutation.isPending}
+              disabled={actionMutation.isPending || wr.status !== "pending"}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Loader2 className="w-3 h-3 mr-1" />
+              Approve
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => actionMutation.mutate({ id: wr.id, action: "pay", adminNotes: adminNotes[wr.id] })}
+              disabled={actionMutation.isPending || (wr.status !== "approved" && wr.status !== "pending")}
               className="bg-green-600 hover:bg-green-700"
             >
               <CheckCircle2 className="w-3 h-3 mr-1" />
-              Approve
+              Mark Paid
             </Button>
             <Button
               size="sm"

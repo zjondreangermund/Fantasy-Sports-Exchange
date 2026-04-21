@@ -16,77 +16,59 @@ type SlabCardProps = {
   age?: number;
   countryCode?: string;
   last5?: number[];
+  value?: string;
+  status?: "active" | "legacy" | "uncovered_league";
+  competitionEligible?: boolean;
   provenanceMarker?: string;
-  onImageError?: () => void;
 };
 
 const rarityThemes: Record<
   SlabRarity,
   {
-    shell: string;
-    inner: string;
+    frame: string;
     border: string;
     glow: string;
-    text: string;
-    muted: string;
-    topTone: string;
     badge: string;
-    statsPanel: string;
-    divider: string;
-    frameRing: string;
+    bg: string;
+    label: string;
+    octagon: string;
   }
 > = {
   common: {
-    shell: "from-zinc-200 via-white to-zinc-300",
-    inner: "from-white via-zinc-100 to-zinc-200",
+    frame: "from-zinc-100 via-white to-zinc-200",
     border: "border-zinc-300",
-    glow: "shadow-[0_14px_34px_rgba(255,255,255,0.18)]",
-    text: "text-zinc-900",
-    muted: "text-zinc-600",
-    topTone: "text-zinc-800",
-    badge: "bg-white/80 text-zinc-700 border-zinc-300",
-    statsPanel: "bg-white/55 border-zinc-300/60",
-    divider: "border-zinc-400/70",
-    frameRing: "ring-zinc-200/60",
+    glow: "shadow-[0_10px_30px_rgba(255,255,255,0.18)]",
+    badge: "bg-zinc-100 text-zinc-700 border-zinc-300",
+    bg: "from-zinc-50 via-white to-zinc-200",
+    label: "COMMON",
+    octagon: "from-zinc-200 via-zinc-50 to-zinc-300",
   },
   rare: {
-    shell: "from-red-700 via-red-600 to-red-900",
-    inner: "from-red-700 via-red-600 to-red-950",
-    border: "border-red-400/70",
-    glow: "shadow-[0_18px_44px_rgba(239,68,68,0.42)]",
-    text: "text-white",
-    muted: "text-white/75",
-    topTone: "text-white/90",
-    badge: "bg-white/12 text-white border-white/20",
-    statsPanel: "bg-black/22 border-white/10",
-    divider: "border-white/20",
-    frameRing: "ring-red-300/20",
+    frame: "from-red-700 via-red-600 to-red-800",
+    border: "border-red-400/60",
+    glow: "shadow-[0_18px_40px_rgba(220,38,38,0.35)]",
+    badge: "bg-white/10 text-white border-white/25",
+    bg: "from-red-950 via-red-700 to-red-900",
+    label: "RARE",
+    octagon: "from-red-900 via-red-500 to-rose-700",
   },
   unique: {
-    shell: "from-violet-900 via-purple-800 to-indigo-950",
-    inner: "from-violet-900 via-fuchsia-800 to-indigo-950",
-    border: "border-fuchsia-300/40",
-    glow: "shadow-[0_18px_46px_rgba(168,85,247,0.48)]",
-    text: "text-white",
-    muted: "text-white/75",
-    topTone: "text-white/90",
-    badge: "bg-white/12 text-white border-white/20",
-    statsPanel: "bg-black/24 border-white/10",
-    divider: "border-white/20",
-    frameRing: "ring-fuchsia-300/20",
+    frame: "from-violet-950 via-indigo-900 to-purple-950",
+    border: "border-fuchsia-300/30",
+    glow: "shadow-[0_18px_40px_rgba(139,92,246,0.38)]",
+    badge: "bg-white/10 text-white border-white/20",
+    bg: "from-violet-950 via-indigo-900 to-fuchsia-900",
+    label: "UNIQUE",
+    octagon: "from-fuchsia-500 via-violet-700 to-amber-200",
   },
   legendary: {
-    shell: "from-amber-300 via-yellow-400 to-amber-700",
-    inner: "from-yellow-300 via-amber-400 to-yellow-700",
-    border: "border-yellow-200/70",
-    glow: "shadow-[0_18px_48px_rgba(245,158,11,0.48)]",
-    text: "text-black",
-    muted: "text-black/70",
-    topTone: "text-black/80",
+    frame: "from-yellow-200 via-amber-400 to-yellow-700",
+    border: "border-yellow-200/60",
+    glow: "shadow-[0_18px_40px_rgba(245,158,11,0.35)]",
     badge: "bg-black/10 text-black border-black/15",
-    statsPanel: "bg-black/10 border-black/10",
-    divider: "border-black/20",
-    frameRing: "ring-yellow-100/30",
+    bg: "from-yellow-300 via-amber-400 to-yellow-700",
+    label: "LEGENDARY",
+    octagon: "from-yellow-900 via-yellow-500 to-amber-200",
   },
 };
 
@@ -96,95 +78,47 @@ function splitName(name: string) {
     .toUpperCase()
     .split(/\s+/)
     .filter(Boolean);
-
-  if (parts.length <= 1) {
-    return { firstName: parts[0] || "PLAYER", lastName: "NAME" };
-  }
-
-  return {
-    firstName: parts.slice(0, -1).join(" "),
-    lastName: parts.slice(-1).join(" "),
-  };
+  if (parts.length <= 1) return { firstName: parts[0] || "PLAYER", lastName: "NAME" };
+  return { firstName: parts.slice(0, -1).join(" "), lastName: parts.slice(-1).join(" ") };
 }
 
-function StatBars({
-  form,
-  rarity,
-}: {
-  form: number[];
-  rarity: SlabRarity;
-}) {
-  const barClass =
-    rarity === "legendary"
-      ? "bg-black/75"
-      : rarity === "common"
-        ? "bg-zinc-800/80"
-        : "bg-white/90";
-
+function StatBars({ form }: { form: number[] }) {
   return (
     <div className="flex items-end gap-1">
       {form.map((value, index) => (
         <div
-          key={index}
-          className={`w-[6px] rounded-full ${barClass}`}
-          style={{ height: `${Math.max(7, Math.min(24, value * 0.22))}px` }}
+          key={`bar-${index}`}
+          className="w-1.5 rounded-sm bg-white/85"
+          style={{ height: `${Math.max(8, Math.min(26, value * 0.24))}px` }}
         />
       ))}
     </div>
   );
 }
 
-function Foil({ rarity }: { rarity: SlabRarity }) {
-  const tone =
-    rarity === "legendary"
-      ? "from-white/35 via-yellow-100/10 to-transparent"
-      : rarity === "unique"
-        ? "from-fuchsia-200/22 via-cyan-100/10 to-transparent"
-        : rarity === "rare"
-          ? "from-white/25 via-red-100/10 to-transparent"
-          : "from-white/18 via-white/8 to-transparent";
-
+function OctagonBackdrop({ rarity }: { rarity: SlabRarity }) {
+  const theme = rarityThemes[rarity];
   return (
-    <>
-      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[24px]">
-        <div
-          className={`absolute inset-y-0 -left-[40%] w-[55%] rotate-[18deg] bg-gradient-to-r ${tone} blur-md animate-[cardShine_5.6s_linear_infinite]`}
-        />
-      </div>
+    <div className="absolute inset-x-2.5 top-[16%] h-[40%]">
       <div
-        className="pointer-events-none absolute inset-[4px] rounded-[20px] opacity-30 mix-blend-screen"
+        className={`absolute inset-0 rounded-[1.1rem] bg-gradient-to-br ${theme.octagon} opacity-95`}
+        style={{ clipPath: "polygon(18% 0%,82% 0%,100% 16%,100% 84%,82% 100%,18% 100%,0% 84%,0% 16%)" }}
+      />
+      <div
+        className="absolute inset-[6px] opacity-35"
         style={{
+          clipPath: "polygon(18% 0%,82% 0%,100% 16%,100% 84%,82% 100%,18% 100%,0% 84%,0% 16%)",
           backgroundImage:
-            "linear-gradient(120deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.02) 18%, rgba(255,255,255,0.00) 32%, rgba(255,255,255,0.12) 46%, rgba(255,255,255,0.00) 58%, rgba(255,255,255,0.14) 74%, rgba(255,255,255,0.00) 100%)",
-          backgroundSize: "220% 220%",
-          animation: "cardFoilMove 7s ease-in-out infinite",
+            "radial-gradient(circle at 25% 20%, rgba(255,255,255,0.85) 0 2px, transparent 3px), linear-gradient(135deg, rgba(255,255,255,0.25) 25%, transparent 25%), linear-gradient(225deg, rgba(255,255,255,0.15) 25%, transparent 25%)",
+          backgroundSize: "28px 28px, 28px 28px, 28px 28px",
+          backgroundPosition: "0 0, 0 0, 14px 14px",
         }}
       />
-    </>
-  );
-}
-
-function Glow({ rarity }: { rarity: SlabRarity }) {
-  const color =
-    rarity === "legendary"
-      ? "rgba(245,158,11,0.34)"
-      : rarity === "unique"
-        ? "rgba(168,85,247,0.36)"
-        : rarity === "rare"
-          ? "rgba(239,68,68,0.34)"
-          : "rgba(255,255,255,0.18)";
-
-  return (
-    <>
       <div
-        className="pointer-events-none absolute inset-[-8px] rounded-[28px] blur-xl animate-[cardPulse_3.4s_ease-in-out_infinite]"
-        style={{ background: `radial-gradient(circle, ${color} 0%, transparent 68%)` }}
+        className="absolute inset-[12px] border border-white/30"
+        style={{ clipPath: "polygon(18% 0%,82% 0%,100% 16%,100% 84%,82% 100%,18% 100%,0% 84%,0% 16%)" }}
       />
-      <div
-        className="pointer-events-none absolute inset-[-2px] rounded-[24px] blur-md opacity-70 animate-[cardPulse_2.8s_ease-in-out_infinite]"
-        style={{ background: `radial-gradient(circle, ${color} 0%, transparent 74%)` }}
-      />
-    </>
+    </div>
   );
 }
 
@@ -202,177 +136,94 @@ export default function SlabCard({
   countryCode = "ARG",
   last5 = [65, 78, 72, 85, 80],
   provenanceMarker = "",
-  onImageError,
 }: SlabCardProps) {
   const theme = rarityThemes[rarity] ?? rarityThemes.common;
-
   const bars = useMemo(() => {
-    const values = Array.isArray(last5)
-      ? last5.slice(0, 5).map((v) => Number(v || 0))
-      : [];
+    const values = Array.isArray(last5) ? last5.slice(0, 5).map((v) => Number(v || 0)) : [];
     while (values.length < 5) values.push(50);
     return values;
   }, [last5]);
 
   const { firstName, lastName } = splitName(name);
+  const textTone = rarity === "common" ? "text-zinc-900" : rarity === "legendary" ? "text-black" : "text-white";
+  const mutedTone = rarity === "common" ? "text-zinc-600" : rarity === "legendary" ? "text-black/70" : "text-white/75";
+  const divider = rarity === "common" ? "border-zinc-400/70" : rarity === "legendary" ? "border-black/20" : "border-white/20";
+  const topTone = rarity === "common" ? "text-zinc-800" : rarity === "legendary" ? "text-black/80" : "text-white/90";
 
   return (
-    <>
-      <style>{`
-        @keyframes cardPulse {
-          0%, 100% { transform: scale(0.985); opacity: 0.65; }
-          50% { transform: scale(1.02); opacity: 1; }
-        }
+    <article
+      className={[
+        "relative w-[176px] max-w-full aspect-[0.57/1] overflow-hidden rounded-[1.35rem] border bg-gradient-to-b",
+        theme.frame,
+        theme.border,
+        theme.glow,
+        className,
+      ].join(" ")}
+    >
+      <div className={`absolute inset-[4px] rounded-[1.15rem] bg-gradient-to-b ${theme.bg}`} />
 
-        @keyframes cardShine {
-          0% { transform: translateX(-140%) rotate(18deg); opacity: 0; }
-          12% { opacity: 0.9; }
-          35% { opacity: 0.55; }
-          100% { transform: translateX(340%) rotate(18deg); opacity: 0; }
-        }
-
-        @keyframes cardFoilMove {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-      `}</style>
-
-      <article
-        className={[
-          "relative w-[176px] h-[312px] max-w-full overflow-visible",
-          className,
-        ].join(" ")}
-      >
-        <Glow rarity={rarity} />
-
-        <div
-          className={[
-            "relative h-full w-full overflow-hidden rounded-[24px] border bg-gradient-to-b ring-1",
-            theme.shell,
-            theme.border,
-            theme.glow,
-            theme.frameRing,
-          ].join(" ")}
-        >
-          <div
-            className={`absolute inset-[4px] rounded-[20px] bg-gradient-to-b ${theme.inner}`}
-          />
-
-          <Foil rarity={rarity} />
-
-          <div
-            className={`absolute inset-x-3 top-3 z-20 flex items-center justify-between text-[9px] font-black tracking-wide ${theme.topTone}`}
-          >
-            <span>{season}</span>
-            <span className="flex items-center gap-1">
-              <span>{teamCode}</span>
-              <span>#{shirtNumber}</span>
-            </span>
-          </div>
-
-          <div className="absolute left-3 top-7 z-20 opacity-90">
-            <Shield className={`h-3.5 w-3.5 ${theme.topTone}`} />
-          </div>
-
-          <div className="absolute inset-x-0 top-[18%] z-20 flex justify-center">
-            <div className="relative h-[136px] w-[86%]">
-              <img
-                src={`/rarity/${rarity}-bg.png`}
-                alt={`${rarity} background`}
-                className="absolute inset-0 h-full w-full object-contain opacity-34"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.18),transparent_68%)]" />
-
-              {imageSrc ? (
-                <img
-                  src={imageSrc}
-                  alt={name}
-                  className="absolute bottom-0 left-1/2 z-10 h-[136px] -translate-x-1/2 object-contain drop-shadow-[0_14px_22px_rgba(0,0,0,0.72)]"
-                  loading="lazy"
-                  decoding="async"
-                  onError={(e) => {
-                    e.currentTarget.src = "/images/player-placeholder.png";
-                    onImageError?.();
-                  }}
-                />
-              ) : (
-                <img
-                  src="/images/player-placeholder.png"
-                  alt="Player placeholder"
-                  className="absolute bottom-0 left-1/2 z-10 h-[118px] -translate-x-1/2 object-contain opacity-92"
-                  loading="lazy"
-                  decoding="async"
-                />
-              )}
-            </div>
-          </div>
-
-          <div className="absolute inset-x-0 top-[56%] z-20 flex justify-center">
-            <div
-              className={`rounded-full border px-2 py-1 text-[7px] font-black tracking-[0.18em] ${theme.badge}`}
-            >
-              {rarity.toUpperCase()}
-            </div>
-          </div>
-
-          <div
-            className={`absolute inset-x-3 top-[63%] z-20 flex items-end justify-between rounded-[12px] border px-2.5 py-2 ${theme.statsPanel} ${theme.text}`}
-          >
-            <div>
-              <div className={`mb-1 text-[6px] font-bold tracking-[0.18em] ${theme.muted}`}>
-                LAST 5 GAMES
-              </div>
-              <StatBars form={bars} rarity={rarity} />
-            </div>
-
-            <div className="text-right">
-              <div className={`text-[6px] font-semibold ${theme.muted}`}>AVERAGE</div>
-              <div className="text-[18px] font-black leading-none tracking-tight">
-                {Number(avgScore || 0).toFixed(0)}
-              </div>
-            </div>
-          </div>
-
-          <div className={`absolute inset-x-3 bottom-[18%] z-20 border-t ${theme.divider}`} />
-
-          <div className={`absolute inset-x-3 bottom-[9.5%] z-20 ${theme.text}`}>
-            <div className="text-center leading-[0.92]">
-              <div className="truncate text-[10px] font-black tracking-wide">
-                {firstName}
-              </div>
-              <div className="mt-0.5 truncate text-[12px] font-black tracking-wide">
-                {lastName}
-              </div>
-              <div className={`mt-1 text-[7px] font-bold tracking-[0.2em] ${theme.muted}`}>
-                {season}
-              </div>
-            </div>
-          </div>
-
-          <div className={`absolute left-3 bottom-2.5 z-20 text-[7px] font-bold ${theme.muted}`}>
-            AGE {age}
-          </div>
-
-          <div className={`absolute right-3 bottom-2.5 z-20 text-[7px] font-bold ${theme.muted}`}>
-            {String(countryCode).slice(0, 3).toUpperCase()}
-          </div>
-
-          <div className={`absolute right-3 top-[85%] z-20 flex items-center gap-1 text-[7px] font-black ${theme.text}`}>
-            <Star className="h-2.5 w-2.5" />
-            <span>{serialNumber}</span>
-          </div>
-
-          {provenanceMarker ? (
-            <div className="absolute right-3 top-[89%] z-20 text-[6px] text-white/70">
-              {provenanceMarker}
-            </div>
-          ) : null}
+      <div className={`absolute inset-x-2.5 top-2 z-20 flex items-center justify-between text-[8px] font-black tracking-wide ${topTone}`}>
+        <div>{season}</div>
+        <div className="flex items-center gap-1">
+          <span>{teamCode}</span>
+          {!!shirtNumber && <span>#{shirtNumber}</span>}
         </div>
-      </article>
-    </>
+      </div>
+
+      <div className="absolute left-2.5 top-6 z-20 opacity-90">
+        <Shield className={`h-3 w-3 ${topTone}`} />
+      </div>
+
+      <OctagonBackdrop rarity={rarity} />
+
+      <div className="absolute inset-x-2 top-[20%] z-20 flex justify-center">
+        {imageSrc ? (
+          <img
+            src={imageSrc}
+            alt={name}
+            className="h-[43%] w-[80%] object-contain drop-shadow-[0_10px_12px_rgba(0,0,0,0.35)]"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <div className="h-24 w-20 rounded-xl bg-white/20" />
+        )}
+      </div>
+
+      <div className={`absolute inset-x-3 top-[60%] z-20 flex items-end justify-between ${textTone}`}>
+        <div>
+          <div className={`mb-1 text-[6px] font-bold tracking-[0.16em] ${mutedTone}`}>LAST 5 GAMES</div>
+          <StatBars form={bars} />
+        </div>
+        <div className="text-right">
+          <div className={`text-[6px] font-semibold ${mutedTone}`}>AVERAGE</div>
+          <div className="text-[17px] font-black leading-none tracking-tight">{Number(avgScore || 0).toFixed(0)}</div>
+        </div>
+      </div>
+
+      <div className={`absolute inset-x-3 bottom-[24%] z-20 border-t ${divider}`} />
+
+      <div className={`absolute inset-x-3 bottom-[11%] z-20 ${textTone}`}>
+        <div className="text-center leading-[0.92]">
+          <div className="truncate text-[10px] font-black tracking-wide">{firstName}</div>
+          <div className="mt-0.5 truncate text-[11px] font-black tracking-wide">{lastName}</div>
+          <div className={`mt-1 text-[7px] font-bold tracking-[0.2em] ${mutedTone}`}>{season}</div>
+        </div>
+      </div>
+
+      <div className={`absolute bottom-2.5 left-3 z-20 text-[7px] font-bold ${mutedTone}`}>AGE {age}</div>
+      <div className={`absolute bottom-2.5 right-3 z-20 text-[7px] font-bold ${mutedTone}`}>{String(countryCode).slice(0, 3).toUpperCase()}</div>
+
+      <div className="absolute left-3 top-[79%] z-20 flex items-center gap-2">
+        <div className={`rounded-full border px-1.5 py-0.5 text-[6px] font-black tracking-wide ${theme.badge}`}>{theme.label}</div>
+      </div>
+
+      <div className={`absolute right-3 top-[79%] z-20 flex items-center gap-1 text-[7px] font-black ${textTone}`}>
+        <Star className="h-2.5 w-2.5" />
+        <span>{serialNumber}</span>
+      </div>
+
+      {provenanceMarker ? <div className="absolute right-3 top-[84%] z-20 text-[6px] text-white/70">{provenanceMarker}</div> : null}
+    </article>
   );
 }
