@@ -13,6 +13,14 @@ function normalizeRarity(rarity?: string | null): Rarity {
   return "common";
 }
 
+function normalizeNationality(player: any): string | undefined {
+  const raw = player?.nationality || player?.country || player?.countryCode || player?.country_code;
+  if (!raw) return undefined;
+  const value = String(raw).trim();
+  if (!value) return undefined;
+  return value.length <= 3 ? value.toUpperCase() : value;
+}
+
 export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCardDataOptions = {}): PlayerCardData {
   const player = card.player as any;
   const requestedWidth = Number(options.imageWidth) > 0 ? Number(options.imageWidth) : 1024;
@@ -34,10 +42,12 @@ export function toFantasyCardData(card: PlayerCardWithPlayer, options: FantasyCa
     club: player?.team ? String(player.team) : undefined,
     team: player?.team ? String(player.team) : undefined,
     league: player?.league ? String(player.league) : undefined,
+    season: "2026-27",
     image: candidates[0],
     imageUrl: player?.imageUrl ? String(player.imageUrl) : undefined,
     photo: player?.photo ? String(player.photo) : undefined,
     imageCandidates: candidates,
+    nationality: normalizeNationality(player),
     rarity: normalizeRarity(card.rarity),
     serial: Number(card.serialNumber || 1),
     maxSupply: Number(card.maxSupply || 100),
