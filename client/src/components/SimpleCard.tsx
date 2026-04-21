@@ -38,9 +38,11 @@ function toSlabRarity(rarity: PlayerCardData["rarity"]): SlabRarity {
 }
 
 function getLast5(player: PlayerCardData) {
-  const last5 = Array.isArray(player.last5Scores) ? player.last5Scores.slice(0, 5) : [];
+  const last5 = Array.isArray(player.last5Scores)
+    ? player.last5Scores.slice(0, 5)
+    : [];
   while (last5.length < 5) last5.push(0);
-  return last5;
+  return last5.map((v) => Number(v || 0));
 }
 
 function getCountryFlag(player: PlayerCardData) {
@@ -60,6 +62,8 @@ function CardFallback({ player, className = "" }: SimpleCardProps) {
   const teamCode = String(player.club || player.team || "TEAM").slice(0, 4).toUpperCase();
   const rarity = normalizeVisualRarity(player.rarity);
 
+function CardFallback({ player, className = "" }: SimpleCardProps) {
+  const rarity = normalizeVisualRarity(player.rarity);
   return (
     <div
       className={[
