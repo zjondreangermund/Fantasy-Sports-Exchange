@@ -10,6 +10,7 @@ export type PlayerCardData = {
   club?: string;
   league?: string;
   serial?: number;
+  maxSupply?: number;
   season?: string;
   image?: string;
   imageUrl?: string;
@@ -27,12 +28,13 @@ export type PlayerCardData = {
   level?: number;
   xp?: number;
   xpMax?: number;
-  form?: string;
+  form?: number;
   price?: number;
   forSale?: boolean;
   listedPrice?: number;
   listed?: boolean;
   last5Scores?: number[];
+  totalPoints?: number;
   status?: "active" | "legacy" | "uncovered_league";
   competitionEligible?: boolean;
   provenanceMarker?: string;
