@@ -1930,43 +1930,141 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // Serve best available real player photo (same-origin)
   app.get("/api/players/:id/photo", async (req, res) => {
-    try {
-      const playerId = Number(req.params.id);
-      if (!Number.isFinite(playerId) || playerId <= 0) {
-        return res.status(400).json({ message: "Invalid player id" });
+  try {
+    const playerId = Number(req.params.id);
+    if (!Number.isFinite(playerId) || playerId <= 0) {
+      return res.status(400).json({ message: "Invalid player id" });
+    }
+
+    const variant = String(req.query.variant || "").toLowerCase().trim();
+    const requestedWidth =
+      parseImageWidth(req.query.w || req.query.width) ||
+      (variant === "thumb" ? 256 : null);
+    const requestedFormat =
+      parseImageFormat(req.query.format) ||
+      (variant === "thumb" ? "webp" : null);
+
+    const player = await storage.getPlayer(playerId);
+    if (!player) {
+      return res.status(404).json({ message: "Player not found" });
+    }
+
+    const imageUrl = String(player.imageUrl || "").trim();
+    let photoCode = extractPhotoCode(imageUrl);
+
+    if (!photoCode && normalizeLookupText(String(player.league || "")) === "premier league") {
+      try {
+        const bootstrap = await fplApi.bootstrap();
+        const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+        const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
+
+        const teamNameById = new Map<number, string>();
+        for (const team of teams) {
+          teamNameById.set(
+            Number(team.id),
+            normalizeLookupText(String(team.name || team.short_name || "")),
+          );
+        }
+
+        const playerTeam = normalizeLookupText(String(player.team || ""));
+        const playerName = normalizeLookupText(String(player.name || ""));
+
+        const matched = elements.find((element: any) => {
+          const teamNorm = teamNameById.get(Number(element.team)) || "";
+          if (teamNorm !== playerTeam) return false;
+
+          const fullName = normalizeLookupText(
+            `${String(element.first_name || "")} ${String(element.second_name || "")}`.trim(),
+          );
+          const webName = normalizeLookupText(String(element.web_name || ""));
+          return fullName === playerName || webName === playerName;
+        });
+
+        if (matched) {
+          photoCode = extractPhotoCode(String(matched.photo || ""));
+        }
+      } catch (error) {
+        console.warn("Failed to map FPL player photo code:", error);
+      }
+    }
+
+    const fallbackPath = path.join(process.cwd(), "dist/public/images/player-1.png");
+
+    // 1) Try built local cache first
+    if (photoCode) {
+      const builtCachePath = path.join(
+        process.cwd(),
+        "dist/public/player-cache",
+        `${photoCode}.png`,
+      );
+
+      try {
+        await fs.access(builtCachePath);
+        const buffer = await fs.readFile(builtCachePath);
+        const transformed = await transformImageBuffer(buffer, "image/png", {
+          width: requestedWidth,
+          format: requestedFormat,
+        });
+
+        res.setHeader("Content-Type", transformed.contentType);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.send(transformed.buffer);
+      } catch {
+        // continue to remote fetch
       }
 
-      const variant = String(req.query.variant || "").toLowerCase().trim();
-      const requestedWidth = parseImageWidth(req.query.w || req.query.width) || (variant === "thumb" ? 256 : null);
-      const requestedFormat = parseImageFormat(req.query.format) || (variant === "thumb" ? "webp" : null);
+      // 2) Try Premier League remote image if cache file is missing
+      try {
+        const remoteUrl = `https://resources.premierleague.com/premierleague/photos/players/250x250/p${photoCode}.png`;
 
-      const player = await storage.getPlayer(playerId);
-      if (!player) return res.status(404).json({ message: "Player not found" });
+        const upstream = await fetch(remoteUrl, {
+          headers: {
+            Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            Referer: "https://www.premierleague.com",
+          },
+        });
 
-      const imageUrl = String(player.imageUrl || "").trim();
-      let photoCode = extractPhotoCode(imageUrl);
+        if (upstream.ok) {
+          const contentType = String(upstream.headers.get("content-type") || "image/png");
+          const arrayBuffer = await upstream.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
 
-      if (!photoCode && normalizeLookupText(String(player.league || "")) === "premier league") {
-        try {
-          const bootstrap = await fplApi.bootstrap();
-          const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
-          const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
-
-          const teamNameById = new Map<number, string>();
-          for (const team of teams) {
-            teamNameById.set(Number(team.id), normalizeLookupText(String(team.name || team.short_name || "")));
-          }
-
-          const playerTeam = normalizeLookupText(String(player.team || ""));
-          const playerName = normalizeLookupText(String(player.name || ""));
-
-          const matched = elements.find((element: any) => {
-            const teamNorm = teamNameById.get(Number(element.team)) || "";
-            if (teamNorm !== playerTeam) return false;
-            const fullName = normalizeLookupText(`${String(element.first_name || "")} ${String(element.second_name || "")}`.trim());
-            const webName = normalizeLookupText(String(element.web_name || ""));
-            return fullName === playerName || webName === playerName;
+          const transformed = await transformImageBuffer(buffer, contentType, {
+            width: requestedWidth,
+            format: requestedFormat,
           });
+
+          res.setHeader("Content-Type", transformed.contentType);
+          res.setHeader("Cache-Control", "public, max-age=21600");
+          return res.send(transformed.buffer);
+        }
+      } catch (error) {
+        console.warn("Failed remote player photo fetch:", error);
+      }
+    }
+
+    // 3) Final built fallback
+    try {
+      const fallbackBuffer = await fs.readFile(fallbackPath);
+      const transformed = await transformImageBuffer(fallbackBuffer, "image/png", {
+        width: requestedWidth,
+        format: requestedFormat,
+      });
+
+      res.setHeader("Content-Type", transformed.contentType);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      return res.send(transformed.buffer);
+    } catch (fallbackError) {
+      console.error("Fallback player image missing:", fallbackError);
+      return res.status(404).json({ message: "Player image not found" });
+    }
+  } catch (error) {
+    console.error("Error serving player photo:", error);
+    return res.status(500).json({ message: "Failed to serve player photo" });
+  }
+});
 
           if (matched) {
             photoCode = extractPhotoCode(String(matched?.photo || matched?.code || ""));
