@@ -59,10 +59,10 @@ function isProbablyFallback(src: string): boolean {
   );
 }
 
-function pickInitialImage(player: PlayerCardData): string {
-  const candidates = getImageCandidates(player);
-  const real = candidates.find((src) => src && !isProbablyFallback(src));
-  return real || candidates[0] || CARD_IMAGE_FALLBACK;
+function pickInitialImageIndex(candidates: string[]): number {
+  const firstReal = candidates.findIndex((src) => src && !isProbablyFallback(src));
+  if (firstReal >= 0) return firstReal;
+  return 0;
 }
 
 function glowForRarity(rarity: string): string {
@@ -85,23 +85,30 @@ export default function UnifiedPlayerCard({
   const rarity = normalizeVisualRarity(player.rarity);
   const tokens = cardVisualTokens[rarity] || cardVisualTokens.common;
 
-  const values = React.useMemo(() => getLast5(player), [player]);
+  const values = React.useMemo(() => getLast5(player), [player.last5Scores, player.rating]);
   const average = avgScore(values, Number(player.rating || 0));
   const total = totalPoints(values, player.totalPoints);
 
-  const imageCandidates = React.useMemo(() => getImageCandidates(player), [player]);
+  const imageKey = React.useMemo(
+    () =>
+      [
+        player.id,
+        player.image,
+        player.imageUrl,
+        player.photo,
+        ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : []),
+      ].join("|"),
+    [player.id, player.image, player.imageUrl, player.photo, player.imageCandidates],
+  );
+
+  const imageCandidates = React.useMemo(() => getImageCandidates(player), [imageKey]);
   const [imageIndex, setImageIndex] = React.useState(() =>
-    Math.max(0, imageCandidates.findIndex((src) => src === pickInitialImage(player))),
+    pickInitialImageIndex(imageCandidates),
   );
 
   React.useEffect(() => {
-    const nextInitial = pickInitialImage(player);
-    const nextIndex = Math.max(
-      0,
-      getImageCandidates(player).findIndex((src) => src === nextInitial),
-    );
-    setImageIndex(nextIndex);
-  }, [player]);
+    setImageIndex(pickInitialImageIndex(imageCandidates));
+  }, [imageKey]);
 
   const img = imageCandidates[imageIndex] || CARD_IMAGE_FALLBACK;
 
@@ -131,7 +138,6 @@ export default function UnifiedPlayerCard({
         ].join(" ")}
         style={{ transformStyle: "preserve-3d" }}
       >
-        {/* outer edge */}
         <div
           className={`absolute inset-0 rounded-[28px] bg-gradient-to-br ${tokens.frameOuter}`}
           style={{ transform: "translateZ(0px)" }}
@@ -149,7 +155,6 @@ export default function UnifiedPlayerCard({
           style={{ transform: "translateZ(14px)" }}
         />
 
-        {/* engraved face */}
         <div
           className="absolute inset-[10px] rounded-[20px] opacity-45"
           style={{
@@ -179,7 +184,6 @@ export default function UnifiedPlayerCard({
           }}
         />
 
-        {/* lighting */}
         <div
           className="absolute inset-[10px] rounded-[20px] border border-white/10"
           style={{ transform: "translateZ(18px)" }}
@@ -197,18 +201,15 @@ export default function UnifiedPlayerCard({
           style={{ transform: "translateZ(18px)" }}
         />
 
-        {/* content */}
         <div
           className="relative z-10 flex h-full flex-col px-4 pb-4 pt-3 text-white"
           style={{ transform: "translateZ(24px)" }}
         >
-          {/* top */}
           <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.16em] text-white/80">
             <span>{season}</span>
             <span>{teamCode(player)}</span>
           </div>
 
-          {/* badges */}
           <div className="mt-2 flex items-center justify-between gap-2">
             <span
               className={[
@@ -228,14 +229,14 @@ export default function UnifiedPlayerCard({
             </span>
           </div>
 
-          {/* image */}
           <div className="relative mt-3 h-[46%] shrink-0 overflow-hidden rounded-[16px]">
             <img
               src={img}
               alt={fullName}
               loading="lazy"
               decoding="async"
-              onError={() => {
+              onError={(e) => {
+                e.currentTarget.onerror = null;
                 setImageIndex((current) =>
                   current + 1 < imageCandidates.length ? current + 1 : current,
                 );
@@ -244,7 +245,6 @@ export default function UnifiedPlayerCard({
             />
           </div>
 
-          {/* mid strip */}
           <div className="mt-3 flex items-center justify-between gap-2">
             <span
               className={[
@@ -259,7 +259,6 @@ export default function UnifiedPlayerCard({
             </span>
           </div>
 
-          {/* stats */}
           <div className="mt-3 rounded-[16px] border border-white/10 bg-black/24 px-3 py-2.5">
             <div className="grid grid-cols-[1fr_auto_auto] items-end gap-3">
               <div>
@@ -301,7 +300,6 @@ export default function UnifiedPlayerCard({
             </div>
           </div>
 
-          {/* name */}
           <div className="mt-auto pt-4">
             <div className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-white/55">
               {firstLine}
