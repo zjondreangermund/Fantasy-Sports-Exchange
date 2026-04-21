@@ -55,6 +55,7 @@ export default function PremierLeaguePage() {
   const [limit, setLimit] = useState(20);
   const [position, setPosition] = useState("");
   const [todayOnlyPlayers, setTodayOnlyPlayers] = useState(false);
+  const [leagueKey, setLeagueKey] = useState<"premier-league" | "la-liga" | "bundesliga" | "serie-a" | "ligue-1">("premier-league");
 
   const currentSeasonLabel = useMemo(() => {
     const now = new Date();
@@ -103,7 +104,7 @@ export default function PremierLeaguePage() {
       if (position?.trim()) params.set("position", position.trim());
       if (todayOnlyPlayers) params.set("today", "1");
 
-      const res = await fetch(`/api/epl/players?${params.toString()}`);
+      const res = await fetch(`/api/leagues/${leagueKey}/players?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch players");
 
       const data = await res.json();
@@ -202,7 +203,7 @@ export default function PremierLeaguePage() {
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center shadow-lg shadow-purple-900/30">
                   <Activity className="w-5 h-5 text-white" />
                 </div>
-                Premier League
+                Top 5 Leagues
               </h1>
               <p className="text-muted-foreground text-sm mt-1">
                 Live tracking for Premier League — {currentSeasonLabel} Season
