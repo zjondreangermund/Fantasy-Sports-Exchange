@@ -1932,17 +1932,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/players/:id/photo", async (req, res) => {
   try {
     const playerId = Number(req.params.id);
-    if (!Number.isFinite(playerId) || playerId <= 0) {
+
+    if (!Number.isFinite(playerId)) {
       return res.status(400).json({ message: "Invalid player id" });
     }
 
-    const variant = String(req.query.variant || "").toLowerCase().trim();
-    const requestedWidth =
-      parseImageWidth(req.query.w || req.query.width) ||
-      (variant === "thumb" ? 256 : null);
-    const requestedFormat =
-      parseImageFormat(req.query.format) ||
-      (variant === "thumb" ? "webp" : null);
+    const requestedWidth = parseImageWidth(req.query.w);
+    const requestedFormat = parseImageFormat(req.query.format);
 
     const player = await storage.getPlayer(playerId);
     if (!player) {
@@ -1952,19 +1948,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const imageUrl = String(player.imageUrl || "").trim();
     let photoCode = extractPhotoCode(imageUrl);
 
-    if (!photoCode && normalizeLookupText(String(player.league || "")) === "premier league") {
-      try {
-        const bootstrap = await fplApi.bootstrap();
-        const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
-        const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
+    // ✅ fallback image (ALWAYS SAFE)
+    const fallbackPath = path.join(process.cwd(), "dist/public/images/player-1.png");
 
-        const teamNameById = new Map<number, string>();
-        for (const team of teams) {
-          teamNameById.set(
-            Number(team.id),
-            normalizeLookupText(String(team.name || team.short_name || "")),
-          );
-        }
+    // ✅ try local built cache first
+    if (photoCode) {
+      const cachePath = path.join(
+        process.cwd(),
+        "dist/public/player-cache",
+        `${photoCode}.png`
+      );
+
+      try {
+        await fs.access(cachePath);
+
+        const buffer = await fs.readFile(cachePath);
+
+        const transformed = await transformImageBuffer(buffer, "image/png", {
+          width: requestedWidth,
+          format: requestedFormat,
+        });
+
+        res.setHeader("Content-Type", transformed.contentType);
+        return res.send(transformed.buffer);
+
+      } catch {
+        // ignore → move to fallback
+      }
+    }
+
+    // ✅ fallback image
+    const fallbackBuffer = await fs.readFile(fallbackPath);
+
+    const transformed = await transformImageBuffer(fallbackBuffer, "image/png", {
+      width: requestedWidth,
+      format: requestedFormat,
+    });
+
+    res.setHeader("Content-Type", transformed.contentType);
+    return res.send(transformed.buffer);
+
+  } catch (error) {
+    console.error("Player photo error:", error);
+    return res.status(500).json({ message: "Failed to serve player photo" });
+  }
+});
 
         const playerTeam = normalizeLookupText(String(player.team || ""));
         const playerName = normalizeLookupText(String(player.name || ""));
