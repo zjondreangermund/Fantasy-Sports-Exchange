@@ -1,96 +1,271 @@
-import { normalizeVisualRarity } from "@/components/cards/cardVisualTokens";
+import * as React from "react";
+import { ShieldCheck } from "lucide-react";
+import { CARD_IMAGE_FALLBACK } from "../../lib/card-image";
+import { cardVisualTokens, normalizeVisualRarity } from "./cardVisualTokens";
 import { type PlayerCardData } from "./types";
 
-export type CardVisualToken = {
-  rarityLabel: string;
-  shell: string;
-  frameOuter: string;
-  frameInner: string;
-  innerGlow: string;
-  bevel: string;
-  glow: string;
-  pattern: string;
-  badge: string;
-  leagueBadge: string;
-  serialBadge: string;
-  orb: string;
-  statChip: string;
+type UnifiedPlayerCardProps = {
+  player: PlayerCardData;
+  className?: string;
 };
 
-const common: CardVisualToken = {
-  rarityLabel: "COMMON",
-  shell: "from-[#111827] via-[#0b1220] to-[#050912]",
-  frameOuter: "from-[#a7b1c2] via-[#6b7280] to-[#3f4b5f]",
-  frameInner: "from-[#1f2937] via-[#111827] to-[#0b1220]",
-  innerGlow: "shadow-[inset_0_0_26px_rgba(203,213,225,0.16)]",
-  bevel: "shadow-[inset_0_2px_0_rgba(255,255,255,0.38),inset_0_-3px_8px_rgba(0,0,0,0.55)]",
-  glow: "shadow-[0_14px_42px_rgba(45,212,191,0.18)]",
-  pattern: "bg-[radial-gradient(circle_at_18%_14%,rgba(148,163,184,0.16),transparent_46%),repeating-radial-gradient(circle_at_0_0,rgba(226,232,240,0.05)_0_1px,transparent_1px_4px)]",
-  badge: "bg-emerald-300/14 border-emerald-200/35 text-emerald-100",
-  leagueBadge: "bg-slate-700/50 border-slate-200/20 text-slate-100/90",
-  serialBadge: "bg-slate-800/70 border-slate-200/25 text-slate-100/95",
-  orb: "bg-emerald-200",
-  statChip: "bg-emerald-500/20 border-emerald-200/35 text-emerald-50",
-};
+function safeText(value: unknown, fallback = ""): string {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
 
-const rare: CardVisualToken = {
-  rarityLabel: "RARE",
-  shell: "from-[#081935] via-[#0b1f43] to-[#071326]",
-  frameOuter: "from-[#7dd3fc] via-[#2563eb] to-[#1e3a8a]",
-  frameInner: "from-[#0e223f] via-[#0c1d33] to-[#081426]",
-  innerGlow: "shadow-[inset_0_0_28px_rgba(56,189,248,0.2)]",
-  bevel: "shadow-[inset_0_2px_0_rgba(255,255,255,0.44),inset_0_-4px_10px_rgba(2,6,23,0.62)]",
-  glow: "shadow-[0_14px_44px_rgba(59,130,246,0.4)]",
-  pattern: "bg-[radial-gradient(circle_at_78%_12%,rgba(125,211,252,0.24),transparent_42%),repeating-linear-gradient(52deg,rgba(56,189,248,0.09)_0_2px,transparent_2px_10px),linear-gradient(135deg,rgba(148,197,255,0.14),transparent_52%)]",
-  badge: "bg-sky-400/20 border-sky-200/40 text-sky-50",
-  leagueBadge: "bg-blue-700/45 border-sky-100/30 text-sky-50",
-  serialBadge: "bg-blue-950/70 border-sky-100/35 text-sky-50",
-  orb: "bg-sky-200",
-  statChip: "bg-sky-500/24 border-sky-200/45 text-sky-50",
-};
+function teamCode(player: PlayerCardData): string {
+  return safeText(player.team || player.club, "TEAM").slice(0, 3).toUpperCase();
+}
 
-const unique: CardVisualToken = {
-  rarityLabel: "UNIQUE",
-  shell: "from-[#200826] via-[#2b0d3d] to-[#120719]",
-  frameOuter: "from-[#f472b6] via-[#a855f7] to-[#6d28d9]",
-  frameInner: "from-[#2e0f45] via-[#210a34] to-[#13081f]",
-  innerGlow: "shadow-[inset_0_0_28px_rgba(217,70,239,0.24)]",
-  bevel: "shadow-[inset_0_2px_0_rgba(255,255,255,0.42),inset_0_-4px_10px_rgba(0,0,0,0.58)]",
-  glow: "shadow-[0_16px_48px_rgba(217,70,239,0.42)]",
-  pattern: "bg-[radial-gradient(circle_at_80%_16%,rgba(244,114,182,0.3),transparent_42%),radial-gradient(circle_at_20%_80%,rgba(168,85,247,0.24),transparent_50%),repeating-radial-gradient(circle_at_50%_30%,rgba(233,213,255,0.06)_0_2px,transparent_2px_10px)]",
-  badge: "bg-fuchsia-400/24 border-fuchsia-200/42 text-fuchsia-50",
-  leagueBadge: "bg-fuchsia-700/40 border-fuchsia-100/30 text-fuchsia-50",
-  serialBadge: "bg-violet-950/68 border-fuchsia-100/35 text-fuchsia-50",
-  orb: "bg-fuchsia-200",
-  statChip: "bg-fuchsia-500/24 border-fuchsia-200/42 text-fuchsia-50",
-};
+function last5(player: PlayerCardData): number[] {
+  const values = Array.isArray(player.last5Scores)
+    ? player.last5Scores.map((v) => Number(v || 0)).slice(0, 5)
+    : [];
+  while (values.length < 5) values.push(0);
+  return values;
+}
 
-const legendary: CardVisualToken = {
-  rarityLabel: "LEGENDARY",
-  shell: "from-[#2b1700] via-[#3b2304] to-[#1a0f00]",
-  frameOuter: "from-[#fde68a] via-[#f59e0b] to-[#b45309]",
-  frameInner: "from-[#382107] via-[#261505] to-[#170d03]",
-  innerGlow: "shadow-[inset_0_0_34px_rgba(252,211,77,0.26)]",
-  bevel: "shadow-[inset_0_2px_0_rgba(255,255,255,0.5),inset_0_-4px_10px_rgba(0,0,0,0.58)]",
-  glow: "shadow-[0_18px_52px_rgba(245,158,11,0.5)]",
-  pattern: "bg-[radial-gradient(circle_at_75%_14%,rgba(253,224,71,0.32),transparent_40%),radial-gradient(circle_at_30%_70%,rgba(251,191,36,0.24),transparent_48%),repeating-linear-gradient(0deg,rgba(251,191,36,0.09)_0_1px,transparent_1px_14px),repeating-linear-gradient(90deg,rgba(251,191,36,0.06)_0_1px,transparent_1px_14px)]",
-  badge: "bg-amber-300/24 border-amber-100/50 text-amber-50",
-  leagueBadge: "bg-amber-700/44 border-amber-100/42 text-amber-50",
-  serialBadge: "bg-amber-950/72 border-amber-100/45 text-amber-50",
-  orb: "bg-amber-200",
-  statChip: "bg-amber-500/26 border-amber-100/50 text-amber-50",
-};
+function avgScore(values: number[], fallback: number): number {
+  const valid = values.filter((v) => Number.isFinite(v));
+  if (!valid.length) return Math.max(0, Math.round(Number(fallback || 0)));
+  return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
+}
 
-export const cardVisualTokens: Record<PlayerCardData["rarity"], CardVisualToken> = {
-  common,
-  rare,
-  unique,
-  epic: unique,
-  legendary,
-};
+function totalPoints(values: number[]): number {
+  return values.reduce((sum, value) => sum + Number(value || 0), 0);
+}
 
-export function normalizeVisualRarity(rarity: PlayerCardData["rarity"]): "common" | "rare" | "unique" | "legendary" {
-  if (rarity === "epic") return "unique";
-  if (rarity === "rare" || rarity === "unique" || rarity === "legendary") return rarity;
-  return "common";
+function imageSrc(player: PlayerCardData): string {
+  const candidates = [
+    safeText(player.image),
+    safeText(player.imageUrl),
+    safeText(player.photo),
+    ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : []),
+  ].filter(Boolean) as string[];
+
+  const real = candidates.find(
+    (src) =>
+      src &&
+      src !== CARD_IMAGE_FALLBACK &&
+      !src.includes("/players/fallback") &&
+      !src.includes("/images/player-1") &&
+      !src.includes("fallback")
+  );
+
+  return real || candidates[0] || CARD_IMAGE_FALLBACK;
+}
+
+function glowForRarity(rarity: string): string {
+  switch (rarity) {
+    case "legendary":
+      return "shadow-[0_0_38px_rgba(245,158,11,0.28)]";
+    case "unique":
+      return "shadow-[0_0_34px_rgba(217,70,239,0.24)]";
+    case "rare":
+      return "shadow-[0_0_32px_rgba(59,130,246,0.22)]";
+    default:
+      return "shadow-[0_0_22px_rgba(255,255,255,0.10)]";
+  }
+}
+
+export default function UnifiedPlayerCard({
+  player,
+  className = "",
+}: UnifiedPlayerCardProps) {
+  const rarity = normalizeVisualRarity(player.rarity);
+  const tokens = cardVisualTokens[player.rarity] || cardVisualTokens.common;
+
+  const values = last5(player);
+  const average = avgScore(values, Number(player.rating || 0));
+  const total = totalPoints(values);
+  const img = imageSrc(player);
+
+  const fullName = safeText(player.name, "Unknown Player");
+  const nameParts = fullName.split(/\s+/).filter(Boolean);
+  const firstLine =
+    nameParts.length > 1 ? nameParts.slice(0, -1).join(" ") : fullName;
+  const secondLine =
+    nameParts.length > 1
+      ? nameParts[nameParts.length - 1]
+      : safeText(player.position, "PLAYER");
+
+  const club = safeText(player.club || player.team, "Fantasy FC");
+  const season = safeText(player.season, "2026-27");
+  const serial = `${Number(player.serial || 1)}/${Number(player.maxSupply || 100)}`;
+  const nationality = safeText(player.nationality, "");
+  const statusLabel = player.competitionEligible ? "Eligible" : "Training";
+
+  return (
+    <article
+      className={[
+        "group relative w-[220px] aspect-[0.7/1] max-w-full overflow-hidden rounded-[28px]",
+        "transition-all duration-300 hover:scale-[1.04] hover:-rotate-[1deg]",
+        glowForRarity(rarity),
+        className,
+      ].join(" ")}
+      style={{ transformStyle: "preserve-3d" }}
+    >
+      {/* Outer frame */}
+      <div
+        className={`absolute inset-0 rounded-[28px] bg-gradient-to-br ${tokens.frameOuter}`}
+      />
+      <div className="absolute inset-[3px] rounded-[25px] bg-black/90" />
+      <div
+        className={`absolute inset-[6px] rounded-[23px] bg-gradient-to-b ${tokens.frameInner} ${tokens.innerGlow} ${tokens.bevel}`}
+      />
+      <div
+        className={`absolute inset-[10px] rounded-[20px] bg-gradient-to-b ${tokens.shell}`}
+      />
+
+      {/* Engraved pattern - stronger */}
+      <div
+        className="absolute inset-[10px] rounded-[20px] opacity-40"
+        style={{
+          backgroundImage: `
+            repeating-linear-gradient(
+              135deg,
+              rgba(255,255,255,0.055) 0px,
+              rgba(255,255,255,0.055) 1px,
+              transparent 1px,
+              transparent 11px
+            ),
+            radial-gradient(
+              circle at 50% 35%,
+              rgba(255,255,255,0.12),
+              transparent 52%
+            )
+          `,
+          backgroundSize: "100% 100%, 100% 100%",
+        }}
+      />
+
+      {/* Border + lighting */}
+      <div className="absolute inset-[10px] rounded-[20px] border border-white/10" />
+      <div className="absolute inset-0 rounded-[28px] bg-gradient-to-t from-black/40 via-transparent to-white/10 pointer-events-none" />
+      <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/12 via-transparent to-transparent opacity-70" />
+      <div className="absolute inset-x-5 top-[54px] h-[44%] rounded-[22px] border border-white/10 bg-gradient-to-b from-white/10 via-white/[0.03] to-transparent" />
+
+      {/* Content */}
+      <div className="relative z-10 flex h-full flex-col px-4 pb-4 pt-3 text-white">
+        {/* Top meta */}
+        <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.16em] text-white/80">
+          <span>{season}</span>
+          <span>{teamCode(player)}</span>
+        </div>
+
+        {/* Badge row */}
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span
+            className={[
+              "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em]",
+              tokens.badge,
+            ].join(" ")}
+          >
+            {safeText(player.rarity, "common")}
+          </span>
+          <span
+            className={[
+              "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold",
+              tokens.serialBadge,
+            ].join(" ")}
+          >
+            {serial}
+          </span>
+        </div>
+
+        {/* Image */}
+        <div className="relative mt-3 h-[46%] shrink-0 overflow-hidden rounded-[16px]">
+          <img
+            src={img}
+            alt={fullName}
+            loading="lazy"
+            decoding="async"
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (target.src !== CARD_IMAGE_FALLBACK) {
+                target.src = CARD_IMAGE_FALLBACK;
+              }
+            }}
+            className="absolute inset-x-0 bottom-0 mx-auto h-[98%] w-full object-cover object-top scale-[1.08] drop-shadow-[0_25px_35px_rgba(0,0,0,0.70)]"
+          />
+        </div>
+
+        {/* Mid strip */}
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <span
+            className={[
+              "inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold",
+              tokens.leagueBadge,
+            ].join(" ")}
+          >
+            {statusLabel}
+          </span>
+          <span className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">
+            {safeText(player.league, "Premier League")}
+          </span>
+        </div>
+
+        {/* Stats */}
+        <div className="mt-3 rounded-[16px] border border-white/10 bg-black/22 px-3 py-2.5">
+          <div className="grid grid-cols-[1fr_auto_auto] items-end gap-3">
+            <div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/50">
+                Last 5
+              </div>
+              <div className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-white/78">
+                {values.map((score, index) => (
+                  <span
+                    key={`${fullName}-${index}`}
+                    className="inline-flex min-w-[20px] items-center justify-center rounded-md bg-white/8 px-1.5 py-0.5"
+                  >
+                    {score}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/50">
+                Avg
+              </div>
+              <div className="mt-1 text-[24px] font-black leading-none tracking-tight">
+                {average}
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/50">
+                Total
+              </div>
+              <div className="mt-1 text-[16px] font-black leading-none tracking-tight">
+                {total}
+              </div>
+              <div className="mt-1 text-[10px] font-medium uppercase text-white/60">
+                {safeText(player.position, "POS")}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Name */}
+        <div className="mt-auto pt-4">
+          <div className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-white/55">
+            {firstLine}
+          </div>
+          <div className="truncate text-[18px] font-black uppercase leading-none tracking-[0.04em]">
+            {secondLine}
+          </div>
+
+          <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-medium text-white/70">
+            <span className="truncate">{club}</span>
+            <span className="inline-flex items-center gap-1">
+              <ShieldCheck size={12} />
+              {nationality}
+            </span>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
 }

@@ -4630,17 +4630,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const { db } = await import("./db.js");
       const { users, wallets, playerCards, players, auctions, auctionBids, competitions, competitionEntries, transactions, auditLogs, withdrawalRequests } = await import("../shared/schema.js");
-      const allUsers = await db.select().from(users);
-      const allWallets = await db.select().from(wallets);
-      const allCards = await db.select().from(playerCards);
-      const allPlayers = await db.select().from(players);
-      const allAuctions = await db.select().from(auctions);
-      const allBids = await db.select().from(auctionBids);
-      const allCompetitions = await db.select().from(competitions);
-      const allEntries = await db.select().from(competitionEntries);
-      const allTransactions = await db.select().from(transactions);
-      const allLogs = await db.select().from(auditLogs);
-      const allWithdrawals = await db.select().from(withdrawalRequests);
+            const safeSelect = async <T>(query: Promise<T>, label: string): Promise<any[]> => {
+        try {
+          const result = await query;
+          return Array.isArray(result) ? result : [];
+        } catch (error) {
+          console.warn(`Backoffice partial query failed for ${label}:`, error);
+          return [];
+        }
+      };
+
+      const [
+        allUsers,
+        allWallets,
+        allCards,
+        allPlayers,
+        allAuctions,
+        allBids,
+        allCompetitions,
+        allEntries,
+        allTransactions,
+        allLogs,
+        allWithdrawals,
+      ] = await Promise.all([
+        safeSelect(db.select().from(users), "users"),
+        safeSelect(db.select().from(wallets), "wallets"),
+        safeSelect(db.select().from(playerCards), "playerCards"),
+        safeSelect(db.select().from(players), "players"),
+        safeSelect(db.select().from(auctions), "auctions"),
+        safeSelect(db.select().from(auctionBids), "auctionBids"),
+        safeSelect(db.select().from(competitions), "competitions"),
+        safeSelect(db.select().from(competitionEntries), "competitionEntries"),
+        safeSelect(db.select().from(transactions), "transactions"),
+        safeSelect(db.select().from(auditLogs), "auditLogs"),
+        safeSelect(db.select().from(withdrawalRequests), "withdrawalRequests"),
+      ]);
 
       const playerById = new Map<number, any>(allPlayers.map((p: any) => [Number(p.id), p]));
       const cardById = new Map<number, any>(allCards.map((c: any) => [Number(c.id), c]));

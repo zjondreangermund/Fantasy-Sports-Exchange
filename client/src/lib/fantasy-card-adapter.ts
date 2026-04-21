@@ -52,7 +52,7 @@ function preferRealImage(candidates: string[]): string {
       src !== CARD_IMAGE_FALLBACK &&
       !src.includes("/players/fallback") &&
       !src.includes("/images/player-1") &&
-      !src.includes("fallback")
+      !src.includes("fallback"),
   );
   return real || candidates[0] || CARD_IMAGE_FALLBACK;
 }
@@ -108,6 +108,11 @@ export function toFantasyCardData(
 
   while (last5Scores.length < 5) last5Scores.push(0);
 
+  const totalPoints = Number(
+    (card as any).totalPoints ||
+      last5Scores.reduce((sum, value) => sum + Number(value || 0), 0),
+  );
+
   return {
     id: String(card.id),
     name: String(player?.name || "Unknown Player"),
@@ -137,5 +142,6 @@ export function toFantasyCardData(
     competitionEligible,
     provenanceMarker,
     last5Scores,
+    totalPoints,
   };
 }
