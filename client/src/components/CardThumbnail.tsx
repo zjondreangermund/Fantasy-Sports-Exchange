@@ -1,8 +1,7 @@
 import { memo } from "react";
-import { Shield } from "lucide-react";
-import Metal3DCard from "./Metal3DCard";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
+import UnifiedPlayerCard from "./cards/UnifiedPlayerCard";
 
 type CardThumbnailProps = {
   card: PlayerCardWithPlayer;
@@ -13,14 +12,6 @@ type CardThumbnailProps = {
   showPrice?: boolean;
 };
 
-const raritySelectedRing: Record<string, string> = {
-  common: "ring-white/25",
-  rare: "ring-[#45a2ff]/45",
-  unique: "ring-[#b154ff]/45",
-  epic: "ring-[#ffc246]/45",
-  legendary: "ring-[#ff9123]/50",
-};
-
 function CardThumbnailBase({
   card,
   size = "md",
@@ -29,32 +20,24 @@ function CardThumbnailBase({
   onClick,
   showPrice = false,
 }: CardThumbnailProps) {
-  const rarity = String(card.rarity || "common").toLowerCase();
-  const selectedRing = raritySelectedRing[rarity] || raritySelectedRing.common;
   const player = card.player || ({} as any);
-  const fantasyCard = toFantasyCardData(card, { imageWidth: 320 });
-
-  const frame =
-    size === "sm"
-      ? "!w-[168px]"
-      : size === "lg"
-        ? "!w-[240px]"
-        : "!w-[208px]";
+  const fantasyCard = toFantasyCardData(card, { imageWidth: size === "lg" ? 640 : 420 });
 
   return (
     <div className="relative inline-flex flex-col items-center">
       <button
         type="button"
         onClick={onClick}
-        className={`relative ${selectable ? "cursor-pointer" : "cursor-default"} ${selected ? `ring-2 rounded-[24px] ${selectedRing}` : ""}`}
+        className={`${selectable ? "cursor-pointer" : "cursor-default"}`}
         data-testid={`card-thumbnail-${card.id}`}
       >
-        <Metal3DCard player={fantasyCard} className={frame} />
-        {selected && (
-          <span className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <Shield className="h-3.5 w-3.5" />
-          </span>
-        )}
+        <UnifiedPlayerCard
+          player={fantasyCard}
+          size={size}
+          variant={size === "sm" ? "compact" : "default"}
+          selected={selected}
+          interactive={selectable}
+        />
       </button>
 
       {showPrice && Number(card.price || 0) > 0 ? (
