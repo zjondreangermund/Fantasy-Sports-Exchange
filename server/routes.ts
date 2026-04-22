@@ -6441,5 +6441,3 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   return httpServer;
 }
-/ /   r e b u i l d   t r i g g e r  
- 
