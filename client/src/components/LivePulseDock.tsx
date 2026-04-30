@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Activity, MessageCircle, ShoppingCart, Trophy } from "lucide-react";
+import { Activity, Library, MessageCircle, ShoppingCart, Trophy } from "lucide-react";
 
 type LiveHubPayload = {
   updatedAt: string;
@@ -55,10 +55,11 @@ export default function LivePulseDock() {
           {data?.chatHighlights?.length ? ` • ${data.chatHighlights[data.chatHighlights.length - 1]?.userName}: ${data.chatHighlights[data.chatHighlights.length - 1]?.text}` : ""}
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
           <Link href="/premier-league"><Button size="sm" variant="ghost" className="h-7 px-2 text-xs">Live Leagues</Button></Link>
           <Link href="/competitions"><Button size="sm" variant="ghost" className="h-7 px-2 text-xs">Tournaments</Button></Link>
-          <Link href="/marketplace"><Button size="sm" variant="ghost" className="h-7 px-2 text-xs">Marketplace</Button></Link>
+          <Link href="/collection"><Button size="sm" variant="ghost" className="h-7 px-2 text-xs"><Library className="mr-1 h-3 w-3" />Collection</Button></Link>
+          <Link href="/marketplace"><Button size="sm" variant="ghost" className="h-7 px-2 text-xs"><ShoppingCart className="mr-1 h-3 w-3" />Marketplace</Button></Link>
         </div>
 
         <div className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">
