@@ -1,4 +1,4 @@
-import SimpleCard from "./SimpleCard";
+import UnifiedPlayerCard from "./cards/UnifiedPlayerCard";
 import { type PlayerCardData } from "./cards/types";
 
 type CollectionPlayerCardProps = {
@@ -17,5 +17,5 @@ const FALLBACK_PLAYER: PlayerCardData = {
 };
 
 export default function CollectionPlayerCard({ player, className = "" }: CollectionPlayerCardProps) {
-  return <SimpleCard player={player || FALLBACK_PLAYER} className={`!w-[220px] ${className}`.trim()} />;
+  return <UnifiedPlayerCard player={player || FALLBACK_PLAYER} className={className} />;
 }
