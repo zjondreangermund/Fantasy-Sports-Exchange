@@ -6,12 +6,12 @@ export type MarketplaceCardData = ReturnType<typeof mapMarketplaceListingToCard>
 
 export function mapMarketplaceListingToCard(card: PlayerCardWithPlayer) {
   const mapped = toFantasyCardData(card, { imageWidth: 512 });
+  const cardId = Number(card.id);
 
   return {
     ...mapped,
-    // Important: marketplace.tsx compares this id to the DB card id.
-    // Keep it numeric here so buy/details/cancel actions keep the original card route.
-    id: Number(card.id) as any,
+    id: cardId as any,
+    cardId,
     price: Number(card.price || mapped.price || 0),
     seller: card.ownerUsername || card.ownerName || "FantasyFC",
     rawCard: card,
@@ -26,53 +26,35 @@ type MarketplaceCardProps = {
   isWatched?: boolean;
 };
 
-export function MarketplaceCard({
-  player,
-  onCardClick,
-  onDetails,
-  onToggleWatchlist,
-  isWatched = false,
-}: MarketplaceCardProps) {
+export function MarketplaceCard({ player, onCardClick, onDetails, onToggleWatchlist, isWatched = false }: MarketplaceCardProps) {
   const price = Number(player.price || 0);
 
   return (
-    <div className="group flex flex-col items-center gap-3 rounded-[28px] border border-white/10 bg-black/20 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.35)] backdrop-blur-sm transition hover:border-emerald-300/35 hover:bg-black/30">
-      <button type="button" onClick={onCardClick} className="text-left transition group-hover:scale-[1.015]">
+    <div className="group flex flex-col items-center gap-2 rounded-[24px] border border-white/10 bg-black/20 p-2.5 shadow-[0_18px_48px_rgba(0,0,0,0.34)] backdrop-blur-sm transition hover:border-emerald-300/35 hover:bg-black/30">
+      <button type="button" onClick={onCardClick} className="text-left transition group-hover:scale-[1.012]">
         <UnifiedPlayerCard player={player} />
       </button>
 
-      <div className="w-full rounded-2xl border border-white/10 bg-gradient-to-b from-white/10 to-white/[0.03] p-3 text-center">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Listed Price</div>
-        <div className="mt-1 text-[22px] font-black leading-none text-emerald-300 drop-shadow-[0_0_16px_rgba(52,211,153,0.35)]">
-          N${price.toFixed(2)}
-        </div>
-        <div className="mt-1 truncate text-xs text-white/45">Seller: {player.seller}</div>
-
-        <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
-          <button
-            type="button"
-            onClick={onCardClick}
-            className="rounded-xl bg-gradient-to-r from-emerald-500 via-green-500 to-lime-500 px-4 py-2 text-sm font-black text-black shadow-[0_10px_24px_rgba(16,185,129,0.28)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(16,185,129,0.38)] active:translate-y-0"
-          >
-            Buy Now
-          </button>
-          <button
-            type="button"
-            onClick={onToggleWatchlist}
-            className="rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-sm font-bold text-white/80 transition hover:bg-white/14 hover:text-white"
-            aria-label="Toggle watchlist"
-          >
-            {isWatched ? "★" : "☆"}
+      <div className="-mt-1 w-full rounded-[18px] border border-white/10 bg-gradient-to-b from-white/10 to-white/[0.03] px-3 py-2 text-center">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-2">
+          <div className="min-w-0 text-left">
+            <div className="text-[9px] font-black uppercase tracking-[0.16em] text-white/40">Price</div>
+            <div className="text-[18px] font-black leading-none text-emerald-300">N${price.toFixed(2)}</div>
+            <div className="mt-0.5 truncate text-[10px] text-white/45">{player.seller}</div>
+          </div>
+          <button type="button" onClick={onToggleWatchlist} className="h-9 rounded-xl border border-white/15 bg-white/8 px-2 text-[10px] font-black text-white/80 transition hover:bg-white/14 hover:text-white">
+            {isWatched ? "Saved" : "Save"}
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={onDetails}
-          className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/50 transition hover:text-white"
-        >
-          View Details
-        </button>
+        <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+          <button type="button" onClick={onCardClick} className="rounded-xl bg-gradient-to-r from-emerald-400 via-green-400 to-lime-300 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-black shadow-[0_8px_20px_rgba(16,185,129,0.25)] transition hover:-translate-y-0.5 active:translate-y-0">
+            Buy
+          </button>
+          <button type="button" onClick={onDetails} className="rounded-xl border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.12em] text-white/60 transition hover:bg-white/8 hover:text-white">
+            Info
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -86,23 +68,17 @@ type MarketplaceCardGridProps = {
   watchedIds?: number[];
 };
 
-export function MarketplaceCardGrid({
-  players,
-  onCardClick,
-  onDetails,
-  onToggleWatchlist,
-  watchedIds = [],
-}: MarketplaceCardGridProps) {
+export function MarketplaceCardGrid({ players, onCardClick, onDetails, onToggleWatchlist, watchedIds = [] }: MarketplaceCardGridProps) {
   return (
-    <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-7 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {players.map((player) => (
         <MarketplaceCard
-          key={player.id}
+          key={player.cardId || player.id}
           player={player}
           onCardClick={onCardClick ? () => onCardClick(player) : undefined}
           onDetails={onDetails ? () => onDetails(player) : undefined}
           onToggleWatchlist={onToggleWatchlist ? () => onToggleWatchlist(player) : undefined}
-          isWatched={watchedIds.includes(Number(player.id))}
+          isWatched={watchedIds.includes(Number(player.cardId || player.id))}
         />
       ))}
     </div>
