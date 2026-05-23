@@ -1,7 +1,6 @@
 import * as React from "react";
-import { ShieldCheck, Sparkles } from "lucide-react";
 import { CARD_IMAGE_FALLBACK } from "../../lib/card-image";
-import { cardVisualTokens, normalizeVisualRarity } from "./cardVisualTokens";
+import { normalizeVisualRarity } from "./cardVisualTokens";
 import { type PlayerCardData } from "./types";
 
 type UnifiedPlayerCardProps = {
@@ -10,6 +9,37 @@ type UnifiedPlayerCardProps = {
 };
 
 type Tilt = { rx: number; ry: number; mx: number; my: number };
+
+const RARITY_STYLE = {
+  common: {
+    frame: "from-slate-100 via-slate-500 to-slate-950",
+    face: "from-slate-800 via-slate-950 to-black",
+    accent: "bg-slate-200 text-slate-950",
+    glow: "shadow-[0_18px_46px_rgba(148,163,184,0.26)]",
+    line: "border-slate-300/45",
+  },
+  rare: {
+    frame: "from-sky-200 via-blue-500 to-blue-950",
+    face: "from-sky-950 via-blue-950 to-black",
+    accent: "bg-sky-300 text-sky-950",
+    glow: "shadow-[0_18px_52px_rgba(59,130,246,0.34)]",
+    line: "border-sky-300/55",
+  },
+  unique: {
+    frame: "from-fuchsia-200 via-purple-600 to-indigo-950",
+    face: "from-fuchsia-950 via-purple-950 to-black",
+    accent: "bg-fuchsia-300 text-fuchsia-950",
+    glow: "shadow-[0_18px_56px_rgba(168,85,247,0.40)]",
+    line: "border-fuchsia-300/55",
+  },
+  legendary: {
+    frame: "from-yellow-200 via-amber-500 to-stone-950",
+    face: "from-amber-950 via-stone-950 to-black",
+    accent: "bg-amber-300 text-amber-950",
+    glow: "shadow-[0_18px_60px_rgba(245,158,11,0.42)]",
+    line: "border-amber-300/60",
+  },
+};
 
 function safeText(value: unknown, fallback = ""): string {
   const text = String(value ?? "").trim();
@@ -21,15 +51,17 @@ function teamCode(player: PlayerCardData): string {
 }
 
 function getLast5(player: PlayerCardData): number[] {
-  const values = Array.isArray(player.last5Scores) ? player.last5Scores.map((v) => Number(v || 0)).slice(0, 5) : [];
+  const values = Array.isArray(player.last5Scores)
+    ? player.last5Scores.map((value) => Number(value || 0)).slice(0, 5)
+    : [];
   while (values.length < 5) values.push(0);
   return values;
 }
 
 function avgScore(values: number[], fallback: number): number {
-  const valid = values.filter((v) => Number.isFinite(v));
+  const valid = values.filter((value) => Number.isFinite(value));
   if (!valid.length) return Math.max(0, Math.round(Number(fallback || 0)));
-  return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
+  return Math.round(valid.reduce((sum, value) => sum + value, 0) / valid.length);
 }
 
 function totalPoints(values: number[], fallback?: number): number {
@@ -37,110 +69,175 @@ function totalPoints(values: number[], fallback?: number): number {
   return sum > 0 ? sum : Math.max(0, Math.round(Number(fallback || 0)));
 }
 
-function getImageCandidates(player: PlayerCardData): string[] {
-  const candidates = [safeText(player.image), safeText(player.imageUrl), safeText(player.photo), ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : []), CARD_IMAGE_FALLBACK].filter(Boolean) as string[];
+function imageCandidates(player: PlayerCardData): string[] {
+  const candidates = [
+    safeText(player.image),
+    safeText(player.imageUrl),
+    safeText(player.photo),
+    ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : []),
+    CARD_IMAGE_FALLBACK,
+  ].filter(Boolean) as string[];
   return Array.from(new Set(candidates));
 }
 
-function isProbablyFallback(src: string): boolean {
+function isFallback(src: string): boolean {
   const value = src.toLowerCase();
-  return value === CARD_IMAGE_FALLBACK.toLowerCase() || value.includes("fallback") || value.includes("/images/player-1") || value.includes("/players/fallback");
+  return value === CARD_IMAGE_FALLBACK.toLowerCase() || value.includes("fallback") || value.includes("/images/player-1");
 }
 
-function pickInitialImageIndex(candidates: string[]): number {
-  const firstReal = candidates.findIndex((src) => src && !isProbablyFallback(src));
-  return firstReal >= 0 ? firstReal : 0;
-}
-
-function rarityGlow(rarity: string): string {
-  switch (rarity) {
-    case "legendary": return "shadow-[0_30px_95px_rgba(245,158,11,0.45)]";
-    case "unique": return "shadow-[0_30px_95px_rgba(168,85,247,0.42)]";
-    case "rare": return "shadow-[0_30px_90px_rgba(59,130,246,0.38)]";
-    default: return "shadow-[0_26px_72px_rgba(148,163,184,0.25)]";
-  }
+function firstImageIndex(candidates: string[]): number {
+  const real = candidates.findIndex((candidate) => candidate && !isFallback(candidate));
+  return real >= 0 ? real : 0;
 }
 
 function rarityLabel(rarity: string): string {
-  return rarity === "unique" ? "Unique" : rarity === "legendary" ? "Legendary" : rarity === "rare" ? "Rare" : "Common";
-}
-
-function pulseGradient(rarity: string): string {
-  if (rarity === "legendary") return "radial-gradient(circle, rgba(251,191,36,.30), transparent 60%)";
-  if (rarity === "unique") return "radial-gradient(circle, rgba(217,70,239,.28), transparent 60%)";
-  if (rarity === "rare") return "radial-gradient(circle, rgba(59,130,246,.28), transparent 60%)";
-  return "radial-gradient(circle, rgba(226,232,240,.16), transparent 60%)";
+  return rarity === "legendary" ? "Legendary" : rarity === "unique" ? "Unique" : rarity === "rare" ? "Rare" : "Common";
 }
 
 export default function UnifiedPlayerCard({ player, className = "" }: UnifiedPlayerCardProps) {
   const rarity = normalizeVisualRarity(player.rarity);
-  const tokens = cardVisualTokens[rarity] || cardVisualTokens.common;
-  const [tilt, setTilt] = React.useState<Tilt>({ rx: 0, ry: 0, mx: 50, my: 18 });
+  const style = RARITY_STYLE[rarity] || RARITY_STYLE.common;
+  const [tilt, setTilt] = React.useState<Tilt>({ rx: 0, ry: 0, mx: 50, my: 20 });
 
-  const values = React.useMemo(() => getLast5(player), [player.last5Scores, player.rating]);
-  const average = avgScore(values, Number(player.rating || 0));
-  const total = totalPoints(values, player.totalPoints);
-  const highScore = Math.max(1, ...values, average, total);
+  const last5 = React.useMemo(() => getLast5(player), [player.last5Scores, player.rating]);
+  const average = avgScore(last5, Number(player.rating || 0));
+  const total = totalPoints(last5, player.totalPoints);
+  const maxBar = Math.max(1, ...last5, average);
 
-  const imageKey = React.useMemo(() => [player.id, player.image, player.imageUrl, player.photo, ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : [])].join("|"), [player.id, player.image, player.imageUrl, player.photo, player.imageCandidates]);
-  const imageCandidates = React.useMemo(() => getImageCandidates(player), [imageKey]);
-  const [imageIndex, setImageIndex] = React.useState(() => pickInitialImageIndex(imageCandidates));
+  const key = React.useMemo(
+    () => [player.id, player.image, player.imageUrl, player.photo, ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : [])].join("|"),
+    [player.id, player.image, player.imageUrl, player.photo, player.imageCandidates],
+  );
+  const candidates = React.useMemo(() => imageCandidates(player), [key]);
+  const [imgIndex, setImgIndex] = React.useState(() => firstImageIndex(candidates));
 
-  React.useEffect(() => setImageIndex(pickInitialImageIndex(imageCandidates)), [imageKey, imageCandidates]);
+  React.useEffect(() => {
+    setImgIndex(firstImageIndex(candidates));
+  }, [key, candidates]);
 
-  const img = imageCandidates[imageIndex] || CARD_IMAGE_FALLBACK;
-  const fullName = safeText(player.name, "Unknown Player");
+  const img = candidates[imgIndex] || CARD_IMAGE_FALLBACK;
+  const name = safeText(player.name, "Unknown Player");
   const club = safeText(player.club || player.team, "Fantasy FC");
+  const league = safeText(player.league, "Premier League");
+  const position = safeText(player.position, "POS").toUpperCase();
   const season = safeText(player.season, "2026-27");
   const serial = `${Number(player.serial || 1)}/${Number(player.maxSupply || 100)}`;
-  const position = safeText(player.position, "POS").toUpperCase();
-  const league = safeText(player.league, "Premier League");
-  const nationality = safeText(player.nationality, "");
-  const statusLabel = player.competitionEligible ? "Eligible" : "Training";
+  const status = player.competitionEligible ? "Eligible" : "Training";
 
   const onMove = (event: React.PointerEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    const px = (event.clientX - rect.left) / rect.width;
-    const py = (event.clientY - rect.top) / rect.height;
-    setTilt({ ry: (px - 0.5) * 18, rx: (0.5 - py) * 16, mx: Math.round(px * 100), my: Math.round(py * 100) });
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
+    setTilt({
+      ry: (x - 0.5) * 10,
+      rx: (0.5 - y) * 8,
+      mx: Math.round(x * 100),
+      my: Math.round(y * 100),
+    });
   };
 
-  const resetTilt = () => setTilt({ rx: 0, ry: 0, mx: 50, my: 18 });
+  const resetTilt = () => setTilt({ rx: 0, ry: 0, mx: 50, my: 20 });
 
   return (
-    <div className={`relative inline-flex [perspective:1600px] ${className}`}>
+    <div className={`relative inline-flex [perspective:1200px] ${className}`}>
       <style>{`
-        @keyframes fantasyCardFoilSweep { 0% { transform: translateX(-140%) rotate(18deg); opacity: 0; } 18% { opacity: .65; } 48% { opacity: .25; } 100% { transform: translateX(140%) rotate(18deg); opacity: 0; } }
-        @keyframes fantasyCardGlowBreath { 0%, 100% { opacity: .42; filter: blur(18px); } 50% { opacity: .85; filter: blur(24px); } }
-        @keyframes fantasyCardRevealLift { 0% { transform: rotateX(24deg) scale(.92); opacity: .0; } 55% { opacity: 1; } 100% { transform: rotateX(0deg) scale(1); opacity: 1; } }
-        @keyframes fantasyStatPulse { 0%, 100% { transform: scaleY(.86); opacity: .72; } 50% { transform: scaleY(1); opacity: 1; } }
+        @keyframes fantasyContainedFoil { 0% { transform: translateX(-130%) rotate(14deg); opacity: 0; } 28% { opacity: .38; } 100% { transform: translateX(130%) rotate(14deg); opacity: 0; } }
+        @keyframes fantasyContainedReveal { from { opacity: 0; transform: translateY(12px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
       `}</style>
+
       <article
         onPointerMove={onMove}
         onPointerLeave={resetTilt}
-        className={["group relative w-[230px] aspect-[0.70/1] max-w-full overflow-visible rounded-[32px]", "transition-transform duration-200 ease-out will-change-transform", rarityGlow(rarity)].join(" ")}
-        style={{ transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg) translateY(-2px)`, transformStyle: "preserve-3d", animation: "fantasyCardRevealLift .62s cubic-bezier(.2,.8,.2,1) both" }}
+        className={`relative h-[360px] w-[252px] overflow-hidden rounded-[30px] bg-gradient-to-br ${style.frame} p-[3px] ${style.glow} transition-transform duration-200 ease-out`}
+        style={{
+          transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`,
+          transformStyle: "preserve-3d",
+          animation: "fantasyContainedReveal .35s ease-out both",
+        }}
       >
-        <div className="absolute -inset-[18px] rounded-[46px] opacity-80" style={{ transform: "translateZ(-30px)", background: pulseGradient(rarity), animation: "fantasyCardGlowBreath 2.4s ease-in-out infinite" }} />
-        <div className="absolute -inset-[10px] rounded-[40px] bg-black/55 blur-2xl" style={{ transform: "translateZ(-24px)" }} />
-        <div className={`absolute inset-0 rounded-[32px] bg-gradient-to-br ${tokens.frameOuter}`} style={{ transform: "translateZ(0px)" }} />
-        <div className="absolute inset-[2px] rounded-[30px] bg-gradient-to-br from-white/40 via-black/70 to-black" style={{ transform: "translateZ(8px)" }} />
-        <div className={`absolute inset-[7px] rounded-[26px] bg-gradient-to-b ${tokens.frameInner} ${tokens.bevel}`} style={{ transform: "translateZ(16px)" }} />
-        <div className="absolute inset-[12px] rounded-[22px] bg-black/95" style={{ transform: "translateZ(23px)" }} />
-        <div className={`absolute inset-[14px] rounded-[20px] bg-gradient-to-b ${tokens.shell}`} style={{ transform: "translateZ(28px)" }} />
-        <div className="absolute inset-[14px] overflow-hidden rounded-[20px] opacity-75" style={{ transform: "translateZ(32px)", backgroundImage: `radial-gradient(circle at ${tilt.mx}% ${tilt.my}%, rgba(255,255,255,0.34), transparent 24%), repeating-linear-gradient(135deg, rgba(255,255,255,0.085) 0px, rgba(255,255,255,0.085) 1px, transparent 1px, transparent 9px), repeating-radial-gradient(circle at 50% 18%, rgba(255,255,255,0.055) 0px, rgba(255,255,255,0.055) 1px, transparent 2px, transparent 12px)` }} />
-        <div className="pointer-events-none absolute inset-[14px] overflow-hidden rounded-[20px] mix-blend-screen" style={{ transform: "translateZ(70px)" }}>
-          <div className="absolute -left-1/2 top-[-20%] h-[140%] w-[42%] bg-gradient-to-r from-transparent via-white/30 to-transparent" style={{ animation: "fantasyCardFoilSweep 3.4s ease-in-out infinite" }} />
-          <div className="absolute inset-0 opacity-35" style={{ background: "linear-gradient(115deg, rgba(255,0,153,.18), transparent 24%, rgba(0,255,255,.14) 42%, transparent 64%, rgba(255,230,0,.14))" }} />
-        </div>
-        <div className="absolute inset-[14px] rounded-[20px] border border-white/15" style={{ transform: "translateZ(38px)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.25), inset 0 -22px 50px rgba(0,0,0,.55)" }} />
-        <div className="relative z-10 flex h-full flex-col px-4 pb-4 pt-3 text-white" style={{ transform: "translateZ(58px)" }}>
-          <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-[0.18em] text-white/80"><span>{season}</span><span>{teamCode(player)}</span></div>
-          <div className="mt-2 flex items-center justify-between gap-2"><span className={["inline-flex items-center rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em]", tokens.badge].join(" ")}>{rarityLabel(rarity)}</span><span className={["rounded-full border px-2 py-1 text-[9px] font-bold", tokens.serialBadge].join(" ")}>{serial}</span></div>
-          <div className="relative mt-3 h-[42%] shrink-0 overflow-hidden rounded-[18px] border border-white/10 bg-black/30"><div className="absolute inset-0 bg-gradient-to-b from-white/12 via-transparent to-black/55" /><img src={img} alt={fullName} loading="lazy" decoding="async" onError={(e) => { e.currentTarget.onerror = null; setImageIndex((current) => (current + 1 < imageCandidates.length ? current + 1 : current)); }} className="absolute inset-x-0 bottom-[-2px] mx-auto h-[108%] w-full object-cover object-top scale-[1.08] drop-shadow-[0_24px_26px_rgba(0,0,0,.72)]" /><div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 to-transparent px-3 pb-2 pt-8"><div className="truncate text-[18px] font-black uppercase leading-none tracking-[0.02em] text-white drop-shadow">{fullName}</div></div></div>
-          <div className="mt-2 grid grid-cols-[1fr_auto] gap-2"><div className="min-w-0 rounded-[14px] border border-white/10 bg-black/30 px-2.5 py-2"><div className="truncate text-[9px] font-black uppercase tracking-[0.16em] text-white/45">{club}</div><div className="mt-0.5 truncate text-[10px] font-bold text-white/75">{league}</div></div><div className="rounded-[14px] border border-white/10 bg-white/10 px-2.5 py-2 text-center"><div className="text-[9px] font-black uppercase text-white/45">Pos</div><div className="text-[14px] font-black leading-none">{position}</div></div></div>
-          <div className="mt-2 rounded-[16px] border border-white/10 bg-black/32 p-2.5"><div className="grid grid-cols-5 gap-1">{values.map((score, index) => { const height = Math.max(12, Math.min(42, (Number(score || 0) / highScore) * 42)); return <div key={`${player.id}-${index}`} className="flex flex-col items-center gap-1"><div className="flex h-[42px] w-full items-end justify-center rounded-lg bg-white/5 px-1"><div className="w-full origin-bottom rounded-md bg-white/45 shadow-[0_0_12px_rgba(255,255,255,.18)]" style={{ height, animation: `fantasyStatPulse ${1.4 + index * .12}s ease-in-out infinite` }} /></div><span className="text-[9px] font-black text-white/70">{score}</span></div>; })}</div><div className="mt-2 grid grid-cols-3 gap-1.5"><div className="rounded-lg bg-white/8 px-2 py-1 text-center"><div className="text-[8px] uppercase text-white/45">Avg</div><div className="text-[15px] font-black leading-none">{average}</div></div><div className="rounded-lg bg-white/8 px-2 py-1 text-center"><div className="text-[8px] uppercase text-white/45">Total</div><div className="text-[15px] font-black leading-none">{total}</div></div><div className="rounded-lg bg-white/8 px-2 py-1 text-center"><div className="text-[8px] uppercase text-white/45">Status</div><div className="truncate text-[10px] font-black leading-none">{statusLabel}</div></div></div></div>
-          <div className="mt-auto flex items-center justify-between gap-2 pt-2 text-[10px] font-semibold text-white/65"><span className="inline-flex min-w-0 items-center gap-1 truncate"><Sparkles size={12} /> {player.provenanceMarker || "Verified"}</span><span className="inline-flex items-center gap-1"><ShieldCheck size={12} /> {nationality || "FC"}</span></div>
+        <div className="relative h-full w-full overflow-hidden rounded-[27px] bg-black">
+          <div className={`absolute inset-0 bg-gradient-to-b ${style.face}`} />
+          <div
+            className="absolute inset-0 opacity-35"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0px, rgba(255,255,255,.08) 1px, transparent 1px, transparent 10px), radial-gradient(circle at 50% 16%, rgba(255,255,255,.18), transparent 38%)",
+            }}
+          />
+          <div
+            className="pointer-events-none absolute inset-0 opacity-45"
+            style={{ background: `radial-gradient(circle at ${tilt.mx}% ${tilt.my}%, rgba(255,255,255,.28), transparent 24%)` }}
+          />
+          <div className="pointer-events-none absolute inset-0 mix-blend-screen">
+            <div className="absolute -left-1/2 top-[-12%] h-[125%] w-[38%] bg-gradient-to-r from-transparent via-white/26 to-transparent" style={{ animation: "fantasyContainedFoil 4s ease-in-out infinite" }} />
+          </div>
+
+          <div className="relative z-10 flex h-full flex-col p-3 text-white">
+            <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-[0.16em] text-white/80">
+              <span>{season}</span>
+              <span>{teamCode(player)}</span>
+            </div>
+
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <span className={`rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] ${style.accent}`}>
+                {rarityLabel(rarity)}
+              </span>
+              <span className="rounded-full border border-white/20 bg-black/35 px-2.5 py-1 text-[9px] font-bold text-white/80">
+                {serial}
+              </span>
+            </div>
+
+            <div className={`relative mt-3 h-[150px] overflow-hidden rounded-[20px] border ${style.line} bg-black/35`}>
+              <img
+                src={img}
+                alt={name}
+                loading="lazy"
+                decoding="async"
+                onError={(event) => {
+                  event.currentTarget.onerror = null;
+                  setImgIndex((current) => (current + 1 < candidates.length ? current + 1 : current));
+                }}
+                className="absolute inset-0 h-full w-full object-cover object-top"
+              />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/92 via-black/55 to-transparent px-3 pb-2 pt-9">
+                <div className="truncate text-[18px] font-black uppercase leading-none tracking-tight text-white drop-shadow">
+                  {name}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-2 grid grid-cols-[1fr_54px] gap-2">
+              <div className="min-w-0 rounded-2xl border border-white/10 bg-black/34 px-3 py-2">
+                <div className="truncate text-[9px] font-black uppercase tracking-[0.16em] text-white/45">{club}</div>
+                <div className="truncate text-[10px] font-semibold text-white/75">{league}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/10 px-2 py-2 text-center">
+                <div className="text-[8px] font-black uppercase text-white/45">Pos</div>
+                <div className="text-[15px] font-black leading-none">{position}</div>
+              </div>
+            </div>
+
+            <div className="mt-2 rounded-2xl border border-white/10 bg-black/42 p-2">
+              <div className="grid grid-cols-5 gap-1.5">
+                {last5.map((score, index) => {
+                  const height = Math.max(8, Math.min(28, (Number(score || 0) / maxBar) * 28));
+                  return (
+                    <div key={`${player.id}-${index}`} className="flex flex-col items-center gap-1">
+                      <div className="flex h-7 w-full items-end justify-center rounded-md bg-white/8 px-1">
+                        <div className="w-full rounded-sm bg-white/55" style={{ height }} />
+                      </div>
+                      <span className="text-[8px] font-bold text-white/70">{score}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-1.5 text-center">
+                <div className="rounded-lg bg-white/8 px-1.5 py-1"><div className="text-[8px] uppercase text-white/45">Avg</div><div className="text-[14px] font-black leading-none">{average}</div></div>
+                <div className="rounded-lg bg-white/8 px-1.5 py-1"><div className="text-[8px] uppercase text-white/45">Total</div><div className="text-[14px] font-black leading-none">{total}</div></div>
+                <div className="rounded-lg bg-white/8 px-1.5 py-1"><div className="text-[8px] uppercase text-white/45">Use</div><div className="truncate text-[10px] font-black leading-none">{status}</div></div>
+              </div>
+            </div>
+          </div>
         </div>
       </article>
     </div>
