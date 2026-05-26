@@ -1,8 +1,11 @@
 /**
- * Scoring System (Sorare-style)
- * 
- * Based on FPL live data, calculates comprehensive player scores
- * Scale: 0-100 points (AA = All-Around Score when >= 60)
+ * Scoring System (Fantasy Arena / Sorare-style)
+ *
+ * Important fairness rule:
+ * - Player score is based on real player match stats only.
+ * - Card rarity does NOT change match points.
+ * - Duplicate cards for the same footballer receive the same player score.
+ * - Captain bonus is applied only to the competition lineup total, not to the card's own stored score.
  */
 
 interface PlayerStats {
@@ -34,99 +37,162 @@ interface ScoringResult {
     penalties: number;
     bonus: number;
   };
+  reasons: Array<{ label: string; points: number; category: "decisive" | "performance" | "penalty" | "bonus" }>;
   is_all_around: boolean; // AA = score >= 60
 }
 
+export const SCORE_RULES = {
+  positive: [
+    { event: "Goal", points: "+8 each" },
+    { event: "Assist", points: "+6 each" },
+    { event: "Clean sheet GK", points: "+10" },
+    { event: "Clean sheet DEF", points: "+8" },
+    { event: "Clean sheet MID", points: "+5" },
+    { event: "Penalty save GK", points: "+12" },
+    { event: "Every 3 saves GK", points: "+2" },
+    { event: "60+ minutes", points: "+25 performance base" },
+    { event: "30–59 minutes", points: "+15 performance base" },
+    { event: "1–29 minutes", points: "+10 performance base" },
+    { event: "ICT index", points: "up to +10" },
+    { event: "BPS contribution", points: "up to +5" },
+    { event: "FPL bonus", points: "+3 per bonus point" },
+    { event: "Multi-category contribution", points: "+5" },
+  ],
+  negative: [
+    { event: "Yellow card", points: "-3" },
+    { event: "Red card", points: "-10" },
+    { event: "Own goal", points: "-10" },
+    { event: "Penalty missed", points: "-8" },
+    { event: "GK/DEF goals conceded after first", points: "-2 each" },
+  ],
+  caps: [
+    { category: "Decisive", cap: "0 to 40" },
+    { category: "Performance", cap: "0 to 40" },
+    { category: "Penalties", cap: "-20 to 0" },
+    { category: "Bonus", cap: "0 to 20" },
+    { category: "Final score", cap: "0 to 100" },
+  ],
+  captain: "Captain receives +10% only in lineup total. The player's own card score remains unchanged.",
+};
+
+function addReason(
+  reasons: ScoringResult["reasons"],
+  label: string,
+  points: number,
+  category: ScoringResult["reasons"][number]["category"],
+) {
+  if (!points) return;
+  reasons.push({ label, points, category });
+}
+
 /**
- * Calculate player score based on Sorare-like system
+ * Calculate player score based on match stats.
  */
 export function calculatePlayerScore(
   stats: PlayerStats,
-  position: string
+  position: string,
 ): ScoringResult {
   let decisive = 0;
   let performance = 0;
   let penalties = 0;
   let bonus = 0;
+  const reasons: ScoringResult["reasons"] = [];
+
+  const normalizedPosition = String(position || "").toUpperCase();
 
   // --- 1. DECISIVE ACTIONS (0-40 points) ---
-  decisive += stats.goals_scored * 8; // Goals: 8 points each
-  decisive += stats.assists * 6; // Assists: 6 points each
-  
-  // Clean Sheet (position-dependent)
+  const goalPoints = stats.goals_scored * 8;
+  const assistPoints = stats.assists * 6;
+  decisive += goalPoints;
+  decisive += assistPoints;
+  addReason(reasons, `${stats.goals_scored} goal(s)`, goalPoints, "decisive");
+  addReason(reasons, `${stats.assists} assist(s)`, assistPoints, "decisive");
+
   if (stats.clean_sheets > 0) {
-    if (position === "GK") decisive += 10;
-    else if (position === "DEF") decisive += 8;
-    else if (position === "MID") decisive += 5;
+    if (normalizedPosition === "GK") {
+      decisive += 10;
+      addReason(reasons, "Clean sheet as GK", 10, "decisive");
+    } else if (normalizedPosition === "DEF") {
+      decisive += 8;
+      addReason(reasons, "Clean sheet as DEF", 8, "decisive");
+    } else if (normalizedPosition === "MID") {
+      decisive += 5;
+      addReason(reasons, "Clean sheet as MID", 5, "decisive");
+    }
   }
-  
-  // GK-specific
-  if (position === "GK") {
-    decisive += stats.penalties_saved * 12; // Penalty save: huge bonus
-    decisive += Math.floor(stats.saves / 3) * 2; // Every 3 saves = 2 points
+
+  if (normalizedPosition === "GK") {
+    const penaltySavePoints = stats.penalties_saved * 12;
+    const savePoints = Math.floor(stats.saves / 3) * 2;
+    decisive += penaltySavePoints;
+    decisive += savePoints;
+    addReason(reasons, `${stats.penalties_saved} penalty save(s)`, penaltySavePoints, "decisive");
+    addReason(reasons, `${stats.saves} save(s)`, savePoints, "decisive");
   }
-  
-  // Cap decisive at 40
+
   decisive = Math.min(decisive, 40);
 
   // --- 2. PERFORMANCE (0-40 points) ---
-  // Base performance for playing time
-  if (stats.minutes >= 60) {
-    performance += 25; // Full performance base for 60+ mins
-  } else if (stats.minutes >= 30) {
-    performance += 15;
-  } else if (stats.minutes > 0) {
-    performance += 10;
-  }
-  
-  // ICT Index (Influence, Creativity, Threat)
+  let minutesPoints = 0;
+  if (stats.minutes >= 60) minutesPoints = 25;
+  else if (stats.minutes >= 30) minutesPoints = 15;
+  else if (stats.minutes > 0) minutesPoints = 10;
+  performance += minutesPoints;
+  addReason(reasons, `${stats.minutes} minutes played`, minutesPoints, "performance");
+
   const ictIndex = parseFloat(stats.ict_index) || 0;
-  performance += Math.min(Math.floor(ictIndex / 10), 10); // Up to 10 bonus from ICT
-  
-  // BPS (Bonus Points System) - reflects overall contribution
+  const ictPoints = Math.min(Math.floor(ictIndex / 10), 10);
+  performance += ictPoints;
+  addReason(reasons, `ICT index ${ictIndex}`, ictPoints, "performance");
+
   const bps = parseFloat(String(stats.bps)) || 0;
-  performance += Math.min(Math.floor(bps / 10), 5); // Up to 5 bonus from BPS
-  
-  // Cap performance at 40
+  const bpsPoints = Math.min(Math.floor(bps / 10), 5);
+  performance += bpsPoints;
+  addReason(reasons, `BPS ${bps}`, bpsPoints, "performance");
+
   performance = Math.min(performance, 40);
 
   // --- 3. PENALTIES (-20 to 0 points) ---
-  penalties -= stats.own_goals * 10; // Own goal: -10
-  penalties -= stats.penalties_missed * 8; // Missed penalty: -8
-  penalties -= stats.yellow_cards * 3; // Yellow card: -3
-  penalties -= stats.red_cards * 10; // Red card: -10
-  
-  // Defensive mistakes (goals conceded for GK/DEF)
-  if (position === "GK" || position === "DEF") {
+  const ownGoalPenalty = -(stats.own_goals * 10);
+  const missedPenalty = -(stats.penalties_missed * 8);
+  const yellowPenalty = -(stats.yellow_cards * 3);
+  const redPenalty = -(stats.red_cards * 10);
+  penalties += ownGoalPenalty + missedPenalty + yellowPenalty + redPenalty;
+  addReason(reasons, `${stats.own_goals} own goal(s)`, ownGoalPenalty, "penalty");
+  addReason(reasons, `${stats.penalties_missed} penalty missed`, missedPenalty, "penalty");
+  addReason(reasons, `${stats.yellow_cards} yellow card(s)`, yellowPenalty, "penalty");
+  addReason(reasons, `${stats.red_cards} red card(s)`, redPenalty, "penalty");
+
+  if (normalizedPosition === "GK" || normalizedPosition === "DEF") {
     const excessConceded = Math.max(stats.goals_conceded - 1, 0);
-    penalties -= excessConceded * 2; // -2 per goal conceded (after first)
+    const concededPenalty = -(excessConceded * 2);
+    penalties += concededPenalty;
+    addReason(reasons, `${excessConceded} extra goal(s) conceded`, concededPenalty, "penalty");
   }
-  
-  // Cap penalties at -20
+
   penalties = Math.max(penalties, -20);
 
   // --- 4. BONUS (0-20 points) ---
-  // FPL Bonus points (awarded to top 3 players in match)
-  bonus += stats.bonus * 3; // Each FPL bonus point = 3 score points
-  
-  // All-Around bonus: if player scored in multiple categories
+  const fplBonusPoints = stats.bonus * 3;
+  bonus += fplBonusPoints;
+  addReason(reasons, `${stats.bonus} FPL bonus point(s)`, fplBonusPoints, "bonus");
+
   const hasGoal = stats.goals_scored > 0;
   const hasAssist = stats.assists > 0;
   const hasCleanSheet = stats.clean_sheets > 0;
   const contributionCount = [hasGoal, hasAssist, hasCleanSheet].filter(Boolean).length;
-  
+
   if (contributionCount >= 2) {
-    bonus += 5; // Multi-category contribution
+    bonus += 5;
+    addReason(reasons, "Multi-category contribution", 5, "bonus");
   }
-  
-  // Cap bonus at 20
+
   bonus = Math.min(bonus, 20);
 
-  // --- TOTAL SCORE (0-100 scale) ---
   const total_score = Math.max(0, Math.min(100, decisive + performance + penalties + bonus));
-  
+
   return {
-    player_id: 0, // Will be set by caller
+    player_id: 0,
     total_score,
     breakdown: {
       decisive,
@@ -134,6 +200,7 @@ export function calculatePlayerScore(
       penalties,
       bonus,
     },
+    reasons,
     is_all_around: total_score >= 60,
   };
 }
@@ -145,19 +212,18 @@ export function calculatePlayerScore(
  */
 export function calculateLineupScore(
   cardScores: ScoringResult[],
-  captainId: number
+  captainId: number,
 ): number {
   let totalScore = 0;
-  
+
   for (const score of cardScores) {
     if (score.player_id === captainId) {
-      // Captain bonus: 110% of score
       totalScore += score.total_score * 1.1;
     } else {
       totalScore += score.total_score;
     }
   }
-  
+
   return Math.round(totalScore);
 }
 
@@ -166,7 +232,7 @@ export function calculateLineupScore(
  */
 export function mapFplStatsToPlayerStats(fplElement: any): PlayerStats {
   const stats = fplElement.stats || {};
-  
+
   return {
     minutes: stats.minutes || 0,
     goals_scored: stats.goals_scored || 0,
