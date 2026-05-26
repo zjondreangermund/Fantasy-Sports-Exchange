@@ -16,7 +16,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
 import {
   LayoutDashboard,
-  Library,
   ShoppingCart,
   Wallet,
   Trophy,
@@ -38,7 +37,7 @@ const menuItems = [
   { title: "Tournaments", href: "/competitions", icon: Trophy },
   { title: "Marketplace", href: "/marketplace", icon: ShoppingCart },
   { title: "Auctions", href: "/auctions", icon: Gavel },
-  { title: "Analytics", href: "/dashboard", icon: BarChart3 },
+  { title: "Analytics", href: "/analytics", icon: BarChart3 },
   { title: "Wallet", href: "/wallet", icon: Wallet },
   { title: "Account", href: "/account", icon: Bell },
   { title: "Card Lab", href: "/card-lab", icon: Gem },
