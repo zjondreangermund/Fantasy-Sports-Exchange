@@ -12,6 +12,7 @@ import StadiumAmbientLayer from "./components/StadiumAmbientLayer";
 import FloatingSupportWidget from "./components/FloatingSupportWidget";
 import FloatingEventNotifications from "./components/FloatingEventNotifications";
 import LivePulseDock from "./components/LivePulseDock";
+import MatchdayQuickDock from "./components/MatchdayQuickDock";
 import PageScene, { routeToPageSceneVariant } from "./components/PageScene";
 import { useAuth } from "./hooks/use-auth";
 import { Skeleton } from "./components/ui/skeleton";
@@ -126,6 +127,7 @@ function AuthenticatedApp() {
               <AuthenticatedRouter />
             </PageScene>
           </main>
+          <MatchdayQuickDock />
           <FloatingEventNotifications />
           <FloatingSupportWidget />
         </div>
