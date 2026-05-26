@@ -28,11 +28,13 @@ import {
   BarChart3,
   Target,
   Swords,
+  Radio,
 } from "lucide-react";
 
 const menuItems = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
   { title: "My Team", href: "/collection", icon: Swords },
+  { title: "Live Lineup", href: "/live-lineup", icon: Radio },
   { title: "Leagues", href: "/premier-league", icon: Activity },
   { title: "Tournaments", href: "/competitions", icon: Trophy },
   { title: "Marketplace", href: "/marketplace", icon: ShoppingCart },
