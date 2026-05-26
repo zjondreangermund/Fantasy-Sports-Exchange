@@ -25,6 +25,7 @@ const OnboardingTunnelPage = React.lazy(() => import("./pages/onboarding-tunnel"
 const CardRevealPage = React.lazy(() => import("./pages/card-reveal"));
 const DashboardPage = React.lazy(() => import("./pages/dashboard"));
 const AnalyticsPage = React.lazy(() => import("./pages/analytics"));
+const LiveLineupPage = React.lazy(() => import("./pages/live-lineup"));
 const CollectionPage = React.lazy(() => import("./pages/collection"));
 const MarketplacePage = React.lazy(() => import("./pages/marketplace"));
 const AuctionsPage = React.lazy(() => import("./pages/auctions"));
@@ -76,6 +77,7 @@ function AuthenticatedRouter() {
         <Route path="/" component={DashboardPage} />
         <Route path="/dashboard" component={DashboardPage} />
         <Route path="/analytics" component={AnalyticsPage} />
+        <Route path="/live-lineup" component={LiveLineupPage} />
         <Route path="/onboarding" component={OnboardingPage} />
         <Route path="/onboarding-packs" component={OnboardingPacksScene} />
         <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
