@@ -1,4 +1,4 @@
-import PlayerTile from "./PlayerTile";
+import PremiumCollectionCard from "./PremiumCollectionCard";
 import { type PlayerCardData } from "./cards/types";
 
 type CollectionPlayerCardProps = {
@@ -17,5 +17,5 @@ const EMPTY_PLAYER: PlayerCardData = {
 };
 
 export default function CollectionPlayerCard({ player, className = "" }: CollectionPlayerCardProps) {
-  return <PlayerTile player={player || EMPTY_PLAYER} className={className} />;
+  return <PremiumCollectionCard player={player || EMPTY_PLAYER} className={className} />;
 }
