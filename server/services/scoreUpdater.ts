@@ -6,10 +6,9 @@
 
 import { fplApi } from "./fplApi.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats, calculateLineupScore } from "./scoring.js";
-import type { IStorage } from "../storage.js";
 
 export class ScoreUpdateService {
-  private storage: any; // Using any to avoid complex type issues
+  private storage: any;
   private updateInterval: NodeJS.Timeout | null = null;
   private lastProcessedGameweek: number | null = null;
   
@@ -19,6 +18,18 @@ export class ScoreUpdateService {
 
   isAutoUpdateEnabled() {
     return Boolean(this.updateInterval);
+  }
+
+  private zeroScore(card: any, elementId = 0) {
+    return {
+      card_id: card?.id || 0,
+      player_id: card?.playerId || 0,
+      element_id: elementId,
+      total_score: 0,
+      breakdown: { decisive: 0, performance: 0, penalties: 0, bonus: 0 },
+      reasons: [],
+      is_all_around: false,
+    };
   }
 
   private normalize(text: string) {
@@ -89,10 +100,59 @@ export class ScoreUpdateService {
     }
     return [...previous.slice(-4), nextScore];
   }
+
+  private buildCardScores(cards: any[], identityMap: { byNameTeam: Map<string, number>; byWebTeam: Map<string, number> }, playerStatsMap: Map<any, any>) {
+    return cards.map((card) => {
+      if (!card?.player) return this.zeroScore(card);
+
+      const elementId = this.resolveFplElementId(card.player, identityMap);
+      const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
+      if (!fplStats) return this.zeroScore(card, elementId);
+
+      const score = calculatePlayerScore(fplStats, card.player.position);
+      return { ...score, card_id: card.id, player_id: card.playerId, element_id: elementId };
+    });
+  }
+
+  private async persistCardScores(cards: any[], cardScores: any[], bootstrapElementById: Map<number, any>) {
+    await Promise.all(
+      cardScores.map(async (score: any, index: number) => {
+        const card = cards[index];
+        if (!card?.id || !score?.element_id) return;
+
+        const element = bootstrapElementById.get(Number(score.element_id));
+        if (!element) return;
+
+        const xp = this.calculateXpFromElement(element);
+        const level = this.levelFromXp(xp);
+        const latestScore = Math.max(0, Math.min(100, Number(score.total_score || 0)));
+        const last5Scores = this.nextLast5Scores(card.last5Scores, latestScore);
+
+        const currentXp = Number(card.xp || 0);
+        const currentLevel = Number(card.level || 1);
+        const currentDs = Number(card.decisiveScore || 35);
+        const currentLast5 = Array.isArray(card.last5Scores)
+          ? card.last5Scores.map((value: any) => Number(value || 0))
+          : [];
+
+        const unchanged =
+          currentXp === xp &&
+          currentLevel === level &&
+          currentDs === latestScore &&
+          JSON.stringify(currentLast5) === JSON.stringify(last5Scores);
+
+        if (unchanged) return;
+
+        await this.storage.updatePlayerCard(card.id, {
+          xp,
+          level,
+          decisiveScore: latestScore,
+          last5Scores,
+        });
+      }),
+    );
+  }
   
-  /**
-   * Start automatic score updates (every 5 minutes during gameweeks)
-   */
   startAutoUpdates() {
     if (this.updateInterval) {
       console.log("Score updates already running");
@@ -100,23 +160,12 @@ export class ScoreUpdateService {
     }
     
     console.log("🔄 Starting automatic score updates (every 5 minutes)");
-    
-    // Run immediately
-    this.updateAllActiveCompetitions().catch(err => 
-      console.error("Initial score update failed:", err)
-    );
-    
-    // Then every 5 minutes
+    this.updateAllActiveCompetitions().catch(err => console.error("Initial score update failed:", err));
     this.updateInterval = setInterval(() => {
-      this.updateAllActiveCompetitions().catch(err =>
-        console.error("Scheduled score update failed:", err)
-      );
+      this.updateAllActiveCompetitions().catch(err => console.error("Scheduled score update failed:", err));
     }, 5 * 60 * 1000);
   }
   
-  /**
-   * Stop automatic updates
-   */
   stopAutoUpdates() {
     if (this.updateInterval) {
       clearInterval(this.updateInterval);
@@ -125,15 +174,10 @@ export class ScoreUpdateService {
     }
   }
   
-  /**
-   * Update scores for all active competitions
-   */
   async updateAllActiveCompetitions() {
     try {
       const competitions = await this.storage.getCompetitions();
-      const activeComps = competitions.filter((c: any) => 
-        c.status === "open" || c.status === "active"
-      );
+      const activeComps = competitions.filter((c: any) => c.status === "open" || c.status === "active");
 
       const currentGameweek = await fplApi.getCurrentGameweek();
       if (this.lastProcessedGameweek !== null && this.lastProcessedGameweek !== currentGameweek) {
@@ -148,7 +192,6 @@ export class ScoreUpdateService {
       
       console.log(`📊 Updating scores for ${activeComps.length} active competitions...`);
       
-      // Fetch live gameweek data
       const [liveData, bootstrap] = await Promise.all([
         fplApi.getLiveGameweek(),
         fplApi.bootstrap(),
@@ -161,7 +204,6 @@ export class ScoreUpdateService {
         bootstrapElementById.set(Number(element.id), element);
       }
       
-      // Build map of FPL player ID -> stats
       for (const element of liveData.elements || []) {
         const stats = mapFplStatsToPlayerStats(element);
         playerStatsMap.set(element.id, stats);
@@ -169,95 +211,21 @@ export class ScoreUpdateService {
       
       let updatedEntries = 0;
       
-      // Update each competition
       for (const comp of activeComps) {
         const entries = await this.storage.getCompetitionEntries(comp.id);
         
         for (const entry of entries) {
           try {
-            // Get cards in lineup with player data
             const cards = await Promise.all(
               (entry.lineupCardIds || []).map((cardId: any) =>
                 this.storage.getPlayerCardWithPlayer(cardId, entry.userId)
               )
             );
             
-            // Calculate score for each card
-            const cardScores = cards.map(card => {
-              if (!card?.player) {
-                return {
-                  card_id: card?.id || 0,
-                  player_id: card?.playerId || 0,
-                  element_id: 0,
-                  total_score: 0,
-                  breakdown: { decisive: 0, performance: 0, penalties: 0, bonus: 0 },
-                  is_all_around: false,
-                };
-              }
-              
-              const elementId = this.resolveFplElementId(card.player, identityMap);
-              const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
-              if (!fplStats) {
-                // Player hasn't played yet this gameweek
-                return {
-                  card_id: card.id,
-                  player_id: card.playerId,
-                  element_id: elementId,
-                  total_score: 0,
-                  breakdown: { decisive: 0, performance: 0, penalties: 0, bonus: 0 },
-                  is_all_around: false,
-                };
-              }
-              
-              const score = calculatePlayerScore(fplStats, card.player.position);
-              return { ...score, card_id: card.id, player_id: card.playerId, element_id: elementId };
-            });
-
-            await Promise.all(
-              cardScores.map(async (score: any, index: number) => {
-                const card = cards[index];
-                if (!card?.id || !score?.element_id) return;
-
-                const element = bootstrapElementById.get(Number(score.element_id));
-                if (!element) return;
-
-                const xp = this.calculateXpFromElement(element);
-                const level = this.levelFromXp(xp);
-                const latestScore = Math.max(0, Math.min(100, Number(score.total_score || 0)));
-                const last5Scores = this.nextLast5Scores(card.last5Scores, latestScore);
-
-                const currentXp = Number(card.xp || 0);
-                const currentLevel = Number(card.level || 1);
-                const currentDs = Number(card.decisiveScore || 35);
-                const currentLast5 = Array.isArray(card.last5Scores)
-                  ? card.last5Scores.map((value: any) => Number(value || 0))
-                  : [];
-
-                const unchanged =
-                  currentXp === xp &&
-                  currentLevel === level &&
-                  currentDs === latestScore &&
-                  JSON.stringify(currentLast5) === JSON.stringify(last5Scores);
-
-                if (unchanged) return;
-
-                await this.storage.updatePlayerCard(card.id, {
-                  xp,
-                  level,
-                  decisiveScore: latestScore,
-                  last5Scores,
-                });
-              }),
-            );
-            
-            // Calculate total lineup score (with captain bonus)
+            const cardScores = this.buildCardScores(cards, identityMap, playerStatsMap);
+            await this.persistCardScores(cards, cardScores, bootstrapElementById);
             const totalScore = calculateLineupScore(cardScores, entry.captainId || 0);
-            
-            // Update entry
-            await this.storage.updateCompetitionEntry(entry.id, {
-              totalScore,
-            });
-            
+            await this.storage.updateCompetitionEntry(entry.id, { totalScore });
             updatedEntries++;
           } catch (err) {
             console.error(`Failed to update entry ${entry.id}:`, err);
@@ -279,10 +247,7 @@ export class ScoreUpdateService {
       for (const comp of activeComps) {
         const entries = await this.storage.getCompetitionEntries(comp.id);
         for (const entry of entries) {
-          await this.storage.updateCompetitionEntry(entry.id, {
-            totalScore: 0,
-          });
-
+          await this.storage.updateCompetitionEntry(entry.id, { totalScore: 0 });
           (Array.isArray(entry?.lineupCardIds) ? entry.lineupCardIds : []).forEach((id: number) => {
             const value = Number(id);
             if (Number.isFinite(value) && value > 0) touchedCardIds.add(value);
@@ -292,9 +257,7 @@ export class ScoreUpdateService {
 
       await Promise.all(
         Array.from(touchedCardIds).map(async (cardId) => {
-          await this.storage.updatePlayerCard(cardId, {
-            decisiveScore: 0,
-          });
+          await this.storage.updatePlayerCard(cardId, { decisiveScore: 0 });
         }),
       );
 
@@ -304,22 +267,15 @@ export class ScoreUpdateService {
     }
   }
   
-  /**
-   * Manually trigger score update for specific competition
-   */
   async updateCompetition(competitionId: number) {
     console.log(`🎯 Manually updating competition ${competitionId}...`);
     
     const comp = await this.storage.getCompetition(competitionId);
-    if (!comp) {
-      throw new Error(`Competition ${competitionId} not found`);
-    }
-    
+    if (!comp) throw new Error(`Competition ${competitionId} not found`);
     if (comp.status !== "open" && comp.status !== "active") {
       throw new Error(`Competition ${competitionId} is not active (status: ${comp.status})`);
     }
     
-    // Use the same update logic
     const [liveData, bootstrap] = await Promise.all([
       fplApi.getLiveGameweek(),
       fplApi.bootstrap(),
@@ -348,78 +304,10 @@ export class ScoreUpdateService {
           )
         );
         
-        const cardScores = cards.map(card => {
-          if (!card?.player) {
-            return {
-              card_id: card?.id || 0,
-              player_id: card?.playerId || 0,
-              element_id: 0,
-              total_score: 0,
-              breakdown: { decisive: 0, performance: 0, penalties: 0, bonus: 0 },
-              is_all_around: false,
-            };
-          }
-          
-          const elementId = this.resolveFplElementId(card.player, identityMap);
-          const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
-          if (!fplStats) {
-            return {
-              card_id: card.id,
-              player_id: card.playerId,
-              element_id: elementId,
-              total_score: 0,
-              breakdown: { decisive: 0, performance: 0, penalties: 0, bonus: 0 },
-              is_all_around: false,
-            };
-          }
-          
-          const score = calculatePlayerScore(fplStats, card.player.position);
-          return { ...score, card_id: card.id, player_id: card.playerId, element_id: elementId };
-        });
-
-        await Promise.all(
-          cardScores.map(async (score: any, index: number) => {
-            const card = cards[index];
-            if (!card?.id || !score?.element_id) return;
-
-            const element = bootstrapElementById.get(Number(score.element_id));
-            if (!element) return;
-
-            const xp = this.calculateXpFromElement(element);
-            const level = this.levelFromXp(xp);
-            const latestScore = Math.max(0, Math.min(100, Number(score.total_score || 0)));
-            const last5Scores = this.nextLast5Scores(card.last5Scores, latestScore);
-
-            const currentXp = Number(card.xp || 0);
-            const currentLevel = Number(card.level || 1);
-            const currentDs = Number(card.decisiveScore || 35);
-            const currentLast5 = Array.isArray(card.last5Scores)
-              ? card.last5Scores.map((value: any) => Number(value || 0))
-              : [];
-
-            const unchanged =
-              currentXp === xp &&
-              currentLevel === level &&
-              currentDs === latestScore &&
-              JSON.stringify(currentLast5) === JSON.stringify(last5Scores);
-
-            if (unchanged) return;
-
-            await this.storage.updatePlayerCard(card.id, {
-              xp,
-              level,
-              decisiveScore: latestScore,
-              last5Scores,
-            });
-          }),
-        );
-        
+        const cardScores = this.buildCardScores(cards, identityMap, playerStatsMap);
+        await this.persistCardScores(cards, cardScores, bootstrapElementById);
         const totalScore = calculateLineupScore(cardScores, entry.captainId || 0);
-        
-        await this.storage.updateCompetitionEntry(entry.id, {
-          totalScore,
-        });
-        
+        await this.storage.updateCompetitionEntry(entry.id, { totalScore });
         updatedCount++;
       } catch (err) {
         console.error(`Failed to update entry ${entry.id}:`, err);
