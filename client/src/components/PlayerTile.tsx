@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from "react";
-import { Activity, Crown, Gem, Shield, TrendingDown, TrendingUp, Zap } from "lucide-react";
+import { Activity, CheckCircle2, Crown, Gem, Shield, TrendingDown, TrendingUp, Zap } from "lucide-react";
 import { type PlayerCardData } from "./cards/types";
 
 type PlayerTileProps = {
@@ -10,35 +10,40 @@ type PlayerTileProps = {
   className?: string;
 };
 
-const rarityStyles: Record<string, { ring: string; badge: string; glow: string; icon: typeof Shield }> = {
+const rarityStyles: Record<string, { border: string; badge: string; rating: string; accent: string; icon: typeof Shield }> = {
   common: {
-    ring: "border-slate-600/70 bg-slate-900/70",
-    badge: "bg-slate-100 text-slate-950",
-    glow: "shadow-[0_0_24px_rgba(148,163,184,.12)]",
+    border: "border-slate-700/80",
+    badge: "border-slate-500/40 bg-slate-500/10 text-slate-200",
+    rating: "border-slate-500/40 bg-slate-700/70 text-white",
+    accent: "from-slate-400/18 via-transparent to-transparent",
     icon: Shield,
   },
   rare: {
-    ring: "border-cyan-400/55 bg-slate-950/80",
-    badge: "bg-cyan-300 text-slate-950",
-    glow: "shadow-[0_0_28px_rgba(34,211,238,.22)]",
+    border: "border-blue-400/45",
+    badge: "border-blue-400/40 bg-blue-500/10 text-blue-300",
+    rating: "border-blue-300/50 bg-blue-600/70 text-white",
+    accent: "from-blue-400/24 via-transparent to-transparent",
     icon: Zap,
   },
   unique: {
-    ring: "border-fuchsia-300/55 bg-slate-950/80",
-    badge: "bg-fuchsia-300 text-slate-950",
-    glow: "shadow-[0_0_32px_rgba(217,70,239,.24)]",
+    border: "border-fuchsia-300/45",
+    badge: "border-fuchsia-400/40 bg-fuchsia-500/10 text-fuchsia-300",
+    rating: "border-fuchsia-300/50 bg-fuchsia-700/65 text-white",
+    accent: "from-fuchsia-400/24 via-transparent to-transparent",
     icon: Gem,
   },
   epic: {
-    ring: "border-violet-300/55 bg-slate-950/80",
-    badge: "bg-violet-300 text-slate-950",
-    glow: "shadow-[0_0_32px_rgba(139,92,246,.24)]",
+    border: "border-violet-300/45",
+    badge: "border-violet-400/40 bg-violet-500/10 text-violet-300",
+    rating: "border-violet-300/50 bg-violet-700/65 text-white",
+    accent: "from-violet-400/24 via-transparent to-transparent",
     icon: Gem,
   },
   legendary: {
-    ring: "border-amber-300/65 bg-black/85",
-    badge: "bg-amber-300 text-black",
-    glow: "shadow-[0_0_36px_rgba(251,191,36,.30)]",
+    border: "border-amber-300/55",
+    badge: "border-amber-300/45 bg-amber-300/10 text-amber-300",
+    rating: "border-amber-300/60 bg-amber-500/20 text-amber-100",
+    accent: "from-amber-300/26 via-transparent to-transparent",
     icon: Crown,
   },
 };
@@ -58,7 +63,13 @@ function getPoints(player: PlayerCardData) {
   const last = scores.length ? scores[scores.length - 1] : Number(player.form || player.rating || 0);
   const total = Number(player.totalPoints || scores.reduce((sum, value) => sum + value, 0));
   const trend = scores.length > 1 ? (scores[scores.length - 1] >= scores[0] ? "up" : "down") : "neutral";
-  return { last: Math.round(last), total: Math.round(total), trend };
+  return { last: Math.round(last * 10) / 10, total: Math.round(total * 10) / 10, trend };
+}
+
+function getLastFive(player: PlayerCardData) {
+  const scores = Array.isArray(player.last5Scores) ? player.last5Scores.slice(0, 5).map((value) => Number(value || 0)) : [];
+  while (scores.length < 5) scores.push(0);
+  return scores;
 }
 
 function PlayerTileBase({ player, selected = false, onClick, showPrice = false, className = "" }: PlayerTileProps) {
@@ -67,6 +78,7 @@ function PlayerTileBase({ player, selected = false, onClick, showPrice = false, 
   const style = rarityStyles[rarity] || rarityStyles.common;
   const Icon = style.icon;
   const points = useMemo(() => getPoints(player), [player]);
+  const lastFive = useMemo(() => getLastFive(player), [player]);
   const TrendIcon = points.trend === "up" ? TrendingUp : points.trend === "down" ? TrendingDown : Activity;
   const image = player.image || player.imageUrl || player.photo || player.imageCandidates?.[0];
   const showImage = Boolean(image) && !failed;
@@ -76,63 +88,81 @@ function PlayerTileBase({ player, selected = false, onClick, showPrice = false, 
       type="button"
       onClick={onClick}
       className={[
-        "group relative flex min-h-[178px] w-[142px] flex-col overflow-hidden rounded-2xl border p-2 text-left transition-all duration-200 hover:-translate-y-1 hover:scale-[1.025]",
-        style.ring,
-        style.glow,
+        "group relative flex h-[252px] w-[186px] flex-col overflow-hidden rounded-3xl border bg-[#08111f] p-3 text-left shadow-[0_18px_50px_rgba(0,0,0,.32)] transition-all duration-200 hover:-translate-y-1 hover:bg-[#0b1628]",
+        style.border,
         selected ? "ring-2 ring-emerald-300 ring-offset-2 ring-offset-slate-950" : "",
         onClick ? "cursor-pointer" : "cursor-default",
         className,
       ].join(" ")}
       data-testid={`player-tile-${player.id}`}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,.12),transparent_40%),linear-gradient(180deg,rgba(15,23,42,.05),rgba(0,0,0,.55))]" />
-      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/90 to-transparent" />
+      <div className={`absolute inset-0 bg-gradient-to-br ${style.accent}`} />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,.10),transparent_38%),linear-gradient(180deg,transparent_35%,rgba(0,0,0,.80)_100%)]" />
 
-      <div className="relative z-10 flex items-start justify-between gap-2">
-        <div>
-          <p className="text-[24px] font-black leading-none text-white">{Number(player.rating || points.last || 0).toFixed(0)}</p>
-          <p className="mt-0.5 text-[11px] font-black uppercase tracking-wide text-white/82">{player.position || "N/A"}</p>
+      <div className="relative z-20 flex items-start justify-between gap-2">
+        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border text-[22px] font-black shadow-[0_0_22px_rgba(37,99,235,.16)] ${style.rating}`}>
+          {Number(player.rating || points.last || 0).toFixed(0)}
         </div>
-        <div className={`flex items-center gap-1 rounded-full px-2 py-1 text-[7px] font-black uppercase tracking-[.16em] ${style.badge}`}>
-          <Icon className="h-2.5 w-2.5" />
-          {rarity.slice(0, 3)}
+        <div className="flex min-w-0 flex-col items-end gap-1">
+          <div className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[8px] font-black uppercase tracking-[.14em] ${style.badge}`}>
+            <Icon className="h-3 w-3" />
+            {rarity}
+          </div>
+          <p className="text-[10px] font-black uppercase tracking-wide text-white/80">{player.position || "N/A"}</p>
         </div>
       </div>
 
-      <div className="relative z-10 mt-1 flex flex-1 items-end justify-center overflow-hidden rounded-xl bg-white/[0.04]">
+      <div className="relative z-10 mt-1 flex flex-1 items-end justify-center overflow-hidden rounded-2xl border border-white/5 bg-black/18">
+        <div className="absolute inset-x-5 bottom-0 h-9 rounded-full bg-black/55 blur-lg" />
         {showImage ? (
           <img
             src={image}
             alt={player.name}
             onError={() => setFailed(true)}
-            className="absolute bottom-0 h-[118%] w-[115%] object-contain object-bottom drop-shadow-[0_16px_12px_rgba(0,0,0,.55)] transition-transform duration-200 group-hover:scale-105"
+            className="absolute bottom-0 left-1/2 h-[120%] w-[118%] -translate-x-1/2 object-contain object-bottom drop-shadow-[0_18px_14px_rgba(0,0,0,.58)] transition-transform duration-200 group-hover:scale-[1.04]"
             loading="lazy"
             decoding="async"
           />
         ) : (
-          <div className="flex h-24 w-20 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-2xl font-black text-white/40">
+          <div className="mb-7 flex h-24 w-24 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] text-3xl font-black text-white/35">
             {playerInitials(player.name)}
           </div>
         )}
       </div>
 
-      <div className="relative z-20 mt-2">
-        <p className="truncate text-[12px] font-black uppercase tracking-wide text-white">{player.name}</p>
-        <p className="truncate text-[9px] font-semibold uppercase tracking-[.14em] text-slate-400">{player.team || player.club || "Free Agent"}</p>
-        <div className="mt-2 grid grid-cols-2 gap-1.5">
-          <div className="rounded-lg border border-white/10 bg-black/35 px-2 py-1">
-            <p className="text-[8px] font-bold uppercase text-slate-500">Last</p>
-            <p className="text-sm font-black text-white">{points.last}</p>
+      <div className="relative z-20 mt-3">
+        <div className="flex items-center gap-1.5">
+          <p className="min-w-0 flex-1 truncate text-[15px] font-black leading-none text-white">{player.name}</p>
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+        </div>
+        <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400">{player.team || player.club || "Free Agent"}</p>
+
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-white/8 bg-black/30 px-2 py-1.5">
+            <p className="text-[8px] font-bold uppercase text-slate-500">Points</p>
+            <p className="text-[15px] font-black text-white">{points.total}</p>
           </div>
-          <div className="rounded-lg border border-white/10 bg-black/35 px-2 py-1">
+          <div className="rounded-xl border border-white/8 bg-black/30 px-2 py-1.5">
             <p className="flex items-center gap-1 text-[8px] font-bold uppercase text-slate-500">
-              <TrendIcon className="h-2.5 w-2.5" /> Points
+              <TrendIcon className="h-2.5 w-2.5" /> Last
             </p>
-            <p className="text-sm font-black text-white">{points.total}</p>
+            <p className="text-[15px] font-black text-white">{points.last}</p>
           </div>
         </div>
+
+        <div className="mt-2 flex items-end gap-1.5">
+          {lastFive.map((score, index) => (
+            <div key={`${score}-${index}`} className="h-5 flex-1 rounded-t bg-emerald-400/25">
+              <div
+                className="mt-auto w-full rounded-t bg-gradient-to-t from-emerald-600 to-lime-300"
+                style={{ height: `${Math.max(18, Math.min(100, Number(score || 0) * 8))}%` }}
+              />
+            </div>
+          ))}
+        </div>
+
         {showPrice && Number(player.price || player.listedPrice || 0) > 0 ? (
-          <p className="mt-2 rounded-lg bg-emerald-400/12 px-2 py-1 text-center text-[10px] font-black text-emerald-300">
+          <p className="mt-2 rounded-xl bg-emerald-400/12 px-2 py-1 text-center text-[11px] font-black text-emerald-300">
             N${Number(player.price || player.listedPrice || 0).toFixed(2)}
           </p>
         ) : null}
