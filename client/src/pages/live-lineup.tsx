@@ -1,9 +1,15 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, ArrowDown, ArrowUp, CircleDot, Swords, Trophy, Zap } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, CircleDot, Crown, Radio, ShieldAlert, Swords, Trophy, Zap } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 import PlayerTile from "../components/PlayerTile";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type Lineup, type PlayerCardWithPlayer } from "../../../shared/schema";
@@ -62,16 +68,49 @@ function buildSlots(cards: PlayerCardWithPlayer[]) {
   return empty;
 }
 
-function SlotCard({ label, card, events }: { label: LineupSlot; card: PlayerCardWithPlayer | null; events: LivePointEvent[] }) {
-  const liveDelta = card ? events.filter((event) => eventMatchesCard(event, card)).reduce((sum, event) => sum + Number(event.delta || 0), 0) : 0;
+function liveDeltaForCard(card: PlayerCardWithPlayer | null, events: LivePointEvent[]) {
+  if (!card) return 0;
+  return events.filter((event) => eventMatchesCard(event, card)).reduce((sum, event) => sum + Number(event.delta || 0), 0);
+}
+
+function fixtureDifficulty(card: PlayerCardWithPlayer | null) {
+  if (!card) return { label: "—", className: "text-slate-500 border-slate-800 bg-slate-950/60" };
+  const score = Number(card.decisiveScore || card.player?.overall || 0);
+  if (score >= 75) return { label: "Good", className: "text-emerald-300 border-emerald-400/25 bg-emerald-400/10" };
+  if (score >= 60) return { label: "Medium", className: "text-yellow-300 border-yellow-400/25 bg-yellow-400/10" };
+  return { label: "Risk", className: "text-red-300 border-red-400/25 bg-red-400/10" };
+}
+
+function SlotCard({
+  label,
+  card,
+  events,
+  captain,
+  onInspect,
+}: {
+  label: LineupSlot;
+  card: PlayerCardWithPlayer | null;
+  events: LivePointEvent[];
+  captain?: boolean;
+  onInspect?: (card: PlayerCardWithPlayer) => void;
+}) {
+  const liveDelta = liveDeltaForCard(card, events);
   const cardPoints = card ? getCardPoints(card) : { total: 0, last: 0 };
+  const difficulty = fixtureDifficulty(card);
+  const pulseClass = liveDelta > 0 ? "ring-2 ring-emerald-300/50 shadow-[0_0_38px_rgba(52,211,153,.20)]" : liveDelta < 0 ? "ring-2 ring-red-300/45 shadow-[0_0_38px_rgba(248,113,113,.16)]" : "";
+
   return (
-    <div className="relative flex min-h-[260px] flex-col items-center justify-center rounded-3xl border border-white/10 bg-black/18 p-3 backdrop-blur-sm">
-      <div className="absolute left-3 top-3 rounded-full border border-slate-700 bg-slate-950/70 px-2 py-1 text-[10px] font-black uppercase tracking-[.18em] text-slate-400">{label}</div>
+    <div className={`relative flex min-h-[260px] flex-col items-center justify-center rounded-3xl border border-white/10 bg-black/18 p-3 backdrop-blur-sm transition-all ${pulseClass}`}>
+      <div className="absolute left-3 top-3 z-20 rounded-full border border-slate-700 bg-slate-950/70 px-2 py-1 text-[10px] font-black uppercase tracking-[.18em] text-slate-400">{label}</div>
+      {captain ? (
+        <div className="absolute right-3 top-3 z-20 flex items-center gap-1 rounded-full border border-amber-300/40 bg-amber-300/10 px-2 py-1 text-[10px] font-black uppercase tracking-[.16em] text-amber-200">
+          <Crown className="h-3 w-3" /> CAP
+        </div>
+      ) : null}
       {card ? (
         <>
-          <PlayerTile player={toFantasyCardData(card, { imageWidth: 640 })} className="!h-[235px] !w-[172px]" />
-          <div className="mt-3 grid w-full grid-cols-3 gap-2 text-center">
+          <PlayerTile player={toFantasyCardData(card, { imageWidth: 640 })} className="!h-[235px] !w-[172px]" onClick={() => onInspect?.(card)} />
+          <div className="mt-3 grid w-full grid-cols-4 gap-2 text-center">
             <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-2 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-slate-500">Team</p>
               <p className="text-sm font-black text-white">{shortTeam(card.player?.team)}</p>
@@ -79,6 +118,10 @@ function SlotCard({ label, card, events }: { label: LineupSlot; card: PlayerCard
             <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-2 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-slate-500">Last</p>
               <p className="text-sm font-black text-white">{cardPoints.last}</p>
+            </div>
+            <div className={`rounded-xl border px-2 py-2 ${difficulty.className}`}>
+              <p className="text-[9px] font-black uppercase tracking-wide opacity-70">Fix</p>
+              <p className="text-sm font-black">{difficulty.label}</p>
             </div>
             <div className={liveDelta >= 0 ? "rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-2 py-2" : "rounded-xl border border-red-400/25 bg-red-400/10 px-2 py-2"}>
               <p className="text-[9px] font-black uppercase tracking-wide text-slate-500">Live</p>
@@ -97,7 +140,71 @@ function SlotCard({ label, card, events }: { label: LineupSlot; card: PlayerCard
   );
 }
 
+function PlayerDetailDialog({ card, events, onOpenChange }: { card: PlayerCardWithPlayer | null; events: LivePointEvent[]; onOpenChange: (open: boolean) => void }) {
+  if (!card) return null;
+  const fantasy = toFantasyCardData(card, { imageWidth: 640 });
+  const cardEvents = events.filter((event) => eventMatchesCard(event, card)).slice(0, 8);
+  const points = getCardPoints(card);
+  const liveDelta = liveDeltaForCard(card, events);
+  const difficulty = fixtureDifficulty(card);
+
+  return (
+    <Dialog open={!!card} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl border-slate-800 bg-[#07111f] text-white">
+        <DialogHeader>
+          <DialogTitle>Player Live Detail</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-5 md:grid-cols-[220px_1fr]">
+          <PlayerTile player={fantasy} className="!h-[300px] !w-[220px]" />
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-2xl font-black">{fantasy.name}</h2>
+              <p className="text-sm text-slate-400">{fantasy.position} · {fantasy.team || fantasy.club || "Free Agent"} · {fantasy.rarity}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="rounded-2xl border border-slate-800 bg-black/25 p-3">
+                <p className="text-[10px] font-black uppercase tracking-[.18em] text-slate-500">Total</p>
+                <p className="text-xl font-black">{points.total}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-black/25 p-3">
+                <p className="text-[10px] font-black uppercase tracking-[.18em] text-slate-500">Last</p>
+                <p className="text-xl font-black">{points.last}</p>
+              </div>
+              <div className={liveDelta >= 0 ? "rounded-2xl border border-emerald-400/25 bg-emerald-400/10 p-3" : "rounded-2xl border border-red-400/25 bg-red-400/10 p-3"}>
+                <p className="text-[10px] font-black uppercase tracking-[.18em] text-slate-500">Live</p>
+                <p className={liveDelta >= 0 ? "text-xl font-black text-emerald-300" : "text-xl font-black text-red-300"}>{liveDelta >= 0 ? `+${liveDelta}` : liveDelta}</p>
+              </div>
+              <div className={`rounded-2xl border p-3 ${difficulty.className}`}>
+                <p className="text-[10px] font-black uppercase tracking-[.18em] opacity-70">Fixture</p>
+                <p className="text-xl font-black">{difficulty.label}</p>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-800 bg-black/25 p-4">
+              <h3 className="mb-3 font-black">Live point gains / losses</h3>
+              <div className="space-y-2">
+                {cardEvents.length ? cardEvents.map((event) => {
+                  const positive = Number(event.delta || 0) >= 0;
+                  return (
+                    <div key={event.id} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-bold">{event.team}</p>
+                        <p className="text-xs text-slate-500">{event.reason}</p>
+                      </div>
+                      <p className={positive ? "font-black text-emerald-300" : "font-black text-red-300"}>{positive ? `+${event.delta}` : event.delta}</p>
+                    </div>
+                  );
+                }) : <p className="text-sm text-slate-500">No live events linked to this player's team yet.</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function LiveLineupPage() {
+  const [selectedCard, setSelectedCard] = useState<PlayerCardWithPlayer | null>(null);
   const { data: lineupData, isLoading } = useQuery<{ lineup: Lineup; cards: PlayerCardWithPlayer[] }>({
     queryKey: ["/api/lineup"],
     queryFn: async () => {
@@ -122,10 +229,12 @@ export default function LiveLineupPage() {
   const lineupCards = lineupData?.cards || [];
   const events = livePointEvents || [];
   const slots = useMemo(() => buildSlots(lineupCards), [lineupCards]);
-  const liveDelta = useMemo(() => lineupCards.reduce((sum, card) => sum + events.filter((event) => eventMatchesCard(event, card)).reduce((eventSum, event) => eventSum + Number(event.delta || 0), 0), 0), [events, lineupCards]);
+  const captainCard = lineupCards[0] || null;
+  const liveDelta = useMemo(() => lineupCards.reduce((sum, card) => sum + liveDeltaForCard(card, events), 0), [events, lineupCards]);
   const lineupPoints = useMemo(() => lineupCards.reduce((sum, card) => sum + getCardPoints(card).total, 0), [lineupCards]);
   const selectedTeams = useMemo(() => Array.from(new Set(lineupCards.map((card) => String(card.player?.team || "").trim()).filter(Boolean))), [lineupCards]);
   const relevantEvents = useMemo(() => events.filter((event) => lineupCards.some((card) => eventMatchesCard(event, card))).slice(0, 12), [events, lineupCards]);
+  const activeTeams = useMemo(() => selectedTeams.map((team) => ({ team, delta: events.filter((event) => shortTeam(event.team) === shortTeam(team)).reduce((sum, event) => sum + Number(event.delta || 0), 0) })), [events, selectedTeams]);
 
   return (
     <div className="relative min-h-full flex-1 overflow-auto bg-[#07111f] p-4 text-slate-100 sm:p-6 lg:p-8">
@@ -135,7 +244,7 @@ export default function LiveLineupPage() {
           <div>
             <p className="text-[11px] font-black uppercase tracking-[.24em] text-emerald-300/70">SO5 Matchday Control</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-white">Live Lineup</h1>
-            <p className="mt-1 text-sm text-slate-400">Only your selected 5 matter here. Track their teams, live gains, losses and recent points.</p>
+            <p className="mt-1 text-sm text-slate-400">Selected 5, captain highlight, team context, and live gain/loss feed. No projected scores.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Card className="rounded-2xl border-slate-800 bg-slate-950/70 px-4 py-3">
@@ -153,21 +262,21 @@ export default function LiveLineupPage() {
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+        <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
           <Card className="relative overflow-hidden rounded-[2rem] border-emerald-400/15 bg-emerald-950/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.04)]">
             <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,.04)_1px,transparent_1px),linear-gradient(0deg,rgba(255,255,255,.04)_1px,transparent_1px)] bg-[size:46px_46px] opacity-25" />
             <div className="absolute left-1/2 top-0 h-full w-px bg-white/10" />
             <div className="absolute left-1/2 top-1/2 h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10" />
             <div className="relative grid gap-4 lg:grid-cols-5">
               {isLoading ? (
-                Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-[360px] rounded-3xl bg-slate-800" />)
+                Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-[390px] rounded-3xl bg-slate-800" />)
               ) : (
                 <>
-                  <SlotCard label="GK" card={slots.GK} events={events} />
-                  <SlotCard label="DEF" card={slots.DEF} events={events} />
-                  <SlotCard label="MID" card={slots.MID} events={events} />
-                  <SlotCard label="FWD" card={slots.FWD} events={events} />
-                  <SlotCard label="UTIL" card={slots.UTIL} events={events} />
+                  <SlotCard label="GK" card={slots.GK} events={events} captain={captainCard?.id === slots.GK?.id} onInspect={setSelectedCard} />
+                  <SlotCard label="DEF" card={slots.DEF} events={events} captain={captainCard?.id === slots.DEF?.id} onInspect={setSelectedCard} />
+                  <SlotCard label="MID" card={slots.MID} events={events} captain={captainCard?.id === slots.MID?.id} onInspect={setSelectedCard} />
+                  <SlotCard label="FWD" card={slots.FWD} events={events} captain={captainCard?.id === slots.FWD?.id} onInspect={setSelectedCard} />
+                  <SlotCard label="UTIL" card={slots.UTIL} events={events} captain={captainCard?.id === slots.UTIL?.id} onInspect={setSelectedCard} />
                 </>
               )}
             </div>
@@ -177,16 +286,21 @@ export default function LiveLineupPage() {
             <Card className="rounded-3xl border-slate-800 bg-slate-950/65 p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-black text-white">Selected Teams</h2>
-                  <p className="text-xs text-slate-500">Your 5 players linked to club context.</p>
+                  <h2 className="text-lg font-black text-white">Live Match Center</h2>
+                  <p className="text-xs text-slate-500">Your selected teams only.</p>
                 </div>
-                <Swords className="h-5 w-5 text-emerald-300" />
+                <Radio className="h-5 w-5 text-emerald-300" />
               </div>
-              <div className="flex flex-wrap gap-2">
-                {selectedTeams.length ? selectedTeams.map((team) => (
-                  <div key={team} className="rounded-2xl border border-slate-800 bg-black/30 px-3 py-2">
-                    <p className="text-[10px] font-black uppercase tracking-[.18em] text-slate-500">Team</p>
-                    <p className="text-sm font-black text-white">{team}</p>
+              <div className="space-y-2">
+                {activeTeams.length ? activeTeams.map(({ team, delta }) => (
+                  <div key={team} className="flex items-center justify-between rounded-2xl border border-slate-800 bg-black/30 px-3 py-3">
+                    <div>
+                      <p className="text-sm font-black text-white">{team}</p>
+                      <p className="text-[11px] text-slate-500">Selected player team</p>
+                    </div>
+                    <div className={delta >= 0 ? "rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-emerald-300" : "rounded-xl border border-red-400/25 bg-red-400/10 px-3 py-1 text-red-300"}>
+                      <span className="text-sm font-black">{delta >= 0 ? `+${delta}` : delta}</span>
+                    </div>
                   </div>
                 )) : <p className="text-sm text-slate-500">No selected teams yet.</p>}
               </div>
@@ -198,12 +312,27 @@ export default function LiveLineupPage() {
             <Card className="rounded-3xl border-slate-800 bg-slate-950/65 p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
+                  <h2 className="text-lg font-black text-white">Risk / Alerts</h2>
+                  <p className="text-xs text-slate-500">Simple flags without projected scores.</p>
+                </div>
+                <ShieldAlert className="h-5 w-5 text-yellow-300" />
+              </div>
+              <div className="space-y-2 text-sm text-slate-400">
+                <p>Captain: <span className="font-black text-amber-200">{captainCard?.player?.name || "Not set"}</span></p>
+                <p>Missing slots: <span className="font-black text-white">{Math.max(0, 5 - lineupCards.length)}</span></p>
+                <p>Live events linked: <span className="font-black text-white">{relevantEvents.length}</span></p>
+              </div>
+            </Card>
+
+            <Card className="rounded-3xl border-slate-800 bg-slate-950/65 p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
                   <h2 className="text-lg font-black text-white">Live Gain / Loss Feed</h2>
                   <p className="text-xs text-slate-500">Only events linked to your selected players' teams.</p>
                 </div>
                 <Zap className="h-5 w-5 text-yellow-300" />
               </div>
-              <div className="max-h-[430px] space-y-2 overflow-auto pr-1">
+              <div className="max-h-[360px] space-y-2 overflow-auto pr-1">
                 {relevantEvents.length ? relevantEvents.map((event) => {
                   const positive = Number(event.delta || 0) >= 0;
                   return (
@@ -233,6 +362,7 @@ export default function LiveLineupPage() {
           </div>
         </div>
       </div>
+      <PlayerDetailDialog card={selectedCard} events={events} onOpenChange={(open) => !open && setSelectedCard(null)} />
     </div>
   );
 }
