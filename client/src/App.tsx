@@ -9,6 +9,7 @@ import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
 import { AppSidebar } from "./components/app-sidebar";
 import { ThemeProvider, ThemeToggle } from "./components/ThemeProvider";
 import StadiumAmbientLayer from "./components/StadiumAmbientLayer";
+import RouteSceneBackground from "./components/RouteSceneBackground";
 import FloatingSupportWidget from "./components/FloatingSupportWidget";
 import FloatingEventNotifications from "./components/FloatingEventNotifications";
 import LivePulseDock from "./components/LivePulseDock";
@@ -113,20 +114,25 @@ function AuthenticatedApp() {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full">
+      <div className="flex h-screen w-full bg-black overflow-hidden">
         <AppSidebar />
-        <div className="flex flex-col flex-1 min-w-0 relative">
+        <div className="flex flex-col flex-1 min-w-0 relative isolate">
+          <RouteSceneBackground pathname={location} />
           <StadiumAmbientLayer teamName={teamName} />
-          <header className="flex items-center justify-between gap-2 p-2 border-b border-border sticky top-0 z-50 bg-background/80 backdrop-blur-xl">
+
+          <header className="flex items-center justify-between gap-2 p-2 border-b border-white/10 sticky top-0 z-50 bg-black/25 backdrop-blur-2xl">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <ThemeToggle />
           </header>
+
           <LivePulseDock />
+
           <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative z-10">
             <PageScene variant={routeToPageSceneVariant(location, true)} className="flex-1">
               <AuthenticatedRouter />
             </PageScene>
           </main>
+
           <MatchdayQuickDock />
           <FloatingEventNotifications />
           <FloatingSupportWidget />
@@ -150,6 +156,7 @@ function AppContent() {
     if (!user) return;
     const code = localStorage.getItem("fantasy_referral_code");
     if (!code) return;
+
     fetch("/api/referrals/claim", {
       method: "POST",
       credentials: "include",
@@ -160,7 +167,7 @@ function AppContent() {
         localStorage.removeItem("fantasy_referral_code");
       })
       .catch(() => {
-        // Keep code for a retry on next load if request fails.
+        // retry next load
       });
   }, [user]);
 
@@ -177,6 +184,7 @@ function AppContent() {
 
   if (!user) {
     const pathname = window.location.pathname || "/";
+
     return (
       <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen">
         <React.Suspense fallback={<RouteFallback />}>
