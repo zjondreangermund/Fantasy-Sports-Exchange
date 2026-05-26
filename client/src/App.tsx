@@ -24,6 +24,7 @@ const OnboardingPacksScene = React.lazy(() => import("./pages/onboarding-packs")
 const OnboardingTunnelPage = React.lazy(() => import("./pages/onboarding-tunnel"));
 const CardRevealPage = React.lazy(() => import("./pages/card-reveal"));
 const DashboardPage = React.lazy(() => import("./pages/dashboard"));
+const AnalyticsPage = React.lazy(() => import("./pages/analytics"));
 const CollectionPage = React.lazy(() => import("./pages/collection"));
 const MarketplacePage = React.lazy(() => import("./pages/marketplace"));
 const AuctionsPage = React.lazy(() => import("./pages/auctions"));
@@ -43,7 +44,6 @@ function RouteFallback() {
 }
 
 function AuthenticatedRouter() {
-  // ✅ Use /status (doesn't 404 when offers not created yet)
   const { data: onboarding, isLoading } = useQuery<{ completed: boolean }>({
     queryKey: ["/api/onboarding/status"],
   });
@@ -56,7 +56,6 @@ function AuthenticatedRouter() {
     );
   }
 
-  // ✅ If onboarding is not completed, force user into onboarding flow
   if (onboarding && !onboarding.completed) {
     return (
       <React.Suspense fallback={<RouteFallback />}>
@@ -76,6 +75,7 @@ function AuthenticatedRouter() {
       <Switch>
         <Route path="/" component={DashboardPage} />
         <Route path="/dashboard" component={DashboardPage} />
+        <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/onboarding" component={OnboardingPage} />
         <Route path="/onboarding-packs" component={OnboardingPacksScene} />
         <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
@@ -102,7 +102,6 @@ function AuthenticatedApp() {
     "--sidebar-width-icon": "3rem",
   };
 
-  // Fetch user data for team name
   const { data: user } = useQuery<{ managerTeamName?: string }>({
     queryKey: ["/api/user"],
   });
