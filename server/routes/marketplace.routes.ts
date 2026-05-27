@@ -131,7 +131,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
       } as any);
     });
 
-    return { ok: true as const, cardId };
+    return { ok: true as const, cardId: resolvedCardId };
   } catch (error: any) {
     const message = String(error?.message || "Failed to buy card");
     const status = message.includes("not found") ? 404 : 400;
@@ -198,13 +198,13 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
   });
 
   app.post("/api/marketplace/buy/:cardId", requireAuth, async (req: any, res) => {
-    const result = await processMarketplacePurchase(req.authUserId, req.params.cardId);
+    const result = await processMarketplacePurchase(req.authUserId, req.params.cardId, req.body?.serialId);
     if (!result.ok) return res.status(result.status).json({ message: result.message });
     return res.json({ success: true, cardId: result.cardId });
   });
 
   app.post("/api/marketplace/buy", requireAuth, async (req: any, res) => {
-    const result = await processMarketplacePurchase(req.authUserId, req.body?.cardId);
+    const result = await processMarketplacePurchase(req.authUserId, req.body?.cardId, req.body?.serialId);
     if (!result.ok) return res.status(result.status).json({ message: result.message });
     return res.json({ success: true, cardId: result.cardId });
   });

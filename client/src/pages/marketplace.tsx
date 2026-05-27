@@ -89,6 +89,9 @@ function resolveCardId(card: PlayerCardWithPlayer): number {
 function getOwner(card: PlayerCardWithPlayer) {
   return String((card as any).ownerUsername || (card as any).ownerName || "Fantasy Arena");
 }
+function resolveSerialId(card: PlayerCardWithPlayer): string {
+  return String((card as any).serialId || "").trim();
+}
 
 function RarityBadge({ rarity, serial, maxSupply }: { rarity: string; serial?: number; maxSupply?: number }) {
   const meta = rarityMeta[String(rarity || "common").toLowerCase()] || rarityMeta.common;
@@ -285,7 +288,10 @@ export default function MarketplacePage() {
 
   const buyMutation = useMutation({
     mutationFn: async (cardId: number) => {
-      const res = await apiRequest("POST", `/api/marketplace/buy/${cardId}`, {});
+      const card = listings?.find((item) => resolveCardId(item) === cardId);
+      const res = await apiRequest("POST", `/api/marketplace/buy/${cardId}`, {
+        serialId: card ? resolveSerialId(card) : undefined,
+      });
       return res.json();
     },
     onSuccess: () => {
@@ -377,13 +383,33 @@ export default function MarketplacePage() {
   };
 
   return (
-    <div className="relative min-h-full flex-1 overflow-auto bg-[#07111f] p-4 text-slate-100 sm:p-6 lg:p-8">
+    <div className="relative min-h-full flex-1 overflow-auto bg-[#050b17] p-4 text-slate-100 sm:p-6 lg:p-8">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(37,99,235,.18),transparent_34%),radial-gradient(circle_at_85%_5%,rgba(14,165,233,.10),transparent_30%),linear-gradient(180deg,#07111f_0%,#050812_100%)]" />
       <div className="relative mx-auto max-w-[1560px]">
+        <div className="mb-5 rounded-3xl border border-slate-800/80 bg-gradient-to-r from-[#0b1730] via-[#101f3b] to-[#0a1430] p-5 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
+          <div className="grid gap-5 md:grid-cols-[2fr_1fr_1fr_1fr]">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[.2em] text-cyan-300/80">Transfer Hub</p>
+              <h1 className="mt-1 text-3xl font-black tracking-tight text-white">Marketplace</h1>
+              <p className="mt-1 text-sm text-slate-300">Scouting-grade cards, instant checkout, live pricing confidence.</p>
+            </div>
+            <div className="rounded-2xl border border-slate-700/70 bg-slate-950/45 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Active Listings</p>
+              <p className="mt-1 text-2xl font-black text-white">{sortedListings.length}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-700/70 bg-slate-950/45 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Watchlist</p>
+              <p className="mt-1 text-2xl font-black text-rose-300">{watchlist.length}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-200/90">Balance</p>
+              <p className="mt-1 text-2xl font-black text-emerald-200">N${Number(wallet?.balance || 0).toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
         <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-white">Marketplace</h1>
-            <p className="mt-1 text-sm text-slate-400">Buy and sell rare player cards</p>
+            <p className="text-sm text-slate-400">Buy and sell rare player cards</p>
           </div>
           <div className="rounded-2xl border border-slate-800 bg-slate-950/75 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,.04)]">
             <p className="text-[10px] font-black uppercase tracking-[.18em] text-slate-500">Balance</p>
@@ -588,7 +614,7 @@ export default function MarketplacePage() {
           </DialogHeader>
           {detailCard ? (
             <div className="space-y-3">
-              <PlayerMarketRow card={detailCard} watched={watchlist.includes(detailCard.id)} onBuy={() => handleOpenBuyCard(detailCard)} onToggleWatchlist={() => toggleWatchlist(detailCard.id)} />
+              <PlayerMarketRow card={detailCard} watched={watchlist.includes(resolveCardId(detailCard))} onBuy={() => handleOpenBuyCard(detailCard)} onToggleWatchlist={() => toggleWatchlist(resolveCardId(detailCard))} />
               <div className="rounded-xl border border-slate-800 bg-black/35 p-4 text-sm text-slate-300">
                 <p>Listed: N${Number(marketSignal?.listedPrice || getCardPrice(detailCard)).toFixed(2)}</p>
                 <p>Last Sale: N${Number(marketSignal?.lastSale || 0).toFixed(2)} · Avg Sale: N${Number(marketSignal?.avgSale || 0).toFixed(2)}</p>
