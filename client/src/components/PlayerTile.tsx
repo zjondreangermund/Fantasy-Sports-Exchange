@@ -32,13 +32,6 @@ const rarityStyles: Record<string, { border: string; badge: string; rating: stri
     accent: "from-fuchsia-400/24 via-transparent to-transparent",
     icon: Gem,
   },
-  epic: {
-    border: "border-violet-300/45",
-    badge: "border-violet-400/40 bg-violet-500/10 text-violet-300",
-    rating: "border-violet-300/50 bg-violet-700/65 text-white",
-    accent: "from-violet-400/24 via-transparent to-transparent",
-    icon: Gem,
-  },
   legendary: {
     border: "border-amber-300/55",
     badge: "border-amber-300/45 bg-amber-300/10 text-amber-300",
@@ -88,7 +81,7 @@ function PlayerTileBase({ player, selected = false, onClick, showPrice = false, 
       type="button"
       onClick={onClick}
       className={[
-        "group relative flex h-[252px] w-[186px] flex-col overflow-hidden rounded-3xl border bg-[#08111f] p-3 text-left shadow-[0_18px_50px_rgba(0,0,0,.32)] transition-all duration-200 hover:-translate-y-1 hover:bg-[#0b1628]",
+        "group relative flex h-[218px] w-[156px] flex-col overflow-hidden rounded-[26px] border bg-[#08111f] p-2.5 text-left shadow-[0_14px_38px_rgba(0,0,0,.34)] transition-all duration-200 hover:-translate-y-1 hover:bg-[#0b1628] sm:h-[232px] sm:w-[168px]",
         style.border,
         selected ? "ring-2 ring-emerald-300 ring-offset-2 ring-offset-slate-950" : "",
         onClick ? "cursor-pointer" : "cursor-default",
@@ -97,72 +90,78 @@ function PlayerTileBase({ player, selected = false, onClick, showPrice = false, 
       data-testid={`player-tile-${player.id}`}
     >
       <div className={`absolute inset-0 bg-gradient-to-br ${style.accent}`} />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,.10),transparent_38%),linear-gradient(180deg,transparent_35%,rgba(0,0,0,.80)_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,.10),transparent_38%),linear-gradient(180deg,transparent_35%,rgba(0,0,0,.82)_100%)]" />
 
       <div className="relative z-20 flex items-start justify-between gap-2">
-        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border text-[22px] font-black shadow-[0_0_22px_rgba(37,99,235,.16)] ${style.rating}`}>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-2xl border text-[18px] font-black ${style.rating}`}>
           {Number(player.rating || points.last || 0).toFixed(0)}
         </div>
+
         <div className="flex min-w-0 flex-col items-end gap-1">
-          <div className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[8px] font-black uppercase tracking-[.14em] ${style.badge}`}>
-            <Icon className="h-3 w-3" />
+          <div className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[7px] font-black uppercase tracking-[.12em] ${style.badge}`}>
+            <Icon className="h-2.5 w-2.5" />
             {rarity}
           </div>
-          <p className="text-[10px] font-black uppercase tracking-wide text-white/80">{player.position || "N/A"}</p>
+          <p className="text-[9px] font-black uppercase tracking-wide text-white/80">{player.position || "N/A"}</p>
         </div>
       </div>
 
       <div className="relative z-10 mt-1 flex flex-1 items-end justify-center overflow-hidden rounded-2xl border border-white/5 bg-black/18">
-        <div className="absolute inset-x-5 bottom-0 h-9 rounded-full bg-black/55 blur-lg" />
+        <div className="absolute inset-x-4 bottom-0 h-7 rounded-full bg-black/55 blur-lg" />
+
         {showImage ? (
           <img
             src={image}
             alt={player.name}
             onError={() => setFailed(true)}
-            className="absolute bottom-0 left-1/2 h-[120%] w-[118%] -translate-x-1/2 object-contain object-bottom drop-shadow-[0_18px_14px_rgba(0,0,0,.58)] transition-transform duration-200 group-hover:scale-[1.04]"
+            className="absolute bottom-0 left-1/2 h-[115%] w-[115%] -translate-x-1/2 object-contain object-bottom drop-shadow-[0_14px_12px_rgba(0,0,0,.58)] transition-transform duration-200 group-hover:scale-[1.03]"
             loading="lazy"
             decoding="async"
           />
         ) : (
-          <div className="mb-7 flex h-24 w-24 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] text-3xl font-black text-white/35">
+          <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] text-2xl font-black text-white/35">
             {playerInitials(player.name)}
           </div>
         )}
       </div>
 
-      <div className="relative z-20 mt-3">
-        <div className="flex items-center gap-1.5">
-          <p className="min-w-0 flex-1 truncate text-[15px] font-black leading-none text-white">{player.name}</p>
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-blue-400" />
+      <div className="relative z-20 mt-2">
+        <div className="flex items-center gap-1">
+          <p className="min-w-0 flex-1 truncate text-[13px] font-black leading-none text-white">{player.name}</p>
+          <CheckCircle2 className="h-3 w-3 shrink-0 text-blue-400" />
         </div>
-        <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[.12em] text-slate-400">{player.team || player.club || "Free Agent"}</p>
 
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <div className="rounded-xl border border-white/8 bg-black/30 px-2 py-1.5">
-            <p className="text-[8px] font-bold uppercase text-slate-500">Points</p>
-            <p className="text-[15px] font-black text-white">{points.total}</p>
+        <p className="mt-1 truncate text-[9px] font-semibold uppercase tracking-[.1em] text-slate-400">
+          {player.team || player.club || "Free Agent"}
+        </p>
+
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <div className="rounded-xl border border-white/8 bg-black/30 px-2 py-1">
+            <p className="text-[7px] font-bold uppercase text-slate-500">Points</p>
+            <p className="text-[13px] font-black text-white">{points.total}</p>
           </div>
-          <div className="rounded-xl border border-white/8 bg-black/30 px-2 py-1.5">
-            <p className="flex items-center gap-1 text-[8px] font-bold uppercase text-slate-500">
-              <TrendIcon className="h-2.5 w-2.5" /> Last
+
+          <div className="rounded-xl border border-white/8 bg-black/30 px-2 py-1">
+            <p className="flex items-center gap-1 text-[7px] font-bold uppercase text-slate-500">
+              <TrendIcon className="h-2 w-2" /> Last
             </p>
-            <p className="text-[15px] font-black text-white">{points.last}</p>
+            <p className="text-[13px] font-black text-white">{points.last}</p>
           </div>
         </div>
 
-        <div className="mt-2 flex items-end gap-1.5">
+        <div className="mt-1.5 flex items-end gap-1">
           {lastFive.map((score, index) => (
-            <div key={`${score}-${index}`} className="h-5 flex-1 rounded-t bg-emerald-400/25">
+            <div key={`${score}-${index}`} className="h-4 flex-1 rounded-t bg-emerald-400/20">
               <div
                 className="mt-auto w-full rounded-t bg-gradient-to-t from-emerald-600 to-lime-300"
-                style={{ height: `${Math.max(18, Math.min(100, Number(score || 0) * 8))}%` }}
+                style={{ height: `${Math.max(14, Math.min(100, Number(score || 0) * 8))}%` }}
               />
             </div>
           ))}
         </div>
 
         {showPrice && Number(player.price || player.listedPrice || 0) > 0 ? (
-          <p className="mt-2 rounded-xl bg-emerald-400/12 px-2 py-1 text-center text-[11px] font-black text-emerald-300">
+          <p className="mt-1.5 rounded-xl bg-emerald-400/12 px-2 py-1 text-center text-[10px] font-black text-emerald-300">
             N${Number(player.price || player.listedPrice || 0).toFixed(2)}
           </p>
         ) : null}
