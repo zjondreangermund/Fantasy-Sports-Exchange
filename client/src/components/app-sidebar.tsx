@@ -23,7 +23,6 @@ import {
   Gem,
   LogOut,
   Shield,
-  Gavel,
   Bell,
   BarChart3,
   Target,
@@ -31,19 +30,27 @@ import {
   Radio,
 } from "lucide-react";
 
-const menuItems = [
-  { title: "Dashboard", href: "/", icon: LayoutDashboard },
-  { title: "My Team", href: "/collection", icon: Swords },
-  { title: "Live Lineup", href: "/live-lineup", icon: Radio },
-  { title: "Leagues", href: "/premier-league", icon: Activity },
-  { title: "Tournaments", href: "/competitions", icon: Trophy },
-  { title: "Marketplace", href: "/marketplace", icon: ShoppingCart },
-  { title: "Auctions", href: "/auctions", icon: Gavel },
-  { title: "Analytics", href: "/analytics", icon: BarChart3 },
-  { title: "Wallet", href: "/wallet", icon: Wallet },
-  { title: "Account", href: "/account", icon: Bell },
-  { title: "Card Lab", href: "/card-lab", icon: Gem },
+type NavItem = {
+  title: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  section: "Play" | "Club" | "Market" | "Account";
+};
+
+const menuItems: NavItem[] = [
+  { title: "Dashboard", href: "/", icon: LayoutDashboard, section: "Play" },
+  { title: "Live Lineup", href: "/live-lineup", icon: Radio, section: "Play" },
+  { title: "Tournaments", href: "/competitions", icon: Trophy, section: "Play" },
+  { title: "My Team", href: "/collection", icon: Swords, section: "Club" },
+  { title: "Leagues", href: "/premier-league", icon: Activity, section: "Club" },
+  { title: "Analytics", href: "/analytics", icon: BarChart3, section: "Club" },
+  { title: "Marketplace", href: "/marketplace", icon: ShoppingCart, section: "Market" },
+  { title: "Wallet", href: "/wallet", icon: Wallet, section: "Account" },
+  { title: "Account", href: "/account", icon: Bell, section: "Account" },
+  { title: "Card Lab", href: "/card-lab", icon: Gem, section: "Account" },
 ];
+
+const sectionOrder: NavItem["section"][] = ["Play", "Club", "Market", "Account"];
 
 function isActivePath(location: string, href: string) {
   if (href === "/") return location === "/" || location === "/dashboard";
@@ -58,8 +65,8 @@ export function AppSidebar() {
     queryKey: ["/api/admin/check"],
   });
 
-  const allItems = adminCheck?.isAdmin
-    ? [...menuItems, { title: "Admin", href: "/admin", icon: Shield }]
+  const allItems: NavItem[] = adminCheck?.isAdmin
+    ? [...menuItems, { title: "Admin", href: "/admin", icon: Shield, section: "Account" }]
     : menuItems;
 
   return (
@@ -80,34 +87,42 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="bg-[#050812] px-2 py-4">
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu className="space-y-1.5">
-              {allItems.map((item) => {
-                const active = isActivePath(location, item.href);
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={active}>
-                      <Link
-                        href={item.href}
-                        data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
-                        className={[
-                          "group flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm font-semibold transition-all",
-                          active
-                            ? "border-cyan-300/35 bg-cyan-400/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08),0_0_24px_rgba(34,211,238,.08)]"
-                            : "border-transparent text-slate-400 hover:border-slate-700/80 hover:bg-slate-900/75 hover:text-slate-100",
-                        ].join(" ")}
-                      >
-                        <item.icon className={active ? "h-4 w-4 text-cyan-300" : "h-4 w-4 text-slate-500 group-hover:text-cyan-200"} />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {sectionOrder.map((section) => {
+          const items = allItems.filter((item) => item.section === section);
+          if (!items.length) return null;
+
+          return (
+            <SidebarGroup key={section}>
+              <p className="px-3 pb-2 pt-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-600">{section}</p>
+              <SidebarGroupContent>
+                <SidebarMenu className="space-y-1.5">
+                  {items.map((item) => {
+                    const active = isActivePath(location, item.href);
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton asChild isActive={active}>
+                          <Link
+                            href={item.href}
+                            data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                            className={[
+                              "group flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm font-semibold transition-all",
+                              active
+                                ? "border-cyan-300/35 bg-cyan-400/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08),0_0_24px_rgba(34,211,238,.08)]"
+                                : "border-transparent text-slate-400 hover:border-slate-700/80 hover:bg-slate-900/75 hover:text-slate-100",
+                            ].join(" ")}
+                          >
+                            <item.icon className={active ? "h-4 w-4 text-cyan-300" : "h-4 w-4 text-slate-500 group-hover:text-cyan-200"} />
+                            <span>{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          );
+        })}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-slate-800/80 bg-[#050812] p-3">
