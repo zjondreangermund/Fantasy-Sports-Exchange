@@ -80,6 +80,12 @@ function getCardPrice(card: PlayerCardWithPlayer) {
   return Number((card as any).price || (card as any).listedPrice || 0);
 }
 
+function resolveCardId(card: PlayerCardWithPlayer): number {
+  const raw = (card as any).id ?? (card as any).cardId ?? (card as any).playerCardId;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
 function getOwner(card: PlayerCardWithPlayer) {
   return String((card as any).ownerUsername || (card as any).ownerName || "Fantasy Arena");
 }
@@ -136,7 +142,8 @@ function PlayerMarketRow({
   const showImage = Boolean(image) && !failed;
 
   return (
-    <div className="grid grid-cols-[minmax(260px,2.2fr)_1.1fr_.8fr_.55fr_.55fr_.8fr_1.15fr_1fr] items-center gap-4 border-b border-slate-800/80 bg-slate-950/40 px-4 py-3 transition hover:bg-slate-900/60 max-xl:grid-cols-[minmax(260px,2fr)_1fr_.6fr_.8fr_1fr] max-lg:grid-cols-1 max-lg:rounded-2xl max-lg:border max-lg:p-4">
+    <div className="group relative grid grid-cols-[minmax(260px,2.2fr)_1.1fr_.8fr_.55fr_.55fr_.8fr_1.15fr_1fr] items-center gap-4 border-b border-slate-800/80 bg-slate-950/50 px-4 py-3 transition hover:bg-slate-900/70 max-xl:grid-cols-[minmax(260px,2fr)_1fr_.6fr_.8fr_1fr] max-lg:grid-cols-1 max-lg:rounded-2xl max-lg:border max-lg:p-4">
+      <div className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100 bg-[linear-gradient(90deg,rgba(30,64,175,.08)_0%,rgba(14,165,233,.03)_45%,transparent_100%)]" />
       <button type="button" onClick={onDetails} className="flex min-w-0 items-center gap-4 text-left">
         <div className="relative h-20 w-24 shrink-0 overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,.26),transparent_48%)]" />
@@ -154,7 +161,7 @@ function PlayerMarketRow({
           )}
         </div>
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-blue-400/40 bg-blue-600/20 text-2xl font-black text-white shadow-[0_0_24px_rgba(37,99,235,.20)]">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-cyan-300/50 bg-gradient-to-b from-cyan-400/25 to-blue-600/25 text-2xl font-black text-white shadow-[0_0_28px_rgba(56,189,248,.26)]">
             {Number(fantasy.rating || 0).toFixed(0)}
           </div>
           <div className="min-w-0">
@@ -180,7 +187,7 @@ function PlayerMarketRow({
         <span className="truncate text-sm text-slate-300">{fantasy.team || fantasy.club || "Free Agent"}</span>
       </div>
 
-      <div className="text-sm font-black text-white max-lg:flex max-lg:justify-between">
+      <div className="text-sm font-black text-cyan-100 max-lg:flex max-lg:justify-between">
         <span className="hidden text-xs font-semibold uppercase text-slate-500 max-lg:block">POS</span>
         {fantasy.position || "N/A"}
       </div>
@@ -487,12 +494,12 @@ export default function MarketplacePage() {
                 <div>
                   {visibleBuyListings.map((card) => (
                     <PlayerMarketRow
-                      key={card.id}
+                  key={resolveCardId(card) || `${card.serialId || "no-serial"}-${card.playerId || "player"}-${getCardPrice(card)}`}
                       card={card}
-                      watched={watchlist.includes(card.id)}
+                      watched={watchlist.includes(resolveCardId(card))}
                       onBuy={() => handleOpenBuyCard(card)}
                       onDetails={() => setDetailCard(card)}
-                      onToggleWatchlist={() => toggleWatchlist(card.id)}
+                      onToggleWatchlist={() => toggleWatchlist(resolveCardId(card))}
                     />
                   ))}
                 </div>
@@ -515,7 +522,7 @@ export default function MarketplacePage() {
             <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/45">
               {visibleSellListings.length > 0 ? (
                 visibleSellListings.map((card) => (
-                  <PlayerMarketRow key={card.id} card={card} watched={watchlist.includes(card.id)} onDetails={() => setDetailCard(card)} />
+                  <PlayerMarketRow key={resolveCardId(card) || `${card.serialId || "no-serial"}-${card.playerId || "player"}-${getCardPrice(card)}`} card={card} watched={watchlist.includes(resolveCardId(card))} onDetails={() => setDetailCard(card)} />
                 ))
               ) : (
                 <Card className="m-4 border-slate-800 bg-slate-950/60 p-12 text-center">
@@ -559,7 +566,12 @@ export default function MarketplacePage() {
               onClick={() => {
                 if (!buyCard) return;
                 play("click");
-                buyMutation.mutate(buyCard.id);
+                const purchaseCardId = resolveCardId(buyCard);
+                if (!purchaseCardId) {
+                  toast({ title: "Error", description: "This listing has an invalid card id.", variant: "destructive" });
+                  return;
+                }
+                buyMutation.mutate(purchaseCardId);
               }}
               disabled={buyMutation.isPending || Number(wallet?.balance || 0) < Number(buyCard ? getCardPrice(buyCard) : 0)}
             >
