@@ -24,7 +24,7 @@ export default function CollectionPage() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [filter, setFilter] = useState<string>("all");
-  const [visibleCount, setVisibleCount] = useState(12);
+  const [visibleCount, setVisibleCount] = useState(16);
   const [editingLineup, setEditingLineup] = useState(false);
   const [selectedForLineup, setSelectedForLineup] = useState<Set<number>>(new Set());
   const [listCard, setListCard] = useState<PlayerCardWithPlayer | null>(null);
@@ -64,8 +64,9 @@ export default function CollectionPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/lineup"] });
       setEditingLineup(false);
-      toast({ title: "Lineup saved!" });
+      toast({ title: "Lineup saved" });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -82,7 +83,7 @@ export default function CollectionPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
       setListCard(null);
       setListPrice("");
-      toast({ title: "Card listed for sale!" });
+      toast({ title: "Card listed for sale" });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to list card", variant: "destructive" });
@@ -115,8 +116,7 @@ export default function CollectionPage() {
       return;
     }
     setListCard(card);
-    const basePrice = BASE_PRICES[rarity] || 1;
-    setListPrice(basePrice.toString());
+    setListPrice(String(BASE_PRICES[rarity] || 1));
   };
 
   const handleConfirmList = () => {
@@ -131,42 +131,20 @@ export default function CollectionPage() {
     }
 
     if (basePrice && price < basePrice) {
-      toast({
-        title: "Price too low",
-        description: `Minimum price for ${rarity} cards is N$${basePrice}`,
-        variant: "destructive",
-      });
+      toast({ title: "Price too low", description: `Minimum price for ${rarity} cards is N$${basePrice}`, variant: "destructive" });
       return;
     }
 
     listForSaleMutation.mutate({ cardId: listCard.id, price });
   };
 
-  const filteredCards = cards?.filter((c) => {
-    if (filter === "all") return true;
-    return String(c.rarity || "").toLowerCase() === filter;
-  });
+  const filteredCards = cards?.filter((c) => filter === "all" || String(c.rarity || "").toLowerCase() === filter);
 
   useEffect(() => {
-    setVisibleCount(12);
+    setVisibleCount(16);
   }, [filter, isMobile, cards?.length]);
 
   const visibleCards = isMobile ? (filteredCards || []).slice(0, visibleCount) : (filteredCards || []);
-
-  useEffect(() => {
-    if (!visibleCards.length) return;
-    const snapshot = visibleCards.slice(0, 5).map((card) => {
-      const fantasy = toFantasyCardData(card, { imageWidth: 1024 });
-      return {
-        id: card.id,
-        name: card.player?.name,
-        rarity: card.rarity,
-        image: fantasy.image,
-        candidates: fantasy.imageCandidates?.slice(0, 3),
-      };
-    });
-    console.info("[Collection] card render debug", snapshot);
-  }, [visibleCards]);
 
   const startEditLineup = () => {
     setEditingLineup(true);
@@ -191,57 +169,56 @@ export default function CollectionPage() {
   ];
 
   return (
-    <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <div className="flex-1 overflow-auto p-3 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-black/20 p-4 backdrop-blur-xl">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">My Collection</h1>
-            <p className="text-muted-foreground text-sm">{cards?.length || 0} cards in your collection</p>
+            <h1 className="text-2xl font-black text-white">My Team</h1>
+            <p className="text-sm text-slate-400">{cards?.length || 0} cards in your collection</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={startEditLineup}>Edit Lineup</Button>
             {editingLineup ? (
               <Button size="sm" onClick={() => saveLineupMutation.mutate(Array.from(selectedForLineup))} disabled={saveLineupMutation.isPending}>
-                Save Lineup ({selectedForLineup.size}/5)
+                Save ({selectedForLineup.size}/5)
               </Button>
             ) : null}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 mb-6">
-          <Filter className="w-4 h-4 text-muted-foreground" />
+        <div className="mb-4 flex items-center gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-black/20 p-2 backdrop-blur-xl">
+          <Filter className="h-4 w-4 shrink-0 text-slate-400" />
           {rarityFilters.map((f) => (
-            <Button key={f.value} variant={filter === f.value ? "default" : "outline"} size="sm" onClick={() => setFilter(f.value)} data-testid={`button-filter-${f.value}`}>
+            <Button key={f.value} variant={filter === f.value ? "default" : "outline"} size="sm" onClick={() => setFilter(f.value)} data-testid={`button-filter-${f.value}`} className="shrink-0">
               {f.label}
             </Button>
           ))}
         </div>
 
         {isLoading ? (
-          <div className="flex flex-wrap gap-6">
-            {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="w-48 h-72 rounded-md" />)}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-[218px] rounded-[26px] sm:h-[232px]" />)}
           </div>
         ) : filteredCards && filteredCards.length > 0 ? (
-          <div className="flex flex-wrap gap-6 md:gap-8 justify-center">
+          <div className="grid grid-cols-2 justify-items-center gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {visibleCards.map((card) => {
-              const fantasyCard = toFantasyCardData(card, { imageWidth: 1024 });
+              const fantasyCard = toFantasyCardData(card, { imageWidth: 640 });
               const isSelected = selectedForLineup.has(card.id);
               return (
-                <div key={card.id} className="flex min-h-[430px] flex-col items-center gap-3">
-                  <button type="button" onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined} className={editingLineup ? `rounded-[32px] ${isSelected ? "ring-2 ring-emerald-400" : ""}` : ""}>
-                    <CollectionPlayerCard player={fantasyCard} className={isMobile ? "!w-[190px]" : "!w-[250px]"} />
-                  </button>
-                  <div className="z-30 flex gap-2">
+                <div key={card.id} className="flex flex-col items-center gap-2">
+                  <div className={editingLineup ? `rounded-[28px] ${isSelected ? "ring-2 ring-emerald-400" : ""}` : ""}>
+                    <CollectionPlayerCard player={fantasyCard} selected={isSelected} onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined} />
+                  </div>
+                  <div className="z-30 flex min-h-8 gap-2">
                     {card.forSale ? (
-                      <Button size="sm" variant="destructive" onClick={() => cancelListingMutation.mutate(card.id)} disabled={cancelListingMutation.isPending} className="text-xs">
+                      <Button size="sm" variant="destructive" onClick={() => cancelListingMutation.mutate(card.id)} disabled={cancelListingMutation.isPending} className="h-8 text-xs">
                         Cancel N${card.price}
                       </Button>
                     ) : String(card.rarity || "").toLowerCase() === "common" ? (
-                      <Button size="sm" variant="outline" disabled className="text-xs">Tournament Only</Button>
+                      <Button size="sm" variant="outline" disabled className="h-8 text-xs">Tournament Only</Button>
                     ) : (
-                      <Button size="sm" onClick={() => handleListCard(card)} className="bg-gradient-to-r from-emerald-500 to-lime-500 font-black text-black shadow-lg hover:scale-105">
-                        <DollarSign className="w-3 h-3 mr-1" />
-                        Sell Card
+                      <Button size="sm" onClick={() => handleListCard(card)} className="h-8 bg-gradient-to-r from-emerald-500 to-lime-500 text-xs font-black text-black">
+                        <DollarSign className="mr-1 h-3 w-3" /> Sell
                       </Button>
                     )}
                   </div>
@@ -249,8 +226,8 @@ export default function CollectionPage() {
               );
             })}
             {isMobile && filteredCards.length > visibleCount ? (
-              <div className="w-full flex justify-center mt-2">
-                <Button variant="outline" onClick={() => setVisibleCount((prev) => prev + 12)}>Load More Cards</Button>
+              <div className="col-span-2 mt-2 flex w-full justify-center sm:col-span-3">
+                <Button variant="outline" onClick={() => setVisibleCount((prev) => prev + 16)}>Load More</Button>
               </div>
             ) : null}
           </div>
@@ -267,20 +244,14 @@ export default function CollectionPage() {
               {listCard && BASE_PRICES[String(listCard.rarity || "").toLowerCase()] ? `Minimum price for ${listCard.rarity} cards: N$${BASE_PRICES[String(listCard.rarity || "").toLowerCase()]}` : "Set your listing price"}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
+          <div className="space-y-4 py-4">
             <div>
               <p className="font-semibold">{listCard?.player?.name}</p>
               <p className="text-sm text-muted-foreground capitalize">{listCard?.rarity} • {listCard?.player?.position}</p>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Price (N$)</label>
-              <Input
-                type="number"
-                value={listPrice}
-                onChange={(e) => setListPrice(e.target.value)}
-                placeholder={listCard ? `Min: ${BASE_PRICES[String(listCard.rarity || "").toLowerCase()] || 1}` : "Enter price"}
-                min={listCard ? BASE_PRICES[String(listCard.rarity || "").toLowerCase()] || 1 : 1}
-              />
+              <Input type="number" value={listPrice} onChange={(e) => setListPrice(e.target.value)} placeholder={listCard ? `Min: ${BASE_PRICES[String(listCard.rarity || "").toLowerCase()] || 1}` : "Enter price"} min={listCard ? BASE_PRICES[String(listCard.rarity || "").toLowerCase()] || 1 : 1} />
             </div>
           </div>
           <DialogFooter>
