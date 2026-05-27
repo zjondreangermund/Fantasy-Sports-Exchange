@@ -34,15 +34,6 @@ type CompetitionEntry = {
   rank?: number | null;
 };
 
-type LivePointEvent = {
-  id: string;
-  gameId: number;
-  team: string;
-  delta: number;
-  reason: string;
-  createdAt: string;
-};
-
 type RewardItem = {
   id?: number | string;
   claimed?: boolean;
@@ -112,13 +103,11 @@ function buildSyntheticNotifications({
   competitions,
   entries,
   rewards,
-  liveEvents,
   retention,
 }: {
   competitions: Competition[];
   entries: CompetitionEntry[];
   rewards: RewardItem[];
-  liveEvents: LivePointEvent[];
   retention?: RetentionSummary;
 }): SyntheticNotification[] {
   const items: SyntheticNotification[] = [];
@@ -149,7 +138,7 @@ function buildSyntheticNotifications({
       items.push({
         key: `competition-active-${competition.id}`,
         title: "Tournament live",
-        message: `${competition.name} is active. Watch live point swings now.`,
+        message: `${competition.name} is active. Check your Live Lineup for point changes.`,
         priority: "high",
       });
     }
@@ -182,17 +171,6 @@ function buildSyntheticNotifications({
         priority: "high",
       });
     });
-
-  liveEvents.slice(0, 8).forEach((event) => {
-    const delta = Number(event.delta || 0);
-    if (delta === 0) return;
-    items.push({
-      key: `live-event-${event.id}`,
-      title: delta > 0 ? "Live points gained" : "Live points lost",
-      message: `${event.team}: ${delta > 0 ? `+${delta}` : delta} for ${event.reason}.`,
-      priority: Math.abs(delta) >= 5 ? "high" : "normal",
-    });
-  });
 
   retention?.watchlist?.alerts?.slice(0, 5).forEach((alert) => {
     items.push({
@@ -280,17 +258,6 @@ export default function FloatingEventNotifications() {
     refetchInterval: 30000,
   });
 
-  const { data: liveEventsRaw } = useQuery<LivePointEvent[]>({
-    queryKey: ["/api/live/point-feed?limit=12"],
-    queryFn: async () => {
-      const res = await fetch("/api/live/point-feed?limit=12", { credentials: "include" });
-      if (!res.ok) return [];
-      const payload = await res.json();
-      return normalizeList<LivePointEvent>(payload);
-    },
-    refetchInterval: 7000,
-  });
-
   const { data: retention } = useQuery<RetentionSummary>({
     queryKey: ["/api/retention/summary"],
     queryFn: async () => {
@@ -328,7 +295,6 @@ export default function FloatingEventNotifications() {
       competitions: competitionsRaw || [],
       entries: entriesRaw || [],
       rewards: rewardsRaw || [],
-      liveEvents: liveEventsRaw || [],
       retention,
     });
 
@@ -343,7 +309,7 @@ export default function FloatingEventNotifications() {
 
     seenSyntheticRef.current = seen;
     writeSeenKeys(seen);
-  }, [competitionsRaw, entriesRaw, rewardsRaw, liveEventsRaw, retention, toast]);
+  }, [competitionsRaw, entriesRaw, rewardsRaw, retention, toast]);
 
   return null;
 }
