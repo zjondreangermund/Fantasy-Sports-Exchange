@@ -2156,34 +2156,42 @@ app.get("/api/players/:id/photo", async (req, res) => {
 
       if (hasTrustedDestination) {
         const { db } = await import("./db.js");
-        const { wallets, transactions } = await import("../shared/schema.js");
-        const { eq, sql } = await import("drizzle-orm");
+        const { wallets, transactions, withdrawalRequests } = await import("../shared/schema.js");
+        const { and, eq, sql } = await import("drizzle-orm");
 
-        const withdrawal = await storage.createWithdrawalRequest({
-          userId,
-          amount: gross,
-          fee,
-          netAmount: net,
-          paymentMethod: method,
-          bankName,
-          accountHolder,
-          accountNumber,
-          iban,
-          swiftCode,
-          ewalletProvider,
-          ewalletId,
-          destinationKey,
-          destinationVerified: true,
-          status: "paid",
-          reviewedAt: new Date(),
-          adminNotes: "Auto-approved trusted payout destination",
-        } as any);
-
-        await db.transaction(async (tx) => {
-          await tx
+        const withdrawal = await db.transaction(async (tx) => {
+          const [debitedWallet] = await tx
             .update(wallets)
-            .set({ balance: sql`${wallets.balance} - ${amount}` } as any)
-            .where(eq(wallets.userId, userId));
+            .set({ balance: sql`${wallets.balance} - ${gross}` } as any)
+            .where(and(eq(wallets.userId, userId), sql`${wallets.balance} >= ${gross}`))
+            .returning();
+
+          if (!debitedWallet) {
+            throw new Error("Insufficient balance");
+          }
+
+          const [createdWithdrawal] = await tx
+            .insert(withdrawalRequests)
+            .values({
+              userId,
+              amount: gross,
+              fee,
+              netAmount: net,
+              paymentMethod: method,
+              bankName,
+              accountHolder,
+              accountNumber,
+              iban,
+              swiftCode,
+              ewalletProvider,
+              ewalletId,
+              destinationKey,
+              destinationVerified: true,
+              status: "paid",
+              reviewedAt: new Date(),
+              adminNotes: "Auto-approved trusted payout destination",
+            } as any)
+            .returning();
 
           await tx.insert(transactions).values({
             userId,
@@ -2196,6 +2204,8 @@ app.get("/api/players/:id/photo", async (req, res) => {
             status: "completed",
             description: `Instant withdrawal auto-approved: ${net} (fee: ${fee})`,
           } as any);
+
+          return createdWithdrawal;
         });
 
         await sendEmailNotification(
@@ -2216,7 +2226,10 @@ app.get("/api/players/:id/photo", async (req, res) => {
       }
 
       // Lock funds immediately until approved/rejected
-      await storage.lockFunds(userId, gross);
+      const lockedWallet = await storage.lockFunds(userId, gross);
+      if (!lockedWallet) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
 
       const releaseAfter = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const verificationToken = randomUUID().replace(/-/g, "");
