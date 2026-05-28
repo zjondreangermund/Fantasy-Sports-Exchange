@@ -1,6 +1,6 @@
 import type { PlayerCardData } from "./types";
 
-export type VisualRarity = "common" | "rare" | "unique" | "legendary";
+export type VisualRarity = "common" | "rare" | "unique" | "epic" | "legendary";
 
 export type CardVisualTokenSet = {
   rarityLabel: string;
@@ -24,8 +24,9 @@ export function normalizeVisualRarity(
     case "rare":
       return "rare";
     case "unique":
-    case "epic":
       return "unique";
+    case "epic":
+      return "epic";
     case "legendary":
       return "legendary";
     default:
@@ -80,6 +81,21 @@ export const cardVisualTokens: Record<VisualRarity, CardVisualTokenSet> = {
     serialBadge: "border-fuchsia-200/18 bg-slate-950/35 text-fuchsia-50/85",
     leagueBadge: "border-fuchsia-200/18 bg-fuchsia-300/8 text-fuchsia-50/85",
     statChip: "border-fuchsia-200/18 bg-fuchsia-300/8 text-fuchsia-50/85",
+  },
+  epic: {
+    rarityLabel: "Epic",
+    frameOuter: "from-violet-300 via-purple-500 to-indigo-800",
+    frameInner: "from-violet-100/45 via-purple-300/25 to-indigo-500/25",
+    shell: "from-slate-950 via-indigo-950 to-purple-950",
+    innerGlow: "shadow-[inset_0_1px_0_rgba(221,214,254,0.24)]",
+    bevel: "shadow-[inset_0_-14px_28px_rgba(12,10,34,0.50)]",
+    pattern:
+      "bg-[radial-gradient(circle_at_20%_10%,rgba(196,181,253,0.16),transparent_40%),radial-gradient(circle_at_80%_90%,rgba(129,140,248,0.14),transparent_42%),repeating-linear-gradient(120deg,rgba(167,139,250,0.08)_0_8px,transparent_8px_16px)]",
+    glow: "shadow-[0_0_38px_rgba(124,58,237,0.26)]",
+    badge: "border-violet-200/28 bg-violet-300/12 text-violet-50",
+    serialBadge: "border-violet-200/18 bg-slate-950/38 text-violet-50/88",
+    leagueBadge: "border-violet-200/18 bg-violet-300/8 text-violet-50/88",
+    statChip: "border-violet-200/18 bg-violet-300/8 text-violet-50/88",
   },
 
   legendary: {
