@@ -50,6 +50,17 @@ import {
 } from "./services/walletLedger.js";
 import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
 import {
+  creditWalletWithLedger,
+  createPendingWithdrawalWithHold,
+  createTrustedWithdrawal,
+  enterCompetitionWithFee,
+  applyMarketplaceTradeLedger,
+  getWalletIntegrityReport,
+  processWalletDeposit,
+  repairMissingWalletsFromLedger,
+} from "./services/walletLedger.js";
+import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
+import {
   getCardStatus,
   getDepositBreakdown,
   getWithdrawalBreakdown,
@@ -2121,6 +2132,13 @@ app.get("/api/players/:id/photo", async (req, res) => {
         newBalance: updatedWallet.balance || 0,
         ip: getClientIp(req),
       });
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
+        targetUserId: userId,
+        amount,
+        newBalance: updatedWallet.balance || 0,
+        ip: getClientIp(req),
+      });
       
       res.json({ 
         success: true, 
@@ -2704,70 +2722,92 @@ app.get("/api/players/:id/photo", async (req, res) => {
     try {
       const userId = req.authUserId;
       const auctionId = parseInt(req.params.id, 10);
-      const { amount } = req.body;
-      
-      if (typeof amount !== "number" || amount <= 0) {
-        return res.status(400).json({ message: "Valid positive amount required" });
+      const bidAmount = toMoney(req.body?.amount);
+
+      if (!Number.isInteger(auctionId) || auctionId <= 0 || bidAmount <= 0) {
+        return res.status(400).json({ message: "Valid auction and positive bid amount required" });
       }
-      
+
       const { db } = await import("./db.js");
-      const { auctions, auctionBids, wallets } = await import("../shared/schema.js");
-      const { eq, desc } = await import("drizzle-orm");
-      
-      // Get auction
-      const auction = await getAuction(auctionId);
-      if (!auction) {
-        return res.status(404).json({ message: "Auction not found" });
-      }
-      
-      // Check auction status
-      if (auction.status !== "live") {
-        return res.status(400).json({ message: "Auction is not active" });
-      }
-      
-      // Check if expired
-      if (auction.endsAt && new Date(auction.endsAt) < new Date()) {
-        return res.status(400).json({ message: "Auction has ended" });
-      }
-      
-      // Can't bid on own auction
-      if (auction.sellerUserId === userId) {
-        return res.status(400).json({ message: "Cannot bid on your own auction" });
-      }
-      
-      // Get current highest bid
-      const bids = await getAuctionBids(auctionId);
-      const currentBid = bids[0];
-      const currentAmount = currentBid?.amount || auction.startPrice || 0;
-      
-      // Check bid amount
-      if (amount < currentAmount + (auction.minIncrement || 1)) {
-        return res.status(400).json({ 
-          message: `Bid must be at least ${currentAmount + (auction.minIncrement || 1)}` 
-        });
-      }
-      
-      // Check balance
-      const wallet = await storage.getWallet(userId);
-      if (!wallet || (wallet.balance || 0) < amount) {
-        return res.status(400).json({ message: "Insufficient balance" });
-      }
-      
-      // Place hold on bidder's wallet
-      await storage.lockFunds(userId, amount);
-      
-      // Release previous bidder's hold (if exists)
-      if (currentBid && currentBid.bidderUserId !== userId) {
-        await storage.unlockFunds(currentBid.bidderUserId, currentBid.amount);
-      }
-      
-      // Create bid
-      const [bid] = await db.insert(auctionBids).values({
-        auctionId,
-        bidderUserId: userId,
-        amount,
-      } as any).returning();
-      
+      const { auctions, auctionBids, wallets, auditLogs } = await import("../shared/schema.js");
+      const { and, eq, desc, sql } = await import("drizzle-orm");
+
+      let bid: any = null;
+      await db.transaction(async (tx) => {
+        const [auction] = await tx.select().from(auctions).where(eq(auctions.id, auctionId)).for("update");
+        if (!auction) throw new Error("Auction not found");
+        if (auction.status !== "live") throw new Error("Auction is not active");
+        if (auction.endsAt && new Date(auction.endsAt) < new Date()) throw new Error("Auction has ended");
+        if (String(auction.sellerUserId || "") === String(userId)) throw new Error("Cannot bid on your own auction");
+
+        const [currentBid] = await tx
+          .select()
+          .from(auctionBids)
+          .where(eq(auctionBids.auctionId, auctionId))
+          .orderBy(desc(auctionBids.amount))
+          .limit(1);
+
+        const currentAmount = toMoney(currentBid?.amount || auction.startPrice || 0);
+        const minIncrement = toMoney(auction.minIncrement || 1);
+        if (bidAmount < toMoney(currentAmount + minIncrement)) {
+          throw new Error(`Bid must be at least ${toMoney(currentAmount + minIncrement)}`);
+        }
+
+        if (currentBid && String(currentBid.bidderUserId || "") === String(userId)) {
+          const delta = toMoney(bidAmount - toMoney(currentBid.amount || 0));
+          if (delta <= 0) throw new Error("Bid must increase your current high bid");
+
+          const [lockedWallet] = await tx
+            .update(wallets)
+            .set({
+              balance: sql`${wallets.balance} - ${delta}`,
+              lockedBalance: sql`${wallets.lockedBalance} + ${delta}`,
+            } as any)
+            .where(and(eq(wallets.userId, userId), sql`${wallets.balance} >= ${delta}`))
+            .returning();
+          if (!lockedWallet) throw new Error("Insufficient balance");
+
+          [bid] = await tx
+            .update(auctionBids)
+            .set({ amount: bidAmount } as any)
+            .where(eq(auctionBids.id, currentBid.id))
+            .returning();
+        } else {
+          const [lockedWallet] = await tx
+            .update(wallets)
+            .set({
+              balance: sql`${wallets.balance} - ${bidAmount}`,
+              lockedBalance: sql`${wallets.lockedBalance} + ${bidAmount}`,
+            } as any)
+            .where(and(eq(wallets.userId, userId), sql`${wallets.balance} >= ${bidAmount}`))
+            .returning();
+          if (!lockedWallet) throw new Error("Insufficient balance");
+
+          if (currentBid) {
+            const previousAmount = toMoney(currentBid.amount || 0);
+            await tx
+              .update(wallets)
+              .set({
+                balance: sql`${wallets.balance} + ${previousAmount}`,
+                lockedBalance: sql`${wallets.lockedBalance} - ${previousAmount}`,
+              } as any)
+              .where(and(eq(wallets.userId, currentBid.bidderUserId), sql`${wallets.lockedBalance} >= ${previousAmount}`));
+          }
+
+          [bid] = await tx.insert(auctionBids).values({
+            auctionId,
+            bidderUserId: userId,
+            amount: bidAmount,
+          } as any).returning();
+        }
+
+        await tx.insert(auditLogs).values({
+          userId,
+          action: "auction.bid.placed",
+          meta: { auctionId, bidId: bid?.id, amount: bidAmount, previousBidderId: currentBid?.bidderUserId || null },
+        } as any);
+      });
+
       res.json({
         success: true,
         message: "Bid placed successfully",
@@ -2775,7 +2815,9 @@ app.get("/api/players/:id/photo", async (req, res) => {
       });
     } catch (error: any) {
       console.error("Failed to place bid:", error);
-      res.status(500).json({ message: error.message || "Failed to place bid" });
+      const message = String(error?.message || "Failed to place bid");
+      const status = message.includes("not found") ? 404 : 400;
+      res.status(status).json({ message });
     }
   });
   
@@ -2784,83 +2826,83 @@ app.get("/api/players/:id/photo", async (req, res) => {
     try {
       const userId = req.authUserId;
       const auctionId = parseInt(req.params.id, 10);
-      
-      const auction = await getAuction(auctionId);
-      if (!auction) {
-        return res.status(404).json({ message: "Auction not found" });
+      if (!Number.isInteger(auctionId) || auctionId <= 0) {
+        return res.status(400).json({ message: "Valid auction required" });
       }
-      
-      if (!auction.buyNowPrice) {
-        return res.status(400).json({ message: "This auction does not have a buy now price" });
-      }
-      
-      if (auction.status !== "live") {
-        return res.status(400).json({ message: "Auction is not active" });
-      }
-      
-      if (auction.sellerUserId === userId) {
-        return res.status(400).json({ message: "Cannot buy your own auction" });
-      }
-      
-      // Check balance
-      const wallet = await storage.getWallet(userId);
-      if (!wallet || (wallet.balance || 0) < auction.buyNowPrice) {
-        return res.status(400).json({ message: "Insufficient balance" });
-      }
-      
-      // Settle instantly
+
       const { db } = await import("./db.js");
-      const { auctions, playerCards, transactions } = await import("../shared/schema.js");
-      const { eq, sql } = await import("drizzle-orm");
-      
+      const { auctions, auctionBids, playerCards, wallets, auditLogs } = await import("../shared/schema.js");
+      const { and, desc, eq, sql } = await import("drizzle-orm");
+
+      let purchasedAuction: any = null;
+      let tradeLedger: any = null;
       await db.transaction(async (tx) => {
-        // Charge buyer
-        await tx
-          .update((await import("../shared/schema.js")).wallets)
-          .set({ balance: sql`${(await import("../shared/schema.js")).wallets.balance} - ${auction.buyNowPrice}` } as any)
-          .where(eq((await import("../shared/schema.js")).wallets.userId, userId));
-        
-        // Credit seller
-        await tx
-          .update((await import("../shared/schema.js")).wallets)
-          .set({ balance: sql`${(await import("../shared/schema.js")).wallets.balance} + ${auction.buyNowPrice}` } as any)
-          .where(eq((await import("../shared/schema.js")).wallets.userId, auction.sellerUserId));
-        
-        // Transfer card
-        await tx
+        const [auction] = await tx.select().from(auctions).where(eq(auctions.id, auctionId)).for("update");
+        if (!auction) throw new Error("Auction not found");
+        if (!auction.buyNowPrice) throw new Error("This auction does not have a buy now price");
+        if (auction.status !== "live") throw new Error("Auction is not active");
+        if (auction.endsAt && new Date(auction.endsAt) < new Date()) throw new Error("Auction has ended");
+        if (String(auction.sellerUserId || "") === String(userId)) throw new Error("Cannot buy your own auction");
+
+        const bids = await tx
+          .select()
+          .from(auctionBids)
+          .where(eq(auctionBids.auctionId, auctionId))
+          .orderBy(desc(auctionBids.amount));
+
+        for (const existingBid of bids as any[]) {
+          const lockedAmount = toMoney(existingBid.amount || 0);
+          if (lockedAmount <= 0) continue;
+          await tx
+            .update(wallets)
+            .set({
+              balance: sql`${wallets.balance} + ${lockedAmount}`,
+              lockedBalance: sql`${wallets.lockedBalance} - ${lockedAmount}`,
+            } as any)
+            .where(and(eq(wallets.userId, existingBid.bidderUserId), sql`${wallets.lockedBalance} >= ${lockedAmount}`));
+        }
+
+        const price = toMoney(auction.buyNowPrice || 0);
+        tradeLedger = await applyMarketplaceTradeLedger(tx, {
+          buyerId: userId,
+          sellerId: String(auction.sellerUserId || ""),
+          cardId: Number(auction.cardId),
+          price,
+          feeRate: 0,
+        });
+
+        const [transferredCard] = await tx
           .update(playerCards)
-          .set({ ownerId: userId } as any)
-          .where(eq(playerCards.id, auction.cardId));
-        
-        // Mark auction as settled
-        await tx
+          .set({ ownerId: userId, forSale: false, price: 0 } as any)
+          .where(and(eq(playerCards.id, auction.cardId), eq(playerCards.ownerId, auction.sellerUserId)))
+          .returning();
+        if (!transferredCard) throw new Error("Auction card was no longer available for transfer");
+
+        const [settledAuction] = await tx
           .update(auctions)
           .set({ status: "settled" } as any)
-          .where(eq(auctions.id, auctionId));
-        
-        // Create transactions
-        await tx.insert(transactions).values({
+          .where(and(eq(auctions.id, auctionId), eq(auctions.status, "live")))
+          .returning();
+        if (!settledAuction) throw new Error("Auction was already settled");
+        purchasedAuction = settledAuction;
+
+        await tx.insert(auditLogs).values({
           userId,
-          type: "auction_settlement",
-          amount: -(auction.buyNowPrice || 0),
-          description: `Auction buy now: Card #${auction.cardId}`,
-        } as any);
-        
-        await tx.insert(transactions).values({
-          userId: auction.sellerUserId,
-          type: "auction_settlement",
-          amount: auction.buyNowPrice || 0,
-          description: `Auction sale: Card #${auction.cardId}`,
+          action: "auction.buy_now.completed",
+          meta: { auctionId, cardId: auction.cardId, price, refundedBidHolds: bids.length, fee: tradeLedger?.fee || 0 },
         } as any);
       });
-      
+
       res.json({
         success: true,
         message: "Auction purchased successfully",
+        auction: purchasedAuction,
       });
     } catch (error: any) {
       console.error("Failed to buy now:", error);
-      res.status(500).json({ message: "Failed to buy now" });
+      const message = String(error?.message || "Failed to buy now");
+      const status = message.includes("not found") ? 404 : 400;
+      res.status(status).json({ message });
     }
   });
   
