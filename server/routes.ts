@@ -5405,6 +5405,118 @@ app.get("/api/players/:id/photo", async (req, res) => {
     }
   });
 
+  app.get("/api/admin/cards/integrity", requireAuth, isAdmin, async (_req: any, res) => {
+    try {
+      const { db } = await import("./db.js");
+      const { playerCards, players, competitionEntries, competitions, RARITY_SUPPLY } = await import("../shared/schema.js");
+
+      const [cardRows, playerRows, entryRows, competitionRows] = await Promise.all([
+        db.select().from(playerCards),
+        db.select({ id: players.id, name: players.name }).from(players),
+        db.select().from(competitionEntries),
+        db.select().from(competitions),
+      ]);
+
+      const playerIds = new Set((playerRows as any[]).map((player: any) => Number(player.id)));
+      const competitionStatusById = new Map((competitionRows as any[]).map((competition: any) => [Number(competition.id), String(competition.status || "")]));
+      const activeLineupCardIds = new Set<number>();
+      for (const entry of entryRows as any[]) {
+        const status = competitionStatusById.get(Number(entry.competitionId));
+        if (status !== "open" && status !== "active") continue;
+        if (!Array.isArray(entry.lineupCardIds)) continue;
+        for (const id of entry.lineupCardIds) {
+          const cardId = Number(id);
+          if (Number.isFinite(cardId) && cardId > 0) activeLineupCardIds.add(cardId);
+        }
+      }
+
+      const serialKeyCounts = new Map<string, number>();
+      const supplyCounts = new Map<string, number>();
+      for (const card of cardRows as any[]) {
+        const playerId = Number(card.playerId || 0);
+        const rarity = String(card.rarity || "common").toLowerCase();
+        const serialNumber = Number(card.serialNumber || 0);
+        if (playerId > 0 && rarity && serialNumber > 0) {
+          const serialKey = `${playerId}:${rarity}:${serialNumber}`;
+          serialKeyCounts.set(serialKey, (serialKeyCounts.get(serialKey) || 0) + 1);
+        }
+        if (playerId > 0 && rarity) {
+          const supplyKey = `${playerId}:${rarity}`;
+          supplyCounts.set(supplyKey, (supplyCounts.get(supplyKey) || 0) + 1);
+        }
+      }
+
+      const rows = (cardRows as any[]).map((card: any) => {
+        const cardId = Number(card.id || 0);
+        const playerId = Number(card.playerId || 0);
+        const rarity = String(card.rarity || "common").toLowerCase();
+        const serialNumber = Number(card.serialNumber || 0);
+        const supplyCap = Number((RARITY_SUPPLY as any)[rarity] || 0);
+        const supplyCount = Number(supplyCounts.get(`${playerId}:${rarity}`) || 0);
+        const serialKey = `${playerId}:${rarity}:${serialNumber}`;
+        const duplicateSerial = serialNumber > 0 && Number(serialKeyCounts.get(serialKey) || 0) > 1;
+        const flags = [
+          !playerIds.has(playerId) ? "missing_player" : null,
+          !card.ownerId ? "missing_owner" : null,
+          card.forSale && !card.ownerId ? "listed_without_owner" : null,
+          card.forSale && Number(card.price || 0) <= 0 ? "listed_without_price" : null,
+          card.forSale && activeLineupCardIds.has(cardId) ? "listed_in_active_lineup" : null,
+          supplyCap > 0 && (!card.serialId || serialNumber <= 0) ? "missing_limited_serial" : null,
+          duplicateSerial ? "duplicate_serial_number" : null,
+          supplyCap > 0 && supplyCount > supplyCap ? "supply_cap_exceeded" : null,
+        ].filter(Boolean);
+
+        return {
+          cardId,
+          playerId,
+          ownerId: card.ownerId || null,
+          rarity,
+          serialId: card.serialId || null,
+          serialNumber: serialNumber || null,
+          maxSupply: Number(card.maxSupply || 0),
+          supplyCap,
+          supplyCount,
+          forSale: Boolean(card.forSale),
+          price: Number(card.price || 0),
+          flags,
+          status: flags.length ? "review" : "ok",
+        };
+      });
+
+      const reviewRows = rows.filter((row) => row.status === "review");
+      const flagCounts = reviewRows.reduce((acc: Record<string, number>, row) => {
+        for (const flag of row.flags) acc[flag] = (acc[flag] || 0) + 1;
+        return acc;
+      }, {});
+
+      return res.json({
+        summary: {
+          cardsChecked: rows.length,
+          okCards: rows.length - reviewRows.length,
+          reviewCards: reviewRows.length,
+          flagCounts,
+        },
+        rows: reviewRows,
+      });
+    } catch (error: any) {
+      console.error("Failed card integrity check:", error);
+      return res.status(500).json({ message: "Failed card integrity check" });
+    }
+  });
+
+  app.post("/api/admin/cards/repair-serials", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      await storage.backfillSerialIds();
+      await writeAuditLog(String(req.authUserId || ""), "admin.cards.repair_serials", {
+        ip: getClientIp(req),
+      });
+      return res.json({ success: true, message: "Card serial repair completed" });
+    } catch (error: any) {
+      console.error("Failed card serial repair:", error);
+      return res.status(500).json({ message: "Failed card serial repair" });
+    }
+  });
+
   app.post("/api/admin/cards/grant-today-starters", requireAuth, isAdmin, async (_req: any, res) => {
     try {
       const [fplPlayers, bootstrap, fixtures] = await Promise.all([
