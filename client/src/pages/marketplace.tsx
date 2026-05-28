@@ -446,6 +446,7 @@ export default function MarketplacePage() {
           </div>
 
           <TabsContent value="buy">
+            <div className="rounded-2xl border border-blue-900/40 bg-[radial-gradient(circle_at_15%_15%,rgba(37,99,235,.16),transparent_35%),linear-gradient(180deg,rgba(15,23,42,.65),rgba(2,6,23,.72))] p-4 shadow-[0_20px_50px_rgba(2,6,23,.35)]">
             <div className="mb-4 flex flex-wrap items-center gap-3">
               <div className="relative min-w-[260px] flex-1 max-w-lg">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -542,9 +543,11 @@ export default function MarketplacePage() {
                 <Button variant="outline" onClick={() => setBuyVisibleCount((prev) => prev + 12)}>Load More Listings</Button>
               </div>
             ) : null}
+            </div>
           </TabsContent>
 
           <TabsContent value="sell">
+            <div className="rounded-2xl border border-fuchsia-900/35 bg-[radial-gradient(circle_at_85%_0%,rgba(217,70,239,.14),transparent_36%),linear-gradient(180deg,rgba(30,41,59,.50),rgba(2,6,23,.74))] p-4 shadow-[0_20px_50px_rgba(2,6,23,.35)]">
             <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/45">
               {visibleSellListings.length > 0 ? (
                 visibleSellListings.map((card) => (
@@ -563,6 +566,7 @@ export default function MarketplacePage() {
                 <Button variant="outline" onClick={() => setSellVisibleCount((prev) => prev + 12)}>Load More My Listings</Button>
               </div>
             ) : null}
+            </div>
           </TabsContent>
         </Tabs>
 
