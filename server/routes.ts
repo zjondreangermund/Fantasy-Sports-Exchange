@@ -3581,7 +3581,26 @@ app.get("/api/players/:id/photo", async (req, res) => {
       const cardCandidatePool = shuffle(todayPlayers.length > 0 ? todayPlayers : allPlayers);
 
       const createPrizeCardForUser = async (targetUserId: string, rarity: string): Promise<number | null> => {
+        const retryPool = shuffle([...cardCandidatePool, ...allPlayers]);
         for (const p of cardCandidatePool) {
+          try {
+            const created = await storage.createPlayerCard({
+              playerId: p.id,
+              ownerId: targetUserId,
+              rarity: rarity as any,
+              level: 1,
+              xp: 0,
+              decisiveScore: 35,
+              last5Scores: [0, 0, 0, 0, 0],
+              forSale: false,
+              price: 0,
+            } as any);
+            return created.id;
+          } catch {
+            continue;
+          }
+        }
+        for (const p of retryPool) {
           try {
             const created = await storage.createPlayerCard({
               playerId: p.id,
@@ -3617,6 +3636,7 @@ app.get("/api/players/:id/photo", async (req, res) => {
       };
 
       let winnerPrizeCardId: number | null = null;
+      const prizeCardFailures: Array<{ entryId: number; userId: string; rank: number; rarity: string }> = [];
 
       for (let i = 0; i < sortedEntries.length; i += 1) {
         const entry = sortedEntries[i];
@@ -3625,6 +3645,9 @@ app.get("/api/players/:id/photo", async (req, res) => {
         const prizeAmount = toMoney(totalPrizePool * payoutPct);
         const cardRarity = getCardRarityForRank(rank);
         const prizeCardId = cardRarity ? await createPrizeCardForUser(entry.userId, cardRarity) : null;
+        if (cardRarity && !prizeCardId) {
+          prizeCardFailures.push({ entryId: entry.id, userId: String(entry.userId || ""), rank, rarity: cardRarity });
+        }
 
         await storage.updateCompetitionEntry(entry.id, {
           rank,
@@ -3676,6 +3699,8 @@ app.get("/api/players/:id/photo", async (req, res) => {
         competitionId,
         winnersCount: Math.min(3, sortedEntries.length),
         winnerPrizeCardId,
+        prizeCardFailuresCount: prizeCardFailures.length,
+        prizeCardFailures,
         ip: getClientIp(req),
       });
       
@@ -3684,6 +3709,8 @@ app.get("/api/players/:id/photo", async (req, res) => {
         message: "Tournament settled successfully",
         winnersCount: Math.min(3, sortedEntries.length),
         winnerPrizeCardId,
+        prizeCardFailuresCount: prizeCardFailures.length,
+        prizeCardFailures,
       });
     } catch (error: any) {
       console.error("Failed to settle competition:", error);
