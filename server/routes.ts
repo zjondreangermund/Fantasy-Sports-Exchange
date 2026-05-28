@@ -2068,115 +2068,6 @@ app.get("/api/players/:id/photo", async (req, res) => {
     }
   });
 
-  app.post("/api/admin/wallet/repair-missing", requireAuth, isAdmin, async (req: any, res) => {
-    try {
-      const { db } = await import("./db.js");
-      const { wallets, transactions } = await import("../shared/schema.js");
-      const { sql } = await import("drizzle-orm");
-
-      const rows = await db.execute(sql`
-        SELECT t.user_id, COALESCE(SUM(t.amount), 0) AS ledger_balance
-        FROM app.transactions t
-        LEFT JOIN app.wallets w ON w.user_id = t.user_id
-        WHERE w.user_id IS NULL
-        GROUP BY t.user_id
-      `);
-      const missingRows = Array.isArray(rows) ? rows : ((rows as any)?.rows || []);
-      const repaired: Array<{ userId: string; balance: number }> = [];
-
-      await db.transaction(async (tx) => {
-        for (const row of missingRows as any[]) {
-          const userId = String(row.user_id || "");
-          if (!userId) continue;
-          const balance = toMoney(row.ledger_balance || 0);
-          await tx.insert(wallets).values({ userId, balance, lockedBalance: 0 } as any).onConflictDoNothing();
-          repaired.push({ userId, balance });
-        }
-
-        if (repaired.length > 0) {
-          await tx.insert(transactions).values(
-            repaired.map((row) => ({
-              userId: row.userId,
-              type: "admin_adjustment",
-              amount: 0,
-              description: `Admin wallet repair created missing wallet at ledger balance ${row.balance}`,
-            } as any)),
-          );
-        }
-      });
-
-      await writeAuditLog(String(req.authUserId || ""), "admin.wallet.repair_missing", {
-        repairedCount: repaired.length,
-        repaired,
-        ip: getClientIp(req),
-      });
-
-      return res.json({ success: true, repairedCount: repaired.length, repaired });
-    } catch (error: any) {
-      console.error("Failed wallet missing repair:", error);
-      return res.status(500).json({ message: "Failed wallet missing repair" });
-    }
-  });
-
-  app.get("/api/admin/transactions", requireAuth, isAdmin, async (req: any, res) => {
-    try {
-      const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
-      const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10)));
-      const userId = String(req.query.userId || "").trim();
-      const type = String(req.query.type || "").trim();
-      const q = String(req.query.q || "").trim();
-      const offset = (page - 1) * limit;
-
-      const { db } = await import("./db.js");
-      const { transactions, users } = await import("../shared/schema.js");
-      const { and, desc, eq, ilike, sql } = await import("drizzle-orm");
-
-      const conditions: any[] = [];
-      if (userId) conditions.push(eq(transactions.userId, userId));
-      if (type) conditions.push(eq(transactions.type, type as any));
-      if (q) conditions.push(ilike(transactions.description, `%${q}%`));
-      const whereClause = conditions.length ? and(...conditions) : undefined;
-
-      const [countRow] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(transactions)
-        .where(whereClause as any);
-
-      const rows = await db
-        .select({
-          id: transactions.id,
-          userId: transactions.userId,
-          type: transactions.type,
-          amount: transactions.amount,
-          description: transactions.description,
-          paymentMethod: transactions.paymentMethod,
-          externalTransactionId: transactions.externalTransactionId,
-          createdAt: transactions.createdAt,
-          userEmail: users.email,
-          userName: users.name,
-        })
-        .from(transactions)
-        .leftJoin(users, eq(transactions.userId, users.id))
-        .where(whereClause as any)
-        .orderBy(desc(transactions.createdAt))
-        .limit(limit)
-        .offset(offset);
-
-      const total = Number(countRow?.count || 0);
-      return res.json({
-        transactions: rows,
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        filters: { userId: userId || null, type: type || null, q: q || null },
-      });
-    } catch (error: any) {
-      console.error("Failed admin transaction explorer:", error);
-      return res.status(500).json({ message: "Failed admin transaction explorer" });
-    }
-  });
-
   app.get("/api/admin/wallet/integrity", requireAuth, isAdmin, async (_req: any, res) => {
     try {
       const { db } = await import("./db.js");
@@ -2426,6 +2317,12 @@ app.get("/api/players/:id/photo", async (req, res) => {
           netAmount: net,
           feeRate,
         });
+      }
+
+      // Lock funds immediately until approved/rejected
+      const lockedWallet = await storage.lockFunds(userId, gross);
+      if (!lockedWallet) {
+        return res.status(400).json({ message: "Insufficient balance" });
       }
 
       const releaseAfter = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -3880,8 +3777,8 @@ app.get("/api/players/:id/photo", async (req, res) => {
     }
   });
 
-
-  app.post("/api/admin/competitions/:id/repair-rewards", requireAuth, isAdmin, async (req: any, res) => {
+  // Admin: Reward integrity check for a settled competition (Phase 2)
+  app.get("/api/admin/competitions/:id/reward-integrity", requireAuth, isAdmin, async (req: any, res) => {
     try {
       const competitionId = parseInt(req.params.id, 10);
       if (!Number.isFinite(competitionId) || competitionId <= 0) {
@@ -3892,75 +3789,41 @@ app.get("/api/players/:id/photo", async (req, res) => {
       if (!competition) {
         return res.status(404).json({ message: "Tournament not found" });
       }
-      if (competition.status !== "completed") {
-        return res.status(400).json({ message: "Tournament must be completed before repairing rewards" });
-      }
 
       const entries = await storage.getCompetitionEntries(competitionId);
-      const allPlayers = shuffle(await storage.getPlayers());
-      const repaired: Array<{ entryId: number; userId: string; oldPrizeCardId: number | null; newPrizeCardId: number }> = [];
-      const skipped: Array<{ entryId: number; userId: string; reason: string }> = [];
+      const rows = await Promise.all(
+        entries.map(async (entry) => {
+          const prizeCardId = Number(entry.prizeCardId || 0);
+          const expectedCard = prizeCardId > 0;
+          const card = expectedCard ? await storage.getPlayerCard(prizeCardId) : undefined;
+          const exists = Boolean(card);
+          const ownerMatches = exists && String(card?.ownerId || "") === String(entry.userId || "");
+          return {
+            entryId: entry.id,
+            userId: String(entry.userId || ""),
+            rank: Number(entry.rank || 0),
+            prizeAmount: toMoney(entry.prizeAmount || 0),
+            prizeCardId: expectedCard ? prizeCardId : null,
+            expectedCard,
+            exists,
+            ownerMatches,
+            status: !expectedCard ? "no_card_expected" : !exists ? "missing_card" : !ownerMatches ? "owner_mismatch" : "ok",
+          };
+        }),
+      );
 
-      const createRepairCard = async (targetUserId: string, rarity: string): Promise<number | null> => {
-        for (const player of allPlayers) {
-          try {
-            const created = await storage.createPlayerCard({
-              playerId: player.id,
-              ownerId: targetUserId,
-              rarity: rarity as any,
-              level: 1,
-              xp: 0,
-              decisiveScore: 35,
-              last5Scores: [0, 0, 0, 0, 0],
-              forSale: false,
-              price: 0,
-            } as any);
-            return created.id;
-          } catch {
-            continue;
-          }
-        }
-        return null;
+      const summary = {
+        totalEntries: rows.length,
+        expectedCards: rows.filter((r) => r.expectedCard).length,
+        missingCards: rows.filter((r) => r.status === "missing_card").length,
+        ownerMismatches: rows.filter((r) => r.status === "owner_mismatch").length,
+        okCards: rows.filter((r) => r.status === "ok").length,
       };
 
-      for (const entry of entries) {
-        const rank = Number(entry.rank || 0);
-        const prizeCardId = Number(entry.prizeCardId || 0);
-        if (rank !== 1 && prizeCardId <= 0) continue;
-
-        const currentCard = prizeCardId > 0 ? await storage.getPlayerCard(prizeCardId) : undefined;
-        const currentOwnerMatches = currentCard && String(currentCard.ownerId || "") === String(entry.userId || "");
-        if (currentOwnerMatches) continue;
-
-        const rarity = String(currentCard?.rarity || competition.prizeCardRarity || (String(competition.tier || "") === "rare" ? "unique" : "rare")).toLowerCase();
-        const newPrizeCardId = await createRepairCard(String(entry.userId || ""), rarity);
-        if (!newPrizeCardId) {
-          skipped.push({ entryId: entry.id, userId: String(entry.userId || ""), reason: "Unable to mint replacement prize card" });
-          continue;
-        }
-
-        await storage.updateCompetitionEntry(entry.id, { prizeCardId: newPrizeCardId });
-        repaired.push({
-          entryId: entry.id,
-          userId: String(entry.userId || ""),
-          oldPrizeCardId: prizeCardId || null,
-          newPrizeCardId,
-        });
-      }
-
-      await writeAuditLog(String(req.authUserId || ""), "admin.competition.repair_rewards", {
-        competitionId,
-        repairedCount: repaired.length,
-        skippedCount: skipped.length,
-        repaired,
-        skipped,
-        ip: getClientIp(req),
-      });
-
-      return res.json({ success: true, competitionId, repairedCount: repaired.length, skippedCount: skipped.length, repaired, skipped });
+      return res.json({ competitionId, competitionName: competition.name, summary, rows });
     } catch (error: any) {
-      console.error("Failed reward repair:", error);
-      return res.status(500).json({ message: "Failed reward repair" });
+      console.error("Failed reward integrity check:", error);
+      return res.status(500).json({ message: "Failed reward integrity check" });
     }
   });
 
@@ -5541,133 +5404,6 @@ app.get("/api/players/:id/photo", async (req, res) => {
     } catch (error: any) {
       console.error("Failed to update tournament:", error);
       return res.status(500).json({ message: "Failed to update tournament", error: error?.message });
-    }
-  });
-
-  app.get("/api/admin/marketplace/integrity", requireAuth, isAdmin, async (_req: any, res) => {
-    try {
-      const { db } = await import("./db.js");
-      const { playerCards, players, competitionEntries, competitions } = await import("../shared/schema.js");
-
-      const [cardRows, playerRows, entryRows, competitionRows] = await Promise.all([
-        db.select().from(playerCards),
-        db.select({ id: players.id, name: players.name }).from(players),
-        db.select().from(competitionEntries),
-        db.select().from(competitions),
-      ]);
-
-      const playerIds = new Set((playerRows as any[]).map((player: any) => Number(player.id)));
-      const competitionStatusById = new Map((competitionRows as any[]).map((competition: any) => [Number(competition.id), String(competition.status || "")]));
-      const activeLineupCardIds = new Set<number>();
-      for (const entry of entryRows as any[]) {
-        const status = competitionStatusById.get(Number(entry.competitionId));
-        if (status !== "open" && status !== "active") continue;
-        if (!Array.isArray(entry.lineupCardIds)) continue;
-        for (const id of entry.lineupCardIds) {
-          const cardId = Number(id);
-          if (Number.isFinite(cardId) && cardId > 0) activeLineupCardIds.add(cardId);
-        }
-      }
-
-      const rows = (cardRows as any[])
-        .filter((card: any) => Boolean(card.forSale))
-        .map((card: any) => {
-          const cardId = Number(card.id || 0);
-          const rarity = String(card.rarity || "common").toLowerCase();
-          const price = toMoney(card.price || 0);
-          const floor = getMarketplaceFloorPrice(rarity);
-          const flags = [
-            !playerIds.has(Number(card.playerId || 0)) ? "missing_player" : null,
-            !card.ownerId ? "missing_owner" : null,
-            !isMarketplaceTradableRarity(rarity) ? "untradable_rarity" : null,
-            price <= 0 ? "invalid_price" : null,
-            floor > 0 && price < floor ? "below_floor" : null,
-            activeLineupCardIds.has(cardId) ? "listed_in_active_lineup" : null,
-          ].filter(Boolean);
-
-          return {
-            cardId,
-            playerId: Number(card.playerId || 0),
-            ownerId: card.ownerId || null,
-            rarity,
-            price,
-            floor,
-            flags,
-            status: flags.length ? "review" : "ok",
-          };
-        });
-
-      const reviewRows = rows.filter((row) => row.status === "review");
-      const flagCounts = reviewRows.reduce((acc: Record<string, number>, row) => {
-        for (const flag of row.flags) acc[flag] = (acc[flag] || 0) + 1;
-        return acc;
-      }, {});
-
-      return res.json({
-        summary: {
-          listingsChecked: rows.length,
-          okListings: rows.length - reviewRows.length,
-          reviewListings: reviewRows.length,
-          flagCounts,
-        },
-        rows: reviewRows,
-      });
-    } catch (error: any) {
-      console.error("Failed marketplace integrity check:", error);
-      return res.status(500).json({ message: "Failed marketplace integrity check" });
-    }
-  });
-
-  app.post("/api/admin/marketplace/repair-listings", requireAuth, isAdmin, async (req: any, res) => {
-    try {
-      const { db } = await import("./db.js");
-      const { playerCards, competitionEntries, competitions } = await import("../shared/schema.js");
-      const { eq, inArray } = await import("drizzle-orm");
-
-      const [cardRows, entryRows, competitionRows] = await Promise.all([
-        db.select().from(playerCards),
-        db.select().from(competitionEntries),
-        db.select().from(competitions),
-      ]);
-
-      const competitionStatusById = new Map((competitionRows as any[]).map((competition: any) => [Number(competition.id), String(competition.status || "")]));
-      const activeLineupCardIds = new Set<number>();
-      for (const entry of entryRows as any[]) {
-        const status = competitionStatusById.get(Number(entry.competitionId));
-        if (status !== "open" && status !== "active") continue;
-        if (!Array.isArray(entry.lineupCardIds)) continue;
-        for (const id of entry.lineupCardIds) {
-          const cardId = Number(id);
-          if (Number.isFinite(cardId) && cardId > 0) activeLineupCardIds.add(cardId);
-        }
-      }
-
-      const repairCardIds = (cardRows as any[])
-        .filter((card: any) => {
-          if (!card.forSale) return false;
-          const cardId = Number(card.id || 0);
-          const rarity = String(card.rarity || "common").toLowerCase();
-          const price = toMoney(card.price || 0);
-          const floor = getMarketplaceFloorPrice(rarity);
-          return !card.ownerId || !isMarketplaceTradableRarity(rarity) || price <= 0 || (floor > 0 && price < floor) || activeLineupCardIds.has(cardId);
-        })
-        .map((card: any) => Number(card.id || 0))
-        .filter((id: number) => Number.isFinite(id) && id > 0);
-
-      if (repairCardIds.length > 0) {
-        await db.update(playerCards).set({ forSale: false, price: 0 } as any).where(inArray(playerCards.id, repairCardIds));
-      }
-
-      await writeAuditLog(String(req.authUserId || ""), "admin.marketplace.repair_listings", {
-        repairedCount: repairCardIds.length,
-        cardIds: repairCardIds,
-        ip: getClientIp(req),
-      });
-
-      return res.json({ success: true, repairedCount: repairCardIds.length, cardIds: repairCardIds });
-    } catch (error: any) {
-      console.error("Failed marketplace repair:", error);
-      return res.status(500).json({ message: "Failed marketplace repair" });
     }
   });
 
