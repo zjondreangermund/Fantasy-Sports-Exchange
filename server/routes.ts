@@ -3718,6 +3718,56 @@ app.get("/api/players/:id/photo", async (req, res) => {
     }
   });
 
+  // Admin: Reward integrity check for a settled competition (Phase 2)
+  app.get("/api/admin/competitions/:id/reward-integrity", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const competitionId = parseInt(req.params.id, 10);
+      if (!Number.isFinite(competitionId) || competitionId <= 0) {
+        return res.status(400).json({ message: "Invalid competition id" });
+      }
+
+      const competition = await storage.getCompetition(competitionId);
+      if (!competition) {
+        return res.status(404).json({ message: "Tournament not found" });
+      }
+
+      const entries = await storage.getCompetitionEntries(competitionId);
+      const rows = await Promise.all(
+        entries.map(async (entry) => {
+          const prizeCardId = Number(entry.prizeCardId || 0);
+          const expectedCard = prizeCardId > 0;
+          const card = expectedCard ? await storage.getPlayerCard(prizeCardId) : undefined;
+          const exists = Boolean(card);
+          const ownerMatches = exists && String(card?.ownerId || "") === String(entry.userId || "");
+          return {
+            entryId: entry.id,
+            userId: String(entry.userId || ""),
+            rank: Number(entry.rank || 0),
+            prizeAmount: toMoney(entry.prizeAmount || 0),
+            prizeCardId: expectedCard ? prizeCardId : null,
+            expectedCard,
+            exists,
+            ownerMatches,
+            status: !expectedCard ? "no_card_expected" : !exists ? "missing_card" : !ownerMatches ? "owner_mismatch" : "ok",
+          };
+        }),
+      );
+
+      const summary = {
+        totalEntries: rows.length,
+        expectedCards: rows.filter((r) => r.expectedCard).length,
+        missingCards: rows.filter((r) => r.status === "missing_card").length,
+        ownerMismatches: rows.filter((r) => r.status === "owner_mismatch").length,
+        okCards: rows.filter((r) => r.status === "ok").length,
+      };
+
+      return res.json({ competitionId, competitionName: competition.name, summary, rows });
+    } catch (error: any) {
+      console.error("Failed reward integrity check:", error);
+      return res.status(500).json({ message: "Failed reward integrity check" });
+    }
+  });
+
   // -------------------------
   // SCORE MANAGEMENT ENDPOINTS
   // -------------------------
