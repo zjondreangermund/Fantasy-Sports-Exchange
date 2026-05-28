@@ -12,16 +12,31 @@ function toMoney(amount: unknown): number {
   return Math.round(value * 100) / 100;
 }
 
-async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
-  const cardId = Number(rawCardId);
-  if (!Number.isInteger(cardId) || cardId <= 0) {
-    return { ok: false as const, status: 400, message: "Valid cardId required" };
+async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, rawSerialId?: unknown) {
+  const cardId = (() => {
+    if (typeof rawCardId === "number") return rawCardId;
+    const normalized = String(rawCardId ?? "").trim();
+    if (!normalized) return Number.NaN;
+    if (/^\d+$/.test(normalized)) return Number(normalized);
+    const match = normalized.match(/(\d+)/);
+    return match ? Number(match[1]) : Number.NaN;
+  })();
+  const serialId = String(rawSerialId ?? "").trim();
+  let resolvedCardId = cardId;
+
+  if ((!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) && serialId) {
+    const [serialCard] = await db.select({ id: playerCards.id }).from(playerCards).where(eq(playerCards.serialId, serialId)).limit(1);
+    resolvedCardId = Number(serialCard?.id || Number.NaN);
+  }
+
+  if (!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) {
+    return { ok: false as const, status: 400, message: "Valid card identifier required" };
   }
 
   try {
     await db.transaction(async (tx) => {
-      const [card] = await tx.select().from(playerCards).where(eq(playerCards.id, cardId)).for("update");
-      if (!card) throw new Error("Card not found");
+      const [card] = await tx.select().from(playerCards).where(eq(playerCards.id, resolvedCardId)).for("update");
+      if (!card) throw new Error("Card does not exist or was already sold");
       if (!card.forSale) throw new Error("Card is not for sale");
       if (!isMarketplaceTradableRarity(String(card.rarity))) throw new Error("Common cards cannot be traded");
 
@@ -60,7 +75,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         .orderBy(desc(transactions.createdAt))
         .limit(25);
 
-      const sameCardPairTx = pairTx.filter((row: any) => String(row.description || "").includes(`card:${cardId}`));
+      const sameCardPairTx = pairTx.filter((row: any) => String(row.description || "").includes(`card:${resolvedCardId}`));
       const excessivePairVolume = pairTx.length >= 6;
       const repeatedSameCard = sameCardPairTx.length >= 2;
 
@@ -68,7 +83,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         await tx.insert(auditLogs).values({
           userId: buyerId,
           action: "risk.wash_trade_blocked",
-          meta: { cardId, buyerId, sellerId, pairTrades7d: pairTx.length, sameCardPairTrades7d: sameCardPairTx.length },
+          meta: { cardId: resolvedCardId, buyerId, sellerId, pairTrades7d: pairTx.length, sameCardPairTrades7d: sameCardPairTx.length },
         } as any);
         throw new Error("Trade blocked by anti-abuse controls");
       }
@@ -76,7 +91,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
       const saleHistory = await tx
         .select()
         .from(transactions)
-        .where(and(eq(transactions.type, "marketplace_sale" as any), sql`${transactions.description} ilike ${`%card:${cardId}%`}`))
+        .where(and(eq(transactions.type, "marketplace_sale" as any), sql`${transactions.description} ilike ${`%card:${resolvedCardId}%`}`))
         .orderBy(desc(transactions.createdAt))
         .limit(5);
 
@@ -85,7 +100,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         await tx.insert(auditLogs).values({
           userId: buyerId,
           action: "risk.price_spike_trade",
-          meta: { cardId, buyerId, sellerId, listedPrice: price, lastSale },
+          meta: { cardId: resolvedCardId, buyerId, sellerId, listedPrice: price, lastSale },
         } as any);
       }
 
@@ -97,34 +112,24 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
 
       await tx.update(wallets).set({ balance: sql`${wallets.balance} - ${price}` } as any).where(eq(wallets.userId, buyerId));
       await tx.update(wallets).set({ balance: sql`${wallets.balance} + ${sellerReceives}` } as any).where(eq(wallets.userId, sellerId));
-      await tx.update(playerCards).set({ ownerId: buyerId, forSale: false, price: 0 } as any).where(eq(playerCards.id, cardId));
+      await tx.update(playerCards).set({ ownerId: buyerId, forSale: false, price: 0 } as any).where(eq(playerCards.id, resolvedCardId));
 
       await tx.insert(transactions).values({
         userId: buyerId,
         type: "marketplace_buy",
         amount: -price,
-        grossAmount: price,
-        feeAmount: 0,
-        netAmount: -price,
-        sourceType: "marketplace_buy",
-        status: "completed",
-        description: `marketplace card:${cardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)}`,
+        description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)}`,
       } as any);
 
       await tx.insert(transactions).values({
         userId: sellerId,
         type: "marketplace_sale",
         amount: sellerReceives,
-        grossAmount: price,
-        feeAmount: fee,
-        netAmount: sellerReceives,
-        sourceType: "marketplace_sale",
-        status: "completed",
-        description: `marketplace card:${cardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}`,
+        description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}`,
       } as any);
     });
 
-    return { ok: true as const, cardId };
+    return { ok: true as const, cardId: resolvedCardId };
   } catch (error: any) {
     const message = String(error?.message || "Failed to buy card");
     const status = message.includes("not found") ? 404 : 400;
@@ -191,13 +196,13 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
   });
 
   app.post("/api/marketplace/buy/:cardId", requireAuth, async (req: any, res) => {
-    const result = await processMarketplacePurchase(req.authUserId, req.params.cardId);
+    const result = await processMarketplacePurchase(req.authUserId, req.params.cardId, req.body?.serialId);
     if (!result.ok) return res.status(result.status).json({ message: result.message });
     return res.json({ success: true, cardId: result.cardId });
   });
 
   app.post("/api/marketplace/buy", requireAuth, async (req: any, res) => {
-    const result = await processMarketplacePurchase(req.authUserId, req.body?.cardId);
+    const result = await processMarketplacePurchase(req.authUserId, req.body?.cardId, req.body?.serialId);
     if (!result.ok) return res.status(result.status).json({ message: result.message });
     return res.json({ success: true, cardId: result.cardId });
   });
