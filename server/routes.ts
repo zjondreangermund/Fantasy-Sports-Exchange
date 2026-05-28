@@ -2317,6 +2317,12 @@ app.get("/api/players/:id/photo", async (req, res) => {
         });
       }
 
+      // Lock funds immediately until approved/rejected
+      const lockedWallet = await storage.lockFunds(userId, gross);
+      if (!lockedWallet) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+
       const releaseAfter = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const verificationToken = randomUUID().replace(/-/g, "");
 
@@ -3769,8 +3775,8 @@ app.get("/api/players/:id/photo", async (req, res) => {
     }
   });
 
-
-  app.post("/api/admin/competitions/:id/repair-rewards", requireAuth, isAdmin, async (req: any, res) => {
+  // Admin: Reward integrity check for a settled competition (Phase 2)
+  app.get("/api/admin/competitions/:id/reward-integrity", requireAuth, isAdmin, async (req: any, res) => {
     try {
       const competitionId = parseInt(req.params.id, 10);
       if (!Number.isFinite(competitionId) || competitionId <= 0) {
@@ -3781,75 +3787,41 @@ app.get("/api/players/:id/photo", async (req, res) => {
       if (!competition) {
         return res.status(404).json({ message: "Tournament not found" });
       }
-      if (competition.status !== "completed") {
-        return res.status(400).json({ message: "Tournament must be completed before repairing rewards" });
-      }
 
       const entries = await storage.getCompetitionEntries(competitionId);
-      const allPlayers = shuffle(await storage.getPlayers());
-      const repaired: Array<{ entryId: number; userId: string; oldPrizeCardId: number | null; newPrizeCardId: number }> = [];
-      const skipped: Array<{ entryId: number; userId: string; reason: string }> = [];
+      const rows = await Promise.all(
+        entries.map(async (entry) => {
+          const prizeCardId = Number(entry.prizeCardId || 0);
+          const expectedCard = prizeCardId > 0;
+          const card = expectedCard ? await storage.getPlayerCard(prizeCardId) : undefined;
+          const exists = Boolean(card);
+          const ownerMatches = exists && String(card?.ownerId || "") === String(entry.userId || "");
+          return {
+            entryId: entry.id,
+            userId: String(entry.userId || ""),
+            rank: Number(entry.rank || 0),
+            prizeAmount: toMoney(entry.prizeAmount || 0),
+            prizeCardId: expectedCard ? prizeCardId : null,
+            expectedCard,
+            exists,
+            ownerMatches,
+            status: !expectedCard ? "no_card_expected" : !exists ? "missing_card" : !ownerMatches ? "owner_mismatch" : "ok",
+          };
+        }),
+      );
 
-      const createRepairCard = async (targetUserId: string, rarity: string): Promise<number | null> => {
-        for (const player of allPlayers) {
-          try {
-            const created = await storage.createPlayerCard({
-              playerId: player.id,
-              ownerId: targetUserId,
-              rarity: rarity as any,
-              level: 1,
-              xp: 0,
-              decisiveScore: 35,
-              last5Scores: [0, 0, 0, 0, 0],
-              forSale: false,
-              price: 0,
-            } as any);
-            return created.id;
-          } catch {
-            continue;
-          }
-        }
-        return null;
+      const summary = {
+        totalEntries: rows.length,
+        expectedCards: rows.filter((r) => r.expectedCard).length,
+        missingCards: rows.filter((r) => r.status === "missing_card").length,
+        ownerMismatches: rows.filter((r) => r.status === "owner_mismatch").length,
+        okCards: rows.filter((r) => r.status === "ok").length,
       };
 
-      for (const entry of entries) {
-        const rank = Number(entry.rank || 0);
-        const prizeCardId = Number(entry.prizeCardId || 0);
-        if (rank !== 1 && prizeCardId <= 0) continue;
-
-        const currentCard = prizeCardId > 0 ? await storage.getPlayerCard(prizeCardId) : undefined;
-        const currentOwnerMatches = currentCard && String(currentCard.ownerId || "") === String(entry.userId || "");
-        if (currentOwnerMatches) continue;
-
-        const rarity = String(currentCard?.rarity || competition.prizeCardRarity || (String(competition.tier || "") === "rare" ? "unique" : "rare")).toLowerCase();
-        const newPrizeCardId = await createRepairCard(String(entry.userId || ""), rarity);
-        if (!newPrizeCardId) {
-          skipped.push({ entryId: entry.id, userId: String(entry.userId || ""), reason: "Unable to mint replacement prize card" });
-          continue;
-        }
-
-        await storage.updateCompetitionEntry(entry.id, { prizeCardId: newPrizeCardId });
-        repaired.push({
-          entryId: entry.id,
-          userId: String(entry.userId || ""),
-          oldPrizeCardId: prizeCardId || null,
-          newPrizeCardId,
-        });
-      }
-
-      await writeAuditLog(String(req.authUserId || ""), "admin.competition.repair_rewards", {
-        competitionId,
-        repairedCount: repaired.length,
-        skippedCount: skipped.length,
-        repaired,
-        skipped,
-        ip: getClientIp(req),
-      });
-
-      return res.json({ success: true, competitionId, repairedCount: repaired.length, skippedCount: skipped.length, repaired, skipped });
+      return res.json({ competitionId, competitionName: competition.name, summary, rows });
     } catch (error: any) {
-      console.error("Failed reward repair:", error);
-      return res.status(500).json({ message: "Failed reward repair" });
+      console.error("Failed reward integrity check:", error);
+      return res.status(500).json({ message: "Failed reward integrity check" });
     }
   });
 
