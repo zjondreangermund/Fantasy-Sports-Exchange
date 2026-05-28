@@ -115,7 +115,7 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
         withdrawalsByUser.get(uid)!.push(row);
       }
 
-      for (const [userId, rows] of withdrawalsByUser.entries()) {
+      for (const [userId, rows] of Array.from(withdrawalsByUser.entries())) {
         const recent = rows.filter((row: any) => {
           const ts = row.createdAt ? new Date(row.createdAt as any).getTime() : 0;
           return Number.isFinite(ts) && now - ts <= 7 * 24 * 60 * 60 * 1000;
@@ -138,7 +138,7 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
         const key = [buyer, seller].sort().join("::");
         pairCount.set(key, (pairCount.get(key) || 0) + 1);
       }
-      for (const [pair, countValue] of pairCount.entries()) {
+      for (const [pair, countValue] of Array.from(pairCount.entries())) {
         if (countValue < 3) continue;
         const [a, b] = pair.split("::");
         pushRisk(riskByUser, a, Math.min(30, countValue * 4), "repeat_trade_pair", { counterparty: b, trades: countValue });
