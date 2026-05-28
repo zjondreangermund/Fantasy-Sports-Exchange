@@ -12,7 +12,7 @@ function toMoney(amount: unknown): number {
   return Math.round(value * 100) / 100;
 }
 
-async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, rawSerialId?: unknown) {
+async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
   const cardId = (() => {
     if (typeof rawCardId === "number") return rawCardId;
     const normalized = String(rawCardId ?? "").trim();
@@ -21,21 +21,13 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
     const match = normalized.match(/(\d+)/);
     return match ? Number(match[1]) : Number.NaN;
   })();
-  const serialId = String(rawSerialId ?? "").trim();
-  let resolvedCardId = cardId;
-
-  if ((!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) && serialId) {
-    const [serialCard] = await db.select({ id: playerCards.id }).from(playerCards).where(eq(playerCards.serialId, serialId)).limit(1);
-    resolvedCardId = Number(serialCard?.id || Number.NaN);
-  }
-
-  if (!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) {
-    return { ok: false as const, status: 400, message: "Valid card identifier required" };
+  if (!Number.isInteger(cardId) || cardId <= 0) {
+    return { ok: false as const, status: 400, message: "Valid cardId required" };
   }
 
   try {
     await db.transaction(async (tx) => {
-      const [card] = await tx.select().from(playerCards).where(eq(playerCards.id, resolvedCardId)).for("update");
+      const [card] = await tx.select().from(playerCards).where(eq(playerCards.id, cardId)).for("update");
       if (!card) throw new Error("Card does not exist or was already sold");
       if (!card.forSale) throw new Error("Card is not for sale");
       if (!isMarketplaceTradableRarity(String(card.rarity))) throw new Error("Common cards cannot be traded");

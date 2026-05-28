@@ -383,11 +383,10 @@ export default function MarketplacePage() {
   };
 
   return (
-    <div className="relative min-h-full flex-1 overflow-auto bg-[#040812] p-4 text-slate-100 sm:p-6 lg:p-8">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(56,189,248,.22),transparent_30%),radial-gradient(circle_at_90%_5%,rgba(168,85,247,.16),transparent_28%),radial-gradient(circle_at_50%_120%,rgba(30,64,175,.25),transparent_45%),linear-gradient(180deg,#040812_0%,#030611_100%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(148,163,184,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,.08)_1px,transparent_1px)] [background-size:48px_48px]" />
+    <div className="relative min-h-full flex-1 overflow-auto bg-[#050b17] p-4 text-slate-100 sm:p-6 lg:p-8">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(37,99,235,.18),transparent_34%),radial-gradient(circle_at_85%_5%,rgba(14,165,233,.10),transparent_30%),linear-gradient(180deg,#07111f_0%,#050812_100%)]" />
       <div className="relative mx-auto max-w-[1560px]">
-        <div className="mb-5 rounded-3xl border border-cyan-700/35 bg-gradient-to-r from-[#07142f] via-[#111a3f] to-[#220b3f] p-5 shadow-[0_24px_70px_rgba(0,0,0,.45)]">
+        <div className="mb-5 rounded-3xl border border-slate-800/80 bg-gradient-to-r from-[#0b1730] via-[#101f3b] to-[#0a1430] p-5 shadow-[0_20px_60px_rgba(0,0,0,.35)]">
           <div className="grid gap-5 md:grid-cols-[2fr_1fr_1fr_1fr]">
             <div>
               <p className="text-[11px] font-black uppercase tracking-[.2em] text-cyan-300/80">Transfer Hub</p>
