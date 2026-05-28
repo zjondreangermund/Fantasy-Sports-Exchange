@@ -879,7 +879,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const enriched = await Promise.all(
         referrals.map(async (row: any) => {
           const rewardCardId = row?.reward_card_id == null ? null : Number(row.reward_card_id);
-          const rewardCard = rewardCardId ? await storage.getPlayerCardWithPlayer(rewardCardId) : null;
+          const rewardCard = rewardCardId ? await storage.getPlayerCardWithPlayer(rewardCardId, userId) : null;
           return {
             id: Number(row.id),
             referredUserId: String(row.referred_user_id || ""),
@@ -3777,7 +3777,7 @@ app.get("/api/players/:id/photo", async (req, res) => {
       const enriched = await Promise.all(
         rewards.map(async (entry) => {
           const competition = await storage.getCompetition(entry.competitionId);
-          const prizeCard = entry.prizeCardId ? await storage.getPlayerCardWithPlayer(entry.prizeCardId) : null;
+          const prizeCard = entry.prizeCardId ? await storage.getPlayerCardWithPlayer(entry.prizeCardId, userId) : null;
           return {
             ...entry,
             claimed: claimedEntryIds.has(Number(entry.id)),
@@ -3827,7 +3827,7 @@ app.get("/api/players/:id/photo", async (req, res) => {
 
       const prizeCardId = row.prize_card_id == null ? null : Number(row.prize_card_id);
       const prizeAmount = toMoney(row.prize_amount || 0);
-      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId) : null;
+      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId, userId) : null;
       const fallbackRarity = String(row.tier || "").toLowerCase() === "rare" && Number(row.rank || 0) === 1
         ? "unique"
         : String(row.prize_card_rarity || "rare").toLowerCase();
@@ -3970,7 +3970,7 @@ app.get("/api/players/:id/photo", async (req, res) => {
         } as any);
       });
 
-      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId) : null;
+      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId, userId) : null;
       const fallbackRarity = String(pending.tier || "").toLowerCase() === "rare" && rank === 1
         ? "unique"
         : String(pending.prize_card_rarity || "rare").toLowerCase();
