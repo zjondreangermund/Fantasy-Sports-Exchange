@@ -2043,6 +2043,75 @@ app.get("/api/players/:id/photo", async (req, res) => {
     }
   });
 
+  app.get("/api/admin/wallet/integrity", requireAuth, isAdmin, async (_req: any, res) => {
+    try {
+      const { db } = await import("./db.js");
+      const { wallets, transactions, users } = await import("../shared/schema.js");
+
+      const [walletRows, transactionRows, userRows] = await Promise.all([
+        db.select().from(wallets),
+        db.select().from(transactions),
+        db.select({ id: users.id, email: users.email, name: users.name }).from(users),
+      ]);
+
+      const userMeta = new Map((userRows as any[]).map((user: any) => [String(user.id), user]));
+      const ledgerByUser = new Map<string, number>();
+      for (const tx of transactionRows as any[]) {
+        const userId = String(tx.userId || "");
+        if (!userId) continue;
+        ledgerByUser.set(userId, toMoney((ledgerByUser.get(userId) || 0) + Number(tx.amount || 0)));
+      }
+
+      const walletUserIds = new Set((walletRows as any[]).map((wallet: any) => String(wallet.userId || "")));
+      const missingWallets = Array.from(ledgerByUser.keys())
+        .filter((userId) => userId && !walletUserIds.has(userId))
+        .map((userId) => ({
+          userId,
+          ledgerBalance: toMoney(ledgerByUser.get(userId) || 0),
+          user: userMeta.get(userId) || null,
+        }));
+
+      const rows = (walletRows as any[]).map((wallet: any) => {
+        const userId = String(wallet.userId || "");
+        const balance = toMoney(wallet.balance || 0);
+        const lockedBalance = toMoney(wallet.lockedBalance || 0);
+        const ledgerBalance = toMoney(ledgerByUser.get(userId) || 0);
+        const delta = toMoney(balance - ledgerBalance);
+        const flags = [
+          balance < 0 ? "negative_balance" : null,
+          lockedBalance < 0 ? "negative_locked_balance" : null,
+          Math.abs(delta) >= 0.01 ? "wallet_ledger_delta" : null,
+        ].filter(Boolean);
+
+        return {
+          userId,
+          user: userMeta.get(userId) || null,
+          balance,
+          lockedBalance,
+          ledgerBalance,
+          delta,
+          flags,
+          status: flags.length ? "review" : "ok",
+        };
+      });
+
+      const summary = {
+        walletsChecked: rows.length,
+        okWallets: rows.filter((row) => row.status === "ok").length,
+        reviewWallets: rows.filter((row) => row.status === "review").length,
+        negativeBalances: rows.filter((row) => row.flags.includes("negative_balance")).length,
+        negativeLockedBalances: rows.filter((row) => row.flags.includes("negative_locked_balance")).length,
+        ledgerDeltas: rows.filter((row) => row.flags.includes("wallet_ledger_delta")).length,
+        missingWallets: missingWallets.length,
+      };
+
+      return res.json({ summary, rows, missingWallets });
+    } catch (error: any) {
+      console.error("Failed wallet integrity check:", error);
+      return res.status(500).json({ message: "Failed wallet integrity check" });
+    }
+  });
+
   app.get("/api/wallet/withdrawals", requireAuth, async (req: any, res) => {
     try {
       const userId = req.authUserId;
