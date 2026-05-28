@@ -25,9 +25,11 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
     return { ok: false as const, status: 400, message: "Valid cardId required" };
   }
 
+  const resolvedCardId = cardId;
+
   try {
     await db.transaction(async (tx) => {
-      const [card] = await tx.select().from(playerCards).where(eq(playerCards.id, cardId)).for("update");
+      const [card] = await tx.select().from(playerCards).where(eq(playerCards.id, resolvedCardId)).for("update");
       if (!card) throw new Error("Card does not exist or was already sold");
       if (!card.forSale) throw new Error("Card is not for sale");
       if (!isMarketplaceTradableRarity(String(card.rarity))) throw new Error("Common cards cannot be traded");
@@ -198,13 +200,13 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
   });
 
   app.post("/api/marketplace/buy/:cardId", requireAuth, async (req: any, res) => {
-    const result = await processMarketplacePurchase(req.authUserId, req.params.cardId, req.body?.serialId);
+    const result = await processMarketplacePurchase(req.authUserId, req.params.cardId);
     if (!result.ok) return res.status(result.status).json({ message: result.message });
     return res.json({ success: true, cardId: result.cardId });
   });
 
   app.post("/api/marketplace/buy", requireAuth, async (req: any, res) => {
-    const result = await processMarketplacePurchase(req.authUserId, req.body?.cardId, req.body?.serialId);
+    const result = await processMarketplacePurchase(req.authUserId, req.body?.cardId);
     if (!result.ok) return res.status(result.status).json({ message: result.message });
     return res.json({ success: true, cardId: result.cardId });
   });
