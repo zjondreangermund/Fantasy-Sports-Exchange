@@ -1,8 +1,9 @@
 import type { Express } from "express";
 import { db } from "../db.js";
-import { auditLogs, playerCards, transactions, users, wallets } from "../../shared/schema.js";
+import { auditLogs, playerCards, transactions, users } from "../../shared/schema.js";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../shared/card-economy.js";
+import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
@@ -108,7 +109,8 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
       await tx.update(wallets).set({ balance: sql`${wallets.balance} + ${sellerReceives}` } as any).where(eq(wallets.userId, sellerId));
       await tx.update(playerCards).set({ ownerId: buyerId, forSale: false, price: 0 } as any).where(eq(playerCards.id, resolvedCardId));
 
-      await tx.insert(transactions).values({
+    try {
+      await db.insert(auditLogs).values({
         userId: buyerId,
         type: "marketplace_buy",
         amount: -price,
@@ -131,7 +133,9 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         status: "completed",
         description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}`,
       } as any);
-    });
+    } catch (auditError) {
+      console.error("Failed to write marketplace purchase audit:", auditError);
+    }
 
     return { ok: true as const, cardId: resolvedCardId };
   } catch (error: any) {
