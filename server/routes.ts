@@ -21,6 +21,15 @@ import { registerAuthModeRoutes } from "./routes/auth.routes.js";
 import { registerRetentionRoutes } from "./routes/retention.routes.js";
 import { creditWalletWithLedger, getWalletIntegrityReport, repairMissingWalletsFromLedger } from "./services/walletLedger.js";
 import {
+  creditWalletWithLedger,
+  createPendingWithdrawalWithHold,
+  createTrustedWithdrawal,
+  getWalletIntegrityReport,
+  processWalletDeposit,
+  repairMissingWalletsFromLedger,
+} from "./services/walletLedger.js";
+import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
+import {
   getCardStatus,
   getDepositBreakdown,
   getWithdrawalBreakdown,
@@ -2071,6 +2080,13 @@ app.get("/api/players/:id/photo", async (req, res) => {
         newBalance: updatedWallet.balance || 0,
         ip: getClientIp(req),
       });
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
+        targetUserId: userId,
+        amount,
+        newBalance: updatedWallet.balance || 0,
+        ip: getClientIp(req),
+      });
       
       res.json({ 
         success: true, 
@@ -2177,20 +2193,16 @@ app.get("/api/players/:id/photo", async (req, res) => {
       // In a real app, you would integrate with a payment processor here
       // For now, just credit the wallet with net amount after fee (dev/testing only)
       
-      await storage.updateWalletBalance(userId, net);
-      await storage.createTransaction({
+      await processWalletDeposit({
         userId,
-        type: "deposit",
-        amount: net,
-        grossAmount: gross,
-        feeAmount: fee,
-        netAmount: net,
-        sourceType: "deposit",
-        status: "completed",
-        description: `Deposit via ${paymentMethod || "manual"} (gross ${formatMoney(gross)}, fee ${formatMoney(fee)} at ${(feeRate * 100).toFixed(1)}%)`,
+        gross,
+        fee,
+        net,
+        feeRate,
         paymentMethod: paymentMethod || "manual",
         externalTransactionId,
-      } as any);
+        description: `Deposit via ${paymentMethod || "manual"} (gross ${formatMoney(gross)}, fee ${formatMoney(fee)} at ${(feeRate * 100).toFixed(1)}%)`,
+      });
       
       res.json({ 
         success: true,
