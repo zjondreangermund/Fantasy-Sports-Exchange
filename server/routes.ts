@@ -20,7 +20,6 @@ import { registerAuctionsRoutes } from "./routes/auctions.routes.js";
 import { registerAuthModeRoutes } from "./routes/auth.routes.js";
 import { registerRetentionRoutes } from "./routes/retention.routes.js";
 import { creditWalletWithLedger, getWalletIntegrityReport, repairMissingWalletsFromLedger } from "./services/walletLedger.js";
-import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
 import {
   getCardStatus,
   getDepositBreakdown,
@@ -2027,10 +2026,43 @@ app.get("/api/players/:id/photo", async (req, res) => {
         wallet = await storage.createWallet({ userId, balance: 0, lockedBalance: 0 });
       }
       
-      const updatedWallet = await creditWalletWithLedger({
-        userId,
+      const { db } = await import("./db.js");
+      const { wallets, transactions } = await import("../shared/schema.js");
+      const { eq, sql } = await import("drizzle-orm");
+
+      const updatedWallet = await db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(wallets)
+          .set({ balance: sql`${wallets.balance} + ${amount}` } as any)
+          .where(eq(wallets.userId, userId))
+          .returning();
+
+        if (!updated) {
+          throw new Error("Wallet not found");
+        }
+
+        await tx.insert(transactions).values({
+          userId,
+          type: "admin_adjustment",
+          amount,
+          description: description || `Admin credit: ${amount}`,
+        } as any);
+
+        return updated;
+      });
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
+        targetUserId: userId,
         amount,
-        description: description || `Admin credit: ${amount}`,
+        newBalance: updatedWallet.balance || 0,
+        ip: getClientIp(req),
+      });
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
+        targetUserId: userId,
+        amount,
+        newBalance: updatedWallet.balance || 0,
+        ip: getClientIp(req),
       });
 
       await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
@@ -2051,86 +2083,69 @@ app.get("/api/players/:id/photo", async (req, res) => {
     }
   });
 
-  app.post("/api/admin/wallet/repair-missing", requireAuth, isAdmin, async (req: any, res) => {
-    try {
-      const repaired = await repairMissingWalletsFromLedger();
-
-      await writeAuditLog(String(req.authUserId || ""), "admin.wallet.repair_missing", {
-        repairedCount: repaired.length,
-        repaired,
-        ip: getClientIp(req),
-      });
-
-      return res.json({ success: true, repairedCount: repaired.length, repaired });
-    } catch (error: any) {
-      console.error("Failed wallet missing repair:", error);
-      return res.status(500).json({ message: "Failed wallet missing repair" });
-    }
-  });
-
-  app.get("/api/admin/transactions", requireAuth, isAdmin, async (req: any, res) => {
-    try {
-      const page = Math.max(1, parseInt(String(req.query.page || "1"), 10));
-      const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10)));
-      const userId = String(req.query.userId || "").trim();
-      const type = String(req.query.type || "").trim();
-      const q = String(req.query.q || "").trim();
-      const offset = (page - 1) * limit;
-
-      const { db } = await import("./db.js");
-      const { transactions, users } = await import("../shared/schema.js");
-      const { and, desc, eq, ilike, sql } = await import("drizzle-orm");
-
-      const conditions: any[] = [];
-      if (userId) conditions.push(eq(transactions.userId, userId));
-      if (type) conditions.push(eq(transactions.type, type as any));
-      if (q) conditions.push(ilike(transactions.description, `%${q}%`));
-      const whereClause = conditions.length ? and(...conditions) : undefined;
-
-      const [countRow] = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(transactions)
-        .where(whereClause as any);
-
-      const rows = await db
-        .select({
-          id: transactions.id,
-          userId: transactions.userId,
-          type: transactions.type,
-          amount: transactions.amount,
-          description: transactions.description,
-          paymentMethod: transactions.paymentMethod,
-          externalTransactionId: transactions.externalTransactionId,
-          createdAt: transactions.createdAt,
-          userEmail: users.email,
-          userName: users.name,
-        })
-        .from(transactions)
-        .leftJoin(users, eq(transactions.userId, users.id))
-        .where(whereClause as any)
-        .orderBy(desc(transactions.createdAt))
-        .limit(limit)
-        .offset(offset);
-
-      const total = Number(countRow?.count || 0);
-      return res.json({
-        transactions: rows,
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        filters: { userId: userId || null, type: type || null, q: q || null },
-      });
-    } catch (error: any) {
-      console.error("Failed admin transaction explorer:", error);
-      return res.status(500).json({ message: "Failed admin transaction explorer" });
-    }
-  });
-
   app.get("/api/admin/wallet/integrity", requireAuth, isAdmin, async (_req: any, res) => {
     try {
-      const report = await getWalletIntegrityReport();
-      return res.json(report);
+      const { db } = await import("./db.js");
+      const { wallets, transactions, users } = await import("../shared/schema.js");
+
+      const [walletRows, transactionRows, userRows] = await Promise.all([
+        db.select().from(wallets),
+        db.select().from(transactions),
+        db.select({ id: users.id, email: users.email, name: users.name }).from(users),
+      ]);
+
+      const userMeta = new Map((userRows as any[]).map((user: any) => [String(user.id), user]));
+      const ledgerByUser = new Map<string, number>();
+      for (const tx of transactionRows as any[]) {
+        const userId = String(tx.userId || "");
+        if (!userId) continue;
+        ledgerByUser.set(userId, toMoney((ledgerByUser.get(userId) || 0) + Number(tx.amount || 0)));
+      }
+
+      const walletUserIds = new Set((walletRows as any[]).map((wallet: any) => String(wallet.userId || "")));
+      const missingWallets = Array.from(ledgerByUser.keys())
+        .filter((userId) => userId && !walletUserIds.has(userId))
+        .map((userId) => ({
+          userId,
+          ledgerBalance: toMoney(ledgerByUser.get(userId) || 0),
+          user: userMeta.get(userId) || null,
+        }));
+
+      const rows = (walletRows as any[]).map((wallet: any) => {
+        const userId = String(wallet.userId || "");
+        const balance = toMoney(wallet.balance || 0);
+        const lockedBalance = toMoney(wallet.lockedBalance || 0);
+        const ledgerBalance = toMoney(ledgerByUser.get(userId) || 0);
+        const delta = toMoney(balance - ledgerBalance);
+        const flags = [
+          balance < 0 ? "negative_balance" : null,
+          lockedBalance < 0 ? "negative_locked_balance" : null,
+          Math.abs(delta) >= 0.01 ? "wallet_ledger_delta" : null,
+        ].filter(Boolean);
+
+        return {
+          userId,
+          user: userMeta.get(userId) || null,
+          balance,
+          lockedBalance,
+          ledgerBalance,
+          delta,
+          flags,
+          status: flags.length ? "review" : "ok",
+        };
+      });
+
+      const summary = {
+        walletsChecked: rows.length,
+        okWallets: rows.filter((row) => row.status === "ok").length,
+        reviewWallets: rows.filter((row) => row.status === "review").length,
+        negativeBalances: rows.filter((row) => row.flags.includes("negative_balance")).length,
+        negativeLockedBalances: rows.filter((row) => row.flags.includes("negative_locked_balance")).length,
+        ledgerDeltas: rows.filter((row) => row.flags.includes("wallet_ledger_delta")).length,
+        missingWallets: missingWallets.length,
+      };
+
+      return res.json({ summary, rows, missingWallets });
     } catch (error: any) {
       console.error("Failed wallet integrity check:", error);
       return res.status(500).json({ message: "Failed wallet integrity check" });
@@ -2317,6 +2332,12 @@ app.get("/api/players/:id/photo", async (req, res) => {
           netAmount: net,
           feeRate,
         });
+      }
+
+      // Lock funds immediately until approved/rejected
+      const lockedWallet = await storage.lockFunds(userId, gross);
+      if (!lockedWallet) {
+        return res.status(400).json({ message: "Insufficient balance" });
       }
 
       const releaseAfter = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -3725,36 +3746,99 @@ app.get("/api/players/:id/photo", async (req, res) => {
   app.get("/api/admin/competitions/:id/reward-integrity", requireAuth, isAdmin, async (req: any, res) => {
     try {
       const competitionId = parseInt(req.params.id, 10);
-      const report = await getCompetitionRewardIntegrity(competitionId);
-      return res.json(report);
+      if (!Number.isFinite(competitionId) || competitionId <= 0) {
+        return res.status(400).json({ message: "Invalid competition id" });
+      }
+
+      const competition = await storage.getCompetition(competitionId);
+      if (!competition) {
+        return res.status(404).json({ message: "Tournament not found" });
+      }
+
+      const entries = await storage.getCompetitionEntries(competitionId);
+      const rows = await Promise.all(
+        entries.map(async (entry) => {
+          const prizeCardId = Number(entry.prizeCardId || 0);
+          const expectedCard = prizeCardId > 0;
+          const card = expectedCard ? await storage.getPlayerCard(prizeCardId) : undefined;
+          const exists = Boolean(card);
+          const ownerMatches = exists && String(card?.ownerId || "") === String(entry.userId || "");
+          return {
+            entryId: entry.id,
+            userId: String(entry.userId || ""),
+            rank: Number(entry.rank || 0),
+            prizeAmount: toMoney(entry.prizeAmount || 0),
+            prizeCardId: expectedCard ? prizeCardId : null,
+            expectedCard,
+            exists,
+            ownerMatches,
+            status: !expectedCard ? "no_card_expected" : !exists ? "missing_card" : !ownerMatches ? "owner_mismatch" : "ok",
+          };
+        }),
+      );
+
+      const summary = {
+        totalEntries: rows.length,
+        expectedCards: rows.filter((r) => r.expectedCard).length,
+        missingCards: rows.filter((r) => r.status === "missing_card").length,
+        ownerMismatches: rows.filter((r) => r.status === "owner_mismatch").length,
+        okCards: rows.filter((r) => r.status === "ok").length,
+      };
+
+      return res.json({ competitionId, competitionName: competition.name, summary, rows });
     } catch (error: any) {
-      const message = String(error?.message || "Failed reward integrity check");
-      const status = message.includes("Invalid") ? 400 : message.includes("not found") || message.includes("Tournament not found") ? 404 : 500;
       console.error("Failed reward integrity check:", error);
-      return res.status(status).json({ message });
+      return res.status(500).json({ message: "Failed reward integrity check" });
     }
   });
 
-  app.post("/api/admin/competitions/:id/repair-rewards", requireAuth, isAdmin, async (req: any, res) => {
+  // Admin: Reward integrity check for a settled competition (Phase 2)
+  app.get("/api/admin/competitions/:id/reward-integrity", requireAuth, isAdmin, async (req: any, res) => {
     try {
       const competitionId = parseInt(req.params.id, 10);
-      const result = await repairCompetitionRewards(competitionId);
+      if (!Number.isFinite(competitionId) || competitionId <= 0) {
+        return res.status(400).json({ message: "Invalid competition id" });
+      }
 
-      await writeAuditLog(String(req.authUserId || ""), "admin.competition.repair_rewards", {
-        competitionId,
-        repairedCount: result.repairedCount,
-        skippedCount: result.skippedCount,
-        repaired: result.repaired,
-        skipped: result.skipped,
-        ip: getClientIp(req),
-      });
+      const competition = await storage.getCompetition(competitionId);
+      if (!competition) {
+        return res.status(404).json({ message: "Tournament not found" });
+      }
 
-      return res.json(result);
+      const entries = await storage.getCompetitionEntries(competitionId);
+      const rows = await Promise.all(
+        entries.map(async (entry) => {
+          const prizeCardId = Number(entry.prizeCardId || 0);
+          const expectedCard = prizeCardId > 0;
+          const card = expectedCard ? await storage.getPlayerCard(prizeCardId) : undefined;
+          const exists = Boolean(card);
+          const ownerMatches = exists && String(card?.ownerId || "") === String(entry.userId || "");
+          return {
+            entryId: entry.id,
+            userId: String(entry.userId || ""),
+            rank: Number(entry.rank || 0),
+            prizeAmount: toMoney(entry.prizeAmount || 0),
+            prizeCardId: expectedCard ? prizeCardId : null,
+            expectedCard,
+            exists,
+            ownerMatches,
+            status: !expectedCard ? "no_card_expected" : !exists ? "missing_card" : !ownerMatches ? "owner_mismatch" : "ok",
+          };
+        }),
+      );
+
+      const summary = {
+        totalEntries: rows.length,
+        expectedCards: rows.filter((r) => r.expectedCard).length,
+        missingCards: rows.filter((r) => r.status === "missing_card").length,
+        ownerMismatches: rows.filter((r) => r.status === "owner_mismatch").length,
+        okCards: rows.filter((r) => r.status === "ok").length,
+      };
+
+      return res.json({ competitionId, competitionName: competition.name, summary, rows });
     } catch (error: any) {
-      const message = String(error?.message || "Failed reward repair");
-      const status = message.includes("Invalid") || message.includes("must be completed") ? 400 : message.includes("not found") || message.includes("Tournament not found") ? 404 : 500;
-      console.error("Failed reward repair:", error);
-      return res.status(status).json({ message });
+      console.error("Failed reward integrity check:", error);
+      return res.status(500).json({ message: "Failed reward integrity check" });
     }
   });
 
@@ -5335,133 +5419,6 @@ app.get("/api/players/:id/photo", async (req, res) => {
     } catch (error: any) {
       console.error("Failed to update tournament:", error);
       return res.status(500).json({ message: "Failed to update tournament", error: error?.message });
-    }
-  });
-
-  app.get("/api/admin/marketplace/integrity", requireAuth, isAdmin, async (_req: any, res) => {
-    try {
-      const { db } = await import("./db.js");
-      const { playerCards, players, competitionEntries, competitions } = await import("../shared/schema.js");
-
-      const [cardRows, playerRows, entryRows, competitionRows] = await Promise.all([
-        db.select().from(playerCards),
-        db.select({ id: players.id, name: players.name }).from(players),
-        db.select().from(competitionEntries),
-        db.select().from(competitions),
-      ]);
-
-      const playerIds = new Set((playerRows as any[]).map((player: any) => Number(player.id)));
-      const competitionStatusById = new Map((competitionRows as any[]).map((competition: any) => [Number(competition.id), String(competition.status || "")]));
-      const activeLineupCardIds = new Set<number>();
-      for (const entry of entryRows as any[]) {
-        const status = competitionStatusById.get(Number(entry.competitionId));
-        if (status !== "open" && status !== "active") continue;
-        if (!Array.isArray(entry.lineupCardIds)) continue;
-        for (const id of entry.lineupCardIds) {
-          const cardId = Number(id);
-          if (Number.isFinite(cardId) && cardId > 0) activeLineupCardIds.add(cardId);
-        }
-      }
-
-      const rows = (cardRows as any[])
-        .filter((card: any) => Boolean(card.forSale))
-        .map((card: any) => {
-          const cardId = Number(card.id || 0);
-          const rarity = String(card.rarity || "common").toLowerCase();
-          const price = toMoney(card.price || 0);
-          const floor = getMarketplaceFloorPrice(rarity);
-          const flags = [
-            !playerIds.has(Number(card.playerId || 0)) ? "missing_player" : null,
-            !card.ownerId ? "missing_owner" : null,
-            !isMarketplaceTradableRarity(rarity) ? "untradable_rarity" : null,
-            price <= 0 ? "invalid_price" : null,
-            floor > 0 && price < floor ? "below_floor" : null,
-            activeLineupCardIds.has(cardId) ? "listed_in_active_lineup" : null,
-          ].filter(Boolean);
-
-          return {
-            cardId,
-            playerId: Number(card.playerId || 0),
-            ownerId: card.ownerId || null,
-            rarity,
-            price,
-            floor,
-            flags,
-            status: flags.length ? "review" : "ok",
-          };
-        });
-
-      const reviewRows = rows.filter((row) => row.status === "review");
-      const flagCounts = reviewRows.reduce((acc: Record<string, number>, row) => {
-        for (const flag of row.flags) acc[flag] = (acc[flag] || 0) + 1;
-        return acc;
-      }, {});
-
-      return res.json({
-        summary: {
-          listingsChecked: rows.length,
-          okListings: rows.length - reviewRows.length,
-          reviewListings: reviewRows.length,
-          flagCounts,
-        },
-        rows: reviewRows,
-      });
-    } catch (error: any) {
-      console.error("Failed marketplace integrity check:", error);
-      return res.status(500).json({ message: "Failed marketplace integrity check" });
-    }
-  });
-
-  app.post("/api/admin/marketplace/repair-listings", requireAuth, isAdmin, async (req: any, res) => {
-    try {
-      const { db } = await import("./db.js");
-      const { playerCards, competitionEntries, competitions } = await import("../shared/schema.js");
-      const { eq, inArray } = await import("drizzle-orm");
-
-      const [cardRows, entryRows, competitionRows] = await Promise.all([
-        db.select().from(playerCards),
-        db.select().from(competitionEntries),
-        db.select().from(competitions),
-      ]);
-
-      const competitionStatusById = new Map((competitionRows as any[]).map((competition: any) => [Number(competition.id), String(competition.status || "")]));
-      const activeLineupCardIds = new Set<number>();
-      for (const entry of entryRows as any[]) {
-        const status = competitionStatusById.get(Number(entry.competitionId));
-        if (status !== "open" && status !== "active") continue;
-        if (!Array.isArray(entry.lineupCardIds)) continue;
-        for (const id of entry.lineupCardIds) {
-          const cardId = Number(id);
-          if (Number.isFinite(cardId) && cardId > 0) activeLineupCardIds.add(cardId);
-        }
-      }
-
-      const repairCardIds = (cardRows as any[])
-        .filter((card: any) => {
-          if (!card.forSale) return false;
-          const cardId = Number(card.id || 0);
-          const rarity = String(card.rarity || "common").toLowerCase();
-          const price = toMoney(card.price || 0);
-          const floor = getMarketplaceFloorPrice(rarity);
-          return !card.ownerId || !isMarketplaceTradableRarity(rarity) || price <= 0 || (floor > 0 && price < floor) || activeLineupCardIds.has(cardId);
-        })
-        .map((card: any) => Number(card.id || 0))
-        .filter((id: number) => Number.isFinite(id) && id > 0);
-
-      if (repairCardIds.length > 0) {
-        await db.update(playerCards).set({ forSale: false, price: 0 } as any).where(inArray(playerCards.id, repairCardIds));
-      }
-
-      await writeAuditLog(String(req.authUserId || ""), "admin.marketplace.repair_listings", {
-        repairedCount: repairCardIds.length,
-        cardIds: repairCardIds,
-        ip: getClientIp(req),
-      });
-
-      return res.json({ success: true, repairedCount: repairCardIds.length, cardIds: repairCardIds });
-    } catch (error: any) {
-      console.error("Failed marketplace repair:", error);
-      return res.status(500).json({ message: "Failed marketplace repair" });
     }
   });
 
