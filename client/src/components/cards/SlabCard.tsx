@@ -256,6 +256,15 @@ function CardBackGhost({ theme, season, teamCode }: { theme: Theme; season: stri
   );
 }
 
+function BackCardStack({ theme }: { theme: Theme }) {
+  return (
+    <>
+      <div className="pointer-events-none absolute inset-y-[5%] -right-[7%] z-0 w-[82%] rotate-[6deg] rounded-[1.4rem] border border-white/15 opacity-45 blur-[0.2px]" style={{ background: `linear-gradient(170deg,${theme.glass},transparent)` }} />
+      <div className="pointer-events-none absolute inset-y-[8%] -left-[7%] z-0 w-[78%] -rotate-[5deg] rounded-[1.3rem] border border-white/12 opacity-30" style={{ background: `linear-gradient(170deg,transparent,${theme.glass})` }} />
+    </>
+  );
+}
+
 export default function SlabCard({
   name,
   rarity,
@@ -292,6 +301,7 @@ export default function SlabCard({
       ].join(" ")}
       style={{ filter: `drop-shadow(${theme.glow})`, transformStyle: "preserve-3d" }}
     >
+      <BackCardStack theme={theme} />
       <div className="absolute inset-0" style={{ clipPath: theme.shape, background: theme.frame }} />
       <div className="absolute inset-[3px]" style={{ clipPath: theme.shape, background: theme.surface }} />
       <div className="absolute inset-[7px]" style={{ clipPath: theme.shape, background: `linear-gradient(145deg,transparent,${theme.glass},transparent)` }} />
@@ -299,6 +309,7 @@ export default function SlabCard({
 
       <div className="absolute inset-[3px] overflow-hidden" style={{ clipPath: theme.shape }}>
         <RarityPattern theme={theme} rarity={rarity} />
+        <div className="absolute inset-0 opacity-70" style={{ backgroundImage: `radial-gradient(circle at 15% 20%, ${theme.particle} 0 1px, transparent 2px), radial-gradient(circle at 80% 35%, ${theme.particle} 0 1px, transparent 2px), radial-gradient(circle at 55% 75%, ${theme.particle} 0 1px, transparent 2px)`, backgroundSize: "36px 36px, 44px 44px, 52px 52px" }} />
         <CardBackGhost theme={theme} season={season} teamCode={teamCode} />
         <div className="absolute inset-x-0 bottom-0 h-[46%] bg-gradient-to-t from-black/70 via-black/28 to-transparent" />
         <div className="absolute inset-x-[10%] top-[9%] h-[58%] rounded-[1.8rem] border border-white/10 bg-white/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,.12)]" />
