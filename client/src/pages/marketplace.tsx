@@ -80,8 +80,17 @@ function getCardPrice(card: PlayerCardWithPlayer) {
   return Number((card as any).price || (card as any).listedPrice || 0);
 }
 
+function resolveCardId(card: PlayerCardWithPlayer): number {
+  const raw = (card as any).id ?? (card as any).cardId ?? (card as any).playerCardId;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+
 function getOwner(card: PlayerCardWithPlayer) {
   return String((card as any).ownerUsername || (card as any).ownerName || "Fantasy Arena");
+}
+function resolveSerialId(card: PlayerCardWithPlayer): string {
+  return String((card as any).serialId || "").trim();
 }
 
 function RarityBadge({ rarity, serial, maxSupply }: { rarity: string; serial?: number; maxSupply?: number }) {
@@ -136,7 +145,8 @@ function PlayerMarketRow({
   const showImage = Boolean(image) && !failed;
 
   return (
-    <div className="grid grid-cols-[minmax(260px,2.2fr)_1.1fr_.8fr_.55fr_.55fr_.8fr_1.15fr_1fr] items-center gap-4 border-b border-slate-800/80 bg-slate-950/40 px-4 py-3 transition hover:bg-slate-900/60 max-xl:grid-cols-[minmax(260px,2fr)_1fr_.6fr_.8fr_1fr] max-lg:grid-cols-1 max-lg:rounded-2xl max-lg:border max-lg:p-4">
+    <div className="group relative grid grid-cols-[minmax(260px,2.2fr)_1.1fr_.8fr_.55fr_.55fr_.8fr_1.15fr_1fr] items-center gap-4 border-b border-slate-800/80 bg-slate-950/50 px-4 py-3 transition hover:bg-slate-900/70 max-xl:grid-cols-[minmax(260px,2fr)_1fr_.6fr_.8fr_1fr] max-lg:grid-cols-1 max-lg:rounded-2xl max-lg:border max-lg:p-4">
+      <div className="pointer-events-none absolute inset-0 opacity-0 transition group-hover:opacity-100 bg-[linear-gradient(90deg,rgba(30,64,175,.08)_0%,rgba(14,165,233,.03)_45%,transparent_100%)]" />
       <button type="button" onClick={onDetails} className="flex min-w-0 items-center gap-4 text-left">
         <div className="relative h-20 w-24 shrink-0 overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,.26),transparent_48%)]" />
@@ -154,7 +164,7 @@ function PlayerMarketRow({
           )}
         </div>
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-blue-400/40 bg-blue-600/20 text-2xl font-black text-white shadow-[0_0_24px_rgba(37,99,235,.20)]">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-cyan-300/50 bg-gradient-to-b from-cyan-400/25 to-blue-600/25 text-2xl font-black text-white shadow-[0_0_28px_rgba(56,189,248,.26)]">
             {Number(fantasy.rating || 0).toFixed(0)}
           </div>
           <div className="min-w-0">
@@ -180,7 +190,7 @@ function PlayerMarketRow({
         <span className="truncate text-sm text-slate-300">{fantasy.team || fantasy.club || "Free Agent"}</span>
       </div>
 
-      <div className="text-sm font-black text-white max-lg:flex max-lg:justify-between">
+      <div className="text-sm font-black text-cyan-100 max-lg:flex max-lg:justify-between">
         <span className="hidden text-xs font-semibold uppercase text-slate-500 max-lg:block">POS</span>
         {fantasy.position || "N/A"}
       </div>
@@ -278,7 +288,10 @@ export default function MarketplacePage() {
 
   const buyMutation = useMutation({
     mutationFn: async (cardId: number) => {
-      const res = await apiRequest("POST", `/api/marketplace/buy/${cardId}`, {});
+      const card = listings?.find((item) => resolveCardId(item) === cardId);
+      const res = await apiRequest("POST", `/api/marketplace/buy/${cardId}`, {
+        serialId: card ? resolveSerialId(card) : undefined,
+      });
       return res.json();
     },
     onSuccess: () => {
@@ -370,13 +383,34 @@ export default function MarketplacePage() {
   };
 
   return (
-    <div className="relative min-h-full flex-1 overflow-auto bg-[#07111f] p-4 text-slate-100 sm:p-6 lg:p-8">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(37,99,235,.18),transparent_34%),radial-gradient(circle_at_85%_5%,rgba(14,165,233,.10),transparent_30%),linear-gradient(180deg,#07111f_0%,#050812_100%)]" />
+    <div className="relative min-h-full flex-1 overflow-auto bg-[#040812] p-4 text-slate-100 sm:p-6 lg:p-8">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(56,189,248,.22),transparent_30%),radial-gradient(circle_at_90%_5%,rgba(168,85,247,.16),transparent_28%),radial-gradient(circle_at_50%_120%,rgba(30,64,175,.25),transparent_45%),linear-gradient(180deg,#040812_0%,#030611_100%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(148,163,184,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,.08)_1px,transparent_1px)] [background-size:48px_48px]" />
       <div className="relative mx-auto max-w-[1560px]">
+        <div className="mb-5 rounded-3xl border border-cyan-700/35 bg-gradient-to-r from-[#07142f] via-[#111a3f] to-[#220b3f] p-5 shadow-[0_24px_70px_rgba(0,0,0,.45)]">
+          <div className="grid gap-5 md:grid-cols-[2fr_1fr_1fr_1fr]">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[.2em] text-cyan-300/80">Transfer Hub</p>
+              <h1 className="mt-1 text-3xl font-black tracking-tight text-white">Marketplace</h1>
+              <p className="mt-1 text-sm text-slate-300">Scouting-grade cards, instant checkout, live pricing confidence.</p>
+            </div>
+            <div className="rounded-2xl border border-slate-700/70 bg-slate-950/45 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Active Listings</p>
+              <p className="mt-1 text-2xl font-black text-white">{sortedListings.length}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-700/70 bg-slate-950/45 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Watchlist</p>
+              <p className="mt-1 text-2xl font-black text-rose-300">{watchlist.length}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-200/90">Balance</p>
+              <p className="mt-1 text-2xl font-black text-emerald-200">N${Number(wallet?.balance || 0).toFixed(2)}</p>
+            </div>
+          </div>
+        </div>
         <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-white">Marketplace</h1>
-            <p className="mt-1 text-sm text-slate-400">Buy and sell rare player cards</p>
+            <p className="text-sm text-slate-400">Buy and sell rare player cards</p>
           </div>
           <div className="rounded-2xl border border-slate-800 bg-slate-950/75 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,.04)]">
             <p className="text-[10px] font-black uppercase tracking-[.18em] text-slate-500">Balance</p>
@@ -413,6 +447,7 @@ export default function MarketplacePage() {
           </div>
 
           <TabsContent value="buy">
+            <div className="rounded-2xl border border-blue-900/40 bg-[radial-gradient(circle_at_15%_15%,rgba(37,99,235,.16),transparent_35%),linear-gradient(180deg,rgba(15,23,42,.65),rgba(2,6,23,.72))] p-4 shadow-[0_20px_50px_rgba(2,6,23,.35)]">
             <div className="mb-4 flex flex-wrap items-center gap-3">
               <div className="relative min-w-[260px] flex-1 max-w-lg">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -487,12 +522,12 @@ export default function MarketplacePage() {
                 <div>
                   {visibleBuyListings.map((card) => (
                     <PlayerMarketRow
-                      key={card.id}
+                  key={resolveCardId(card) || `${card.serialId || "no-serial"}-${card.playerId || "player"}-${getCardPrice(card)}`}
                       card={card}
-                      watched={watchlist.includes(card.id)}
+                      watched={watchlist.includes(resolveCardId(card))}
                       onBuy={() => handleOpenBuyCard(card)}
                       onDetails={() => setDetailCard(card)}
-                      onToggleWatchlist={() => toggleWatchlist(card.id)}
+                      onToggleWatchlist={() => toggleWatchlist(resolveCardId(card))}
                     />
                   ))}
                 </div>
@@ -509,13 +544,15 @@ export default function MarketplacePage() {
                 <Button variant="outline" onClick={() => setBuyVisibleCount((prev) => prev + 12)}>Load More Listings</Button>
               </div>
             ) : null}
+            </div>
           </TabsContent>
 
           <TabsContent value="sell">
+            <div className="rounded-2xl border border-fuchsia-900/35 bg-[radial-gradient(circle_at_85%_0%,rgba(217,70,239,.14),transparent_36%),linear-gradient(180deg,rgba(30,41,59,.50),rgba(2,6,23,.74))] p-4 shadow-[0_20px_50px_rgba(2,6,23,.35)]">
             <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/45">
               {visibleSellListings.length > 0 ? (
                 visibleSellListings.map((card) => (
-                  <PlayerMarketRow key={card.id} card={card} watched={watchlist.includes(card.id)} onDetails={() => setDetailCard(card)} />
+                  <PlayerMarketRow key={resolveCardId(card) || `${card.serialId || "no-serial"}-${card.playerId || "player"}-${getCardPrice(card)}`} card={card} watched={watchlist.includes(resolveCardId(card))} onDetails={() => setDetailCard(card)} />
                 ))
               ) : (
                 <Card className="m-4 border-slate-800 bg-slate-950/60 p-12 text-center">
@@ -530,6 +567,7 @@ export default function MarketplacePage() {
                 <Button variant="outline" onClick={() => setSellVisibleCount((prev) => prev + 12)}>Load More My Listings</Button>
               </div>
             ) : null}
+            </div>
           </TabsContent>
         </Tabs>
 
@@ -559,7 +597,12 @@ export default function MarketplacePage() {
               onClick={() => {
                 if (!buyCard) return;
                 play("click");
-                buyMutation.mutate(buyCard.id);
+                const purchaseCardId = resolveCardId(buyCard);
+                if (!purchaseCardId) {
+                  toast({ title: "Error", description: "This listing has an invalid card id.", variant: "destructive" });
+                  return;
+                }
+                buyMutation.mutate(purchaseCardId);
               }}
               disabled={buyMutation.isPending || Number(wallet?.balance || 0) < Number(buyCard ? getCardPrice(buyCard) : 0)}
             >
@@ -576,7 +619,7 @@ export default function MarketplacePage() {
           </DialogHeader>
           {detailCard ? (
             <div className="space-y-3">
-              <PlayerMarketRow card={detailCard} watched={watchlist.includes(detailCard.id)} onBuy={() => handleOpenBuyCard(detailCard)} onToggleWatchlist={() => toggleWatchlist(detailCard.id)} />
+              <PlayerMarketRow card={detailCard} watched={watchlist.includes(resolveCardId(detailCard))} onBuy={() => handleOpenBuyCard(detailCard)} onToggleWatchlist={() => toggleWatchlist(resolveCardId(detailCard))} />
               <div className="rounded-xl border border-slate-800 bg-black/35 p-4 text-sm text-slate-300">
                 <p>Listed: N${Number(marketSignal?.listedPrice || getCardPrice(detailCard)).toFixed(2)}</p>
                 <p>Last Sale: N${Number(marketSignal?.lastSale || 0).toFixed(2)} · Avg Sale: N${Number(marketSignal?.avgSale || 0).toFixed(2)}</p>
