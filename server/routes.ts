@@ -19,6 +19,7 @@ import { registerAdminRoutes } from "./routes/admin.routes.js";
 import { registerAuctionsRoutes } from "./routes/auctions.routes.js";
 import { registerAuthModeRoutes } from "./routes/auth.routes.js";
 import { registerRetentionRoutes } from "./routes/retention.routes.js";
+import { creditWalletWithLedger, getWalletIntegrityReport, repairMissingWalletsFromLedger } from "./services/walletLedger.js";
 import {
   getCardStatus,
   getDepositBreakdown,
@@ -2048,6 +2049,13 @@ app.get("/api/players/:id/photo", async (req, res) => {
         } as any);
 
         return updated;
+      });
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
+        targetUserId: userId,
+        amount,
+        newBalance: updatedWallet.balance || 0,
+        ip: getClientIp(req),
       });
 
       await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
