@@ -42,7 +42,7 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "mt-2 rounded-xl border border-border/60 bg-[radial-gradient(circle_at_10%_0%,rgba(59,130,246,.12),transparent_40%),linear-gradient(180deg,rgba(15,23,42,.45),rgba(2,6,23,.65))] p-3 shadow-[0_18px_50px_rgba(2,6,23,.32)] ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       className
     )}
     {...props}

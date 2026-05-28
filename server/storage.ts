@@ -267,24 +267,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateWalletBalance(userId: string, amount: number): Promise<Wallet | undefined> {
+    if (!Number.isFinite(amount) || amount === 0) return this.getWallet(userId);
+
     const [updated] = await db
       .update(wallets)
       .set({ balance: sql`${wallets.balance} + ${amount}` } as any)
-      .where(eq(wallets.userId, userId))
+      .where(and(eq(wallets.userId, userId), sql`${wallets.balance} + ${amount} >= 0`))
       .returning();
     return updated || undefined;
   }
 
   async updateWalletLockedBalance(userId: string, amount: number): Promise<Wallet | undefined> {
+    if (!Number.isFinite(amount) || amount === 0) return this.getWallet(userId);
+
     const [updated] = await db
       .update(wallets)
       .set({ lockedBalance: sql`${wallets.lockedBalance} + ${amount}` } as any)
-      .where(eq(wallets.userId, userId))
+      .where(and(eq(wallets.userId, userId), sql`${wallets.lockedBalance} + ${amount} >= 0`))
       .returning();
     return updated || undefined;
   }
 
   async lockFunds(userId: string, amount: number): Promise<Wallet | undefined> {
+    if (!Number.isFinite(amount) || amount <= 0) return undefined;
+
     const [updated] = await db
       .update(wallets)
       .set(
@@ -293,12 +299,14 @@ export class DatabaseStorage implements IStorage {
           lockedBalance: sql`${wallets.lockedBalance} + ${amount}`,
         } as any,
       )
-      .where(eq(wallets.userId, userId))
+      .where(and(eq(wallets.userId, userId), sql`${wallets.balance} >= ${amount}`))
       .returning();
     return updated || undefined;
   }
 
   async unlockFunds(userId: string, amount: number): Promise<Wallet | undefined> {
+    if (!Number.isFinite(amount) || amount <= 0) return undefined;
+
     const [updated] = await db
       .update(wallets)
       .set(
@@ -307,7 +315,7 @@ export class DatabaseStorage implements IStorage {
           lockedBalance: sql`${wallets.lockedBalance} - ${amount}`,
         } as any,
       )
-      .where(eq(wallets.userId, userId))
+      .where(and(eq(wallets.userId, userId), sql`${wallets.lockedBalance} >= ${amount}`))
       .returning();
     return updated || undefined;
   }
