@@ -137,6 +137,15 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
   } catch (error: any) {
     const message = String(error?.message || "Failed to buy card");
     const status = message.includes("not found") ? 404 : 400;
+    try {
+      await db.insert(auditLogs).values({
+        userId: buyerId,
+        action: "marketplace.purchase.failed",
+        meta: { cardId: resolvedCardId, serialId, message },
+      } as any);
+    } catch (auditError) {
+      console.error("Failed to write marketplace purchase failure audit:", auditError);
+    }
     return { ok: false as const, status, message };
   }
 }
@@ -169,6 +178,15 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
       }
 
       await db.update(playerCards).set({ forSale: true, price: parsedPrice } as any).where(eq(playerCards.id, parsedCardId));
+      try {
+        await db.insert(auditLogs).values({
+          userId,
+          action: "marketplace.listing.created",
+          meta: { cardId: parsedCardId, price: parsedPrice, rarity: card.rarity, floor },
+        } as any);
+      } catch (auditError) {
+        console.error("Failed to write marketplace listing audit:", auditError);
+      }
       return res.json({ success: true, message: "Card listed for sale", cardId: parsedCardId, price: parsedPrice, floor });
     } catch (error: any) {
       console.error("Marketplace list override failed:", error);
@@ -187,6 +205,15 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
       if (String(card.ownerId || "") !== String(userId)) return res.status(403).json({ message: "Not your card" });
 
       await db.update(playerCards).set({ forSale: false, price: 0 } as any).where(eq(playerCards.id, cardId));
+      try {
+        await db.insert(auditLogs).values({
+          userId,
+          action: "marketplace.listing.cancelled",
+          meta: { cardId, previousPrice: card.price || 0 },
+        } as any);
+      } catch (auditError) {
+        console.error("Failed to write marketplace cancellation audit:", auditError);
+      }
       return res.json({ success: true, cardId });
     } catch (error: any) {
       console.error("Cancel marketplace listing failed:", error);
