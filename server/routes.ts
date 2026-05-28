@@ -2023,19 +2023,42 @@ app.get("/api/players/:id/photo", async (req, res) => {
         wallet = await storage.createWallet({ userId, balance: 0, lockedBalance: 0 });
       }
       
-      // Credit wallet and create transaction
-      await storage.updateWalletBalance(userId, amount);
-      await storage.createTransaction({
-        userId,
-        type: "deposit",
+      const { db } = await import("./db.js");
+      const { wallets, transactions } = await import("../shared/schema.js");
+      const { eq, sql } = await import("drizzle-orm");
+
+      const updatedWallet = await db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(wallets)
+          .set({ balance: sql`${wallets.balance} + ${amount}` } as any)
+          .where(eq(wallets.userId, userId))
+          .returning();
+
+        if (!updated) {
+          throw new Error("Wallet not found");
+        }
+
+        await tx.insert(transactions).values({
+          userId,
+          type: "admin_adjustment",
+          amount,
+          description: description || `Admin credit: ${amount}`,
+        } as any);
+
+        return updated;
+      });
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
+        targetUserId: userId,
         amount,
-        description: description || `Admin credit: ${amount}`,
+        newBalance: updatedWallet.balance || 0,
+        ip: getClientIp(req),
       });
       
       res.json({ 
         success: true, 
         message: `Credited ${amount} to user ${userId}`,
-        newBalance: (wallet.balance || 0) + amount
+        newBalance: updatedWallet.balance || 0
       });
     } catch (error: any) {
       console.error("Failed to credit wallet:", error);
@@ -2302,26 +2325,49 @@ app.get("/api/players/:id/photo", async (req, res) => {
 
       const releaseAfter = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const verificationToken = randomUUID().replace(/-/g, "");
-      
-      // Create withdrawal request
-      const withdrawal = await storage.createWithdrawalRequest({
-        userId,
-        amount: gross,
-        fee,
-        netAmount: net,
-        paymentMethod: method,
-        bankName,
-        accountHolder,
-        accountNumber,
-        iban,
-        swiftCode,
-        ewalletProvider,
-        ewalletId,
-        destinationKey,
-        destinationVerified: false,
-        verificationToken,
-        releaseAfter,
-        status: "pending",
+
+      const { db: pendingWithdrawalDb } = await import("./db.js");
+      const { wallets: pendingWallets, withdrawalRequests: pendingWithdrawalRequests } = await import("../shared/schema.js");
+      const { and: pendingAnd, eq: pendingEq, sql: pendingSql } = await import("drizzle-orm");
+
+      const withdrawal = await pendingWithdrawalDb.transaction(async (tx) => {
+        const [lockedWallet] = await tx
+          .update(pendingWallets)
+          .set({
+            balance: pendingSql`${pendingWallets.balance} - ${gross}`,
+            lockedBalance: pendingSql`${pendingWallets.lockedBalance} + ${gross}`,
+          } as any)
+          .where(pendingAnd(pendingEq(pendingWallets.userId, userId), pendingSql`${pendingWallets.balance} >= ${gross}`))
+          .returning();
+
+        if (!lockedWallet) {
+          throw new Error("Insufficient balance");
+        }
+
+        const [createdWithdrawal] = await tx
+          .insert(pendingWithdrawalRequests)
+          .values({
+            userId,
+            amount: gross,
+            fee,
+            netAmount: net,
+            paymentMethod: method,
+            bankName,
+            accountHolder,
+            accountNumber,
+            iban,
+            swiftCode,
+            ewalletProvider,
+            ewalletId,
+            destinationKey,
+            destinationVerified: false,
+            verificationToken,
+            releaseAfter,
+            status: "pending",
+          } as any)
+          .returning();
+
+        return createdWithdrawal;
       });
 
       const baseUrl = process.env.PUBLIC_BASE_URL || "https://fantasy-sports-exchange-production-b10a.up.railway.app";
@@ -2417,177 +2463,8 @@ app.get("/api/players/:id/photo", async (req, res) => {
     }
   });
 
-  // List a card for sale
-  app.post("/api/marketplace/list", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const { cardId, price } = req.body;
-      
-      if (!cardId || typeof price !== "number" || price <= 0) {
-        return res.status(400).json({ message: "Valid cardId and positive price required" });
-      }
-      
-      // Get the card
-      const card = await storage.getPlayerCard(cardId);
-      if (!card) {
-        return res.status(404).json({ message: "Card not found" });
-      }
-      
-      // Verify ownership
-      if (card.ownerId !== userId) {
-        return res.status(403).json({ message: "You don't own this card" });
-      }
-      
-      // Check if already listed
-      if (card.forSale) {
-        return res.status(400).json({ message: "Card is already listed for sale" });
-      }
-
-      // Disallow listing cards used in any active/open competition lineup
-      const activeEntries = await storage.getUserCompetitions(userId);
-      let inActiveLineup = false;
-      for (const entry of activeEntries) {
-        const entryComp = await storage.getCompetition(entry.competitionId);
-        if (!entryComp || (entryComp.status !== "open" && entryComp.status !== "active")) continue;
-        if (Array.isArray(entry?.lineupCardIds) && entry.lineupCardIds.includes(cardId)) {
-          inActiveLineup = true;
-          break;
-        }
-      }
-      if (inActiveLineup) {
-        return res.status(400).json({
-          message: "Cannot list a card that is currently used in a tournament lineup.",
-        });
-      }
-      
-      // Enforce base prices by rarity
-      const basePrices: Record<string, number> = {
-        common: 10,
-        rare: 100,
-        unique: 250,
-        legendary: 500,
-      };
-      
-      const basePrice = basePrices[card.rarity];
-      if (basePrice && price < basePrice) {
-        return res.status(400).json({ 
-          message: `Minimum price for ${card.rarity} cards is ${formatMoney(basePrice)}` 
-        });
-      }
-      
-      // TODO: Check if card is in an active auction (when auctions are implemented)
-      
-      // List the card
-      await storage.updatePlayerCard(cardId, {
-        forSale: true,
-        price
-      });
-      
-      res.json({ 
-        success: true, 
-        message: "Card listed for sale",
-        cardId,
-        price
-      });
-    } catch (error: any) {
-      console.error("Failed to list card:", error);
-      res.status(500).json({ message: "Failed to list card" });
-    }
-  });
-
-  // Cancel a listing
-  app.post("/api/marketplace/cancel/:cardId", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const cardId = parseInt(req.params.cardId, 10);
-      
-      if (!cardId || isNaN(cardId)) {
-        return res.status(400).json({ message: "Valid cardId required" });
-      }
-      
-      // Get the card
-      const card = await storage.getPlayerCard(cardId);
-      if (!card) {
-        return res.status(404).json({ message: "Card not found" });
-      }
-      
-      // Verify ownership
-      if (card.ownerId !== userId) {
-        return res.status(403).json({ message: "You don't own this card" });
-      }
-      
-      // Check if listed
-      if (!card.forSale) {
-        return res.status(400).json({ message: "Card is not listed for sale" });
-      }
-      
-      // Cancel listing
-      await storage.updatePlayerCard(cardId, {
-        forSale: false,
-        price: 0
-      });
-      
-      res.json({ 
-        success: true, 
-        message: "Listing cancelled",
-        cardId
-      });
-    } catch (error: any) {
-      console.error("Failed to cancel listing:", error);
-      res.status(500).json({ message: "Failed to cancel listing" });
-    }
-  });
-
-  // Old sell route (deprecated - use /list instead)
-  app.post("/api/marketplace/sell", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const { cardId, price } = req.body;
-      
-      if (!cardId || typeof price !== "number" || price <= 0) {
-        return res.status(400).json({ message: "Valid cardId and positive price required" });
-      }
-      
-      // Use the new list endpoint logic
-      const card = await storage.getPlayerCard(cardId);
-      if (!card) {
-        return res.status(404).json({ message: "Card not found" });
-      }
-      
-      if (card.ownerId !== userId) {
-        return res.status(403).json({ message: "You don't own this card" });
-      }
-
-      const activeEntries = await storage.getUserCompetitions(userId);
-      let inActiveLineup = false;
-      for (const entry of activeEntries) {
-        const entryComp = await storage.getCompetition(entry.competitionId);
-        if (!entryComp || (entryComp.status !== "open" && entryComp.status !== "active")) continue;
-        if (Array.isArray(entry?.lineupCardIds) && entry.lineupCardIds.includes(cardId)) {
-          inActiveLineup = true;
-          break;
-        }
-      }
-      if (inActiveLineup) {
-        return res.status(400).json({
-          message: "Cannot list a card that is currently used in a tournament lineup.",
-        });
-      }
-      
-      await storage.updatePlayerCard(cardId, {
-        forSale: true,
-        price
-      });
-      
-      res.json({ 
-        success: true,
-        message: "Card listed for sale" 
-      });
-    } catch (error: any) {
-      console.error("Failed to sell card:", error);
-      res.status(500).json({ message: "Failed to sell card" });
-    }
-  });
+  // Fixed-price listing mutations are registered in server/routes/marketplace.routes.ts.
+  // Keep this section read-only here to avoid duplicate route implementations drifting.
 
   // -------------------------
   // AUCTION ENDPOINTS
