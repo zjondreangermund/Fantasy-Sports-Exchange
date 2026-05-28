@@ -879,7 +879,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const enriched = await Promise.all(
         referrals.map(async (row: any) => {
           const rewardCardId = row?.reward_card_id == null ? null : Number(row.reward_card_id);
-          const rewardCard = rewardCardId ? await storage.getPlayerCardWithPlayer(rewardCardId) : null;
+          const rewardCard = rewardCardId ? await storage.getPlayerCardWithPlayer(rewardCardId, userId) : null;
           return {
             id: Number(row.id),
             referredUserId: String(row.referred_user_id || ""),
@@ -2023,23 +2023,115 @@ app.get("/api/players/:id/photo", async (req, res) => {
         wallet = await storage.createWallet({ userId, balance: 0, lockedBalance: 0 });
       }
       
-      // Credit wallet and create transaction
-      await storage.updateWalletBalance(userId, amount);
-      await storage.createTransaction({
-        userId,
-        type: "deposit",
+      const { db } = await import("./db.js");
+      const { wallets, transactions } = await import("../shared/schema.js");
+      const { eq, sql } = await import("drizzle-orm");
+
+      const updatedWallet = await db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(wallets)
+          .set({ balance: sql`${wallets.balance} + ${amount}` } as any)
+          .where(eq(wallets.userId, userId))
+          .returning();
+
+        if (!updated) {
+          throw new Error("Wallet not found");
+        }
+
+        await tx.insert(transactions).values({
+          userId,
+          type: "admin_adjustment",
+          amount,
+          description: description || `Admin credit: ${amount}`,
+        } as any);
+
+        return updated;
+      });
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
+        targetUserId: userId,
         amount,
-        description: description || `Admin credit: ${amount}`,
+        newBalance: updatedWallet.balance || 0,
+        ip: getClientIp(req),
       });
       
       res.json({ 
         success: true, 
         message: `Credited ${amount} to user ${userId}`,
-        newBalance: (wallet.balance || 0) + amount
+        newBalance: updatedWallet.balance || 0
       });
     } catch (error: any) {
       console.error("Failed to credit wallet:", error);
       res.status(500).json({ message: "Failed to credit wallet" });
+    }
+  });
+
+  app.get("/api/admin/wallet/integrity", requireAuth, isAdmin, async (_req: any, res) => {
+    try {
+      const { db } = await import("./db.js");
+      const { wallets, transactions, users } = await import("../shared/schema.js");
+
+      const [walletRows, transactionRows, userRows] = await Promise.all([
+        db.select().from(wallets),
+        db.select().from(transactions),
+        db.select({ id: users.id, email: users.email, name: users.name }).from(users),
+      ]);
+
+      const userMeta = new Map((userRows as any[]).map((user: any) => [String(user.id), user]));
+      const ledgerByUser = new Map<string, number>();
+      for (const tx of transactionRows as any[]) {
+        const userId = String(tx.userId || "");
+        if (!userId) continue;
+        ledgerByUser.set(userId, toMoney((ledgerByUser.get(userId) || 0) + Number(tx.amount || 0)));
+      }
+
+      const walletUserIds = new Set((walletRows as any[]).map((wallet: any) => String(wallet.userId || "")));
+      const missingWallets = Array.from(ledgerByUser.keys())
+        .filter((userId) => userId && !walletUserIds.has(userId))
+        .map((userId) => ({
+          userId,
+          ledgerBalance: toMoney(ledgerByUser.get(userId) || 0),
+          user: userMeta.get(userId) || null,
+        }));
+
+      const rows = (walletRows as any[]).map((wallet: any) => {
+        const userId = String(wallet.userId || "");
+        const balance = toMoney(wallet.balance || 0);
+        const lockedBalance = toMoney(wallet.lockedBalance || 0);
+        const ledgerBalance = toMoney(ledgerByUser.get(userId) || 0);
+        const delta = toMoney(balance - ledgerBalance);
+        const flags = [
+          balance < 0 ? "negative_balance" : null,
+          lockedBalance < 0 ? "negative_locked_balance" : null,
+          Math.abs(delta) >= 0.01 ? "wallet_ledger_delta" : null,
+        ].filter(Boolean);
+
+        return {
+          userId,
+          user: userMeta.get(userId) || null,
+          balance,
+          lockedBalance,
+          ledgerBalance,
+          delta,
+          flags,
+          status: flags.length ? "review" : "ok",
+        };
+      });
+
+      const summary = {
+        walletsChecked: rows.length,
+        okWallets: rows.filter((row) => row.status === "ok").length,
+        reviewWallets: rows.filter((row) => row.status === "review").length,
+        negativeBalances: rows.filter((row) => row.flags.includes("negative_balance")).length,
+        negativeLockedBalances: rows.filter((row) => row.flags.includes("negative_locked_balance")).length,
+        ledgerDeltas: rows.filter((row) => row.flags.includes("wallet_ledger_delta")).length,
+        missingWallets: missingWallets.length,
+      };
+
+      return res.json({ summary, rows, missingWallets });
+    } catch (error: any) {
+      console.error("Failed wallet integrity check:", error);
+      return res.status(500).json({ message: "Failed wallet integrity check" });
     }
   });
 
@@ -2156,34 +2248,42 @@ app.get("/api/players/:id/photo", async (req, res) => {
 
       if (hasTrustedDestination) {
         const { db } = await import("./db.js");
-        const { wallets, transactions } = await import("../shared/schema.js");
-        const { eq, sql } = await import("drizzle-orm");
+        const { wallets, transactions, withdrawalRequests } = await import("../shared/schema.js");
+        const { and, eq, sql } = await import("drizzle-orm");
 
-        const withdrawal = await storage.createWithdrawalRequest({
-          userId,
-          amount: gross,
-          fee,
-          netAmount: net,
-          paymentMethod: method,
-          bankName,
-          accountHolder,
-          accountNumber,
-          iban,
-          swiftCode,
-          ewalletProvider,
-          ewalletId,
-          destinationKey,
-          destinationVerified: true,
-          status: "paid",
-          reviewedAt: new Date(),
-          adminNotes: "Auto-approved trusted payout destination",
-        } as any);
-
-        await db.transaction(async (tx) => {
-          await tx
+        const withdrawal = await db.transaction(async (tx) => {
+          const [debitedWallet] = await tx
             .update(wallets)
-            .set({ balance: sql`${wallets.balance} - ${amount}` } as any)
-            .where(eq(wallets.userId, userId));
+            .set({ balance: sql`${wallets.balance} - ${gross}` } as any)
+            .where(and(eq(wallets.userId, userId), sql`${wallets.balance} >= ${gross}`))
+            .returning();
+
+          if (!debitedWallet) {
+            throw new Error("Insufficient balance");
+          }
+
+          const [createdWithdrawal] = await tx
+            .insert(withdrawalRequests)
+            .values({
+              userId,
+              amount: gross,
+              fee,
+              netAmount: net,
+              paymentMethod: method,
+              bankName,
+              accountHolder,
+              accountNumber,
+              iban,
+              swiftCode,
+              ewalletProvider,
+              ewalletId,
+              destinationKey,
+              destinationVerified: true,
+              status: "paid",
+              reviewedAt: new Date(),
+              adminNotes: "Auto-approved trusted payout destination",
+            } as any)
+            .returning();
 
           await tx.insert(transactions).values({
             userId,
@@ -2196,6 +2296,8 @@ app.get("/api/players/:id/photo", async (req, res) => {
             status: "completed",
             description: `Instant withdrawal auto-approved: ${net} (fee: ${fee})`,
           } as any);
+
+          return createdWithdrawal;
         });
 
         await sendEmailNotification(
@@ -2215,31 +2317,51 @@ app.get("/api/players/:id/photo", async (req, res) => {
         });
       }
 
-      // Lock funds immediately until approved/rejected
-      await storage.lockFunds(userId, gross);
-
       const releaseAfter = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const verificationToken = randomUUID().replace(/-/g, "");
-      
-      // Create withdrawal request
-      const withdrawal = await storage.createWithdrawalRequest({
-        userId,
-        amount: gross,
-        fee,
-        netAmount: net,
-        paymentMethod: method,
-        bankName,
-        accountHolder,
-        accountNumber,
-        iban,
-        swiftCode,
-        ewalletProvider,
-        ewalletId,
-        destinationKey,
-        destinationVerified: false,
-        verificationToken,
-        releaseAfter,
-        status: "pending",
+
+      const { db: pendingWithdrawalDb } = await import("./db.js");
+      const { wallets: pendingWallets, withdrawalRequests: pendingWithdrawalRequests } = await import("../shared/schema.js");
+      const { and: pendingAnd, eq: pendingEq, sql: pendingSql } = await import("drizzle-orm");
+
+      const withdrawal = await pendingWithdrawalDb.transaction(async (tx) => {
+        const [lockedWallet] = await tx
+          .update(pendingWallets)
+          .set({
+            balance: pendingSql`${pendingWallets.balance} - ${gross}`,
+            lockedBalance: pendingSql`${pendingWallets.lockedBalance} + ${gross}`,
+          } as any)
+          .where(pendingAnd(pendingEq(pendingWallets.userId, userId), pendingSql`${pendingWallets.balance} >= ${gross}`))
+          .returning();
+
+        if (!lockedWallet) {
+          throw new Error("Insufficient balance");
+        }
+
+        const [createdWithdrawal] = await tx
+          .insert(pendingWithdrawalRequests)
+          .values({
+            userId,
+            amount: gross,
+            fee,
+            netAmount: net,
+            paymentMethod: method,
+            bankName,
+            accountHolder,
+            accountNumber,
+            iban,
+            swiftCode,
+            ewalletProvider,
+            ewalletId,
+            destinationKey,
+            destinationVerified: false,
+            verificationToken,
+            releaseAfter,
+            status: "pending",
+          } as any)
+          .returning();
+
+        return createdWithdrawal;
       });
 
       const baseUrl = process.env.PUBLIC_BASE_URL || "https://fantasy-sports-exchange-production-b10a.up.railway.app";
@@ -2335,177 +2457,8 @@ app.get("/api/players/:id/photo", async (req, res) => {
     }
   });
 
-  // List a card for sale
-  app.post("/api/marketplace/list", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const { cardId, price } = req.body;
-      
-      if (!cardId || typeof price !== "number" || price <= 0) {
-        return res.status(400).json({ message: "Valid cardId and positive price required" });
-      }
-      
-      // Get the card
-      const card = await storage.getPlayerCard(cardId);
-      if (!card) {
-        return res.status(404).json({ message: "Card not found" });
-      }
-      
-      // Verify ownership
-      if (card.ownerId !== userId) {
-        return res.status(403).json({ message: "You don't own this card" });
-      }
-      
-      // Check if already listed
-      if (card.forSale) {
-        return res.status(400).json({ message: "Card is already listed for sale" });
-      }
-
-      // Disallow listing cards used in any active/open competition lineup
-      const activeEntries = await storage.getUserCompetitions(userId);
-      let inActiveLineup = false;
-      for (const entry of activeEntries) {
-        const entryComp = await storage.getCompetition(entry.competitionId);
-        if (!entryComp || (entryComp.status !== "open" && entryComp.status !== "active")) continue;
-        if (Array.isArray(entry?.lineupCardIds) && entry.lineupCardIds.includes(cardId)) {
-          inActiveLineup = true;
-          break;
-        }
-      }
-      if (inActiveLineup) {
-        return res.status(400).json({
-          message: "Cannot list a card that is currently used in a tournament lineup.",
-        });
-      }
-      
-      // Enforce base prices by rarity
-      const basePrices: Record<string, number> = {
-        common: 10,
-        rare: 100,
-        unique: 250,
-        legendary: 500,
-      };
-      
-      const basePrice = basePrices[card.rarity];
-      if (basePrice && price < basePrice) {
-        return res.status(400).json({ 
-          message: `Minimum price for ${card.rarity} cards is ${formatMoney(basePrice)}` 
-        });
-      }
-      
-      // TODO: Check if card is in an active auction (when auctions are implemented)
-      
-      // List the card
-      await storage.updatePlayerCard(cardId, {
-        forSale: true,
-        price
-      });
-      
-      res.json({ 
-        success: true, 
-        message: "Card listed for sale",
-        cardId,
-        price
-      });
-    } catch (error: any) {
-      console.error("Failed to list card:", error);
-      res.status(500).json({ message: "Failed to list card" });
-    }
-  });
-
-  // Cancel a listing
-  app.post("/api/marketplace/cancel/:cardId", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const cardId = parseInt(req.params.cardId, 10);
-      
-      if (!cardId || isNaN(cardId)) {
-        return res.status(400).json({ message: "Valid cardId required" });
-      }
-      
-      // Get the card
-      const card = await storage.getPlayerCard(cardId);
-      if (!card) {
-        return res.status(404).json({ message: "Card not found" });
-      }
-      
-      // Verify ownership
-      if (card.ownerId !== userId) {
-        return res.status(403).json({ message: "You don't own this card" });
-      }
-      
-      // Check if listed
-      if (!card.forSale) {
-        return res.status(400).json({ message: "Card is not listed for sale" });
-      }
-      
-      // Cancel listing
-      await storage.updatePlayerCard(cardId, {
-        forSale: false,
-        price: 0
-      });
-      
-      res.json({ 
-        success: true, 
-        message: "Listing cancelled",
-        cardId
-      });
-    } catch (error: any) {
-      console.error("Failed to cancel listing:", error);
-      res.status(500).json({ message: "Failed to cancel listing" });
-    }
-  });
-
-  // Old sell route (deprecated - use /list instead)
-  app.post("/api/marketplace/sell", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const { cardId, price } = req.body;
-      
-      if (!cardId || typeof price !== "number" || price <= 0) {
-        return res.status(400).json({ message: "Valid cardId and positive price required" });
-      }
-      
-      // Use the new list endpoint logic
-      const card = await storage.getPlayerCard(cardId);
-      if (!card) {
-        return res.status(404).json({ message: "Card not found" });
-      }
-      
-      if (card.ownerId !== userId) {
-        return res.status(403).json({ message: "You don't own this card" });
-      }
-
-      const activeEntries = await storage.getUserCompetitions(userId);
-      let inActiveLineup = false;
-      for (const entry of activeEntries) {
-        const entryComp = await storage.getCompetition(entry.competitionId);
-        if (!entryComp || (entryComp.status !== "open" && entryComp.status !== "active")) continue;
-        if (Array.isArray(entry?.lineupCardIds) && entry.lineupCardIds.includes(cardId)) {
-          inActiveLineup = true;
-          break;
-        }
-      }
-      if (inActiveLineup) {
-        return res.status(400).json({
-          message: "Cannot list a card that is currently used in a tournament lineup.",
-        });
-      }
-      
-      await storage.updatePlayerCard(cardId, {
-        forSale: true,
-        price
-      });
-      
-      res.json({ 
-        success: true,
-        message: "Card listed for sale" 
-      });
-    } catch (error: any) {
-      console.error("Failed to sell card:", error);
-      res.status(500).json({ message: "Failed to sell card" });
-    }
-  });
+  // Fixed-price listing mutations are registered in server/routes/marketplace.routes.ts.
+  // Keep this section read-only here to avoid duplicate route implementations drifting.
 
   // -------------------------
   // AUCTION ENDPOINTS
@@ -3345,30 +3298,53 @@ app.get("/api/players/:id/photo", async (req, res) => {
         });
       }
       
-      // Check balance and deduct entry fee
-      const entryFee = competition.entryFee || 0;
-      if (entryFee > 0) {
-        const wallet = await storage.getWallet(userId);
-        if (!wallet || (wallet.balance || 0) < entryFee) {
-          return res.status(400).json({ message: "Insufficient balance for entry fee" });
+      const entryFee = toMoney(competition.entryFee || 0);
+      const { db } = await import("./db.js");
+      const { wallets, transactions, competitionEntries } = await import("../shared/schema.js");
+      const { and, eq, sql } = await import("drizzle-orm");
+
+      const entry = await db.transaction(async (tx) => {
+        const [freshExistingEntry] = await tx
+          .select({ id: competitionEntries.id })
+          .from(competitionEntries)
+          .where(and(eq(competitionEntries.competitionId, competitionId), eq(competitionEntries.userId, userId)))
+          .limit(1);
+
+        if (freshExistingEntry) {
+          throw new Error("Already entered this tournament");
         }
-        
-        await storage.updateWalletBalance(userId, -entryFee);
-        await storage.createTransaction({
-          userId,
-          type: "entry_fee",
-          amount: -entryFee,
-          description: `Entered tournament: ${competition.name}`,
-        });
-      }
-      
-      // Create entry
-      const entry = await storage.createCompetitionEntry({
-        competitionId,
-        userId,
-        lineupCardIds: cardIds,
-        captainId: captainId || cardIds[0],
-        totalScore: 0,
+
+        if (entryFee > 0) {
+          const [debitedWallet] = await tx
+            .update(wallets)
+            .set({ balance: sql`${wallets.balance} - ${entryFee}` } as any)
+            .where(and(eq(wallets.userId, userId), sql`${wallets.balance} >= ${entryFee}`))
+            .returning();
+
+          if (!debitedWallet) {
+            throw new Error("Insufficient balance for entry fee");
+          }
+
+          await tx.insert(transactions).values({
+            userId,
+            type: "entry_fee",
+            amount: -entryFee,
+            description: `Entered tournament: ${competition.name}`,
+          } as any);
+        }
+
+        const [createdEntry] = await tx
+          .insert(competitionEntries)
+          .values({
+            competitionId,
+            userId,
+            lineupCardIds: cardIds,
+            captainId: captainId || cardIds[0],
+            totalScore: 0,
+          } as any)
+          .returning();
+
+        return createdEntry;
       });
       
       res.json({ 
@@ -3378,7 +3354,9 @@ app.get("/api/players/:id/photo", async (req, res) => {
       });
     } catch (error: any) {
       console.error("Failed to join competition:", error);
-      res.status(500).json({ message: error.message || "Failed to join tournament" });
+      const message = String(error?.message || "Failed to join tournament");
+      const status = message.includes("Insufficient balance") || message.includes("Already entered") ? 400 : 500;
+      res.status(status).json({ message });
     }
   });
 
@@ -3548,8 +3526,23 @@ app.get("/api/players/:id/photo", async (req, res) => {
 
   // Admin: Settle competition
   app.post("/api/admin/competitions/settle/:id", requireAuth, isAdmin, async (req: any, res) => {
+    let settlementLockAcquired = false;
+    let settlementLockKey = 0;
+
     try {
       const competitionId = parseInt(req.params.id, 10);
+      if (!Number.isFinite(competitionId) || competitionId <= 0) {
+        return res.status(400).json({ message: "Invalid tournament id" });
+      }
+
+      const { db } = await import("./db.js");
+      settlementLockKey = 910_000 + competitionId;
+      const lockResult = await db.execute(sql`SELECT pg_try_advisory_lock(${settlementLockKey}) AS locked`);
+      const lockRows = Array.isArray(lockResult) ? lockResult : ((lockResult as any)?.rows || []);
+      settlementLockAcquired = Boolean(lockRows[0]?.locked);
+      if (!settlementLockAcquired) {
+        return res.status(409).json({ message: "Tournament settlement is already running. Please wait for it to finish." });
+      }
       
       const competition = await storage.getCompetition(competitionId);
       if (!competition) {
@@ -3565,7 +3558,6 @@ app.get("/api/players/:id/photo", async (req, res) => {
       const sortedEntries = entries
         .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
 
-      const { db } = await import("./db.js");
       const { notifications } = await import("../shared/schema.js");
       
       const isRareTier = String(competition.tier || "").toLowerCase() === "rare";
@@ -3581,7 +3573,26 @@ app.get("/api/players/:id/photo", async (req, res) => {
       const cardCandidatePool = shuffle(todayPlayers.length > 0 ? todayPlayers : allPlayers);
 
       const createPrizeCardForUser = async (targetUserId: string, rarity: string): Promise<number | null> => {
+        const retryPool = shuffle([...cardCandidatePool, ...allPlayers]);
         for (const p of cardCandidatePool) {
+          try {
+            const created = await storage.createPlayerCard({
+              playerId: p.id,
+              ownerId: targetUserId,
+              rarity: rarity as any,
+              level: 1,
+              xp: 0,
+              decisiveScore: 35,
+              last5Scores: [0, 0, 0, 0, 0],
+              forSale: false,
+              price: 0,
+            } as any);
+            return created.id;
+          } catch {
+            continue;
+          }
+        }
+        for (const p of retryPool) {
           try {
             const created = await storage.createPlayerCard({
               playerId: p.id,
@@ -3617,6 +3628,7 @@ app.get("/api/players/:id/photo", async (req, res) => {
       };
 
       let winnerPrizeCardId: number | null = null;
+      const prizeCardFailures: Array<{ entryId: number; userId: string; rank: number; rarity: string }> = [];
 
       for (let i = 0; i < sortedEntries.length; i += 1) {
         const entry = sortedEntries[i];
@@ -3625,6 +3637,9 @@ app.get("/api/players/:id/photo", async (req, res) => {
         const prizeAmount = toMoney(totalPrizePool * payoutPct);
         const cardRarity = getCardRarityForRank(rank);
         const prizeCardId = cardRarity ? await createPrizeCardForUser(entry.userId, cardRarity) : null;
+        if (cardRarity && !prizeCardId) {
+          prizeCardFailures.push({ entryId: entry.id, userId: String(entry.userId || ""), rank, rarity: cardRarity });
+        }
 
         await storage.updateCompetitionEntry(entry.id, {
           rank,
@@ -3676,6 +3691,8 @@ app.get("/api/players/:id/photo", async (req, res) => {
         competitionId,
         winnersCount: Math.min(3, sortedEntries.length),
         winnerPrizeCardId,
+        prizeCardFailuresCount: prizeCardFailures.length,
+        prizeCardFailures,
         ip: getClientIp(req),
       });
       
@@ -3684,10 +3701,155 @@ app.get("/api/players/:id/photo", async (req, res) => {
         message: "Tournament settled successfully",
         winnersCount: Math.min(3, sortedEntries.length),
         winnerPrizeCardId,
+        prizeCardFailuresCount: prizeCardFailures.length,
+        prizeCardFailures,
       });
     } catch (error: any) {
       console.error("Failed to settle competition:", error);
       res.status(500).json({ message: "Failed to settle tournament" });
+    } finally {
+      if (settlementLockAcquired && settlementLockKey > 0) {
+        try {
+          const { db } = await import("./db.js");
+          await db.execute(sql`SELECT pg_advisory_unlock(${settlementLockKey})`);
+        } catch (unlockError) {
+          console.error("Failed to release settlement advisory lock:", unlockError);
+        }
+      }
+    }
+  });
+
+  // Admin: Reward integrity check for a settled competition (Phase 2)
+  app.get("/api/admin/competitions/:id/reward-integrity", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const competitionId = parseInt(req.params.id, 10);
+      if (!Number.isFinite(competitionId) || competitionId <= 0) {
+        return res.status(400).json({ message: "Invalid competition id" });
+      }
+
+      const competition = await storage.getCompetition(competitionId);
+      if (!competition) {
+        return res.status(404).json({ message: "Tournament not found" });
+      }
+
+      const entries = await storage.getCompetitionEntries(competitionId);
+      const rows = await Promise.all(
+        entries.map(async (entry) => {
+          const prizeCardId = Number(entry.prizeCardId || 0);
+          const expectedCard = prizeCardId > 0;
+          const card = expectedCard ? await storage.getPlayerCard(prizeCardId) : undefined;
+          const exists = Boolean(card);
+          const ownerMatches = exists && String(card?.ownerId || "") === String(entry.userId || "");
+          return {
+            entryId: entry.id,
+            userId: String(entry.userId || ""),
+            rank: Number(entry.rank || 0),
+            prizeAmount: toMoney(entry.prizeAmount || 0),
+            prizeCardId: expectedCard ? prizeCardId : null,
+            expectedCard,
+            exists,
+            ownerMatches,
+            status: !expectedCard ? "no_card_expected" : !exists ? "missing_card" : !ownerMatches ? "owner_mismatch" : "ok",
+          };
+        }),
+      );
+
+      const summary = {
+        totalEntries: rows.length,
+        expectedCards: rows.filter((r) => r.expectedCard).length,
+        missingCards: rows.filter((r) => r.status === "missing_card").length,
+        ownerMismatches: rows.filter((r) => r.status === "owner_mismatch").length,
+        okCards: rows.filter((r) => r.status === "ok").length,
+      };
+
+      return res.json({ competitionId, competitionName: competition.name, summary, rows });
+    } catch (error: any) {
+      console.error("Failed reward integrity check:", error);
+      return res.status(500).json({ message: "Failed reward integrity check" });
+    }
+  });
+
+
+  app.post("/api/admin/competitions/:id/repair-rewards", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const competitionId = parseInt(req.params.id, 10);
+      if (!Number.isFinite(competitionId) || competitionId <= 0) {
+        return res.status(400).json({ message: "Invalid competition id" });
+      }
+
+      const competition = await storage.getCompetition(competitionId);
+      if (!competition) {
+        return res.status(404).json({ message: "Tournament not found" });
+      }
+      if (competition.status !== "completed") {
+        return res.status(400).json({ message: "Tournament must be completed before repairing rewards" });
+      }
+
+      const entries = await storage.getCompetitionEntries(competitionId);
+      const allPlayers = shuffle(await storage.getPlayers());
+      const repaired: Array<{ entryId: number; userId: string; oldPrizeCardId: number | null; newPrizeCardId: number }> = [];
+      const skipped: Array<{ entryId: number; userId: string; reason: string }> = [];
+
+      const createRepairCard = async (targetUserId: string, rarity: string): Promise<number | null> => {
+        for (const player of allPlayers) {
+          try {
+            const created = await storage.createPlayerCard({
+              playerId: player.id,
+              ownerId: targetUserId,
+              rarity: rarity as any,
+              level: 1,
+              xp: 0,
+              decisiveScore: 35,
+              last5Scores: [0, 0, 0, 0, 0],
+              forSale: false,
+              price: 0,
+            } as any);
+            return created.id;
+          } catch {
+            continue;
+          }
+        }
+        return null;
+      };
+
+      for (const entry of entries) {
+        const rank = Number(entry.rank || 0);
+        const prizeCardId = Number(entry.prizeCardId || 0);
+        if (rank !== 1 && prizeCardId <= 0) continue;
+
+        const currentCard = prizeCardId > 0 ? await storage.getPlayerCard(prizeCardId) : undefined;
+        const currentOwnerMatches = currentCard && String(currentCard.ownerId || "") === String(entry.userId || "");
+        if (currentOwnerMatches) continue;
+
+        const rarity = String(currentCard?.rarity || competition.prizeCardRarity || (String(competition.tier || "") === "rare" ? "unique" : "rare")).toLowerCase();
+        const newPrizeCardId = await createRepairCard(String(entry.userId || ""), rarity);
+        if (!newPrizeCardId) {
+          skipped.push({ entryId: entry.id, userId: String(entry.userId || ""), reason: "Unable to mint replacement prize card" });
+          continue;
+        }
+
+        await storage.updateCompetitionEntry(entry.id, { prizeCardId: newPrizeCardId });
+        repaired.push({
+          entryId: entry.id,
+          userId: String(entry.userId || ""),
+          oldPrizeCardId: prizeCardId || null,
+          newPrizeCardId,
+        });
+      }
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.competition.repair_rewards", {
+        competitionId,
+        repairedCount: repaired.length,
+        skippedCount: skipped.length,
+        repaired,
+        skipped,
+        ip: getClientIp(req),
+      });
+
+      return res.json({ success: true, competitionId, repairedCount: repaired.length, skippedCount: skipped.length, repaired, skipped });
+    } catch (error: any) {
+      console.error("Failed reward repair:", error);
+      return res.status(500).json({ message: "Failed reward repair" });
     }
   });
 
@@ -3777,7 +3939,7 @@ app.get("/api/players/:id/photo", async (req, res) => {
       const enriched = await Promise.all(
         rewards.map(async (entry) => {
           const competition = await storage.getCompetition(entry.competitionId);
-          const prizeCard = entry.prizeCardId ? await storage.getPlayerCardWithPlayer(entry.prizeCardId) : null;
+          const prizeCard = entry.prizeCardId ? await storage.getPlayerCardWithPlayer(entry.prizeCardId, userId) : null;
           return {
             ...entry,
             claimed: claimedEntryIds.has(Number(entry.id)),
@@ -3827,7 +3989,7 @@ app.get("/api/players/:id/photo", async (req, res) => {
 
       const prizeCardId = row.prize_card_id == null ? null : Number(row.prize_card_id);
       const prizeAmount = toMoney(row.prize_amount || 0);
-      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId) : null;
+      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId, userId) : null;
       const fallbackRarity = String(row.tier || "").toLowerCase() === "rare" && Number(row.rank || 0) === 1
         ? "unique"
         : String(row.prize_card_rarity || "rare").toLowerCase();
@@ -3970,7 +4132,7 @@ app.get("/api/players/:id/photo", async (req, res) => {
         } as any);
       });
 
-      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId) : null;
+      const prizeCard = prizeCardId ? await storage.getPlayerCardWithPlayer(prizeCardId, userId) : null;
       const fallbackRarity = String(pending.tier || "").toLowerCase() === "rare" && rank === 1
         ? "unique"
         : String(pending.prize_card_rarity || "rare").toLowerCase();
