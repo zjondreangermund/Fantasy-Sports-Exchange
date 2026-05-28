@@ -67,7 +67,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         .orderBy(desc(transactions.createdAt))
         .limit(25);
 
-      const sameCardPairTx = pairTx.filter((row: any) => String(row.description || "").includes(`card:${cardId}`));
+      const sameCardPairTx = pairTx.filter((row: any) => String(row.description || "").includes(`card:${resolvedCardId}`));
       const excessivePairVolume = pairTx.length >= 6;
       const repeatedSameCard = sameCardPairTx.length >= 2;
 
@@ -75,7 +75,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         await tx.insert(auditLogs).values({
           userId: buyerId,
           action: "risk.wash_trade_blocked",
-          meta: { cardId, buyerId, sellerId, pairTrades7d: pairTx.length, sameCardPairTrades7d: sameCardPairTx.length },
+          meta: { cardId: resolvedCardId, buyerId, sellerId, pairTrades7d: pairTx.length, sameCardPairTrades7d: sameCardPairTx.length },
         } as any);
         throw new Error("Trade blocked by anti-abuse controls");
       }
@@ -83,7 +83,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
       const saleHistory = await tx
         .select()
         .from(transactions)
-        .where(and(eq(transactions.type, "marketplace_sale" as any), sql`${transactions.description} ilike ${`%card:${cardId}%`}`))
+        .where(and(eq(transactions.type, "marketplace_sale" as any), sql`${transactions.description} ilike ${`%card:${resolvedCardId}%`}`))
         .orderBy(desc(transactions.createdAt))
         .limit(5);
 
@@ -92,7 +92,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         await tx.insert(auditLogs).values({
           userId: buyerId,
           action: "risk.price_spike_trade",
-          meta: { cardId, buyerId, sellerId, listedPrice: price, lastSale },
+          meta: { cardId: resolvedCardId, buyerId, sellerId, listedPrice: price, lastSale },
         } as any);
       }
 
@@ -104,7 +104,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
 
       await tx.update(wallets).set({ balance: sql`${wallets.balance} - ${price}` } as any).where(eq(wallets.userId, buyerId));
       await tx.update(wallets).set({ balance: sql`${wallets.balance} + ${sellerReceives}` } as any).where(eq(wallets.userId, sellerId));
-      await tx.update(playerCards).set({ ownerId: buyerId, forSale: false, price: 0 } as any).where(eq(playerCards.id, cardId));
+      await tx.update(playerCards).set({ ownerId: buyerId, forSale: false, price: 0 } as any).where(eq(playerCards.id, resolvedCardId));
 
       await tx.insert(transactions).values({
         userId: buyerId,
@@ -115,7 +115,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         netAmount: -price,
         sourceType: "marketplace_buy",
         status: "completed",
-        description: `marketplace card:${cardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)}`,
+        description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)}`,
       } as any);
 
       await tx.insert(transactions).values({
@@ -127,7 +127,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         netAmount: sellerReceives,
         sourceType: "marketplace_sale",
         status: "completed",
-        description: `marketplace card:${cardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}`,
+        description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}`,
       } as any);
     });
 
