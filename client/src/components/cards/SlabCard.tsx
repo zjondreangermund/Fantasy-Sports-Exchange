@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Activity, Crown, Gem, Shield, Sparkles, TrendingDown, TrendingUp, Zap } from "lucide-react";
 
-export type SlabRarity = "common" | "rare" | "unique" | "legendary";
+export type SlabRarity = "common" | "rare" | "unique" | "epic" | "legendary";
 
 type CardStats = {
   pace?: number;
@@ -135,6 +135,25 @@ const themes: Record<SlabRarity, Theme> = {
     sweepOpacity: 0.76,
     icon: Crown,
   },
+  epic: {
+    label: "EPIC",
+    title: "Arcane Violet",
+    surface: "linear-gradient(180deg,#140629 0%,#3b0764 48%,#0b0418 100%)",
+    frame: "linear-gradient(145deg,#ddd6fe 0%,#8b5cf6 25%,#312e81 56%,#c4b5fd 100%)",
+    glow: "0 32px 88px rgba(139,92,246,.56)",
+    text: "text-violet-50",
+    muted: "text-violet-100/76",
+    badge: "border-violet-200/45 bg-violet-300/14 text-violet-50 shadow-[0_0_26px_rgba(139,92,246,.30)]",
+    statPanel: "border-violet-200/25 bg-black/45 text-violet-50",
+    glass: "rgba(76,29,149,.44)",
+    line: "rgba(196,181,253,.34)",
+    portraitGlow: "radial-gradient(circle at 50% 33%,rgba(221,214,254,.58),rgba(124,58,237,.35) 42%,transparent 72%)",
+    pattern: "rgba(196,181,253,.24)",
+    particle: "rgba(167,139,250,.40)",
+    shape: crystalShape,
+    sweepOpacity: 0.68,
+    icon: Gem,
+  },
 };
 
 function splitName(name: string) {
@@ -163,6 +182,12 @@ function formTrend(last5?: number[]) {
   const values = Array.isArray(last5) ? last5.map((v) => Number(v || 0)).filter((v) => v > 0) : [];
   if (values.length < 2) return "neutral" as const;
   return values[values.length - 1] >= values[0] ? "up" as const : "down" as const;
+}
+
+function normalizeLast5(last5?: number[]) {
+  const values = Array.isArray(last5) ? last5.slice(0, 5).map((v) => Math.max(0, Math.round(Number(v || 0)))) : [];
+  while (values.length < 5) values.push(0);
+  return values;
 }
 
 function RarityPattern({ theme, rarity }: { theme: Theme; rarity: SlabRarity }) {
@@ -231,6 +256,15 @@ function CardBackGhost({ theme, season, teamCode }: { theme: Theme; season: stri
   );
 }
 
+function BackCardStack({ theme }: { theme: Theme }) {
+  return (
+    <>
+      <div className="pointer-events-none absolute inset-y-[5%] -right-[7%] z-0 w-[82%] rotate-[6deg] rounded-[1.4rem] border border-white/15 opacity-45 blur-[0.2px]" style={{ background: `linear-gradient(170deg,${theme.glass},transparent)` }} />
+      <div className="pointer-events-none absolute inset-y-[8%] -left-[7%] z-0 w-[78%] -rotate-[5deg] rounded-[1.3rem] border border-white/12 opacity-30" style={{ background: `linear-gradient(170deg,transparent,${theme.glass})` }} />
+    </>
+  );
+}
+
 export default function SlabCard({
   name,
   rarity,
@@ -254,6 +288,7 @@ export default function SlabCard({
   const { firstName, lastName } = splitName(name);
   const statRows = useMemo(() => getStats(rating, stats), [rating, stats]);
   const trend = formTrend(last5);
+  const recent = normalizeLast5(last5);
   const Icon = theme.icon;
   const initials = `${firstName[0] || "P"}${lastName[0] || "L"}`;
 
@@ -266,6 +301,7 @@ export default function SlabCard({
       ].join(" ")}
       style={{ filter: `drop-shadow(${theme.glow})`, transformStyle: "preserve-3d" }}
     >
+      <BackCardStack theme={theme} />
       <div className="absolute inset-0" style={{ clipPath: theme.shape, background: theme.frame }} />
       <div className="absolute inset-[3px]" style={{ clipPath: theme.shape, background: theme.surface }} />
       <div className="absolute inset-[7px]" style={{ clipPath: theme.shape, background: `linear-gradient(145deg,transparent,${theme.glass},transparent)` }} />
@@ -273,6 +309,7 @@ export default function SlabCard({
 
       <div className="absolute inset-[3px] overflow-hidden" style={{ clipPath: theme.shape }}>
         <RarityPattern theme={theme} rarity={rarity} />
+        <div className="absolute inset-0 opacity-70" style={{ backgroundImage: `radial-gradient(circle at 15% 20%, ${theme.particle} 0 1px, transparent 2px), radial-gradient(circle at 80% 35%, ${theme.particle} 0 1px, transparent 2px), radial-gradient(circle at 55% 75%, ${theme.particle} 0 1px, transparent 2px)`, backgroundSize: "36px 36px, 44px 44px, 52px 52px" }} />
         <CardBackGhost theme={theme} season={season} teamCode={teamCode} />
         <div className="absolute inset-x-0 bottom-0 h-[46%] bg-gradient-to-t from-black/70 via-black/28 to-transparent" />
         <div className="absolute inset-x-[10%] top-[9%] h-[58%] rounded-[1.8rem] border border-white/10 bg-white/[0.035] shadow-[inset_0_1px_0_rgba(255,255,255,.12)]" />
@@ -308,6 +345,17 @@ export default function SlabCard({
               <span>{value}</span>
               <span className={`text-[7px] ${theme.muted}`}>{label}</span>
             </div>
+          ))}
+        </div>
+      </div>
+
+      <div className={`absolute inset-x-[8%] bottom-[21%] z-30 flex items-center justify-between gap-1 text-[7px] font-black ${theme.muted}`}>
+        <span className="tracking-[.16em]">LAST 5</span>
+        <div className="flex items-center gap-1">
+          {recent.map((value, idx) => (
+            <span key={`${value}-${idx}`} className="rounded-md border border-white/20 bg-white/10 px-1.5 py-0.5 text-[8px] leading-none text-white/90">
+              {value}
+            </span>
           ))}
         </div>
       </div>
