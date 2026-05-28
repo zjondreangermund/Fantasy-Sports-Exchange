@@ -12,16 +12,31 @@ function toMoney(amount: unknown): number {
   return Math.round(value * 100) / 100;
 }
 
-async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
-  const cardId = Number(rawCardId);
-  if (!Number.isInteger(cardId) || cardId <= 0) {
-    return { ok: false as const, status: 400, message: "Valid cardId required" };
+async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, rawSerialId?: unknown) {
+  const cardId = (() => {
+    if (typeof rawCardId === "number") return rawCardId;
+    const normalized = String(rawCardId ?? "").trim();
+    if (!normalized) return Number.NaN;
+    if (/^\d+$/.test(normalized)) return Number(normalized);
+    const match = normalized.match(/(\d+)/);
+    return match ? Number(match[1]) : Number.NaN;
+  })();
+  const serialId = String(rawSerialId ?? "").trim();
+  let resolvedCardId = cardId;
+
+  if ((!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) && serialId) {
+    const [serialCard] = await db.select({ id: playerCards.id }).from(playerCards).where(eq(playerCards.serialId, serialId)).limit(1);
+    resolvedCardId = Number(serialCard?.id || Number.NaN);
+  }
+
+  if (!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) {
+    return { ok: false as const, status: 400, message: "Valid card identifier required" };
   }
 
   try {
     await db.transaction(async (tx) => {
-      const [card] = await tx.select().from(playerCards).where(eq(playerCards.id, cardId)).for("update");
-      if (!card) throw new Error("Card not found");
+      const [card] = await tx.select().from(playerCards).where(eq(playerCards.id, resolvedCardId)).for("update");
+      if (!card) throw new Error("Card does not exist or was already sold");
       if (!card.forSale) throw new Error("Card is not for sale");
       if (!isMarketplaceTradableRarity(String(card.rarity))) throw new Error("Common cards cannot be traded");
 
@@ -124,7 +139,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
       } as any);
     });
 
-    return { ok: true as const, cardId };
+    return { ok: true as const, cardId: resolvedCardId };
   } catch (error: any) {
     const message = String(error?.message || "Failed to buy card");
     const status = message.includes("not found") ? 404 : 400;
@@ -191,13 +206,13 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
   });
 
   app.post("/api/marketplace/buy/:cardId", requireAuth, async (req: any, res) => {
-    const result = await processMarketplacePurchase(req.authUserId, req.params.cardId);
+    const result = await processMarketplacePurchase(req.authUserId, req.params.cardId, req.body?.serialId);
     if (!result.ok) return res.status(result.status).json({ message: result.message });
     return res.json({ success: true, cardId: result.cardId });
   });
 
   app.post("/api/marketplace/buy", requireAuth, async (req: any, res) => {
-    const result = await processMarketplacePurchase(req.authUserId, req.body?.cardId);
+    const result = await processMarketplacePurchase(req.authUserId, req.body?.cardId, req.body?.serialId);
     if (!result.ok) return res.status(result.status).json({ message: result.message });
     return res.json({ success: true, cardId: result.cardId });
   });
