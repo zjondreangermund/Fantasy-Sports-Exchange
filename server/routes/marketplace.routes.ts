@@ -12,7 +12,7 @@ function toMoney(amount: unknown): number {
   return Math.round(value * 100) / 100;
 }
 
-async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, rawSerialId?: unknown) {
+async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
   const cardId = (() => {
     if (typeof rawCardId === "number") return rawCardId;
     const normalized = String(rawCardId ?? "").trim();
@@ -21,17 +21,11 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
     const match = normalized.match(/(\d+)/);
     return match ? Number(match[1]) : Number.NaN;
   })();
-  const serialId = String(rawSerialId ?? "").trim();
-  let resolvedCardId = cardId;
-
-  if ((!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) && serialId) {
-    const [serialCard] = await db.select({ id: playerCards.id }).from(playerCards).where(eq(playerCards.serialId, serialId)).limit(1);
-    resolvedCardId = Number(serialCard?.id || Number.NaN);
+  if (!Number.isInteger(cardId) || cardId <= 0) {
+    return { ok: false as const, status: 400, message: "Valid cardId required" };
   }
 
-  if (!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) {
-    return { ok: false as const, status: 400, message: "Valid card identifier required" };
-  }
+  const resolvedCardId = cardId;
 
   try {
     await db.transaction(async (tx) => {
@@ -118,6 +112,11 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
         userId: buyerId,
         type: "marketplace_buy",
         amount: -price,
+        grossAmount: price,
+        feeAmount: 0,
+        netAmount: -price,
+        sourceType: "marketplace_buy",
+        status: "completed",
         description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)}`,
       } as any);
 
@@ -125,6 +124,11 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
         userId: sellerId,
         type: "marketplace_sale",
         amount: sellerReceives,
+        grossAmount: price,
+        feeAmount: fee,
+        netAmount: sellerReceives,
+        sourceType: "marketplace_sale",
+        status: "completed",
         description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}`,
       } as any);
     });
