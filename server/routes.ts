@@ -2064,6 +2064,13 @@ app.get("/api/players/:id/photo", async (req, res) => {
         newBalance: updatedWallet.balance || 0,
         ip: getClientIp(req),
       });
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
+        targetUserId: userId,
+        amount,
+        newBalance: updatedWallet.balance || 0,
+        ip: getClientIp(req),
+      });
       
       res.json({ 
         success: true, 
