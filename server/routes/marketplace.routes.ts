@@ -6,6 +6,9 @@ import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../sha
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
+const BUY_TX_TYPE = "purchase" as any;
+const SALE_TX_TYPE = "sale" as any;
+
 function toMoney(amount: unknown): number {
   const value = Number(amount);
   if (!Number.isFinite(value)) return 0;
@@ -75,7 +78,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
         .from(transactions)
         .where(
           and(
-            eq(transactions.type, "marketplace_buy" as any),
+            eq(transactions.type, BUY_TX_TYPE),
             sql`${transactions.createdAt} >= now() - interval '7 days'`,
             or(
               sql`${transactions.description} ilike ${`%buyer:${buyerId}% seller:${sellerId}%`}`,
@@ -102,7 +105,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
       const saleHistory = await tx
         .select()
         .from(transactions)
-        .where(and(eq(transactions.type, "marketplace_sale" as any), sql`${transactions.description} ilike ${`%card:${resolvedCardId}%`}`))
+        .where(and(eq(transactions.type, SALE_TX_TYPE), sql`${transactions.description} ilike ${`%card:${resolvedCardId}%`}`))
         .orderBy(desc(transactions.createdAt))
         .limit(5);
 
@@ -127,7 +130,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
 
       await tx.insert(transactions).values({
         userId: buyerId,
-        type: "marketplace_buy",
+        type: BUY_TX_TYPE,
         amount: -price,
         grossAmount: price,
         feeAmount: 0,
@@ -139,7 +142,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
 
       await tx.insert(transactions).values({
         userId: sellerId,
-        type: "marketplace_sale",
+        type: SALE_TX_TYPE,
         amount: sellerReceives,
         grossAmount: price,
         feeAmount: fee,
