@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import CardThumbnail from "../components/CardThumbnail";
@@ -9,7 +9,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { type Competition, type CompetitionEntry, type Lineup, type PlayerCardWithPlayer } from "../../../shared/schema";
-import { Clock, Copy, Crown, DollarSign, Medal, Shield, Sparkles, Trophy, Users } from "lucide-react";
+import { Clock, Copy, Crown, DollarSign, Shield, Sparkles, Trophy, Users } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
 
@@ -44,13 +44,19 @@ function normalizeTier(value: unknown) {
   return String(value || "common").toLowerCase();
 }
 
+function getInviteLink(pin: string) {
+  const base = typeof window !== "undefined" ? window.location.origin : "";
+  return `${base}/join/${pin}`;
+}
+
 export default function CompetitionsPage() {
   const { toast } = useToast();
+  const initialPin = typeof window !== "undefined" ? (window.location.pathname.match(/\/join\/([A-Z0-9]+)/i)?.[1] || "") : "";
   const [selectedComp, setSelectedComp] = useState<CompetitionWithEntries | null>(null);
   const [entryMode, setEntryMode] = useState<EntryMode>("standard");
   const [selectedCards, setSelectedCards] = useState<number[]>([]);
   const [captainId, setCaptainId] = useState<number | null>(null);
-  const [pinCode, setPinCode] = useState("");
+  const [pinCode, setPinCode] = useState(initialPin.toUpperCase());
   const [pinTournament, setPinTournament] = useState<CompetitionWithEntries | null>(null);
   const [createdPin, setCreatedPin] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState({
@@ -229,8 +235,9 @@ export default function CompetitionsPage() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
-      setCreatedPin(data?.pin || data?.tournament?.join_pin || null);
-      toast({ title: "Tournament created", description: data?.pin ? `PIN: ${data.pin}` : "Your tournament is live." });
+      const nextPin = data?.pin || data?.tournament?.join_pin || null;
+      setCreatedPin(nextPin);
+      toast({ title: "Tournament created", description: nextPin ? `PIN: ${nextPin}` : "Your tournament is live." });
     },
     onError: (error: any) => toast({ title: "Could not create tournament", description: error.message, variant: "destructive" }),
   });
@@ -253,6 +260,8 @@ export default function CompetitionsPage() {
 
   const platformFeePreview = Number(createForm.entryFee || 0) * 0.2;
   const prizePreview = Number(createForm.entryFee || 0) - platformFeePreview;
+  const createdInviteLink = createdPin ? getInviteLink(createdPin) : "";
+  const foundInviteLink = pinCode ? getInviteLink(pinCode.trim().toUpperCase()) : "";
 
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
@@ -273,13 +282,13 @@ export default function CompetitionsPage() {
             <div className="flex items-center gap-2 mb-3"><Sparkles className="w-4 h-4 text-yellow-500" /><h2 className="font-semibold">Tournament Economy</h2></div>
             <div className="space-y-2 text-sm">
               <EconomyRow label="Entry fees" value="20% platform / 80% prize pool" />
-              <EconomyRow label="Private tournaments" value="PIN-based entry" />
+              <EconomyRow label="Private tournaments" value="PIN + invite link" />
               <EconomyRow label="Lineup rule" value="5 cards: GK / DEF / MID / FWD + utility" />
             </div>
           </Card>
         </div>
 
-        <Tabs defaultValue="live" className="w-full">
+        <Tabs defaultValue={initialPin ? "pin" : "live"} className="w-full">
           <TabsList className="mb-4 flex h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
             <TabsTrigger value="live" className="rounded-full border px-4">🔴 Public</TabsTrigger>
             <TabsTrigger value="pin" className="rounded-full border px-4">🔐 Join by PIN</TabsTrigger>
@@ -310,6 +319,7 @@ export default function CompetitionsPage() {
                 <input className="rounded-xl border bg-background px-4 py-3 text-lg uppercase tracking-[0.25em]" placeholder="PIN CODE" value={pinCode} onChange={(e) => setPinCode(e.target.value.toUpperCase())} />
                 <Button onClick={() => findPinMutation.mutate()} disabled={findPinMutation.isPending}>{findPinMutation.isPending ? "Searching..." : "Find Tournament"}</Button>
               </div>
+              {pinCode && <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground break-all">Invite link: {foundInviteLink}</div>}
               {pinTournament && <Card className="p-4 border-primary/20 bg-primary/5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div><h3 className="font-bold text-lg">{pinTournament.name}</h3><p className="text-sm text-muted-foreground">{pinTournament.entryCount || 0}{(pinTournament.max_entries || pinTournament.maxEntries) ? ` / ${pinTournament.max_entries || pinTournament.maxEntries}` : ""} players joined</p></div>
@@ -333,7 +343,7 @@ export default function CompetitionsPage() {
               </div>
               <div className="grid sm:grid-cols-3 gap-2"><InfoPill label="Platform fee" value={`N$${money(platformFeePreview)}`} helper="20% per entry." /><InfoPill label="Prize pool" value={`N$${money(prizePreview)}`} helper="80% per entry." /><InfoPill label="Creator can enter" value="Yes" helper="Normal fee applies." /></div>
               <Button onClick={() => createTournamentMutation.mutate()} disabled={createTournamentMutation.isPending}>{createTournamentMutation.isPending ? "Creating..." : "Create Tournament"}</Button>
-              {createdPin && <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-sm"><div className="text-muted-foreground mb-1">Private tournament PIN</div><div className="flex items-center gap-2"><code className="text-2xl font-bold tracking-[0.3em]">{createdPin}</code><Button size="sm" variant="outline" onClick={() => { navigator.clipboard?.writeText(createdPin); toast({ title: "PIN copied" }); }}><Copy className="w-4 h-4" /></Button></div></div>}
+              {createdPin && <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-sm space-y-3"><div><div className="text-muted-foreground mb-1">Private tournament PIN</div><div className="flex items-center gap-2"><code className="text-2xl font-bold tracking-[0.3em]">{createdPin}</code><Button size="sm" variant="outline" onClick={() => { navigator.clipboard?.writeText(createdPin); toast({ title: "PIN copied" }); }}><Copy className="w-4 h-4" /></Button></div></div><div><div className="text-muted-foreground mb-1">Invite link</div><div className="flex items-center gap-2"><code className="text-xs break-all rounded bg-background/70 px-2 py-1">{createdInviteLink}</code><Button size="sm" variant="outline" onClick={() => { navigator.clipboard?.writeText(createdInviteLink); toast({ title: "Invite link copied" }); }}><Copy className="w-4 h-4" /></Button></div></div></div>}
             </Card>
           </TabsContent>
         </Tabs>
@@ -398,6 +408,6 @@ function CompetitionCard({ comp, entered, onJoin }: { comp: CompetitionWithEntri
   </Card>;
 }
 
-function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function MiniStat({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return <div className="rounded-xl border bg-muted/20 p-3"><div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-muted-foreground">{icon}{label}</div><div className="font-semibold mt-1">{value}</div></div>;
 }
