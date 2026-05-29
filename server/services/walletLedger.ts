@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db.js";
-import { transactions, users, wallets } from "../../shared/schema.js";
+import { competitionEntries, transactions, users, wallets } from "../../shared/schema.js";
 
 function toMoney(amount: unknown): number {
   const value = Number(amount);
@@ -19,15 +19,9 @@ export type WalletIntegrityRow = {
   status: "ok" | "review";
 };
 
-export async function creditWalletWithLedger(input: {
-  userId: string;
-  amount: number;
-  description?: string;
-}) {
+export async function creditWalletWithLedger(input: { userId: string; amount: number; description?: string }) {
   const amount = toMoney(input.amount);
-  if (!input.userId || amount <= 0) {
-    throw new Error("Valid userId and positive amount required");
-  }
+  if (!input.userId || amount <= 0) throw new Error("Valid userId and positive amount required");
 
   return db.transaction(async (tx) => {
     const [updatedWallet] = await tx
@@ -35,20 +29,200 @@ export async function creditWalletWithLedger(input: {
       .set({ balance: sql`${wallets.balance} + ${amount}` } as any)
       .where(eq(wallets.userId, input.userId))
       .returning();
-
-    if (!updatedWallet) {
-      throw new Error("Wallet not found");
-    }
+    if (!updatedWallet) throw new Error("Wallet not found");
 
     await tx.insert(transactions).values({
       userId: input.userId,
       type: "admin_adjustment",
       amount,
+      grossAmount: amount,
+      feeAmount: 0,
+      netAmount: amount,
+      sourceType: "admin_adjustment",
+      status: "completed",
       description: input.description || `Admin credit: ${amount}`,
     } as any);
 
     return updatedWallet;
   });
+}
+
+export async function processWalletDeposit(input: { userId: string; amount: number; description?: string }) {
+  const amount = toMoney(input.amount);
+  if (!input.userId || amount <= 0) throw new Error("Valid deposit required");
+  return creditWalletWithLedger({ userId: input.userId, amount, description: input.description || `Deposit: ${amount}` });
+}
+
+export async function createTrustedWithdrawal(input: any) {
+  const userId = String(input?.userId || "");
+  const amount = toMoney(input?.amount || 0);
+  if (!userId || amount <= 0) throw new Error("Valid withdrawal required");
+
+  return db.transaction(async (tx) => {
+    const [updatedWallet] = await tx
+      .update(wallets)
+      .set({ balance: sql`${wallets.balance} - ${amount}` } as any)
+      .where(and(eq(wallets.userId, userId), sql`${wallets.balance} >= ${amount}`))
+      .returning();
+    if (!updatedWallet) throw new Error("Insufficient balance");
+
+    await tx.insert(transactions).values({
+      userId,
+      type: "withdrawal",
+      amount: -amount,
+      grossAmount: amount,
+      feeAmount: toMoney(input?.fee || 0),
+      netAmount: toMoney(input?.netAmount ?? amount),
+      sourceType: "withdrawal",
+      status: "completed",
+      description: input?.description || `Withdrawal: ${amount}`,
+    } as any);
+
+    return { wallet: updatedWallet };
+  });
+}
+
+export async function createPendingWithdrawalWithHold(input: any) {
+  const userId = String(input?.userId || "");
+  const amount = toMoney(input?.amount || 0);
+  if (!userId || amount <= 0) throw new Error("Valid withdrawal hold required");
+
+  return db.transaction(async (tx) => {
+    const [updatedWallet] = await tx
+      .update(wallets)
+      .set({ balance: sql`${wallets.balance} - ${amount}`, lockedBalance: sql`${wallets.lockedBalance} + ${amount}` } as any)
+      .where(and(eq(wallets.userId, userId), sql`${wallets.balance} >= ${amount}`))
+      .returning();
+    if (!updatedWallet) throw new Error("Insufficient balance");
+    return { wallet: updatedWallet };
+  });
+}
+
+export async function enterCompetitionWithFee(input: any) {
+  const userId = String(input?.userId || "");
+  const competitionId = Number(input?.competitionId || 0);
+  const entryFee = toMoney(input?.entryFee || 0);
+  const lineupCardIds = Array.isArray(input?.lineupCardIds) ? input.lineupCardIds : [];
+  if (!userId || !Number.isInteger(competitionId) || competitionId <= 0) throw new Error("Valid tournament entry required");
+
+  return db.transaction(async (tx) => {
+    const [freshExistingEntry] = await tx
+      .select({ id: competitionEntries.id })
+      .from(competitionEntries)
+      .where(and(eq(competitionEntries.competitionId, competitionId), eq(competitionEntries.userId, userId)))
+      .limit(1);
+    if (freshExistingEntry) throw new Error("Already entered this tournament");
+
+    if (entryFee > 0) {
+      const [debitedWallet] = await tx
+        .update(wallets)
+        .set({ balance: sql`${wallets.balance} - ${entryFee}` } as any)
+        .where(and(eq(wallets.userId, userId), sql`${wallets.balance} >= ${entryFee}`))
+        .returning();
+      if (!debitedWallet) throw new Error("Insufficient balance for entry fee");
+
+      await tx.insert(transactions).values({
+        userId,
+        type: "entry_fee",
+        amount: -entryFee,
+        grossAmount: entryFee,
+        feeAmount: 0,
+        netAmount: -entryFee,
+        sourceType: "tournament_entry",
+        status: "completed",
+        description: `Entered tournament: ${String(input?.competitionName || competitionId)}`,
+      } as any);
+    }
+
+    const [createdEntry] = await tx.insert(competitionEntries).values({
+      competitionId,
+      userId,
+      lineupCardIds,
+      captainId: input?.captainId || lineupCardIds[0],
+      totalScore: 0,
+    } as any).returning();
+
+    return createdEntry;
+  });
+}
+
+export async function applyMarketplaceTradeLedger(tx: any, input: any) {
+  const buyerId = String(input?.buyerId || "");
+  const sellerId = String(input?.sellerId || "");
+  const price = toMoney(input?.amount || 0);
+  if (!buyerId || !sellerId || price <= 0) throw new Error("Valid trade required");
+  if (buyerId === sellerId) throw new Error("Cannot buy your own card");
+
+  const [buyerWallet] = await tx
+    .update(wallets)
+    .set({ balance: sql`${wallets.balance} - ${price}` } as any)
+    .where(and(eq(wallets.userId, buyerId), sql`${wallets.balance} >= ${price}`))
+    .returning();
+  if (!buyerWallet) throw new Error("Insufficient balance");
+
+  const fee = toMoney(price * Number(input?.feeRate ?? 0.08));
+  const sellerReceives = toMoney(price - fee);
+  await tx.update(wallets).set({ balance: sql`${wallets.balance} + ${sellerReceives}` } as any).where(eq(wallets.userId, sellerId));
+
+  await tx.insert(transactions).values({
+    userId: buyerId,
+    type: "marketplace_buy",
+    amount: -price,
+    grossAmount: price,
+    feeAmount: 0,
+    netAmount: -price,
+    sourceType: input?.sourceType || "marketplace_buy",
+    status: "completed",
+    description: `marketplace card:${input?.cardId || ""} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)}`,
+  } as any);
+  await tx.insert(transactions).values({
+    userId: sellerId,
+    type: "marketplace_sale",
+    amount: sellerReceives,
+    grossAmount: price,
+    feeAmount: fee,
+    netAmount: sellerReceives,
+    sourceType: input?.sourceType || "marketplace_sale",
+    status: "completed",
+    description: `marketplace card:${input?.cardId || ""} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}`,
+  } as any);
+
+  return { price, fee, sellerReceives };
+}
+
+export async function refundWalletHold(tx: any, input: { userId: string; amount: number }) {
+  const amount = toMoney(input.amount);
+  if (!input.userId || amount <= 0) return undefined;
+  const [updatedWallet] = await tx
+    .update(wallets)
+    .set({ balance: sql`${wallets.balance} + ${amount}`, lockedBalance: sql`${wallets.lockedBalance} - ${amount}` } as any)
+    .where(and(eq(wallets.userId, input.userId), sql`${wallets.lockedBalance} >= ${amount}`))
+    .returning();
+  if (!updatedWallet) throw new Error("Unable to refund held funds");
+  return updatedWallet;
+}
+
+export async function settleHeldAuctionBid(tx: any, input: any) {
+  const winnerId = String(input?.winnerId || "");
+  const sellerId = String(input?.sellerId || "");
+  const amount = toMoney(input?.amount || 0);
+  if (!winnerId || !sellerId || amount <= 0) throw new Error("Valid auction settlement required");
+
+  const [winnerWallet] = await tx
+    .update(wallets)
+    .set({ lockedBalance: sql`${wallets.lockedBalance} - ${amount}` } as any)
+    .where(and(eq(wallets.userId, winnerId), sql`${wallets.lockedBalance} >= ${amount}`))
+    .returning();
+  if (!winnerWallet) throw new Error("Winning bidder funds are not locked");
+
+  const fee = toMoney(amount * 0.08);
+  const sellerReceives = toMoney(amount - fee);
+  await tx.update(wallets).set({ balance: sql`${wallets.balance} + ${sellerReceives}` } as any).where(eq(wallets.userId, sellerId));
+
+  await tx.insert(transactions).values({ userId: winnerId, type: "auction_settlement", amount: -amount, grossAmount: amount, feeAmount: 0, netAmount: -amount, sourceType: "auction_settlement", status: "completed", description: `auction card:${input?.cardId || ""} buyer:${winnerId} seller:${sellerId}` } as any);
+  await tx.insert(transactions).values({ userId: sellerId, type: "auction_settlement", amount: sellerReceives, grossAmount: amount, feeAmount: fee, netAmount: sellerReceives, sourceType: "auction_settlement", status: "completed", description: `auction card:${input?.cardId || ""} buyer:${winnerId} seller:${sellerId}` } as any);
+
+  return { amount, fee, sellerReceives };
 }
 
 export async function getWalletIntegrityReport() {
@@ -69,11 +243,7 @@ export async function getWalletIntegrityReport() {
   const walletUserIds = new Set((walletRows as any[]).map((wallet: any) => String(wallet.userId || "")));
   const missingWallets = Array.from(ledgerByUser.keys())
     .filter((userId) => userId && !walletUserIds.has(userId))
-    .map((userId) => ({
-      userId,
-      ledgerBalance: toMoney(ledgerByUser.get(userId) || 0),
-      user: userMeta.get(userId) || null,
-    }));
+    .map((userId) => ({ userId, ledgerBalance: toMoney(ledgerByUser.get(userId) || 0), user: userMeta.get(userId) || null }));
 
   const rows: WalletIntegrityRow[] = (walletRows as any[]).map((wallet: any) => {
     const userId = String(wallet.userId || "");
@@ -81,22 +251,8 @@ export async function getWalletIntegrityReport() {
     const lockedBalance = toMoney(wallet.lockedBalance || 0);
     const ledgerBalance = toMoney(ledgerByUser.get(userId) || 0);
     const delta = toMoney(balance - ledgerBalance);
-    const flags = [
-      balance < 0 ? "negative_balance" : null,
-      lockedBalance < 0 ? "negative_locked_balance" : null,
-      Math.abs(delta) >= 0.01 ? "wallet_ledger_delta" : null,
-    ].filter(Boolean) as string[];
-
-    return {
-      userId,
-      user: userMeta.get(userId) || null,
-      balance,
-      lockedBalance,
-      ledgerBalance,
-      delta,
-      flags,
-      status: flags.length ? "review" : "ok",
-    };
+    const flags = [balance < 0 ? "negative_balance" : null, lockedBalance < 0 ? "negative_locked_balance" : null, Math.abs(delta) >= 0.01 ? "wallet_ledger_delta" : null].filter(Boolean) as string[];
+    return { userId, user: userMeta.get(userId) || null, balance, lockedBalance, ledgerBalance, delta, flags, status: flags.length ? "review" : "ok" };
   });
 
   const summary = {
@@ -131,35 +287,18 @@ export async function repairMissingWalletsFromLedger() {
       await tx.insert(wallets).values({ userId, balance, lockedBalance: 0 } as any).onConflictDoNothing();
       repaired.push({ userId, balance });
     }
-
-    if (repaired.length > 0) {
-      await tx.insert(transactions).values(
-        repaired.map((row) => ({
-          userId: row.userId,
-          type: "admin_adjustment",
-          amount: 0,
-          description: `Admin wallet repair created missing wallet at ledger balance ${row.balance}`,
-        } as any)),
-      );
-    }
   });
 
   return repaired;
 }
 
-export async function debitWalletForHold(input: {
-  userId: string;
-  amount: number;
-}) {
+export async function debitWalletForHold(input: { userId: string; amount: number }) {
   const amount = toMoney(input.amount);
   if (!input.userId || amount <= 0) return undefined;
 
   const [updatedWallet] = await db
     .update(wallets)
-    .set({
-      balance: sql`${wallets.balance} - ${amount}`,
-      lockedBalance: sql`${wallets.lockedBalance} + ${amount}`,
-    } as any)
+    .set({ balance: sql`${wallets.balance} - ${amount}`, lockedBalance: sql`${wallets.lockedBalance} + ${amount}` } as any)
     .where(and(eq(wallets.userId, input.userId), sql`${wallets.balance} >= ${amount}`))
     .returning();
 
