@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import CardThumbnail from "../components/CardThumbnail";
+import TournamentLeaderboardMini from "../components/tournaments/TournamentLeaderboardMini";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -326,6 +327,7 @@ export default function CompetitionsPage() {
                   <Badge className="capitalize">{pinTournament.tier}</Badge>
                 </div>
                 <div className="grid sm:grid-cols-3 gap-2 my-4 text-sm"><InfoPill label="Entry" value={`N$${money(pinTournament.entryFee)}`} helper="Paid from wallet." /><InfoPill label="Platform" value={`N$${money(Number(pinTournament.entryFee || 0) * 0.2)}`} helper="20% fee." /><InfoPill label="Prize pool" value={`N$${money(Number(pinTournament.entryFee || 0) * 0.8)}`} helper="Added per entry." /></div>
+                <TournamentLeaderboardMini competitionId={pinTournament.id} compact />
                 <Button onClick={() => openCompetitionAction(pinTournament, "pin")}>Choose Lineup & Join</Button>
               </Card>}
             </Card>
@@ -355,6 +357,7 @@ export default function CompetitionsPage() {
           {selectedComp && <div className="py-4 space-y-4">
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">This tournament requires <span className="font-semibold text-foreground capitalize">{selectedComp.tier}</span> cards only. Pick 5 cards and set a captain.</div>
             <div className="flex flex-wrap gap-2"><Badge variant="outline">Entry: N${money(selectedComp.entryFee)}</Badge><Badge variant="outline">Platform: N${money(Number(selectedComp.entryFee || 0) * 0.2)}</Badge><Badge variant="outline">Prize pool add: N${money(Number(selectedComp.entryFee || 0) * 0.8)}</Badge></div>
+            <TournamentLeaderboardMini competitionId={selectedComp.id} />
             <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={() => applyLineupPreset(savedLineupIds, "Saved lineup")} disabled={savedLineupIds.length !== 5}>Use Saved Lineup ({savedLineupIds.length}/5)</Button><Button variant="outline" onClick={() => applyLineupPreset(previousLineupIds, "Previous tournament lineup")} disabled={previousLineupIds.length !== 5}>Use Previous Lineup ({previousLineupIds.length}/5)</Button></div>
             <p className="text-sm text-muted-foreground">Selected: {selectedCards.length}/5. Need at least 1 GK, 1 DEF, 1 MID and 1 FWD.</p>
             {selectedCards.length > 0 && !lineupValid && <div className="flex flex-wrap gap-1">{!hasGK && <Badge variant="outline" className="text-red-400 border-red-400">Need GK</Badge>}{!hasDEF && <Badge variant="outline" className="text-red-400 border-red-400">Need DEF</Badge>}{!hasMID && <Badge variant="outline" className="text-red-400 border-red-400">Need MID</Badge>}{!hasFWD && <Badge variant="outline" className="text-red-400 border-red-400">Need FWD</Badge>}</div>}
@@ -403,6 +406,7 @@ function CompetitionCard({ comp, entered, onJoin }: { comp: CompetitionWithEntri
       <MiniStat icon={<Trophy className="w-3 h-3" />} label="Prize pool" value={`N$${money(prizePool || Number(comp.entryFee || 0) * 0.8 * entryCount)}`} />
       <MiniStat icon={<Shield className="w-3 h-3" />} label="Platform" value={`N$${money(platformFees || Number(comp.entryFee || 0) * 0.2 * entryCount)}`} />
     </div>
+    {(comp.status === "open" || comp.status === "active") && <TournamentLeaderboardMini competitionId={comp.id} compact />}
     <div className="flex flex-wrap gap-2"><Badge variant="outline" className="capitalize">Prize: {comp.prizeCardRarity || comp.tier} card</Badge>{entered && <Badge variant="outline" className="border-green-500 text-green-500">Entered</Badge>}</div>
     <Button className="w-full" onClick={onJoin} disabled={entered || comp.status !== "open"}>{entered ? "Already Entered" : comp.status === "open" ? "Enter Tournament" : "Not Open"}</Button>
   </Card>;
