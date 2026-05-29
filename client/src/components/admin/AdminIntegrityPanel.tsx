@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CreditCard, DatabaseZap, RefreshCw, ShieldCheck, Store, Wallet } from "lucide-react";
+import { AlertTriangle, CreditCard, DatabaseZap, RefreshCw, ShieldCheck, Store, Trophy, Wallet } from "lucide-react";
 import { apiRequest, queryClient } from "../../lib/queryClient";
 import { useToast } from "../../hooks/use-toast";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
+import { Input } from "../ui/input";
 import { Skeleton } from "../ui/skeleton";
 
 type IntegritySummary = Record<string, number | string | boolean | null | undefined>;
@@ -136,10 +138,43 @@ function IntegrityCard({
 
 export default function AdminIntegrityPanel() {
   const { toast } = useToast();
+  const [competitionIdInput, setCompetitionIdInput] = useState("");
 
   const walletIntegrity = useQuery<IntegrityResponse>({ queryKey: ["/api/admin/wallet/integrity"] });
   const marketplaceIntegrity = useQuery<IntegrityResponse>({ queryKey: ["/api/admin/marketplace/integrity"] });
   const cardIntegrity = useQuery<IntegrityResponse>({ queryKey: ["/api/admin/cards/integrity"] });
+
+  const rewardIntegrityMutation = useMutation({
+    mutationFn: async (competitionId: string) => {
+      const normalizedId = Number(competitionId);
+      if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+        throw new Error("Enter a valid competition ID");
+      }
+      const response = await apiRequest("GET", `/api/admin/competitions/${normalizedId}/reward-integrity`);
+      return response.json();
+    },
+    onError: (error: any) => {
+      toast({ title: "Reward check failed", description: error?.message || "Unable to check rewards", variant: "destructive" });
+    },
+  });
+
+  const rewardRepairMutation = useMutation({
+    mutationFn: async (competitionId: string) => {
+      const normalizedId = Number(competitionId);
+      if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+        throw new Error("Enter a valid competition ID");
+      }
+      const response = await apiRequest("POST", `/api/admin/competitions/${normalizedId}/repair-rewards`, {});
+      return response.json();
+    },
+    onSuccess: async (_data, competitionId) => {
+      toast({ title: "Reward repair completed", description: `Competition ${competitionId}` });
+      rewardIntegrityMutation.mutate(competitionId);
+    },
+    onError: (error: any) => {
+      toast({ title: "Reward repair failed", description: error?.message || "Unable to repair rewards", variant: "destructive" });
+    },
+  });
 
   const repairMutation = useMutation({
     mutationFn: async (endpoint: string) => {
@@ -225,6 +260,67 @@ export default function AdminIntegrityPanel() {
           actionPending={repairMutation.isPending}
         />
       </div>
+
+      <Card className="overflow-hidden border-violet-300/15 bg-gradient-to-br from-slate-950 via-slate-950/95 to-violet-950/30 p-0 shadow-2xl shadow-black/25">
+        <div className="border-b border-white/10 bg-gradient-to-r from-violet-300/10 via-white/[0.04] to-transparent p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl border border-violet-300/20 bg-violet-300/10 p-3 text-violet-200">
+                <Trophy className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">Tournament reward integrity</h3>
+                <p className="mt-1 text-sm text-slate-400">Check and repair prize-card delivery for a settled competition.</p>
+              </div>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+              <Input
+                value={competitionIdInput}
+                onChange={(event) => setCompetitionIdInput(event.target.value)}
+                placeholder="Competition ID"
+                className="bg-black/30 lg:w-44"
+              />
+              <Button variant="outline" onClick={() => rewardIntegrityMutation.mutate(competitionIdInput)} disabled={rewardIntegrityMutation.isPending}>
+                <RefreshCw className="mr-2 h-4 w-4" />{rewardIntegrityMutation.isPending ? "Checking..." : "Check"}
+              </Button>
+              <Button onClick={() => rewardRepairMutation.mutate(competitionIdInput)} disabled={rewardRepairMutation.isPending}>
+                <DatabaseZap className="mr-2 h-4 w-4" />{rewardRepairMutation.isPending ? "Repairing..." : "Repair"}
+              </Button>
+            </div>
+          </div>
+        </div>
+        <div className="p-4">
+          {rewardIntegrityMutation.data ? (
+            <div className="grid gap-3 lg:grid-cols-[1fr_1.25fr]">
+              <div className="grid grid-cols-2 gap-3">
+                {Object.entries((rewardIntegrityMutation.data as IntegrityResponse).summary || {}).slice(0, 6).map(([key, value]) => (
+                  <SummaryMetric key={key} label={key.replace(/([A-Z])/g, " $1")} value={value} />
+                ))}
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-slate-400">Reward findings</p>
+                {((rewardIntegrityMutation.data as IntegrityResponse).rows || (rewardIntegrityMutation.data as IntegrityResponse).issues || []).slice(0, 5).length === 0 ? (
+                  <p className="text-sm text-emerald-300">No reward findings returned.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {(((rewardIntegrityMutation.data as IntegrityResponse).rows || (rewardIntegrityMutation.data as IntegrityResponse).issues || []) as any[]).slice(0, 5).map((row, index) => (
+                      <div key={row.entryId || row.userId || index} className="rounded-lg border border-white/10 bg-white/[0.03] p-2 text-xs text-slate-300">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-white">Entry {row.entryId || index + 1}</span>
+                          <Badge variant="outline" className="border-white/15 text-[0.65rem] text-slate-300">{row.status || row.reason || "review"}</Badge>
+                        </div>
+                        <p className="mt-1 truncate text-slate-500">{JSON.stringify(row).slice(0, 180)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-400">Enter a competition ID to verify winner prize-card delivery and ownership.</p>
+          )}
+        </div>
+      </Card>
 
       <Card className="border-amber-300/15 bg-amber-950/10 p-4">
         <div className="flex gap-3 text-sm text-amber-100/80">
