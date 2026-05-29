@@ -2255,19 +2255,6 @@ app.get("/api/players/:id/photo", async (req, res) => {
     });
   }
 });
-      
-      res.json({ 
-        success: true,
-        message: "Deposit processed successfully",
-        fee,
-        netAmount: net,
-        feeRate
-      });
-    } catch (error: any) {
-      console.error("Failed to process deposit:", error);
-      res.status(500).json({ message: "Failed to process deposit" });
-    }
-  });
 
   app.post("/api/wallet/withdraw", requireAuth, async (req: any, res) => {
     try {
