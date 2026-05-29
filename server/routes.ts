@@ -19,36 +19,6 @@ import { registerAdminRoutes } from "./routes/admin.routes.js";
 import { registerAuctionsRoutes } from "./routes/auctions.routes.js";
 import { registerAuthModeRoutes } from "./routes/auth.routes.js";
 import { registerRetentionRoutes } from "./routes/retention.routes.js";
-import { creditWalletWithLedger, getWalletIntegrityReport, repairMissingWalletsFromLedger } from "./services/walletLedger.js";
-import {
-  creditWalletWithLedger,
-  createPendingWithdrawalWithHold,
-  createTrustedWithdrawal,
-  getWalletIntegrityReport,
-  processWalletDeposit,
-  repairMissingWalletsFromLedger,
-} from "./services/walletLedger.js";
-import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
-import {
-  creditWalletWithLedger,
-  createPendingWithdrawalWithHold,
-  createTrustedWithdrawal,
-  enterCompetitionWithFee,
-  getWalletIntegrityReport,
-  processWalletDeposit,
-  repairMissingWalletsFromLedger,
-} from "./services/walletLedger.js";
-import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
-import {
-  creditWalletWithLedger,
-  createPendingWithdrawalWithHold,
-  createTrustedWithdrawal,
-  enterCompetitionWithFee,
-  getWalletIntegrityReport,
-  processWalletDeposit,
-  repairMissingWalletsFromLedger,
-} from "./services/walletLedger.js";
-import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
 import {
   creditWalletWithLedger,
   createPendingWithdrawalWithHold,
@@ -59,29 +29,10 @@ import {
   processWalletDeposit,
   repairMissingWalletsFromLedger,
 } from "./services/walletLedger.js";
-import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
 import {
-  creditWalletWithLedger,
-  createPendingWithdrawalWithHold,
-  createTrustedWithdrawal,
-  enterCompetitionWithFee,
-  applyMarketplaceTradeLedger,
-  getWalletIntegrityReport,
-  processWalletDeposit,
-  repairMissingWalletsFromLedger,
-} from "./services/walletLedger.js";
-import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
-import {
-  creditWalletWithLedger,
-  createPendingWithdrawalWithHold,
-  createTrustedWithdrawal,
-  enterCompetitionWithFee,
-  applyMarketplaceTradeLedger,
-  getWalletIntegrityReport,
-  processWalletDeposit,
-  repairMissingWalletsFromLedger,
-} from "./services/walletLedger.js";
-import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
+  getCompetitionRewardIntegrity,
+  repairCompetitionRewards,
+} from "./services/tournamentRewards.js";
 import {
   getCardStatus,
   getDepositBreakdown,
@@ -96,7 +47,6 @@ import {
 
 // ✅ Google auth (Passport) – relies on session/passport middleware being set up in server entry file
 import passport from "passport";
-
 const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || "").split(",").filter(Boolean);
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || DEFAULT_ADMIN_EMAIL)
