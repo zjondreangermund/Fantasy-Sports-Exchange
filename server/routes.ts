@@ -2233,7 +2233,6 @@ app.get("/api/players/:id/photo", async (req, res) => {
       
       await processWalletDeposit({
         userId,
-        gross,
         fee,
         net,
         feeRate,
@@ -2245,7 +2244,6 @@ app.get("/api/players/:id/photo", async (req, res) => {
       res.json({ 
         success: true,
         message: "Deposit processed successfully",
-        amount: gross,
         fee,
         netAmount: net,
         feeRate
