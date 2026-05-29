@@ -1,119 +1,58 @@
-import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-// Fixed: @/hooks -> ../hooks
-import { useAuth } from "../hooks/use-auth";
-import { queryClient } from "../lib/queryClient";
-import Metal3DCard from "../components/Metal3DCard";
-import { toFantasyCardData } from "../lib/fantasy-card-adapter";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { ArrowRight, Banknote, BellRing, CreditCard, Gavel, LayoutGrid, LineChart, ShoppingBag, Sparkles, Trophy, Users, Wallet as WalletIcon, Zap } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
-// Fixed: @shared -> ../../../shared
-import { type PlayerCardWithPlayer, type Wallet, type Lineup } from "../../../shared/schema";
-import {
-  Trophy,
-  Wallet as WalletIcon,
-  TrendingUp,
-  Star,
-  Package,
-  ArrowLeftRight,
-  Swords,
-  Shield,
-  Zap,
-  ChevronUp,
-  Percent,
-  DollarSign,
-  CheckCircle2,
-  Circle,
-  Timer,
-  MessageCircle,
-  Flame,
-  BellRing,
-  Target,
-} from "lucide-react";
-import { Link, useLocation } from "wouter";
-import { useToast } from "../hooks/use-toast";
+import Metal3DCard from "../components/Metal3DCard";
+import { toFantasyCardData } from "../lib/fantasy-card-adapter";
+import { useAuth } from "../hooks/use-auth";
+import { type Competition, type CompetitionEntry, type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
 
-type OnboardingConfig = {
-  signupPacksEnabled: boolean;
-  requireTeamName: boolean;
-  teamNameMinLength: number;
-  onboardingEntryPath: string;
-  starterChecklistLabel: string;
-  packLabels: string[];
+type CompetitionWithEntries = Competition & {
+  entryCount?: number;
+  max_entries?: number | null;
+  maxEntries?: number | null;
+  prize_pool_total?: number;
+  platform_fee_total?: number;
 };
 
-type LiveChatMessage = {
-  id: string;
-  userId: string;
-  userName: string;
-  text: string;
-  replyToMessageId?: string;
-  replyToUserId?: string;
-  replyToUserName?: string;
-  replyToText?: string;
-  createdAt: string;
-};
-
-type LivePointEvent = {
-  id: string;
-  gameId: number;
-  team: string;
-  delta: number;
-  reason: string;
-  createdAt: string;
-};
-
-type TournamentRewardStatus = {
-  available: boolean;
-  claimed: boolean;
-  rarity: "common" | "rare" | "unique" | "epic" | "legendary";
-  competitionName?: string;
-  competitionId?: number | null;
-  entryId?: number | null;
-  cardId?: number | null;
-  rank?: number;
-  prizeAmount?: number;
-  hasMoney?: boolean;
-  hasCard?: boolean;
+type NotificationResponse = {
+  notifications: Array<{ id: number; title: string; message: string; read: boolean; createdAt?: string | null }>;
+  unreadCount: number;
 };
 
 type RetentionSummary = {
-  missions: Array<{ id: string; title: string; progress: number; target: number; completed: boolean }>;
-  reminders: Array<{ id: string; title: string; remindAt: string; enabled: boolean }>;
-  watchlist: { cardIds: number[]; alerts: Array<{ cardId: number; playerName: string; listedPrice: number; fairValue: number; status: string }> };
-  nextBestAction: { key: string; title: string; ctaPath: string };
-  deadline: null | { competitionId: number; competitionName: string; startsAt: string };
+  missions?: Array<{ id: string; title: string; progress: number; target: number; completed: boolean }>;
+  nextBestAction?: { key: string; title: string; ctaPath: string };
+  deadline?: null | { competitionId: number; competitionName: string; startsAt: string };
 };
 
+function money(value: unknown) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return "N$0.00";
+  return `N$${n.toFixed(2)}`;
+}
+
+function rarityCounts(cards: PlayerCardWithPlayer[] | undefined) {
+  const counts: Record<string, number> = { common: 0, rare: 0, unique: 0, legendary: 0 };
+  for (const card of cards || []) {
+    const rarity = String(card.rarity || "common").toLowerCase();
+    counts[rarity] = (counts[rarity] || 0) + 1;
+  }
+  return counts;
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { toast } = useToast();
-  const [, navigate] = useLocation();
-  const [cheers, setCheers] = useState(182);
-  const [chatInput, setChatInput] = useState("");
-  const [replyTarget, setReplyTarget] = useState<LiveChatMessage | null>(null);
 
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
     queryFn: async () => {
       const res = await fetch("/api/wallet", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch wallet");
-      return res.json();
-    },
-  });
-
-  const { data: lineup, isLoading: lineupLoading } = useQuery<{
-    lineup: Lineup;
-    cards: PlayerCardWithPlayer[];
-  }>({
-    queryKey: ["/api/lineup"],
-    queryFn: async () => {
-      const res = await fetch("/api/lineup", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch lineup");
       return res.json();
     },
   });
@@ -128,656 +67,196 @@ export default function DashboardPage() {
     },
   });
 
-  const { data: onboardingConfig } = useQuery<OnboardingConfig>({
-    queryKey: ["/api/onboarding/config"],
-  });
-
-  const { data: tournamentRewardStatus, refetch: refetchTournamentReward } = useQuery<TournamentRewardStatus | null>({
-    queryKey: ["/api/rewards/tournament-status"],
+  const { data: lineup, isLoading: lineupLoading } = useQuery<{ cards: PlayerCardWithPlayer[] }>({
+    queryKey: ["/api/lineup"],
     queryFn: async () => {
-      const res = await fetch("/api/rewards/tournament-status", { credentials: "include" });
-      if (!res.ok) return null;
+      const res = await fetch("/api/lineup", { credentials: "include" });
+      if (!res.ok) return { cards: [] };
       return res.json();
     },
   });
 
-  const {
-    data: liveChatMessages,
-    refetch: refetchLiveChat,
-    isFetching: liveChatLoading,
-  } = useQuery<LiveChatMessage[]>({
-    queryKey: ["/api/live-chat/messages?limit=40"],
+  const { data: competitions } = useQuery<CompetitionWithEntries[]>({
+    queryKey: ["/api/competitions"],
     queryFn: async () => {
-      const res = await fetch("/api/live-chat/messages?limit=40", { credentials: "include" });
+      const res = await fetch("/api/competitions", { credentials: "include" });
       if (!res.ok) return [];
       const data = await res.json();
-      return Array.isArray(data) ? data : [];
+      return Array.isArray(data) ? data : data.competitions || [];
     },
-    refetchInterval: 5000,
+    refetchInterval: 30000,
   });
 
-  const { data: livePointEvents } = useQuery<LivePointEvent[]>({
-    queryKey: ["/api/live/point-feed?limit=20"],
+  const { data: myEntries } = useQuery<CompetitionEntry[]>({
+    queryKey: ["/api/competitions/my-entries"],
     queryFn: async () => {
-      const res = await fetch("/api/live/point-feed?limit=20", { credentials: "include" });
+      const res = await fetch("/api/competitions/my-entries", { credentials: "include" });
       if (!res.ok) return [];
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
+      return res.json();
     },
-    refetchInterval: 5000,
+    refetchInterval: 30000,
+  });
+
+  const { data: notifications } = useQuery<NotificationResponse>({
+    queryKey: ["/api/notifications"],
+    queryFn: async () => {
+      const res = await fetch("/api/notifications", { credentials: "include" });
+      if (!res.ok) return { notifications: [], unreadCount: 0 };
+      return res.json();
+    },
+    refetchInterval: 30000,
   });
 
   const { data: retentionSummary } = useQuery<RetentionSummary>({
     queryKey: ["/api/retention/summary"],
     queryFn: async () => {
       const res = await fetch("/api/retention/summary", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch retention summary");
+      if (!res.ok) return {};
       return res.json();
     },
     refetchInterval: 30000,
   });
 
-  const sendLiveChatMutation = useMutation({
-    mutationFn: async ({ text, replyToMessageId }: { text: string; replyToMessageId?: string }) => {
-      const res = await fetch("/api/live-chat/messages", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, replyToMessageId }),
-      });
-      if (!res.ok) throw new Error("Failed to send message");
-      return res.json();
-    },
-    onSuccess: async () => {
-      setChatInput("");
-      setReplyTarget(null);
-      await refetchLiveChat();
-    },
-  });
+  const activeCompetitionIds = new Set((myEntries || []).map((entry) => entry.competitionId));
+  const activeTournaments = (competitions || []).filter((comp) => activeCompetitionIds.has(comp.id) && (comp.status === "open" || comp.status === "active"));
+  const openTournaments = (competitions || []).filter((comp) => comp.status === "open");
+  const listedCards = (cards || []).filter((card) => card.forSale);
+  const counts = rarityCounts(cards);
+  const lineupCards = lineup?.cards || [];
+  const lineupScore = lineupCards.reduce((sum, card) => {
+    const scores = Array.isArray(card.last5Scores) ? card.last5Scores as number[] : [];
+    return sum + Number(scores[scores.length - 1] || 0);
+  }, 0);
+  const walletBalance = Number(wallet?.balance || 0);
 
-  const claimTournamentRewardMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/rewards/tournament-claim", {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to claim tournament reward");
-      return res.json() as Promise<{
-        rarity: "common" | "rare" | "unique" | "epic" | "legendary";
-        cardId?: number | null;
-        prizeAmount?: number;
-        competitionName?: string;
-      }>;
-    },
-    onSuccess: async (data) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/wallet"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/rewards"] }),
-        refetchTournamentReward(),
-      ]);
-      const rarity = String(data?.rarity || "rare").toLowerCase();
-      const cardId = Number(data?.cardId || 0);
-      if (cardId > 0) {
-        navigate(`/card-reveal?source=tournament-reward&rarity=${encodeURIComponent(rarity)}&cardId=${cardId}`);
-        return;
-      }
-
-      toast({
-        title: "Congratulations! Reward claimed",
-        description: `Your ${data?.competitionName || "tournament"} cash reward of N$${Number(data?.prizeAmount || 0).toFixed(2)} has been added to your wallet.`,
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Could not claim reward",
-        description: "Please try again in a moment.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  useEffect(() => {
-    if (onboardingConfig?.signupPacksEnabled === false) return;
-    if (cardsLoading) return;
-
-    if (Array.isArray(cards) && cards.length === 0) {
-      (async () => {
-        try {
-          await fetch("/api/onboarding/create-offer", { method: "POST" });
-          navigate("/onboarding");
-        } catch (err) {
-          console.error("Failed to create onboarding offer:", err);
-        }
-      })();
-    }
-  }, [cardsLoading, cards, navigate, onboardingConfig?.signupPacksEnabled]);
-
-  const totalScore = lineup?.cards?.reduce((sum, c) => {
-    const scores = c.last5Scores as number[];
-    return sum + (scores?.[scores.length - 1] || 0);
-  }, 0) || 0;
-
-  const hasCards = (cards?.length || 0) > 0;
-  const hasLineup = (lineup?.cards?.length || 0) === 5;
-  const hasBalance = (wallet?.balance || 0) > 0;
-
-  const checklist = [
-    { label: onboardingConfig?.starterChecklistLabel || "Open starter packs", done: hasCards },
-    { label: "Set your 5-card lineup", done: hasLineup },
-    { label: "Fund wallet for market moves", done: hasBalance },
-  ];
-
-  const onboardingEntryPath = onboardingConfig?.onboardingEntryPath || "/onboarding";
-
-  const weeklyEvents = useMemo(
-    () => [
-      { title: "Derby Week Boost", desc: "Manchester derby cards +10% market demand", endsIn: "2d 14h" },
-      { title: "Flash Volatility", desc: "Rare cards spread tightens for 6 hours", endsIn: "6h 08m" },
-      { title: "Weekend Tournament", desc: "Top 100 split bonus prize pool", endsIn: "3d 01h" },
-    ],
-    [],
-  );
+  const nextAction = useMemo(() => {
+    if (!cards?.length) return { title: "Open starter packs", href: "/onboarding", cta: "Start" };
+    if (lineupCards.length !== 5) return { title: "Set your 5-card lineup", href: "/collection", cta: "Set Lineup" };
+    if (activeTournaments.length === 0) return { title: "Enter a tournament", href: "/competitions", cta: "Enter Now" };
+    if (walletBalance <= 0) return { title: "Fund your wallet", href: "/wallet", cta: "Deposit" };
+    return { title: retentionSummary?.nextBestAction?.title || "Review marketplace opportunities", href: retentionSummary?.nextBestAction?.ctaPath || "/marketplace", cta: "Review" };
+  }, [cards?.length, lineupCards.length, activeTournaments.length, walletBalance, retentionSummary?.nextBestAction]);
 
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground" data-testid="text-welcome">
-              Welcome back, {user?.firstName || "Manager"}
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              Track live EPL performances, manage your squad, and climb the leaderboard
-            </p>
+      <div className="mx-auto max-w-7xl space-y-6">
+        <section className="overflow-hidden rounded-[2rem] border border-primary/20 bg-gradient-to-br from-primary/15 via-background/90 to-black/40 p-5 shadow-2xl shadow-black/20 sm:p-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <Badge className="gap-1"><Sparkles className="h-3 w-3" /> Command Center</Badge>
+                {notifications?.unreadCount ? <Badge variant="outline">{notifications.unreadCount} unread</Badge> : null}
+              </div>
+              <h1 className="text-2xl font-black tracking-tight text-foreground sm:text-4xl">Welcome back, {user?.firstName || "Manager"}</h1>
+              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Your wallet, squad, tournaments and market actions in one clean view.</p>
+            </div>
+            <Card className="min-w-[240px] border-emerald-400/20 bg-emerald-400/10 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-emerald-300/80">Next Best Action</p>
+              <h2 className="mt-2 font-bold text-foreground">{nextAction.title}</h2>
+              <Link href={nextAction.href}><Button className="mt-3 w-full">{nextAction.cta}<ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
+            </Card>
           </div>
-        </div>
+        </section>
 
-        {Boolean(tournamentRewardStatus?.available) && (
-          <Card className="p-5 mb-6 border-amber-400/40 bg-gradient-to-r from-amber-500/10 to-yellow-400/10">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-amber-300 font-semibold">Tournament Winner Reward</p>
-                <h3 className="text-lg font-semibold text-foreground">Congratulations! Your reward is ready to claim</h3>
-                <p className="text-sm text-muted-foreground">
-                  {tournamentRewardStatus?.competitionName
-                    ? `${tournamentRewardStatus.competitionName} reward is waiting: ${tournamentRewardStatus?.hasMoney ? `N$${Number(tournamentRewardStatus?.prizeAmount || 0).toFixed(2)} cash` : ""}${tournamentRewardStatus?.hasMoney && tournamentRewardStatus?.hasCard ? " + " : ""}${tournamentRewardStatus?.hasCard ? `${String(tournamentRewardStatus?.rarity || "rare").toUpperCase()} card` : ""}.`
-                    : "Your tournament reward is ready to claim."}
-                </p>
-              </div>
-              <Button
-                onClick={() => claimTournamentRewardMutation.mutate()}
-                disabled={claimTournamentRewardMutation.isPending}
-              >
-                {claimTournamentRewardMutation.isPending ? "Claiming..." : tournamentRewardStatus?.hasCard ? "Claim & Reveal" : "Claim Reward"}
-              </Button>
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard icon={<WalletIcon className="h-5 w-5" />} label="Wallet Balance" value={walletLoading ? null : money(walletBalance)} helper="Available funds" href="/wallet" />
+          <MetricCard icon={<CreditCard className="h-5 w-5" />} label="Cards Owned" value={cardsLoading ? null : String(cards?.length || 0)} helper={`${listedCards.length} listed for sale`} href="/collection" />
+          <MetricCard icon={<Trophy className="h-5 w-5" />} label="Live Entries" value={String(activeTournaments.length)} helper={`${openTournaments.length} open tournaments`} href="/competitions" />
+          <MetricCard icon={<LineChart className="h-5 w-5" />} label="Lineup Score" value={lineupLoading ? null : String(lineupScore)} helper={`${lineupCards.length}/5 cards selected`} href="/live-lineup" />
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <Card className="p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <div><h2 className="text-lg font-bold">Current Lineup</h2><p className="text-sm text-muted-foreground">Your active 5-card squad.</p></div>
+              <Link href="/collection"><Button size="sm" variant="outline">Edit Lineup</Button></Link>
             </div>
-          </Card>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-md bg-green-500/10 flex items-center justify-center">
-                <WalletIcon className="w-5 h-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Balance</p>
-                {walletLoading ? (
-                  <Skeleton className="h-6 w-20" />
-                ) : (
-                  <p
-                    className="text-xl font-bold text-foreground"
-                    data-testid="text-balance"
-                  >
-                    N${wallet?.balance?.toFixed(2) || "0.00"}
-                  </p>
-                )}
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-                <Star className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Cards Owned</p>
-                {cardsLoading ? (
-                  <Skeleton className="h-6 w-20" />
-                ) : (
-                  <p
-                    className="text-xl font-bold text-foreground"
-                    data-testid="text-cards-count"
-                  >
-                    {cards?.length || 0}
-                  </p>
-                )}
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-md bg-yellow-500/10 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-yellow-500" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Last Game Score</p>
-                <p
-                  className="text-xl font-bold text-foreground"
-                  data-testid="text-score"
-                >
-                  {totalScore}
-                </p>
-              </div>
-            </div>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <Card className="p-4 bg-background/70 border-border/60">
-          <div className="flex items-center gap-2 mb-2">
-            <Target className="w-4 h-4 text-primary" />
-            <h3 className="font-semibold">Missions</h3>
-          </div>
-          <div className="space-y-2 text-sm">
-            {(retentionSummary?.missions || []).map((mission) => (
-              <div key={mission.id} className="flex items-center justify-between">
-                <span className={mission.completed ? "text-green-500" : "text-foreground"}>
-                  {mission.title}
-                </span>
-                <Badge variant={mission.completed ? "default" : "outline"}>
-                  {mission.progress}/{mission.target}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </Card>
-        <Card className="p-4 bg-background/70 border-border/60">
-          <div className="flex items-center gap-2 mb-2">
-            <BellRing className="w-4 h-4 text-primary" />
-            <h3 className="font-semibold">Deadline & Reminders</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {retentionSummary?.deadline
-              ? `${retentionSummary.deadline.competitionName} starts ${new Date(retentionSummary.deadline.startsAt).toLocaleString()}`
-              : "No active deadline right now."}
-          </p>
-          <p className="text-xs text-muted-foreground mt-2">
-            {retentionSummary?.reminders?.length || 0} reminder(s) configured.
-          </p>
-        </Card>
-        <Card className="p-4 bg-background/70 border-border/60">
-          <h3 className="font-semibold mb-2">Next Best Action</h3>
-          <p className="text-sm text-muted-foreground mb-3">
-            {retentionSummary?.nextBestAction?.title || "Review your lineup and card market opportunities."}
-          </p>
-          {retentionSummary?.nextBestAction?.ctaPath ? (
-            <Link href={retentionSummary.nextBestAction.ctaPath}>
-              <Button size="sm">Go now</Button>
-            </Link>
-          ) : null}
-          <div className="mt-3 text-xs text-muted-foreground">
-            {retentionSummary?.watchlist?.alerts?.length || 0} watchlist alert(s).
-          </div>
-        </Card>
-      </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-          <Card className="p-5 lg:col-span-2 border-primary/20 bg-primary/5">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                <Zap className="w-5 h-5 text-primary" />
-                Matchday Checklist
-              </h2>
-              <Badge variant="secondary" data-testid="badge-checklist-progress">
-                {checklist.filter((step) => step.done).length}/3 complete
-              </Badge>
-            </div>
-
-            <div className="space-y-2.5">
-              {checklist.map((step) => (
-                <div key={step.label} className="flex items-center gap-2 text-sm">
-                  {step.done ? (
-                    <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  ) : (
-                    <Circle className="w-4 h-4 text-muted-foreground" />
-                  )}
-                  <span className={step.done ? "text-foreground" : "text-muted-foreground"}>{step.label}</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-5 border-border/70">
-            <h3 className="font-semibold text-foreground mb-1">Best Next Action</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              {hasCards && hasLineup
-                ? "Your core setup is done. Improve card quality in the market."
-                : hasCards
-                  ? "You have cards ready — lock your lineup to start competing."
-                  : "Start by opening your packs and selecting your first 5 cards."}
-            </p>
-
-            {!hasCards ? (
-              <Button onClick={() => navigate(onboardingEntryPath)} data-testid="button-next-onboarding">
-                Go to Onboarding
-              </Button>
-            ) : !hasLineup ? (
-              <Button onClick={() => navigate("/collection")} data-testid="button-next-lineup">
-                Set Lineup
-              </Button>
+            {lineupLoading ? (
+              <div className="flex gap-3 overflow-x-auto pb-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-64 w-44 shrink-0 rounded-xl" />)}</div>
+            ) : lineupCards.length ? (
+              <div className="flex gap-3 overflow-x-auto pb-2">{lineupCards.map((card) => <Metal3DCard key={card.id} player={toFantasyCardData(card)} className="!w-[180px] shrink-0" />)}</div>
             ) : (
-              <Button onClick={() => navigate("/marketplace")} data-testid="button-next-market">
-                Open Marketplace
-              </Button>
+              <EmptyState title="No lineup set" body="Select 5 eligible cards from your collection before entering tournaments." action="Set Lineup" href="/collection" />
             )}
           </Card>
-        </div>
 
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-primary" />
-              Your Lineup
-            </h2>
-            <Link href="/collection">
-              <Button variant="outline" size="sm" data-testid="link-view-collection">
-                View Collection
-              </Button>
-            </Link>
-          </div>
-
-          {lineupLoading ? (
-            <div className="flex flex-wrap gap-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="w-48 h-72 rounded-md" />
-              ))}
-            </div>
-          ) : lineup?.cards && lineup.cards.length > 0 ? (
-            <div className="flex flex-wrap gap-4">
-              {lineup.cards.map((card) => (
-                <Metal3DCard key={card.id} player={toFantasyCardData(card)} className="!w-[208px]" />
-              ))}
-            </div>
-          ) : (
-            <Card className="p-8 text-center">
-              <p className="text-muted-foreground">
-                No lineup set yet. Visit your collection to set one up.
-              </p>
+          <div className="space-y-4">
+            <Card className="p-5">
+              <div className="mb-4 flex items-center gap-2"><Trophy className="h-5 w-5 text-yellow-500" /><h2 className="font-bold">Active Tournaments</h2></div>
+              {activeTournaments.length ? (
+                <div className="space-y-2">{activeTournaments.slice(0, 4).map((comp) => <CompactRow key={comp.id} title={comp.name} meta={`${String(comp.tier || "common").toUpperCase()} • ${money(comp.entryFee)}`} badge={comp.status} />)}</div>
+              ) : (
+                <EmptyState title="No active entries" body="Join a public tournament or enter a private PIN cup." action="Find Tournaments" href="/competitions" compact />
+              )}
             </Card>
-          )}
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h2 className="text-lg font-semibold text-foreground">
-              Quick Actions
-            </h2>
+            <Card className="p-5">
+              <div className="mb-4 flex items-center gap-2"><BellRing className="h-5 w-5 text-primary" /><h2 className="font-bold">Important Updates</h2></div>
+              {notifications?.notifications?.length ? (
+                <div className="space-y-2">{notifications.notifications.slice(0, 3).map((note) => <CompactRow key={note.id} title={note.title} meta={note.message} badge={note.read ? "Read" : "New"} />)}</div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No important notifications.</p>
+              )}
+            </Card>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Link href="/marketplace">
-              <Card className="p-4 hover-elevate cursor-pointer">
-                <h3 className="font-medium text-foreground mb-1">Marketplace</h3>
-                <p className="text-sm text-muted-foreground">
-                  Browse and buy rare cards from other managers
-                </p>
-              </Card>
-            </Link>
-            <Link href="/wallet">
-              <Card className="p-4 hover-elevate cursor-pointer">
-                <h3 className="font-medium text-foreground mb-1">Wallet</h3>
-                <p className="text-sm text-muted-foreground">
-                  Deposit funds and manage your balance
-                </p>
-              </Card>
-            </Link>
-            <Link href="/collection">
-              <Card className="p-4 hover-elevate cursor-pointer">
-                <h3 className="font-medium text-foreground mb-1">Collection</h3>
-                <p className="text-sm text-muted-foreground">
-                  View all your cards and manage your lineup
-                </p>
-              </Card>
-            </Link>
-          </div>
-        </div>
+        </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-8">
-          <Card className="p-5 border-primary/30 bg-primary/5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Timer className="w-4 h-4 text-primary" />
-                Weekly Live Events
-              </h3>
-              <Badge variant="secondary">Live Economy</Badge>
-            </div>
-            <div className="space-y-3">
-              {weeklyEvents.map((evt) => (
-                <div key={evt.title} className="rounded-lg border border-border/60 p-3 bg-background/40">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-medium text-sm">{evt.title}</p>
-                    <Badge>{evt.endsIn}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">{evt.desc}</p>
-                </div>
-              ))}
+        <section className="grid gap-4 lg:grid-cols-3">
+          <ActionCard icon={<ShoppingBag className="h-5 w-5" />} title="Marketplace" body="Buy cards, manage listings and spot value opportunities." href="/marketplace" cta="Open Market" />
+          <ActionCard icon={<Gavel className="h-5 w-5" />} title="Auctions" body="Bid on live auction cards and track current offers." href="/auctions" cta="View Auctions" />
+          <ActionCard icon={<Users className="h-5 w-5" />} title="Create Tournament" body="Start a public cup or private PIN tournament with friends." href="/competitions" cta="Create Cup" />
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+          <Card className="p-5">
+            <div className="mb-4 flex items-center gap-2"><LayoutGrid className="h-5 w-5 text-primary" /><h2 className="font-bold">Collection Snapshot</h2></div>
+            <div className="grid grid-cols-2 gap-2">
+              <RarityPill label="Common" value={counts.common || 0} />
+              <RarityPill label="Rare" value={counts.rare || 0} />
+              <RarityPill label="Unique" value={counts.unique || 0} />
+              <RarityPill label="Legendary" value={counts.legendary || 0} />
             </div>
           </Card>
-
-          <Card className="p-5 border-border/70">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold flex items-center gap-2">
-                <MessageCircle className="w-4 h-4 text-primary" />
-                Social Arena
-              </h3>
-              <Button size="sm" variant="outline" onClick={() => setCheers((v) => v + 1)}>
-                <Flame className="w-4 h-4 mr-1 text-orange-500" /> Cheer ({cheers})
-              </Button>
-            </div>
-
-            <div className="mb-3 rounded-md border border-border/60 bg-background/40 px-3 py-2">
-              <p className="text-xs font-medium mb-2 text-muted-foreground">Live Point Dots</p>
-              <div className="space-y-1.5 max-h-24 overflow-auto">
-                {(livePointEvents || []).slice().reverse().slice(0, 8).map((event) => (
-                  <div key={event.id} className="flex items-center gap-2 text-xs">
-                    <span className={`h-2.5 w-2.5 rounded-full ${event.delta >= 0 ? "bg-green-500" : "bg-red-500"}`} />
-                    <span className="text-foreground">{event.team}</span>
-                    <span className={event.delta >= 0 ? "text-green-500" : "text-red-500"}>
-                      {event.delta >= 0 ? `+${event.delta}` : event.delta}
-                    </span>
-                    <span className="text-muted-foreground">{event.reason}</span>
+          <Card className="p-5">
+            <div className="mb-4 flex items-center gap-2"><Zap className="h-5 w-5 text-primary" /><h2 className="font-bold">Missions & Deadlines</h2></div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                {(retentionSummary?.missions || []).slice(0, 3).map((mission) => (
+                  <div key={mission.id} className="flex items-center justify-between rounded-xl border bg-background/60 p-3 text-sm">
+                    <span className={mission.completed ? "text-green-500" : "text-foreground"}>{mission.title}</span>
+                    <Badge variant={mission.completed ? "default" : "outline"}>{mission.progress}/{mission.target}</Badge>
                   </div>
                 ))}
-                {(!livePointEvents || livePointEvents.length === 0) && (
-                  <p className="text-xs text-muted-foreground">No point events yet.</p>
-                )}
+                {!(retentionSummary?.missions || []).length && <p className="text-sm text-muted-foreground">No missions right now.</p>}
               </div>
-            </div>
-
-            <div className="space-y-2 mb-3 max-h-36 overflow-auto">
-              {(liveChatMessages || []).slice().reverse().slice(0, 8).map((message) => (
-                <div key={message.id} className="text-sm rounded-md border border-border/60 bg-background/40 px-3 py-2">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="font-medium text-xs text-foreground">{message.userName || "Manager"}</span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="text-[10px] text-primary hover:underline"
-                        onClick={() => {
-                          setReplyTarget(message);
-                          setChatInput((prev) => {
-                            const tag = `@${message.userName} `;
-                            if (prev.trim().length === 0) return tag;
-                            if (prev.startsWith(tag)) return prev;
-                            return `${tag}${prev}`;
-                          });
-                        }}
-                      >
-                        Reply
-                      </button>
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                  </div>
-                  {message.replyToMessageId && (
-                    <div className="mb-1 rounded border border-primary/30 bg-primary/10 px-2 py-1">
-                      <p className="text-[10px] text-primary font-medium">Replying to @{message.replyToUserName || "Manager"}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{message.replyToText || "Message"}</p>
-                    </div>
-                  )}
-                  <p className="text-xs text-foreground/90">{message.text}</p>
-                </div>
-              ))}
-              {(!liveChatMessages || liveChatMessages.length === 0) && (
-                <div className="text-xs rounded-md border border-border/60 bg-background/40 px-3 py-2 text-muted-foreground">
-                  No chat messages yet.
-                </div>
-              )}
-            </div>
-
-            {replyTarget && (
-              <div className="mb-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] text-primary font-medium">
-                    Replying to @{replyTarget.userName}
-                  </p>
-                  <button
-                    className="text-[10px] text-muted-foreground hover:text-foreground"
-                    onClick={() => setReplyTarget(null)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-                <p className="text-[10px] text-muted-foreground truncate">{replyTarget.text}</p>
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <Input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder={
-                  liveChatLoading
-                    ? "Refreshing chat..."
-                    : replyTarget
-                    ? `Reply to @${replyTarget.userName}`
-                    : "Send a live message"
-                }
-                maxLength={280}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    const text = chatInput.trim();
-                    if (!text || sendLiveChatMutation.isPending) return;
-                    sendLiveChatMutation.mutate({ text, replyToMessageId: replyTarget?.id });
-                  }
-                }}
-              />
-              <Button
-                size="sm"
-                onClick={() => {
-                  const text = chatInput.trim();
-                  if (!text) return;
-                  sendLiveChatMutation.mutate({ text, replyToMessageId: replyTarget?.id });
-                }}
-                disabled={sendLiveChatMutation.isPending || chatInput.trim().length === 0}
-              >
-                Send
-              </Button>
-            </div>
-          </Card>
-        </div>
-
-        <div className="mt-10">
-          <h2 className="text-xl font-bold text-foreground mb-2 flex items-center gap-2">
-            <Shield className="w-5 h-5 text-primary" />
-            How It Works
-          </h2>
-          <p className="text-muted-foreground text-sm mb-6">
-            Everything you need to know about collecting, competing, and climbing the ranks.
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Card className="p-5 border-border/50">
-              <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center mb-3">
-                <Package className="w-5 h-5 text-purple-500" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-1.5">1. Open Starter Packs</h3>
-              <p className="text-sm text-muted-foreground">
-                Sign up and receive 5 position-based packs (GK, DEF, MID, FWD, Wildcards) with 15 common players total. Pick 1 from each pack to form your starting lineup of 5.
-              </p>
-            </Card>
-
-            <Card className="p-5 border-border/50">
-              <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center mb-3">
-                <Swords className="w-5 h-5 text-blue-500" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-1.5">2. Build Your SO5 Lineup</h3>
-              <p className="text-sm text-muted-foreground">
-                Your lineup needs exactly 5 cards: 1 GK, 1 DEF, 1 MID, 1 FWD, and 1 Utility (any position). Choose a captain for a 10% score bonus.
-              </p>
-            </Card>
-
-            <Card className="p-5 border-border/50">
-              <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center mb-3">
-                <Trophy className="w-5 h-5 text-green-500" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-1.5">3. Compete Weekly</h3>
-              <p className="text-sm text-muted-foreground">
-                Enter Common tier tournaments for free or Rare tier for N$20. Your players score based on real-world performance. Top 3 win prizes — 60/30/10 split of the prize pool plus bonus cards.
-              </p>
-            </Card>
-
-            <Card className="p-5 border-border/50">
-              <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center mb-3">
-                <ChevronUp className="w-5 h-5 text-amber-500" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-1.5">4. Level Up Cards</h3>
-              <p className="text-sm text-muted-foreground">
-                Cards earn XP from appearances, goals, assists, and minutes played. Every 1,000 XP levels up a card. Each level gives 5% more points than the previous — so a Level 3 card earns 10% bonus points.
-              </p>
-            </Card>
-
-            <Card className="p-5 border-border/50">
-              <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center mb-3">
-                <ArrowLeftRight className="w-5 h-5 text-red-500" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-1.5">5. Trade & Swap</h3>
-              <p className="text-sm text-muted-foreground">
-                Rare, Unique, Epic, and Legendary cards can be sold or swapped on the marketplace. You can also propose swap offers with optional cash top-ups. Common cards are free and untradable.
-              </p>
-            </Card>
-
-            <Card className="p-5 border-border/50">
-              <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center mb-3">
-                <Percent className="w-5 h-5 text-cyan-500" />
-              </div>
-              <h3 className="font-semibold text-foreground mb-1.5">6. Card Rarities</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-zinc-400 mr-1 align-middle" /> Common (Silver) —
-                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500 mr-1 ml-2 align-middle" /> Rare (Red) —
-                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-gradient-to-r from-purple-500 to-pink-500 mr-1 ml-2 align-middle" /> Unique (Rainbow) —
-                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-900 mr-1 ml-2 align-middle" /> Epic (Black) —
-                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-400 mr-1 ml-2 align-middle" /> Legendary (Gold). Higher rarity = higher base stats and more points per game.
-              </p>
-            </Card>
-          </div>
-
-          <Card className="p-4 mt-4 bg-primary/5 border-primary/20">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <DollarSign className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <h4 className="font-semibold text-foreground text-sm">8% Platform Fee</h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  An 8% fee applies to all financial transactions including deposits, marketplace sales, and swap deals. This keeps the platform running and funds the prize pools.
-                </p>
+              <div className="rounded-xl border bg-background/60 p-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Deadline</p>
+                <p className="mt-2 text-sm font-semibold">{retentionSummary?.deadline ? retentionSummary.deadline.competitionName : "No active deadline"}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{retentionSummary?.deadline?.startsAt ? new Date(retentionSummary.deadline.startsAt).toLocaleString() : "You are clear for now."}</p>
               </div>
             </div>
           </Card>
-        </div>
+        </section>
       </div>
     </div>
   );
+}
+
+function MetricCard({ icon, label, value, helper, href }: { icon: React.ReactNode; label: string; value: string | null; helper: string; href: string }) {
+  return <Link href={href}><Card className="group cursor-pointer border-border/70 bg-background/80 p-4 transition hover:border-primary/40 hover:bg-primary/5"><div className="flex items-center justify-between gap-3"><div className="rounded-2xl bg-primary/10 p-3 text-primary">{icon}</div><ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition group-hover:opacity-100" /></div><p className="mt-4 text-xs uppercase tracking-[0.2em] text-muted-foreground">{label}</p>{value === null ? <Skeleton className="mt-2 h-7 w-24" /> : <p className="mt-1 text-2xl font-black text-foreground">{value}</p>}<p className="mt-1 text-xs text-muted-foreground">{helper}</p></Card></Link>;
+}
+
+function ActionCard({ icon, title, body, href, cta }: { icon: React.ReactNode; title: string; body: string; href: string; cta: string }) {
+  return <Card className="p-5"><div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">{icon}</div><h3 className="font-bold">{title}</h3><p className="mt-1 min-h-10 text-sm text-muted-foreground">{body}</p><Link href={href}><Button className="mt-4 w-full" variant="outline">{cta}<ArrowRight className="ml-2 h-4 w-4" /></Button></Link></Card>;
+}
+
+function CompactRow({ title, meta, badge }: { title: string; meta: string; badge: string }) {
+  return <div className="flex items-start justify-between gap-3 rounded-xl border bg-background/60 p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{title}</p><p className="line-clamp-2 text-xs text-muted-foreground">{meta}</p></div><Badge variant="outline" className="shrink-0 capitalize">{badge}</Badge></div>;
+}
+
+function RarityPill({ label, value }: { label: string; value: number }) {
+  return <div className="rounded-xl border bg-background/60 p-3"><p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{label}</p><p className="text-xl font-black">{value}</p></div>;
+}
+
+function EmptyState({ title, body, action, href, compact = false }: { title: string; body: string; action: string; href: string; compact?: boolean }) {
+  return <div className={`rounded-2xl border border-dashed bg-background/50 text-center ${compact ? "p-4" : "p-8"}`}><p className="font-semibold">{title}</p><p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">{body}</p><Link href={href}><Button className="mt-4" size="sm">{action}</Button></Link></div>;
 }
