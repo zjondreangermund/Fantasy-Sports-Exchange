@@ -8,6 +8,9 @@ interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
 const BUY_TX_TYPE = "purchase" as any;
 const SALE_TX_TYPE = "sale" as any;
+const TOURNAMENT_FEE_RATE = 0.2;
+const PIN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const TOURNAMENT_RARITIES = new Set(["common", "rare", "unique", "epic", "legendary"]);
 
 function toMoney(amount: unknown): number {
   const value = Number(amount);
@@ -22,6 +25,26 @@ function parseCardId(rawCardId: unknown): number {
   if (/^\d+$/.test(normalized)) return Number(normalized);
   const match = normalized.match(/(\d+)/);
   return match ? Number(match[1]) : Number.NaN;
+}
+
+function normalizePin(raw: unknown) {
+  return String(raw || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function randomPin(length = 6) {
+  let pin = "";
+  for (let i = 0; i < length; i += 1) pin += PIN_ALPHABET[Math.floor(Math.random() * PIN_ALPHABET.length)];
+  return pin;
+}
+
+async function generateUniqueTournamentPin() {
+  for (let i = 0; i < 25; i += 1) {
+    const pin = randomPin();
+    const existing = await db.execute(sql`select id from app.competitions where join_pin = ${pin} limit 1`);
+    const rows = Array.isArray((existing as any)?.rows) ? (existing as any).rows : [];
+    if (rows.length === 0) return pin;
+  }
+  throw new Error("Could not generate tournament PIN");
 }
 
 async function resolveCard(rawCardId: unknown, rawSerialId?: unknown) {
@@ -176,6 +199,136 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
 
 export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplaceRoutesDeps) {
   const { requireAuth } = deps;
+
+  app.post("/api/user-tournaments/create", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const name = String(req.body?.name || "").trim().slice(0, 80);
+      const tier = String(req.body?.tier || "common").toLowerCase().trim();
+      const entryFee = toMoney(req.body?.entryFee);
+      const maxEntriesRaw = Number(req.body?.maxEntries || 0);
+      const maxEntries = Number.isInteger(maxEntriesRaw) && maxEntriesRaw > 1 ? Math.min(maxEntriesRaw, 500) : null;
+      const visibility = String(req.body?.visibility || "private").toLowerCase() === "public" ? "public" : "private";
+      const gameWeek = Number.isInteger(Number(req.body?.gameWeek)) && Number(req.body?.gameWeek) > 0 ? Number(req.body?.gameWeek) : 1;
+      const startDate = req.body?.startDate ? new Date(String(req.body.startDate)) : new Date();
+      const endDate = req.body?.endDate ? new Date(String(req.body.endDate)) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      if (!name) return res.status(400).json({ message: "Tournament name required" });
+      if (!TOURNAMENT_RARITIES.has(tier)) return res.status(400).json({ message: "Invalid rarity tier" });
+      if (entryFee < 0) return res.status(400).json({ message: "Entry fee cannot be negative" });
+      if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()) || endDate <= startDate) return res.status(400).json({ message: "Valid start and end dates required" });
+      const pin = visibility === "private" ? await generateUniqueTournamentPin() : null;
+      const prizeRarity = tier === "common" ? "rare" : tier;
+      const result = await db.execute(sql`
+        insert into app.competitions (name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity, created_by_user_id, join_pin, visibility, max_entries, platform_fee_rate, platform_fee_total, prize_pool_total)
+        values (${name}, ${tier}, ${entryFee}, 'open', ${gameWeek}, ${startDate}, ${endDate}, ${prizeRarity}, ${userId}, ${pin}, ${visibility}, ${maxEntries}, ${TOURNAMENT_FEE_RATE}, 0, 0)
+        returning *
+      `);
+      const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : [];
+      return res.json({ success: true, tournament: rows[0] || null, pin });
+    } catch (error: any) {
+      console.error("Failed to create user tournament:", error);
+      return res.status(500).json({ message: error?.message || "Failed to create tournament" });
+    }
+  });
+
+  app.get("/api/user-tournaments/pin/:pin", requireAuth, async (req: any, res) => {
+    try {
+      const pin = normalizePin(req.params.pin);
+      if (!pin) return res.status(400).json({ message: "PIN required" });
+      const result = await db.execute(sql`
+        select c.*, count(ce.id)::int as entry_count
+        from app.competitions c
+        left join app.competition_entries ce on ce.competition_id = c.id
+        where c.join_pin = ${pin}
+        group by c.id
+        limit 1
+      `);
+      const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : [];
+      if (!rows[0]) return res.status(404).json({ message: "Tournament PIN not found" });
+      return res.json({ tournament: rows[0] });
+    } catch (error: any) {
+      console.error("Failed to find tournament PIN:", error);
+      return res.status(500).json({ message: error?.message || "Failed to find tournament" });
+    }
+  });
+
+  app.post("/api/user-tournaments/join-pin", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const pin = normalizePin(req.body?.pin);
+      const cardIds = Array.isArray(req.body?.cardIds) ? req.body.cardIds.map((id: unknown) => Number(id)).filter((id: number) => Number.isInteger(id) && id > 0).slice(0, 5) : [];
+      const captainId = Number(req.body?.captainId || cardIds[0] || 0);
+      if (!pin) return res.status(400).json({ message: "PIN required" });
+      if (cardIds.length !== 5) return res.status(400).json({ message: "Select exactly 5 cards" });
+      if (!cardIds.includes(captainId)) return res.status(400).json({ message: "Captain must be in selected lineup" });
+      let joined: any = null;
+      await db.transaction(async (tx) => {
+        const tournamentResult = await tx.execute(sql`
+          select c.*, count(ce.id)::int as entry_count
+          from app.competitions c
+          left join app.competition_entries ce on ce.competition_id = c.id
+          where c.join_pin = ${pin}
+          group by c.id
+          limit 1
+        `);
+        const tournament = (Array.isArray((tournamentResult as any)?.rows) ? (tournamentResult as any).rows : [])[0];
+        if (!tournament) throw new Error("Tournament PIN not found");
+        if (String(tournament.status || "") !== "open") throw new Error("Tournament is not open");
+        if (tournament.max_entries && Number(tournament.entry_count || 0) >= Number(tournament.max_entries)) throw new Error("Tournament is full");
+        if (String(tournament.created_by_user_id || "") === userId) throw new Error("Tournament creator cannot enter their own PIN tournament");
+        const duplicate = await tx.execute(sql`select id from app.competition_entries where competition_id = ${Number(tournament.id)} and user_id = ${userId} limit 1`);
+        if ((Array.isArray((duplicate as any)?.rows) ? (duplicate as any).rows : []).length > 0) throw new Error("You already entered this tournament");
+        const cardsResult = await tx.execute(sql`
+          select id, rarity, owner_id, for_sale
+          from app.player_cards
+          where id = any(${cardIds}::int[])
+          for update
+        `);
+        const cards = Array.isArray((cardsResult as any)?.rows) ? (cardsResult as any).rows : [];
+        if (cards.length !== 5) throw new Error("One or more cards were not found");
+        const tier = String(tournament.tier || "common").toLowerCase();
+        for (const card of cards) {
+          if (String(card.owner_id || "") !== userId) throw new Error("You can only enter cards you own");
+          if (card.for_sale) throw new Error("Listed cards cannot enter tournaments");
+          if (String(card.rarity || "common").toLowerCase() !== tier) throw new Error(`This tournament requires ${tier} cards only`);
+        }
+        const entryFee = toMoney(tournament.entry_fee || 0);
+        const fee = toMoney(entryFee * TOURNAMENT_FEE_RATE);
+        const prizePool = toMoney(entryFee - fee);
+        if (entryFee > 0) {
+          const walletResult = await tx.execute(sql`update app.wallets set balance = balance - ${entryFee} where user_id = ${userId} and balance >= ${entryFee} returning *`);
+          if ((Array.isArray((walletResult as any)?.rows) ? (walletResult as any).rows : []).length === 0) throw new Error("Insufficient balance");
+          await tx.insert(transactions).values({
+            userId,
+            type: "entry_fee" as any,
+            amount: -entryFee,
+            grossAmount: entryFee,
+            feeAmount: fee,
+            netAmount: -entryFee,
+            sourceType: "user_tournament_entry",
+            description: `PIN tournament ${pin} entry competition:${tournament.id} platform_fee:${fee.toFixed(2)} prize_pool:${prizePool.toFixed(2)}`,
+          } as any);
+        }
+        const entryResult = await tx.execute(sql`
+          insert into app.competition_entries (competition_id, user_id, lineup_card_ids, captain_id, total_score)
+          values (${Number(tournament.id)}, ${userId}, ${JSON.stringify(cardIds)}::jsonb, ${captainId}, 0)
+          returning *
+        `);
+        await tx.execute(sql`
+          update app.competitions
+          set platform_fee_total = coalesce(platform_fee_total, 0) + ${fee},
+              prize_pool_total = coalesce(prize_pool_total, 0) + ${prizePool}
+          where id = ${Number(tournament.id)}
+        `);
+        joined = (Array.isArray((entryResult as any)?.rows) ? (entryResult as any).rows : [])[0] || null;
+      });
+      return res.json({ success: true, entry: joined });
+    } catch (error: any) {
+      console.error("Failed to join PIN tournament:", error);
+      const message = String(error?.message || "Failed to join tournament");
+      return res.status(message.includes("not found") ? 404 : 400).json({ message });
+    }
+  });
 
   app.post("/api/marketplace/list", requireAuth, async (req: any, res) => {
     try {
