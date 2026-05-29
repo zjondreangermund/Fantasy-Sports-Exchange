@@ -136,7 +136,6 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
         feeAmount: 0,
         netAmount: -price,
         sourceType: "marketplace_buy",
-        status: "completed",
         description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)}`,
       } as any);
 
@@ -148,7 +147,6 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
         feeAmount: fee,
         netAmount: sellerReceives,
         sourceType: "marketplace_sale",
-        status: "completed",
         description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}`,
       } as any);
 
