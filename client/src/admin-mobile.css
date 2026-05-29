@@ -1,8 +1,10 @@
 @media (max-width: 767px) {
-  [data-admin-mobile-tabs] {
+  [data-admin-mobile-tabs],
+  .xl\:grid-cols-8 {
     display: flex !important;
     grid-template-columns: none !important;
     gap: 0.5rem !important;
+    height: auto !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
     padding: 0.35rem !important;
@@ -10,7 +12,8 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  [data-admin-mobile-tabs] > button {
+  [data-admin-mobile-tabs] > button,
+  .xl\:grid-cols-8 > button {
     min-width: 9.5rem;
     flex: 0 0 auto;
     scroll-snap-align: start;
