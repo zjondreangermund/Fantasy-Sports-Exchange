@@ -4,11 +4,14 @@ type SceneKey =
   | "dashboard"
   | "lineup"
   | "market"
+  | "auction"
   | "analytics"
   | "competitions"
   | "collection"
   | "wallet"
+  | "account"
   | "league"
+  | "lab"
   | "admin"
   | "default";
 
@@ -58,6 +61,17 @@ const scenes: Record<SceneKey, SceneConfig> = {
     overlay: "from-amber-950/30 via-transparent to-black/84",
     label: "TRADING FLOOR",
   },
+  auction: {
+    base: "from-[#130706] via-[#1f1012] to-[#050304]",
+    image: "url(https://images.unsplash.com/photo-1511886929837-354d827aae26?q=80&w=2400&auto=format&fit=crop)",
+    imageOpacity: "opacity-[.30]",
+    primary: "rgba(251,113,133,.34)",
+    secondary: "rgba(249,115,22,.28)",
+    accent: "rgba(168,85,247,.20)",
+    grid: "opacity-[.24]",
+    overlay: "from-orange-950/28 via-transparent to-black/86",
+    label: "AUCTION HOUSE",
+  },
   analytics: {
     base: "from-[#020817] via-[#061523] to-[#02050b]",
     image: "url(https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2400&auto=format&fit=crop)",
@@ -102,6 +116,17 @@ const scenes: Record<SceneKey, SceneConfig> = {
     overlay: "from-emerald-950/28 via-transparent to-black/84",
     label: "FINANCE HUB",
   },
+  account: {
+    base: "from-[#050816] via-[#10162a] to-[#03040a]",
+    image: "url(https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=2400&auto=format&fit=crop)",
+    imageOpacity: "opacity-[.18]",
+    primary: "rgba(129,140,248,.30)",
+    secondary: "rgba(45,212,191,.18)",
+    accent: "rgba(244,114,182,.14)",
+    grid: "opacity-[.22]",
+    overlay: "from-indigo-950/26 via-transparent to-black/84",
+    label: "CLUB OFFICE",
+  },
   league: {
     base: "from-[#020617] via-[#071a32] to-[#02040a]",
     image: "url(https://images.unsplash.com/photo-1556056504-5c7696c4c28d?q=80&w=2400&auto=format&fit=crop)",
@@ -112,6 +137,17 @@ const scenes: Record<SceneKey, SceneConfig> = {
     grid: "opacity-[.24]",
     overlay: "from-blue-950/26 via-transparent to-black/82",
     label: "LIVE LEAGUES",
+  },
+  lab: {
+    base: "from-[#090611] via-[#111827] to-[#03040a]",
+    image: "url(https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2400&auto=format&fit=crop)",
+    imageOpacity: "opacity-[.24]",
+    primary: "rgba(168,85,247,.34)",
+    secondary: "rgba(34,211,238,.22)",
+    accent: "rgba(250,204,21,.14)",
+    grid: "opacity-[.28]",
+    overlay: "from-purple-950/28 via-transparent to-black/86",
+    label: "CARD LAB",
   },
   admin: {
     base: "from-[#090611] via-[#111827] to-[#03040a]",
@@ -140,11 +176,14 @@ const scenes: Record<SceneKey, SceneConfig> = {
 function sceneFromPath(pathname: string): SceneKey {
   if (pathname === "/" || pathname === "/dashboard") return "dashboard";
   if (pathname.startsWith("/live-lineup")) return "lineup";
-  if (pathname.startsWith("/marketplace") || pathname.startsWith("/auctions")) return "market";
+  if (pathname.startsWith("/marketplace")) return "market";
+  if (pathname.startsWith("/auctions")) return "auction";
   if (pathname.startsWith("/analytics")) return "analytics";
   if (pathname.startsWith("/competitions")) return "competitions";
-  if (pathname.startsWith("/collection") || pathname.startsWith("/card-lab") || pathname.startsWith("/card-reveal")) return "collection";
-  if (pathname.startsWith("/wallet") || pathname.startsWith("/account")) return "wallet";
+  if (pathname.startsWith("/collection") || pathname.startsWith("/card-reveal")) return "collection";
+  if (pathname.startsWith("/card-lab")) return "lab";
+  if (pathname.startsWith("/wallet")) return "wallet";
+  if (pathname.startsWith("/account")) return "account";
   if (pathname.startsWith("/premier-league")) return "league";
   if (pathname.startsWith("/admin")) return "admin";
   return "default";

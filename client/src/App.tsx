@@ -14,6 +14,7 @@ import FloatingSupportWidget from "./components/FloatingSupportWidget";
 import FloatingEventNotifications from "./components/FloatingEventNotifications";
 import LivePulseDock from "./components/LivePulseDock";
 import MatchdayQuickDock from "./components/MatchdayQuickDock";
+import MobileNavDock from "./components/MobileNavDock";
 import PageScene, { routeToPageSceneVariant } from "./components/PageScene";
 import { useAuth } from "./hooks/use-auth";
 import { Skeleton } from "./components/ui/skeleton";
@@ -127,13 +128,14 @@ function AuthenticatedApp() {
 
           <LivePulseDock />
 
-          <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative z-10">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative z-10 pb-24 md:pb-0">
             <PageScene variant={routeToPageSceneVariant(location, true)} className="flex-1">
               <AuthenticatedRouter />
             </PageScene>
           </main>
 
           <MatchdayQuickDock />
+          <MobileNavDock />
           <FloatingEventNotifications />
           <FloatingSupportWidget />
         </div>
