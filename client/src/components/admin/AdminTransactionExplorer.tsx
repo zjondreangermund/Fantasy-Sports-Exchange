@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Banknote, RefreshCw, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, Banknote, Download, Filter, RefreshCw, Search, ShieldAlert } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
@@ -14,6 +14,11 @@ type AdminTransaction = {
   userName?: string | null;
   type: string;
   amount: number;
+  grossAmount?: number | null;
+  feeAmount?: number | null;
+  netAmount?: number | null;
+  sourceType?: string | null;
+  status?: string | null;
   description?: string | null;
   paymentMethod?: string | null;
   externalTransactionId?: string | null;
@@ -26,6 +31,12 @@ type TransactionsResponse = {
   limit: number;
   total: number;
   totalPages: number;
+  analytics?: {
+    creditTotal?: number;
+    debitTotal?: number;
+    netTotal?: number;
+    typeBreakdown?: Record<string, { count: number; amount: number }>;
+  };
   filters: { userId?: string | null; type?: string | null; q?: string | null };
 };
 
@@ -42,10 +53,46 @@ const TX_TYPES = [
   "admin_adjustment",
 ];
 
+const RISK_PRESETS = [
+  { label: "All", q: "", type: "" },
+  { label: "Withdrawals", q: "", type: "withdrawal" },
+  { label: "Marketplace", q: "marketplace", type: "" },
+  { label: "Auction", q: "auction", type: "" },
+  { label: "Failed / rejected", q: "failed rejected", type: "" },
+  { label: "Admin adjustments", q: "", type: "admin_adjustment" },
+];
+
 function amountClass(amount: number) {
   if (amount > 0) return "text-emerald-300";
   if (amount < 0) return "text-rose-300";
   return "text-slate-300";
+}
+
+function csvEscape(value: unknown) {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function buildCsv(rows: AdminTransaction[]) {
+  const headers = ["id", "createdAt", "userId", "userEmail", "userName", "type", "amount", "grossAmount", "feeAmount", "netAmount", "status", "sourceType", "paymentMethod", "externalTransactionId", "description"];
+  const body = rows.map((row) => [
+    row.id,
+    row.createdAt || "",
+    row.userId,
+    row.userEmail || "",
+    row.userName || "",
+    row.type,
+    row.amount,
+    row.grossAmount ?? "",
+    row.feeAmount ?? "",
+    row.netAmount ?? "",
+    row.status || "",
+    row.sourceType || "",
+    row.paymentMethod || "",
+    row.externalTransactionId || "",
+    row.description || "",
+  ].map(csvEscape).join(","));
+  return [headers.join(","), ...body].join("\n");
 }
 
 export default function AdminTransactionExplorer() {
@@ -76,10 +123,35 @@ export default function AdminTransactionExplorer() {
   const total = Number(transactionsQuery.data?.total || 0);
   const totalPages = Math.max(1, Number(transactionsQuery.data?.totalPages || 1));
   const pageTotal = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const analytics = transactionsQuery.data?.analytics;
+  const creditTotal = Number(analytics?.creditTotal || 0);
+  const debitTotal = Number(analytics?.debitTotal || 0);
+  const filteredNet = Number(analytics?.netTotal || 0);
+  const typeBreakdown = Object.entries(analytics?.typeBreakdown || {}).sort((a, b) => Math.abs(Number(b[1]?.amount || 0)) - Math.abs(Number(a[1]?.amount || 0))).slice(0, 6);
 
   const applyFilters = () => {
     setPage(1);
     setAppliedFilters({ userId: userId.trim(), type: type.trim(), q: q.trim() });
+  };
+
+  const applyPreset = (preset: { q: string; type: string }) => {
+    setPage(1);
+    setType(preset.type);
+    setQ(preset.q);
+    setAppliedFilters({ userId: userId.trim(), type: preset.type, q: preset.q });
+  };
+
+  const exportCsv = () => {
+    const csv = buildCsv(rows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ledger-page-${page}-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -98,44 +170,80 @@ export default function AdminTransactionExplorer() {
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:min-w-72">
+          <div className="grid grid-cols-2 gap-2 sm:min-w-[28rem] lg:grid-cols-4">
             <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-right">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Matched</p>
               <p className="text-2xl font-black text-white">{total}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-right">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Credits</p>
+              <p className="text-xl font-black text-emerald-300">N${money.format(creditTotal)}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-right">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Debits</p>
+              <p className="text-xl font-black text-rose-300">N${money.format(Math.abs(debitTotal))}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-right">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Page net</p>
-              <p className={`text-2xl font-black ${amountClass(pageTotal)}`}>N${money.format(pageTotal)}</p>
+              <p className={`text-xl font-black ${amountClass(pageTotal)}`}>N${money.format(pageTotal)}</p>
             </div>
           </div>
         </div>
       </Card>
 
       <Card className="border-white/10 bg-slate-950/70 p-4">
+        <div className="mb-3 flex flex-wrap gap-2">
+          {RISK_PRESETS.map((preset) => (
+            <Button key={preset.label} variant="outline" size="sm" onClick={() => applyPreset(preset)}>
+              <Filter className="mr-2 h-3.5 w-3.5" />{preset.label}
+            </Button>
+          ))}
+        </div>
         <div className="grid gap-3 lg:grid-cols-[1fr_13rem_1fr_auto]">
-          <Input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="Filter user ID" className="bg-black/25" />
+          <Input value={userId} onChange={(event) => setUserId(event.target.value)} placeholder="Filter user ID or paste suspicious user" className="bg-black/25" />
           <select value={type} onChange={(event) => setType(event.target.value)} className="h-10 rounded-md border border-white/10 bg-black/25 px-3 text-sm text-slate-200">
             {TX_TYPES.map((txType) => (
               <option key={txType || "all"} value={txType}>{txType || "All types"}</option>
             ))}
           </select>
-          <Input value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search description" className="bg-black/25" />
+          <Input value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search description, buyer, seller, card or external ref" className="bg-black/25" />
           <div className="flex gap-2">
             <Button onClick={applyFilters}><Search className="mr-2 h-4 w-4" />Search</Button>
             <Button variant="outline" onClick={() => transactionsQuery.refetch()}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
+            <Button variant="outline" onClick={exportCsv} disabled={rows.length === 0}><Download className="mr-2 h-4 w-4" />CSV</Button>
           </div>
         </div>
       </Card>
 
+      {typeBreakdown.length > 0 && (
+        <Card className="border-amber-300/15 bg-amber-950/10 p-4">
+          <div className="mb-3 flex items-center gap-2 text-amber-200">
+            <ShieldAlert className="h-4 w-4" />
+            <p className="text-xs font-black uppercase tracking-[0.2em]">Filtered type breakdown</p>
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            {typeBreakdown.map(([breakdownType, data]) => (
+              <div key={breakdownType} className="rounded-2xl border border-white/10 bg-black/25 p-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{breakdownType}</p>
+                <p className="mt-1 text-lg font-black text-white">{data.count} tx</p>
+                <p className={amountClass(Number(data.amount || 0))}>N${money.format(Number(data.amount || 0))}</p>
+              </div>
+            ))}
+          </div>
+          <p className={`mt-3 text-sm font-semibold ${amountClass(filteredNet)}`}>Filtered net: N${money.format(filteredNet)}</p>
+        </Card>
+      )}
+
       <Card className="overflow-hidden border-white/10 bg-slate-950/70 shadow-2xl shadow-black/20">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-sm">
+          <table className="w-full min-w-[1120px] text-sm">
             <thead className="border-b border-white/10 bg-white/[0.04] text-left text-xs uppercase tracking-[0.14em] text-slate-400">
               <tr>
                 <th className="px-4 py-3">ID</th>
                 <th className="px-4 py-3">When</th>
                 <th className="px-4 py-3">User</th>
                 <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Amount</th>
                 <th className="px-4 py-3">Description</th>
                 <th className="px-4 py-3">External</th>
@@ -144,10 +252,10 @@ export default function AdminTransactionExplorer() {
             <tbody className="divide-y divide-white/10">
               {transactionsQuery.isLoading ? (
                 Array.from({ length: 6 }).map((_, index) => (
-                  <tr key={index}><td colSpan={7} className="px-4 py-3"><Skeleton className="h-8 w-full" /></td></tr>
+                  <tr key={index}><td colSpan={8} className="px-4 py-3"><Skeleton className="h-8 w-full" /></td></tr>
                 ))
               ) : rows.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No transactions matched your filters.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">No transactions matched your filters.</td></tr>
               ) : rows.map((tx) => (
                 <tr key={tx.id} className="align-top hover:bg-white/[0.03]">
                   <td className="px-4 py-3 font-mono text-xs text-slate-400">#{tx.id}</td>
@@ -157,9 +265,10 @@ export default function AdminTransactionExplorer() {
                     <p className="max-w-56 truncate text-xs text-slate-500">{tx.userId}</p>
                   </td>
                   <td className="px-4 py-3"><Badge variant="outline" className="border-white/15 text-slate-300">{tx.type}</Badge></td>
+                  <td className="px-4 py-3"><Badge variant="outline" className="border-emerald-300/20 text-emerald-200">{tx.status || "posted"}</Badge></td>
                   <td className={`px-4 py-3 text-right font-black ${amountClass(Number(tx.amount || 0))}`}>N${money.format(Number(tx.amount || 0))}</td>
                   <td className="px-4 py-3"><p className="max-w-md truncate text-slate-300">{tx.description || "—"}</p></td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{tx.externalTransactionId || tx.paymentMethod || "—"}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{tx.externalTransactionId || tx.paymentMethod || tx.sourceType || "—"}</td>
                 </tr>
               ))}
             </tbody>
