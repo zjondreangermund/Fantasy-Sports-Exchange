@@ -1,9 +1,8 @@
 import type { Express } from "express";
 import { db } from "../db.js";
-import { auditLogs, playerCards, transactions, users } from "../../shared/schema.js";
+import { auditLogs, playerCards, transactions, users, wallets } from "../../shared/schema.js";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../shared/card-economy.js";
-import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
@@ -13,20 +12,37 @@ function toMoney(amount: unknown): number {
   return Math.round(value * 100) / 100;
 }
 
-async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
-  const cardId = (() => {
-    if (typeof rawCardId === "number") return rawCardId;
-    const normalized = String(rawCardId ?? "").trim();
-    if (!normalized) return Number.NaN;
-    if (/^\d+$/.test(normalized)) return Number(normalized);
-    const match = normalized.match(/(\d+)/);
-    return match ? Number(match[1]) : Number.NaN;
-  })();
-  if (!Number.isInteger(cardId) || cardId <= 0) {
-    return { ok: false as const, status: 400, message: "Valid cardId required" };
+function parseCardId(rawCardId: unknown): number {
+  if (typeof rawCardId === "number") return rawCardId;
+  const normalized = String(rawCardId ?? "").trim();
+  if (!normalized) return Number.NaN;
+  if (/^\d+$/.test(normalized)) return Number(normalized);
+  const match = normalized.match(/(\d+)/);
+  return match ? Number(match[1]) : Number.NaN;
+}
+
+async function resolveCard(rawCardId: unknown, rawSerialId?: unknown) {
+  const cardId = parseCardId(rawCardId);
+  const serialId = String(rawSerialId ?? "").trim();
+
+  if (Number.isInteger(cardId) && cardId > 0) {
+    return { cardId, serialId };
   }
 
-  const resolvedCardId = cardId;
+  if (serialId) {
+    const [card] = await db.select({ id: playerCards.id }).from(playerCards).where(eq(playerCards.serialId, serialId));
+    if (card?.id) return { cardId: Number(card.id), serialId };
+  }
+
+  return { cardId: Number.NaN, serialId };
+}
+
+async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, rawSerialId?: unknown) {
+  const { cardId: resolvedCardId, serialId } = await resolveCard(rawCardId, rawSerialId);
+
+  if (!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) {
+    return { ok: false as const, status: 400, message: "Valid cardId required" };
+  }
 
   try {
     await db.transaction(async (tx) => {
@@ -99,7 +115,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         } as any);
       }
 
-      const [buyerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, buyerId));
+      const [buyerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, buyerId)).for("update");
       if (!buyerWallet || toMoney(buyerWallet.balance || 0) < price) throw new Error("Insufficient balance");
 
       const fee = toMoney(price * 0.08);
@@ -109,8 +125,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
       await tx.update(wallets).set({ balance: sql`${wallets.balance} + ${sellerReceives}` } as any).where(eq(wallets.userId, sellerId));
       await tx.update(playerCards).set({ ownerId: buyerId, forSale: false, price: 0 } as any).where(eq(playerCards.id, resolvedCardId));
 
-    try {
-      await db.insert(auditLogs).values({
+      await tx.insert(transactions).values({
         userId: buyerId,
         type: "marketplace_buy",
         amount: -price,
@@ -133,14 +148,18 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown) {
         status: "completed",
         description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}`,
       } as any);
-    } catch (auditError) {
-      console.error("Failed to write marketplace purchase audit:", auditError);
-    }
+
+      await tx.insert(auditLogs).values({
+        userId: buyerId,
+        action: "marketplace.purchase.completed",
+        meta: { cardId: resolvedCardId, serialId, buyerId, sellerId, price, fee, sellerReceives },
+      } as any);
+    });
 
     return { ok: true as const, cardId: resolvedCardId };
   } catch (error: any) {
     const message = String(error?.message || "Failed to buy card");
-    const status = message.includes("not found") ? 404 : 400;
+    const status = message.includes("not found") || message.includes("does not exist") ? 404 : 400;
     try {
       await db.insert(auditLogs).values({
         userId: buyerId,
