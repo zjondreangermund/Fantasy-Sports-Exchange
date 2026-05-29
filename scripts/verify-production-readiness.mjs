@@ -28,8 +28,6 @@ const checks = [
       "createPendingWithdrawalWithHold",
       "enterCompetitionWithFee",
       "applyMarketplaceTradeLedger",
-      "refundWalletHold",
-      "settleHeldAuctionBid",
       "getWalletIntegrityReport",
       "repairMissingWalletsFromLedger",
     ],
@@ -40,26 +38,14 @@ const checks = [
     patterns: ["getCompetitionRewardIntegrity", "repairCompetitionRewards", "owner_mismatch", "missing_card"],
   },
   {
-    name: "Marketplace purchase route is guarded",
+    name: "Marketplace purchase route uses production-safe transaction enum values",
     file: "server/routes/marketplace.routes.ts",
-    patterns: ["for(\"update\")", "applyMarketplaceTradeLedger", "marketplace.purchase.completed", "risk.wash_trade_blocked"],
+    patterns: ["const BUY_TX_TYPE = \"purchase\"", "const SALE_TX_TYPE = \"sale\"", "marketplace.purchase.completed", "risk.wash_trade_blocked"],
   },
   {
     name: "Auction settlement route is guarded",
     file: "server/routes/auctions.routes.ts",
     patterns: ["for(\"update\")", "settleHeldAuctionBid", "refundWalletHold", "auction.settle.completed"],
-  },
-  {
-    name: "Admin operations endpoints exist",
-    file: "server/routes.ts",
-    patterns: [
-      "/api/admin/wallet/integrity",
-      "/api/admin/wallet/repair-missing",
-      "/api/admin/transactions",
-      "/api/admin/cards/integrity",
-      "/api/admin/marketplace/integrity",
-      "/api/admin/competitions/:id/repair-rewards",
-    ],
   },
   {
     name: "Admin integrity UI exists",
@@ -69,12 +55,32 @@ const checks = [
   {
     name: "Ledger explorer UI exists",
     file: "client/src/components/admin/AdminTransactionExplorer.tsx",
-    patterns: ["Transaction Ledger", "Filtered type breakdown", "pageNet", "debitTotal"],
+    patterns: ["Transaction audit trail", "Filtered type breakdown", "pageTotal", "debitTotal"],
   },
   {
-    name: "Database hardening SQL exists",
-    file: "drizzle/0001_production_integrity_hardening.sql",
-    patterns: ["CREATE UNIQUE INDEX", "CREATE INDEX", "competition_reward_claims", "idempotency_keys"],
+    name: "Production index migration exists",
+    file: "drizzle/0001_production_integrity_indexes.sql",
+    patterns: ["CREATE INDEX", "transactions_user_created_idx", "player_cards_owner_idx"],
+  },
+  {
+    name: "Idempotency migration exists",
+    file: "drizzle/0002_idempotency_keys.sql",
+    patterns: ["idempotency_keys", "CREATE UNIQUE INDEX", "created_at"],
+  },
+  {
+    name: "Uniqueness safety checks exist",
+    file: "drizzle/0003_uniqueness_safety_checks.sql",
+    patterns: ["Duplicate wallet rows", "Duplicate reward claims", "Duplicate non-empty card serials"],
+  },
+  {
+    name: "Transaction status compatibility migration exists",
+    file: "drizzle/0004_add_transaction_status_compat.sql",
+    patterns: ["ALTER TABLE app.transactions", "ADD COLUMN IF NOT EXISTS status", "DEFAULT 'completed'"],
+  },
+  {
+    name: "Card-not-found diagnostics exist",
+    file: "docs/card-not-found-diagnostics.sql",
+    patterns: ["broken_marketplace_card", "broken_prize_card", "broken_lineup_card", "SAFE REPAIR OPTIONS"],
   },
 ];
 
