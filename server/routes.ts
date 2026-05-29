@@ -72,6 +72,17 @@ import {
 } from "./services/walletLedger.js";
 import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
 import {
+  creditWalletWithLedger,
+  createPendingWithdrawalWithHold,
+  createTrustedWithdrawal,
+  enterCompetitionWithFee,
+  applyMarketplaceTradeLedger,
+  getWalletIntegrityReport,
+  processWalletDeposit,
+  repairMissingWalletsFromLedger,
+} from "./services/walletLedger.js";
+import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "./services/tournamentRewards.js";
+import {
   getCardStatus,
   getDepositBreakdown,
   getWithdrawalBreakdown,
@@ -2100,6 +2111,13 @@ app.get("/api/players/:id/photo", async (req, res) => {
         } as any);
 
         return updated;
+      });
+
+      await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
+        targetUserId: userId,
+        amount,
+        newBalance: updatedWallet.balance || 0,
+        ip: getClientIp(req),
       });
 
       await writeAuditLog(String(req.authUserId || ""), "admin.wallet.credit", {
