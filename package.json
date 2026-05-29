@@ -17,7 +17,8 @@
     "db:push": "drizzle-kit push",
     "cap:sync": "npm run build:web && npx cap sync",
     "cap:android": "npm run cap:sync && npx cap open android",
-    "cap:ios": "npm run cap:sync && npx cap open ios"
+    "cap:ios": "npm run cap:sync && npx cap open ios",
+    "test:critical-flows": "node scripts/verify-critical-flows.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.1.0",
