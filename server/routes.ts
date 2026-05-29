@@ -2218,28 +2218,43 @@ app.get("/api/players/:id/photo", async (req, res) => {
   });
 
   app.post("/api/wallet/deposit", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const { amount, paymentMethod, externalTransactionId } = req.body;
-      
-      if (typeof amount !== "number" || amount <= 0) {
-        return res.status(400).json({ message: "Valid positive amount required" });
-      }
-      
-      const { gross, feeRate, fee, net } = getDepositBreakdown(amount);
-      
-      // In a real app, you would integrate with a payment processor here
-      // For now, just credit the wallet with net amount after fee (dev/testing only)
-      
-      await processWalletDeposit({
-        userId,
-        fee,
-        net,
-        feeRate,
-        paymentMethod: paymentMethod || "manual",
-        externalTransactionId,
-        description: `Deposit via ${paymentMethod || "manual"} (gross ${formatMoney(gross)}, fee ${formatMoney(fee)} at ${(feeRate * 100).toFixed(1)}%)`,
-      });
+  try {
+    const userId = req.authUserId;
+    const { amount, paymentMethod, externalTransactionId } = req.body;
+
+    if (typeof amount !== "number" || amount <= 0) {
+      return res.status(400).json({ message: "Valid positive amount required" });
+    }
+
+    const { gross, feeRate, fee, net } = getDepositBreakdown(amount);
+
+    await processWalletDeposit({
+      userId,
+      amount: net,
+      description: `Deposit via ${
+        paymentMethod || "manual"
+      } (gross ${formatMoney(gross)}, fee ${formatMoney(
+        fee
+      )} at ${(feeRate * 100).toFixed(1)}%)`,
+    });
+
+    return res.json({
+      success: true,
+      message: "Deposit processed successfully",
+      grossAmount: gross,
+      fee,
+      netAmount: net,
+      feeRate,
+      paymentMethod: paymentMethod || "manual",
+      externalTransactionId: externalTransactionId || null,
+    });
+  } catch (error: any) {
+    console.error("Failed to process deposit:", error);
+    return res.status(500).json({
+      message: error?.message || "Failed to process deposit",
+    });
+  }
+});
       
       res.json({ 
         success: true,
