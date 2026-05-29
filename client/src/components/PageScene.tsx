@@ -25,9 +25,33 @@ type SceneMood = {
   textureOpacity: number;
 };
 
+type SceneChrome = {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  statA: string;
+  statB: string;
+};
+
 function sceneArtworkSrc(variant: PageSceneVariant) {
   return `/page-scenes/${variant}.svg`;
 }
+
+const CHROME: Record<PageSceneVariant, SceneChrome> = {
+  landing: { eyebrow: "FANTASY ARENA", title: "Kickoff tunnel", subtitle: "Premium card football economy", statA: "LIVE", statB: "N$" },
+  dashboard: { eyebrow: "CONTROL ROOM", title: "Manager command", subtitle: "Squad, wallet and market overview", statA: "OPS", statB: "LIVE" },
+  vault: { eyebrow: "CARD VAULT", title: "Collection floor", subtitle: "Rarity, serials and squad assets", statA: "SERIAL", statB: "RARITY" },
+  market: { eyebrow: "TRADING FLOOR", title: "Marketplace exchange", subtitle: "Buy, sell and track card liquidity", statA: "BID", statB: "ASK" },
+  auction: { eyebrow: "AUCTION HOUSE", title: "Deadline bidding", subtitle: "Locked bids and instant buy-now trades", statA: "TIMER", statB: "HOLD" },
+  wallet: { eyebrow: "FINANCE HUB", title: "Wallet ledger", subtitle: "Balances, fees and withdrawals", statA: "LEDGER", statB: "N$" },
+  account: { eyebrow: "CLUB OFFICE", title: "Profile suite", subtitle: "Identity, referrals and security", statA: "CLUB", statB: "ID" },
+  competition: { eyebrow: "TOURNAMENT NIGHT", title: "Prize arena", subtitle: "Entries, rewards and leaderboards", statA: "GW", statB: "PRIZE" },
+  premierLeague: { eyebrow: "LIVE LEAGUES", title: "Premier League hub", subtitle: "Standings, clubs and match context", statA: "EPL", statB: "FORM" },
+  onboarding: { eyebrow: "STARTER TUNNEL", title: "Club setup", subtitle: "Build your first squad identity", statA: "PACK", statB: "READY" },
+  reveal: { eyebrow: "CARD REVEAL", title: "Walkout moment", subtitle: "Pack lights, rarity and suspense", statA: "DROP", statB: "FX" },
+  admin: { eyebrow: "ADMIN OPS", title: "Risk control", subtitle: "Integrity, repair and operations", statA: "AUDIT", statB: "RISK" },
+  lab: { eyebrow: "CARD LAB", title: "Design studio", subtitle: "Visuals, rarity and card testing", statA: "LAB", statB: "FX" },
+};
 
 const MOODS: Record<PageSceneVariant, SceneMood> = {
   landing: {
@@ -219,6 +243,16 @@ export default function PageScene({ variant, children, className }: PageScenePro
         <div className="page-scene__glow page-scene__glow--a" />
         <div className="page-scene__glow page-scene__glow--b" />
         <div className="page-scene__glow page-scene__glow--c" />
+        <div className="page-scene__stadium-lines" />
+        <div className="page-scene__chrome">
+          <div className="page-scene__chrome-kicker">{CHROME[variant].eyebrow}</div>
+          <div className="page-scene__chrome-title">{CHROME[variant].title}</div>
+          <div className="page-scene__chrome-subtitle">{CHROME[variant].subtitle}</div>
+          <div className="page-scene__chrome-stats">
+            <span>{CHROME[variant].statA}</span>
+            <span>{CHROME[variant].statB}</span>
+          </div>
+        </div>
         <div className="page-scene__vignette" />
       </div>
       <div className="page-scene__content">{children}</div>
