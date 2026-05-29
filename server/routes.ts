@@ -2332,7 +2332,6 @@ app.get("/api/players/:id/photo", async (req, res) => {
             .values({
               userId,
               amount: gross,
-              fee,
               netAmount: net,
               paymentMethod: method,
               bankName,
@@ -2355,7 +2354,6 @@ app.get("/api/players/:id/photo", async (req, res) => {
             type: "withdrawal",
             amount: -gross,
             grossAmount: gross,
-            feeAmount: fee,
             netAmount: net,
             sourceType: "withdrawal",
             status: "completed",
