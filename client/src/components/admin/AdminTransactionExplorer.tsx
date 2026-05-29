@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Banknote, RefreshCw, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, Banknote, PieChart, RefreshCw, Search } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
@@ -20,12 +20,20 @@ type AdminTransaction = {
   createdAt?: string | null;
 };
 
+type TransactionSummary = {
+  netAmount: number;
+  credits: number;
+  debits: number;
+  byType: Array<{ type: string; count: number; netAmount: number }>;
+};
+
 type TransactionsResponse = {
   transactions: AdminTransaction[];
   page: number;
   limit: number;
   total: number;
   totalPages: number;
+  summary?: TransactionSummary;
   filters: { userId?: string | null; type?: string | null; q?: string | null };
 };
 
@@ -76,6 +84,8 @@ export default function AdminTransactionExplorer() {
   const total = Number(transactionsQuery.data?.total || 0);
   const totalPages = Math.max(1, Number(transactionsQuery.data?.totalPages || 1));
   const pageTotal = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const summary = transactionsQuery.data?.summary;
+  const typeBreakdown = summary?.byType || [];
 
   const applyFilters = () => {
     setPage(1);
@@ -98,14 +108,23 @@ export default function AdminTransactionExplorer() {
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:min-w-72">
+          <div className="grid grid-cols-2 gap-2 sm:min-w-[28rem] lg:grid-cols-4">
             <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-right">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Matched</p>
               <p className="text-2xl font-black text-white">{total}</p>
             </div>
+            <div className="rounded-2xl border border-emerald-300/15 bg-emerald-300/10 px-4 py-3 text-right">
+              <p className="text-xs uppercase tracking-[0.18em] text-emerald-200/60">Credits</p>
+              <p className="text-2xl font-black text-emerald-200">N${money.format(Number(summary?.credits || 0))}</p>
+            </div>
+            <div className="rounded-2xl border border-rose-300/15 bg-rose-300/10 px-4 py-3 text-right">
+              <p className="text-xs uppercase tracking-[0.18em] text-rose-200/60">Debits</p>
+              <p className="text-2xl font-black text-rose-200">N${money.format(Number(summary?.debits || 0))}</p>
+            </div>
             <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-right">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Page net</p>
-              <p className={`text-2xl font-black ${amountClass(pageTotal)}`}>N${money.format(pageTotal)}</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Filtered net</p>
+              <p className={`text-2xl font-black ${amountClass(Number(summary?.netAmount || 0))}`}>N${money.format(Number(summary?.netAmount || 0))}</p>
+              <p className={`text-xs ${amountClass(pageTotal)}`}>Page N${money.format(pageTotal)}</p>
             </div>
           </div>
         </div>
@@ -125,6 +144,35 @@ export default function AdminTransactionExplorer() {
             <Button variant="outline" onClick={() => transactionsQuery.refetch()}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
           </div>
         </div>
+      </Card>
+
+      <Card className="border-cyan-300/15 bg-gradient-to-r from-cyan-950/25 via-slate-950/70 to-fuchsia-950/20 p-4">
+        <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">
+          <PieChart className="h-4 w-4" /> Filtered type breakdown
+        </div>
+        {transactionsQuery.isLoading ? (
+          <div className="grid gap-3 md:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-20 rounded-2xl" />)}
+          </div>
+        ) : typeBreakdown.length === 0 ? (
+          <p className="text-sm text-slate-400">No transaction volume to summarize for the current filters.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {typeBreakdown.slice(0, 8).map((row) => {
+              const net = Number(row.netAmount || 0);
+              return (
+                <div key={row.type} className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <Badge variant="outline" className="border-cyan-300/20 text-cyan-100">{row.type || "unknown"}</Badge>
+                    <span className="text-xs font-semibold text-slate-500">{row.count} tx</span>
+                  </div>
+                  <p className={`mt-3 text-2xl font-black ${amountClass(net)}`}>N${money.format(net)}</p>
+                  <p className="mt-1 text-xs text-slate-500">Net impact in current filter set</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
       <Card className="overflow-hidden border-white/10 bg-slate-950/70 shadow-2xl shadow-black/20">

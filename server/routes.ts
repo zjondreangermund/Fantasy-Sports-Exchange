@@ -2101,6 +2101,25 @@ app.get("/api/players/:id/photo", async (req, res) => {
         .from(transactions)
         .where(whereClause as any);
 
+      const [summaryRow] = await db
+        .select({
+          netAmount: sql<number>`coalesce(sum(${transactions.amount}), 0)`,
+          credits: sql<number>`coalesce(sum(case when ${transactions.amount} > 0 then ${transactions.amount} else 0 end), 0)`,
+          debits: sql<number>`coalesce(sum(case when ${transactions.amount} < 0 then abs(${transactions.amount}) else 0 end), 0)`,
+        })
+        .from(transactions)
+        .where(whereClause as any);
+
+      const typeBreakdown = await db
+        .select({
+          type: transactions.type,
+          count: sql<number>`count(*)`,
+          netAmount: sql<number>`coalesce(sum(${transactions.amount}), 0)`,
+        })
+        .from(transactions)
+        .where(whereClause as any)
+        .groupBy(transactions.type);
+
       const rows = await db
         .select({
           id: transactions.id,
@@ -2128,6 +2147,18 @@ app.get("/api/players/:id/photo", async (req, res) => {
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+        summary: {
+          netAmount: Number(summaryRow?.netAmount || 0),
+          credits: Number(summaryRow?.credits || 0),
+          debits: Number(summaryRow?.debits || 0),
+          byType: typeBreakdown
+            .map((row) => ({
+              type: row.type,
+              count: Number(row.count || 0),
+              netAmount: Number(row.netAmount || 0),
+            }))
+            .sort((a, b) => Math.abs(b.netAmount) - Math.abs(a.netAmount)),
+        },
         filters: { userId: userId || null, type: type || null, q: q || null },
       });
     } catch (error: any) {

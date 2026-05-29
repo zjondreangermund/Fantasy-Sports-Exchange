@@ -72,6 +72,8 @@ const checks = [
       "/api/admin/cards/repair-serials",
       "/api/admin/competitions/:id/reward-integrity",
       "/api/admin/competitions/:id/repair-rewards",
+      "/api/admin/transactions",
+      "typeBreakdown",
     ],
   },
   {
@@ -84,6 +86,17 @@ const checks = [
       "/api/admin/cards/integrity",
       "/api/admin/competitions/${normalizedId}/reward-integrity",
       "/api/admin/competitions/${normalizedId}/repair-rewards",
+    ],
+  },
+  {
+    name: "admin transaction UI exposes filtered ledger analytics",
+    file: "client/src/components/admin/AdminTransactionExplorer.tsx",
+    patterns: [
+      "Filtered type breakdown",
+      "summary?.credits",
+      "summary?.debits",
+      "summary?.netAmount",
+      "/api/admin/transactions",
     ],
   },
   {
