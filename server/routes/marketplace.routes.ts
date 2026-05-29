@@ -252,6 +252,49 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
     }
   });
 
+  app.get("/api/competitions/:id/leaderboard", requireAuth, async (req: any, res) => {
+    try {
+      const competitionId = Number(req.params.id);
+      if (!Number.isInteger(competitionId) || competitionId <= 0) return res.status(400).json({ message: "Valid competition ID required" });
+      const viewerId = String(req.authUserId || "");
+      const result = await db.execute(sql`
+        with ranked as (
+          select
+            ce.id as "entryId",
+            ce.user_id as "userId",
+            coalesce(u.manager_team_name, u.name, u.email, 'Manager') as "teamName",
+            coalesce(ce.total_score, 0)::float as "totalScore",
+            ce.lineup_card_ids as "lineupCardIds",
+            ce.captain_id as "captainId",
+            ce.joined_at as "joinedAt",
+            rank() over (order by coalesce(ce.total_score, 0) desc, ce.joined_at asc, ce.id asc) as rank
+          from app.competition_entries ce
+          left join app.users u on u.id = ce.user_id
+          where ce.competition_id = ${competitionId}
+        )
+        select * from ranked order by rank asc, "entryId" asc
+      `);
+      const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : [];
+      const leaderScore = Number(rows[0]?.totalScore || 0);
+      const leaderboard = rows.map((row: any) => {
+        const score = Number(row.totalScore || 0);
+        return {
+          ...row,
+          rank: Number(row.rank || 0),
+          totalScore: score,
+          behindLeader: Math.max(0, leaderScore - score),
+          isViewer: String(row.userId || "") === viewerId,
+          prizePosition: Number(row.rank || 0) === 1,
+        };
+      });
+      const viewerEntry = leaderboard.find((row: any) => row.isViewer) || null;
+      return res.json({ competitionId, leaderboard, topThree: leaderboard.slice(0, 3), viewerEntry, entryCount: leaderboard.length });
+    } catch (error: any) {
+      console.error("Failed to fetch competition leaderboard:", error);
+      return res.status(500).json({ message: error?.message || "Failed to fetch leaderboard" });
+    }
+  });
+
   app.post("/api/user-tournaments/join-pin", requireAuth, async (req: any, res) => {
     try {
       const userId = String(req.authUserId || "");
