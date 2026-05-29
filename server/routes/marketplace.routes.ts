@@ -275,7 +275,6 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         if (!tournament) throw new Error("Tournament PIN not found");
         if (String(tournament.status || "") !== "open") throw new Error("Tournament is not open");
         if (tournament.max_entries && Number(tournament.entry_count || 0) >= Number(tournament.max_entries)) throw new Error("Tournament is full");
-        if (String(tournament.created_by_user_id || "") === userId) throw new Error("Tournament creator cannot enter their own PIN tournament");
         const duplicate = await tx.execute(sql`select id from app.competition_entries where competition_id = ${Number(tournament.id)} and user_id = ${userId} limit 1`);
         if ((Array.isArray((duplicate as any)?.rows) ? (duplicate as any).rows : []).length > 0) throw new Error("You already entered this tournament");
         const cardsResult = await tx.execute(sql`
