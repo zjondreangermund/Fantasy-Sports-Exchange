@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import CardThumbnail from "../components/CardThumbnail";
 import { Button } from "../components/ui/button";
@@ -7,37 +7,59 @@ import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
-import { type PlayerCardWithPlayer, type Competition, type CompetitionEntry, type Lineup } from "../../../shared/schema";
-import { Trophy, Users, Clock, DollarSign, Crown, Medal, ChevronDown, ChevronUp, Sparkles, Shield } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { type Competition, type CompetitionEntry, type Lineup, type PlayerCardWithPlayer } from "../../../shared/schema";
+import { Clock, Copy, Crown, DollarSign, Medal, Shield, Sparkles, Trophy, Users } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
-import RewardPopup from "../components/RewardPopup";
 
-type EnrichedEntry = CompetitionEntry & { userName: string; userImage: string | null };
+type EnrichedEntry = CompetitionEntry & { userName?: string; userImage?: string | null };
 type CompetitionWithEntries = Competition & {
   submissionClosesAt?: string;
   entryOpen?: boolean;
-  entries: EnrichedEntry[];
-  entryCount: number;
-  winner?: {
-    userId: string;
-    userName: string;
-    totalScore: number;
-    prizeAmount: number;
-    prizeCardId: number | null;
-  } | null;
+  entries?: EnrichedEntry[];
+  entryCount?: number;
+  join_pin?: string | null;
+  joinPin?: string | null;
+  visibility?: string;
+  max_entries?: number | null;
+  maxEntries?: number | null;
+  created_by_user_id?: string | null;
+  createdByUserId?: string | null;
+  platform_fee_total?: number;
+  prize_pool_total?: number;
 };
+
+type EntryMode = "standard" | "pin";
+
+const rarityOptions = ["common", "rare", "unique", "legendary"];
+
+function money(value: unknown) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return "0.00";
+  return n.toFixed(2);
+}
+
+function normalizeTier(value: unknown) {
+  return String(value || "common").toLowerCase();
+}
 
 export default function CompetitionsPage() {
   const { toast } = useToast();
   const [selectedComp, setSelectedComp] = useState<CompetitionWithEntries | null>(null);
+  const [entryMode, setEntryMode] = useState<EntryMode>("standard");
   const [selectedCards, setSelectedCards] = useState<number[]>([]);
   const [captainId, setCaptainId] = useState<number | null>(null);
-  const [showReward, setShowReward] = useState(false);
-  const [viewTeamOpen, setViewTeamOpen] = useState(false);
-  const [viewTeamLoading, setViewTeamLoading] = useState(false);
-  const [viewTeamData, setViewTeamData] = useState<any | null>(null);
+  const [pinCode, setPinCode] = useState("");
+  const [pinTournament, setPinTournament] = useState<CompetitionWithEntries | null>(null);
+  const [createdPin, setCreatedPin] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState({
+    name: "Friday Friends Cup",
+    tier: "common",
+    entryFee: "20",
+    maxEntries: "10",
+    visibility: "private",
+  });
 
   const { data: competitions, isLoading } = useQuery<CompetitionWithEntries[]>({
     queryKey: ["/api/competitions"],
@@ -68,39 +90,123 @@ export default function CompetitionsPage() {
     },
   });
 
-  const { data: rewards } = useQuery<any[]>({
-    queryKey: ["/api/rewards"],
-    queryFn: async () => {
-      const res = await fetch("/api/rewards", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch rewards");
-      return res.json();
-    },
-  });
-
   const { data: myEntries } = useQuery<CompetitionEntry[]>({
     queryKey: ["/api/competitions/my-entries"],
     queryFn: async () => {
       const res = await fetch("/api/competitions/my-entries", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch your tournament entries");
+      if (!res.ok) return [];
       return res.json();
     },
   });
 
+  const liveComps = useMemo(() => (Array.isArray(competitions) ? competitions : []).filter((c) => c.status === "open" || c.status === "active"), [competitions]);
+  const upcomingComps = useMemo(() => (Array.isArray(competitions) ? competitions : []).filter((c) => c.status === "upcoming"), [competitions]);
+  const completedComps = useMemo(() => (Array.isArray(competitions) ? competitions : []).filter((c) => c.status === "completed"), [competitions]);
+  const myEntryByCompetitionId = useMemo(() => new Map((Array.isArray(myEntries) ? myEntries : []).map((entry) => [entry.competitionId, entry] as const)), [myEntries]);
+  const myLiveComps = liveComps.filter((comp) => myEntryByCompetitionId.has(comp.id));
+  const enteredCompetitionIds = new Set((Array.isArray(myEntries) ? myEntries : []).map((entry) => entry.competitionId));
+  const myCommonCards = (Array.isArray(myCards) ? myCards : []).filter((card) => normalizeTier(card.rarity) === "common" && !card.forSale);
+
+  const requiredTier = normalizeTier(selectedComp?.tier);
+  const availableCards = (Array.isArray(myCards) ? myCards : [])
+    .filter((card) => card && !card.forSale)
+    .filter((card) => !selectedComp || normalizeTier(card.rarity) === requiredTier);
+
+  const selectedCardObjects = availableCards.filter((card) => selectedCards.includes(card.id));
+  const positionCounts: Record<string, number> = {};
+  selectedCardObjects.forEach((card) => {
+    const pos = card.player?.position || "";
+    positionCounts[pos] = (positionCounts[pos] || 0) + 1;
+  });
+  const hasGK = (positionCounts.GK || 0) >= 1;
+  const hasDEF = (positionCounts.DEF || 0) >= 1;
+  const hasMID = (positionCounts.MID || 0) >= 1;
+  const hasFWD = (positionCounts.FWD || 0) >= 1;
+  const lineupValid = selectedCards.length === 5 && hasGK && hasDEF && hasMID && hasFWD;
+
+  const cardIdsForTier = (ids: unknown, tier: string) => {
+    const sourceIds = Array.isArray(ids) ? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id)) : [];
+    const allowed = new Set((Array.isArray(myCards) ? myCards : [])
+      .filter((card) => !card.forSale && normalizeTier(card.rarity) === normalizeTier(tier))
+      .map((card) => card.id));
+    return sourceIds.filter((id) => allowed.has(id)).slice(0, 5);
+  };
+
+  const previousEntryForTier = (tier: string, excludeCompetitionId?: number) => [...(Array.isArray(myEntries) ? myEntries : [])]
+    .filter((entry) => entry.competitionId !== excludeCompetitionId && Array.isArray(entry.lineupCardIds) && entry.lineupCardIds.length > 0)
+    .sort((a: any, b: any) => new Date(b.joinedAt || 0).getTime() - new Date(a.joinedAt || 0).getTime())
+    .find((entry) => cardIdsForTier(entry.lineupCardIds, tier).length === 5);
+
+  const previousEntry = selectedComp ? previousEntryForTier(selectedComp.tier, selectedComp.id) : undefined;
+  const previousLineupIds = cardIdsForTier(previousEntry?.lineupCardIds, selectedComp?.tier || "");
+  const savedLineupIds = cardIdsForTier(savedLineup?.lineup?.cardIds, selectedComp?.tier || "");
+
+  const applyLineupPreset = (ids: unknown, label: string) => {
+    if (!selectedComp) return;
+    const validIds = cardIdsForTier(ids, selectedComp.tier);
+    if (validIds.length !== 5) {
+      toast({ title: `${label} not available`, description: `You need 5 available ${selectedComp.tier} cards.`, variant: "destructive" });
+      return;
+    }
+    setSelectedCards(validIds);
+    setCaptainId(validIds[0]);
+    toast({ title: `${label} applied`, description: "Review your captain before entering." });
+  };
+
+  const openCompetitionAction = (comp: CompetitionWithEntries, mode: EntryMode = "standard") => {
+    if (comp.status !== "open") {
+      toast({ title: "Tournament unavailable", description: "This tournament is not open for new entries." });
+      return;
+    }
+    if (comp.entryOpen === false) {
+      toast({ title: "Submission closed", description: "This gameweek is locked because kickoff has started." });
+      return;
+    }
+    setSelectedComp(comp);
+    setEntryMode(mode);
+    const savedIds = cardIdsForTier(savedLineup?.lineup?.cardIds, comp.tier);
+    const previousEntry = previousEntryForTier(comp.tier, comp.id);
+    const previousIds = cardIdsForTier(previousEntry?.lineupCardIds, comp.tier);
+    const startingIds = savedIds.length === 5 ? savedIds : previousIds;
+    setSelectedCards(startingIds);
+    setCaptainId(startingIds[0] || null);
+  };
+
+  const toggleCard = (cardId: number) => {
+    setSelectedCards((prev) => {
+      if (prev.includes(cardId)) {
+        const remaining = prev.filter((id) => id !== cardId);
+        if (captainId === cardId) setCaptainId(remaining[0] || null);
+        return remaining;
+      }
+      if (prev.length >= 5) return prev;
+      const next = [...prev, cardId];
+      if (!captainId) setCaptainId(cardId);
+      return next;
+    });
+  };
+
   const joinMutation = useMutation({
-    mutationFn: async (data: { competitionId: number; cardIds: number[]; captainId: number }) => {
-      const res = await apiRequest("POST", "/api/competitions/join", data);
+    mutationFn: async () => {
+      if (!selectedComp || !captainId) throw new Error("Select a tournament and captain");
+      const payload = { competitionId: selectedComp.id, cardIds: selectedCards, captainId };
+      if (entryMode === "pin") {
+        const res = await apiRequest("POST", "/api/user-tournaments/join-pin", { pin: selectedComp.join_pin || selectedComp.joinPin || pinCode, cardIds: selectedCards, captainId });
+        return res.json();
+      }
+      const res = await apiRequest("POST", "/api/competitions/join", payload);
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/competitions/my-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallet"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/rewards"] });
       setSelectedComp(null);
       setSelectedCards([]);
       setCaptainId(null);
       toast({ title: "Entered tournament!" });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       if (isUnauthorizedError(error)) {
         toast({ title: "Unauthorized", variant: "destructive" });
         setTimeout(() => { window.location.href = "/api/login"; }, 500);
@@ -110,191 +216,188 @@ export default function CompetitionsPage() {
     },
   });
 
-  const toggleCard = (cardId: number) => {
-    setSelectedCards((prev) => {
-      if (prev.includes(cardId)) {
-        if (captainId === cardId) {
-          const remaining = prev.filter((id) => id !== cardId);
-          setCaptainId(remaining.length > 0 ? remaining[0] : null);
-        }
-        return prev.filter((id) => id !== cardId);
-      }
-      if (prev.length >= 5) return prev;
-      const newCards = [...prev, cardId];
-      if (!captainId) setCaptainId(cardId);
-      return newCards;
-    });
-  };
-
-  const liveComps = (Array.isArray(competitions) ? competitions : [])?.filter((c) => c && (c.status === "open" || c.status === "active")) || [];
-  const upcomingComps = (Array.isArray(competitions) ? competitions : [])?.filter((c) => c && c.status === "upcoming") || [];
-  const completedComps = (Array.isArray(competitions) ? competitions : [])?.filter((c) => c && c.status === "completed") || [];
-  const myEntryByCompetitionId = new Map(((Array.isArray(myEntries) ? myEntries : []) || []).map((entry) => [entry.competitionId, entry] as const));
-  const myLiveComps = liveComps.filter((comp) => myEntryByCompetitionId.has(comp.id));
-  const requiredTier = String(selectedComp?.tier || "").toLowerCase();
-  const availableCards = (Array.isArray(myCards) ? myCards : [])
-    ?.filter((c) => c && !c.forSale)
-    .filter((card) => {
-      if (!requiredTier) return true;
-      return String(card.rarity || "common").toLowerCase() === requiredTier;
-    }) || [];
-  const enteredCompetitionIds = new Set(((Array.isArray(myEntries) ? myEntries : []) || []).map((entry) => entry.competitionId));
-  const myCommonCards = (Array.isArray(myCards) ? myCards : []).filter((card) => String(card.rarity || "common").toLowerCase() === "common" && !card.forSale);
-
-  const cardIdsForTier = (ids: unknown, tier: string) => {
-    const sourceIds = Array.isArray(ids) ? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id)) : [];
-    const allowed = new Set((Array.isArray(myCards) ? myCards : [])
-      .filter((card) => !card.forSale && String(card.rarity || "common").toLowerCase() === String(tier || "").toLowerCase())
-      .map((card) => card.id));
-    return sourceIds.filter((id) => allowed.has(id)).slice(0, 5);
-  };
-
-  const previousEntryForTier = (tier: string, excludeCompetitionId?: number) => {
-    return [...(Array.isArray(myEntries) ? myEntries : [])]
-      .filter((entry) => entry.competitionId !== excludeCompetitionId && Array.isArray(entry.lineupCardIds) && entry.lineupCardIds.length > 0)
-      .sort((a: any, b: any) => new Date(b.joinedAt || 0).getTime() - new Date(a.joinedAt || 0).getTime())
-      .find((entry) => cardIdsForTier(entry.lineupCardIds, tier).length === 5);
-  };
-
-  const applyLineupPreset = (ids: unknown, label: string) => {
-    if (!selectedComp) return;
-    const validIds = cardIdsForTier(ids, selectedComp.tier);
-    if (validIds.length !== 5) {
-      toast({ title: `${label} not available`, description: `You need 5 available ${selectedComp.tier} cards for this tournament.`, variant: "destructive" });
-      return;
-    }
-    setSelectedCards(validIds);
-    setCaptainId(validIds[0]);
-    toast({ title: `${label} applied`, description: "Review your captain before entering." });
-  };
-
-  const handleViewUserTeam = async (competitionId: number, entryId: number) => {
-    try {
-      setViewTeamOpen(true);
-      setViewTeamLoading(true);
-      const res = await fetch(`/api/competitions/${competitionId}/entries/${entryId}/lineup`, { credentials: "include" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.message || "Failed to fetch lineup");
-      }
-      const data = await res.json();
-      setViewTeamData(data);
-    } catch (error: any) {
-      toast({ title: "Cannot view lineup", description: error.message, variant: "destructive" });
-      setViewTeamOpen(false);
-    } finally {
-      setViewTeamLoading(false);
-    }
-  };
-
-  const unclaimedRewards = (Array.isArray(rewards) ? rewards : [])?.filter((r) => r && !r.claimed && (Number(r.prizeAmount || 0) > 0 || r.prizeCard)) || [];
-  const selectedCardObjects = availableCards.filter((c) => selectedCards.includes(c.id));
-  const positionCounts: Record<string, number> = {};
-  selectedCardObjects.forEach((c) => {
-    const pos = c.player?.position || "";
-    positionCounts[pos] = (positionCounts[pos] || 0) + 1;
+  const createTournamentMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/user-tournaments/create", {
+        name: createForm.name,
+        tier: createForm.tier,
+        entryFee: Number(createForm.entryFee || 0),
+        maxEntries: Number(createForm.maxEntries || 0),
+        visibility: createForm.visibility,
+      });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
+      setCreatedPin(data?.pin || data?.tournament?.join_pin || null);
+      toast({ title: "Tournament created", description: data?.pin ? `PIN: ${data.pin}` : "Your tournament is live." });
+    },
+    onError: (error: any) => toast({ title: "Could not create tournament", description: error.message, variant: "destructive" }),
   });
-  const hasGK = (positionCounts["GK"] || 0) >= 1;
-  const hasDEF = (positionCounts["DEF"] || 0) >= 1;
-  const hasMID = (positionCounts["MID"] || 0) >= 1;
-  const hasFWD = (positionCounts["FWD"] || 0) >= 1;
-  const lineupValid = selectedCards.length === 5 && hasGK && hasDEF && hasMID && hasFWD;
-  const lineupError = selectedCards.length === 5 && !lineupValid ? "Lineup must have at least 1 GK, 1 DEF, 1 MID, and 1 FWD (5th card is utility)" : null;
 
-  const openCompetitionAction = (comp: CompetitionWithEntries) => {
-    const myEntry = myEntryByCompetitionId.get(comp.id);
-    if (comp.status === "open") {
-      if (comp.entryOpen === false) {
-        toast({ title: "Submission closed", description: "This gameweek is locked because kickoff has started." });
-        return;
-      }
-      setSelectedComp(comp);
-      const savedIds = cardIdsForTier(savedLineup?.lineup?.cardIds, comp.tier);
-      const previousEntry = previousEntryForTier(comp.tier, comp.id);
-      const previousIds = cardIdsForTier(previousEntry?.lineupCardIds, comp.tier);
-      const startingIds = savedIds.length === 5 ? savedIds : previousIds;
-      setSelectedCards(startingIds);
-      setCaptainId(startingIds[0] || null);
-      return;
-    }
-    if (comp.status === "active" && myEntry) {
-      handleViewUserTeam(comp.id, myEntry.id);
-      return;
-    }
-    toast({ title: "Tournament unavailable", description: "This tournament is not open for new entries." });
-  };
+  const findPinMutation = useMutation({
+    mutationFn: async () => {
+      const pin = pinCode.trim().toUpperCase();
+      if (!pin) throw new Error("Enter a PIN code");
+      const res = await fetch(`/api/user-tournaments/pin/${encodeURIComponent(pin)}`, { credentials: "include" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || "Tournament PIN not found");
+      return data;
+    },
+    onSuccess: (data: any) => {
+      setPinTournament(data.tournament);
+      toast({ title: "Tournament found", description: data.tournament?.name || "PIN tournament loaded." });
+    },
+    onError: (error: any) => toast({ title: "PIN not found", description: error.message, variant: "destructive" }),
+  });
 
-  const previousEntry = selectedComp ? previousEntryForTier(selectedComp.tier, selectedComp.id) : undefined;
-  const previousLineupIds = cardIdsForTier(previousEntry?.lineupCardIds, selectedComp?.tier || "");
-  const savedLineupIds = cardIdsForTier(savedLineup?.lineup?.cardIds, selectedComp?.tier || "");
+  const platformFeePreview = Number(createForm.entryFee || 0) * 0.2;
+  const prizePreview = Number(createForm.entryFee || 0) - platformFeePreview;
 
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-4 mb-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-4">
           <Card className="p-6 border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-11 h-11 rounded-2xl bg-primary/15 flex items-center justify-center"><Trophy className="w-5 h-5 text-primary" /></div>
-              <div><h1 className="text-2xl font-bold text-foreground">Tournaments</h1><p className="text-sm text-muted-foreground">Play commons, climb leaderboards, and win better cards.</p></div>
+              <div><h1 className="text-2xl font-bold text-foreground">Tournaments</h1><p className="text-sm text-muted-foreground">Create private PIN cups, join public tournaments, and win better cards.</p></div>
             </div>
-            <div className="grid sm:grid-cols-3 gap-3 mt-4"><InfoPill label="Common cards ready" value={`${myCommonCards.length}`} helper="Use commons to compete." /><InfoPill label="Live entries" value={`${myLiveComps.length}`} helper="Track your current runs." /><InfoPill label="Unclaimed rewards" value={`${unclaimedRewards.length}`} helper="Rare prizes and payouts." /></div>
+            <div className="grid sm:grid-cols-3 gap-3 mt-4">
+              <InfoPill label="Common cards ready" value={`${myCommonCards.length}`} helper="Use commons to compete." />
+              <InfoPill label="Live entries" value={`${myLiveComps.length}`} helper="Track your current runs." />
+              <InfoPill label="Platform fee" value="20%" helper="Applies to all tournaments." />
+            </div>
           </Card>
-          <Card className="p-6"><div className="flex items-center gap-2 mb-3"><Sparkles className="w-4 h-4 text-yellow-500" /><h2 className="font-semibold">Reward Ladder</h2></div><div className="space-y-2 text-sm"><div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Daily / Common tournaments</span><Badge variant="outline" className="text-green-500 border-green-500">Win rare cards</Badge></div><div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Rare tournaments</span><Badge variant="outline" className="text-blue-500 border-blue-500">Cash + premium cards</Badge></div><div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Captain bonus</span><Badge variant="outline">+10% score</Badge></div><div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Lineup build</span><Badge variant="outline">1 GK / DEF / MID / FWD + 1 utility</Badge></div></div></Card>
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-3"><Sparkles className="w-4 h-4 text-yellow-500" /><h2 className="font-semibold">Tournament Economy</h2></div>
+            <div className="space-y-2 text-sm">
+              <EconomyRow label="Entry fees" value="20% platform / 80% prize pool" />
+              <EconomyRow label="Private tournaments" value="PIN-based entry" />
+              <EconomyRow label="Lineup rule" value="5 cards: GK / DEF / MID / FWD + utility" />
+            </div>
+          </Card>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6"><div className="text-sm text-muted-foreground flex items-center gap-2"><Shield className="w-4 h-4" />Common cards are your entry layer. Higher rarities are the prize and progression layer.</div>{unclaimedRewards.length > 0 && <Button onClick={() => setShowReward(true)} className="bg-yellow-500 hover:bg-yellow-600 text-black"><Medal className="w-4 h-4 mr-1" /> View Rewards ({unclaimedRewards.length})</Button>}</div>
+        <Tabs defaultValue="live" className="w-full">
+          <TabsList className="mb-4 flex h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
+            <TabsTrigger value="live" className="rounded-full border px-4">🔴 Public</TabsTrigger>
+            <TabsTrigger value="pin" className="rounded-full border px-4">🔐 Join by PIN</TabsTrigger>
+            <TabsTrigger value="create" className="rounded-full border px-4">➕ Create</TabsTrigger>
+            <TabsTrigger value="my-live" className="rounded-full border px-4">⭐ My Live</TabsTrigger>
+            <TabsTrigger value="upcoming" className="rounded-full border px-4">📅 Upcoming</TabsTrigger>
+            <TabsTrigger value="completed" className="rounded-full border px-4">✅ Completed</TabsTrigger>
+          </TabsList>
 
-        <Tabs defaultValue={myLiveComps.length > 0 ? "my-live" : "live"} className="w-full">
-          <TabsList className="mb-4"><TabsTrigger value="my-live">⭐ My Live</TabsTrigger><TabsTrigger value="live">🔴 Live Tournaments</TabsTrigger><TabsTrigger value="upcoming">📅 Upcoming</TabsTrigger><TabsTrigger value="completed">✅ Completed</TabsTrigger></TabsList>
-          <TabsContent value="my-live">{myLiveComps.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{myLiveComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div> : <Card className="p-8 text-center"><p className="text-muted-foreground">You are not currently entered in a live tournament.</p></Card>}</TabsContent>
-          <TabsContent value="live">{isLoading ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}</div> : liveComps.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{liveComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div> : <Card className="p-8 text-center"><p className="text-muted-foreground">No live tournaments available</p></Card>}</TabsContent>
-          <TabsContent value="upcoming">{isLoading ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}</div> : upcomingComps.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{upcomingComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div> : <Card className="p-8 text-center"><p className="text-muted-foreground">No upcoming tournaments available</p></Card>}</TabsContent>
-          <TabsContent value="completed">{isLoading ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}</div> : completedComps.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{completedComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div> : <Card className="p-8 text-center"><p className="text-muted-foreground">No completed tournaments yet</p></Card>}</TabsContent>
+          <TabsContent value="live">
+            {isLoading ? <LoadingGrid /> : liveComps.length > 0 ? <CompetitionGrid comps={liveComps} enteredIds={enteredCompetitionIds} onJoin={(comp) => openCompetitionAction(comp)} /> : <EmptyCard text="No public live tournaments available." />}
+          </TabsContent>
+          <TabsContent value="my-live">
+            {myLiveComps.length > 0 ? <CompetitionGrid comps={myLiveComps} enteredIds={enteredCompetitionIds} onJoin={(comp) => openCompetitionAction(comp)} /> : <EmptyCard text="You are not currently entered in a live tournament." />}
+          </TabsContent>
+          <TabsContent value="upcoming">
+            {isLoading ? <LoadingGrid /> : upcomingComps.length > 0 ? <CompetitionGrid comps={upcomingComps} enteredIds={enteredCompetitionIds} onJoin={(comp) => openCompetitionAction(comp)} /> : <EmptyCard text="No upcoming tournaments available." />}
+          </TabsContent>
+          <TabsContent value="completed">
+            {isLoading ? <LoadingGrid /> : completedComps.length > 0 ? <CompetitionGrid comps={completedComps} enteredIds={enteredCompetitionIds} onJoin={(comp) => openCompetitionAction(comp)} /> : <EmptyCard text="No completed tournaments yet." />}
+          </TabsContent>
+
+          <TabsContent value="pin">
+            <Card className="p-5 space-y-4">
+              <div className="flex items-center gap-2"><Shield className="w-5 h-5 text-primary" /><h2 className="font-semibold text-lg">Join a Private Tournament</h2></div>
+              <p className="text-sm text-muted-foreground">Enter the PIN from your friend or competition creator. You will still pay the listed entry fee and must use the correct rarity cards.</p>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <input className="rounded-xl border bg-background px-4 py-3 text-lg uppercase tracking-[0.25em]" placeholder="PIN CODE" value={pinCode} onChange={(e) => setPinCode(e.target.value.toUpperCase())} />
+                <Button onClick={() => findPinMutation.mutate()} disabled={findPinMutation.isPending}>{findPinMutation.isPending ? "Searching..." : "Find Tournament"}</Button>
+              </div>
+              {pinTournament && <Card className="p-4 border-primary/20 bg-primary/5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div><h3 className="font-bold text-lg">{pinTournament.name}</h3><p className="text-sm text-muted-foreground">{pinTournament.entryCount || 0}{(pinTournament.max_entries || pinTournament.maxEntries) ? ` / ${pinTournament.max_entries || pinTournament.maxEntries}` : ""} players joined</p></div>
+                  <Badge className="capitalize">{pinTournament.tier}</Badge>
+                </div>
+                <div className="grid sm:grid-cols-3 gap-2 my-4 text-sm"><InfoPill label="Entry" value={`N$${money(pinTournament.entryFee)}`} helper="Paid from wallet." /><InfoPill label="Platform" value={`N$${money(Number(pinTournament.entryFee || 0) * 0.2)}`} helper="20% fee." /><InfoPill label="Prize pool" value={`N$${money(Number(pinTournament.entryFee || 0) * 0.8)}`} helper="Added per entry." /></div>
+                <Button onClick={() => openCompetitionAction(pinTournament, "pin")}>Choose Lineup & Join</Button>
+              </Card>}
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="create">
+            <Card className="p-5 space-y-4">
+              <div className="flex items-center gap-2"><Crown className="w-5 h-5 text-yellow-500" /><h2 className="font-semibold text-lg">Create Tournament</h2></div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1 text-sm"><span className="text-muted-foreground">Name</span><input className="w-full rounded-xl border bg-background px-3 py-2" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} /></label>
+                <label className="space-y-1 text-sm"><span className="text-muted-foreground">Rarity</span><select className="w-full rounded-xl border bg-background px-3 py-2 capitalize" value={createForm.tier} onChange={(e) => setCreateForm({ ...createForm, tier: e.target.value })}>{rarityOptions.map((tier) => <option key={tier} value={tier}>{tier}</option>)}</select></label>
+                <label className="space-y-1 text-sm"><span className="text-muted-foreground">Entry Fee (N$)</span><input type="number" min="0" className="w-full rounded-xl border bg-background px-3 py-2" value={createForm.entryFee} onChange={(e) => setCreateForm({ ...createForm, entryFee: e.target.value })} /></label>
+                <label className="space-y-1 text-sm"><span className="text-muted-foreground">Max Players</span><input type="number" min="2" className="w-full rounded-xl border bg-background px-3 py-2" value={createForm.maxEntries} onChange={(e) => setCreateForm({ ...createForm, maxEntries: e.target.value })} /></label>
+                <label className="space-y-1 text-sm md:col-span-2"><span className="text-muted-foreground">Visibility</span><select className="w-full rounded-xl border bg-background px-3 py-2" value={createForm.visibility} onChange={(e) => setCreateForm({ ...createForm, visibility: e.target.value })}><option value="private">Private PIN</option><option value="public">Public</option></select></label>
+              </div>
+              <div className="grid sm:grid-cols-3 gap-2"><InfoPill label="Platform fee" value={`N$${money(platformFeePreview)}`} helper="20% per entry." /><InfoPill label="Prize pool" value={`N$${money(prizePreview)}`} helper="80% per entry." /><InfoPill label="Creator can enter" value="Yes" helper="Normal fee applies." /></div>
+              <Button onClick={() => createTournamentMutation.mutate()} disabled={createTournamentMutation.isPending}>{createTournamentMutation.isPending ? "Creating..." : "Create Tournament"}</Button>
+              {createdPin && <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-sm"><div className="text-muted-foreground mb-1">Private tournament PIN</div><div className="flex items-center gap-2"><code className="text-2xl font-bold tracking-[0.3em]">{createdPin}</code><Button size="sm" variant="outline" onClick={() => { navigator.clipboard?.writeText(createdPin); toast({ title: "PIN copied" }); }}><Copy className="w-4 h-4" /></Button></div></div>}
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
 
       <Dialog open={!!selectedComp} onOpenChange={() => setSelectedComp(null)}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-auto">
           <DialogHeader><DialogTitle>Enter {selectedComp?.name}</DialogTitle></DialogHeader>
-          {selectedComp && <div className="py-4">
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 mb-4 text-sm text-muted-foreground">This tournament uses <span className="font-semibold text-foreground capitalize">{selectedComp.tier}</span> cards. Choose your saved lineup, reuse your previous tournament lineup, or manually adjust your 5 cards.</div>
-            <div className="flex flex-wrap gap-2 mb-4">{selectedComp.entryFee > 0 && <Badge variant="outline" className="text-amber-500 border-amber-500">Entry Fee: N${selectedComp.entryFee}</Badge>}<Badge variant="outline" className="text-green-500 border-green-500">Prize: {selectedComp.prizeCardRarity?.charAt(0).toUpperCase()}{selectedComp.prizeCardRarity?.slice(1)} Card</Badge>{selectedComp.tier === "rare" && <Badge variant="outline" className="text-blue-400 border-blue-400">+ Prize Pool (50/20/15/10/5 split)</Badge>}</div>
-            <div className="mb-4 grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={() => applyLineupPreset(savedLineupIds, "Saved lineup")} disabled={savedLineupIds.length !== 5}>Use Saved Lineup ({savedLineupIds.length}/5)</Button><Button variant="outline" onClick={() => applyLineupPreset(previousLineupIds, "Previous tournament lineup")} disabled={previousLineupIds.length !== 5}>Use Previous Lineup ({previousLineupIds.length}/5)</Button></div>
-            <p className="text-sm text-muted-foreground mb-2">Selected lineup: 1 GK, 1 DEF, 1 MID, 1 FWD + 1 Utility. Choose a captain for a 10% bonus. {selectedCards.length}/5 selected.</p>
-            {selectedComp?.tier && <p className="text-xs text-muted-foreground mb-2">Tournament tier is <span className="font-semibold capitalize">{selectedComp.tier}</span>. Only {selectedComp.tier} cards are shown and allowed.</p>}
-            {lineupError && <p className="text-sm text-red-500 mb-2">{lineupError}</p>}
-            {selectedCards.length > 0 && selectedCards.length < 5 && <div className="flex flex-wrap gap-1 mb-2">{!hasGK && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need GK</Badge>}{!hasDEF && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need DEF</Badge>}{!hasMID && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need MID</Badge>}{!hasFWD && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need FWD</Badge>}</div>}
-            <div className="flex flex-wrap gap-4 mb-4 max-h-80 overflow-auto justify-center preserve-3d" style={{ transformStyle: "preserve-3d" }}>{availableCards.map((card) => <div key={card.id} className="card-3d-container bg-transparent shadow-none p-0" style={{ transformStyle: "preserve-3d", minHeight: "300px" }}><CardThumbnail card={card} size="sm" selected={selectedCards.includes(card.id)} selectable onClick={() => toggleCard(card.id)} />{selectedCards.includes(card.id) && <button className={`absolute -top-1 -left-1 z-30 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${captainId === card.id ? "bg-yellow-500 text-black" : "bg-muted text-muted-foreground hover:bg-yellow-500 hover:text-black"}`} onClick={(e) => { e.stopPropagation(); setCaptainId(card.id); }} title="Set as Captain">C</button>}</div>)}</div>
+          {selectedComp && <div className="py-4 space-y-4">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">This tournament requires <span className="font-semibold text-foreground capitalize">{selectedComp.tier}</span> cards only. Pick 5 cards and set a captain.</div>
+            <div className="flex flex-wrap gap-2"><Badge variant="outline">Entry: N${money(selectedComp.entryFee)}</Badge><Badge variant="outline">Platform: N${money(Number(selectedComp.entryFee || 0) * 0.2)}</Badge><Badge variant="outline">Prize pool add: N${money(Number(selectedComp.entryFee || 0) * 0.8)}</Badge></div>
+            <div className="grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={() => applyLineupPreset(savedLineupIds, "Saved lineup")} disabled={savedLineupIds.length !== 5}>Use Saved Lineup ({savedLineupIds.length}/5)</Button><Button variant="outline" onClick={() => applyLineupPreset(previousLineupIds, "Previous tournament lineup")} disabled={previousLineupIds.length !== 5}>Use Previous Lineup ({previousLineupIds.length}/5)</Button></div>
+            <p className="text-sm text-muted-foreground">Selected: {selectedCards.length}/5. Need at least 1 GK, 1 DEF, 1 MID and 1 FWD.</p>
+            {selectedCards.length > 0 && !lineupValid && <div className="flex flex-wrap gap-1">{!hasGK && <Badge variant="outline" className="text-red-400 border-red-400">Need GK</Badge>}{!hasDEF && <Badge variant="outline" className="text-red-400 border-red-400">Need DEF</Badge>}{!hasMID && <Badge variant="outline" className="text-red-400 border-red-400">Need MID</Badge>}{!hasFWD && <Badge variant="outline" className="text-red-400 border-red-400">Need FWD</Badge>}</div>}
+            <div className="flex flex-wrap gap-4 justify-center max-h-96 overflow-auto preserve-3d" style={{ transformStyle: "preserve-3d" }}>{availableCards.map((card) => <div key={card.id} className="relative card-3d-container bg-transparent shadow-none p-0" style={{ transformStyle: "preserve-3d", minHeight: "300px" }}><CardThumbnail card={card} size="sm" selected={selectedCards.includes(card.id)} selectable onClick={() => toggleCard(card.id)} />{selectedCards.includes(card.id) && <button className={`absolute -top-1 -left-1 z-30 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${captainId === card.id ? "bg-yellow-500 text-black" : "bg-muted text-muted-foreground hover:bg-yellow-500 hover:text-black"}`} onClick={(e) => { e.stopPropagation(); setCaptainId(card.id); }} title="Set captain">C</button>}</div>)}</div>
           </div>}
-          <DialogFooter><Button variant="outline" onClick={() => setSelectedComp(null)}>Cancel</Button><Button onClick={() => selectedComp && captainId && joinMutation.mutate({ competitionId: selectedComp.id, cardIds: selectedCards, captainId })} disabled={!lineupValid || !captainId || joinMutation.isPending}>{joinMutation.isPending ? "Entering..." : selectedComp?.entryFee ? `Enter (N$${selectedComp.entryFee})` : "Enter Free"}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setSelectedComp(null)}>Cancel</Button><Button onClick={() => joinMutation.mutate()} disabled={!lineupValid || !captainId || joinMutation.isPending}>{joinMutation.isPending ? "Entering..." : selectedComp?.entryFee ? `Enter (N$${money(selectedComp.entryFee)})` : "Enter Free"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {showReward && unclaimedRewards.length > 0 && <RewardPopup rewards={unclaimedRewards} onClose={() => setShowReward(false)} />}
-      <Dialog open={viewTeamOpen} onOpenChange={setViewTeamOpen}><DialogContent className="max-w-4xl max-h-[80vh] overflow-auto"><DialogHeader><DialogTitle>{viewTeamData?.userName || "Manager"} Lineup • {Number(viewTeamData?.totalScore || 0).toFixed(1)} pts</DialogTitle></DialogHeader>{viewTeamLoading ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 py-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[260px] rounded-xl" />)}</div> : <div className="py-2 space-y-3"><div className="flex flex-wrap items-center justify-center gap-2 text-xs"><Badge variant="outline">Base: {Number(viewTeamData?.scoreBreakdown?.baseTotal || 0).toFixed(1)}</Badge><Badge variant="outline">Captain Bonus: +{Number(viewTeamData?.scoreBreakdown?.captainBonus || 0).toFixed(1)}</Badge><Badge variant="outline">Computed: {Number(viewTeamData?.scoreBreakdown?.computedTotal || 0).toFixed(1)}</Badge><Badge variant="outline">Stored: {Number(viewTeamData?.scoreBreakdown?.storedTotal || viewTeamData?.totalScore || 0).toFixed(1)}</Badge></div><div className="flex flex-wrap gap-4 justify-center">{(viewTeamData?.cards || []).map((card: any) => <div key={card.id} className="flex flex-col items-center gap-1 max-w-[180px]"><CardThumbnail card={card} size="sm" selected={viewTeamData?.captainId === card.id} /><Badge variant="outline" className="text-xs">{Number(card.points || 0).toFixed(1)} pts{viewTeamData?.captainId === card.id ? ` (C +${Number(card.captainBonus || 0).toFixed(1)})` : ""}</Badge><div className="text-[10px] leading-tight text-muted-foreground text-center border rounded px-2 py-1 w-full"><div>D {Number(card?.pointsBreakdown?.decisive || 0).toFixed(1)} • P {Number(card?.pointsBreakdown?.performance || 0).toFixed(1)} • Pen {Number(card?.pointsBreakdown?.penalties || 0).toFixed(1)} • B {Number(card?.pointsBreakdown?.bonus || 0).toFixed(1)}</div>{(Array.isArray(card?.pointsExplanation) ? card.pointsExplanation : []).slice(0, 6).map((item: any, idx: number) => <div key={idx}>{item.label}: {item.value}</div>)}</div></div>)}</div></div>}</DialogContent></Dialog>
     </div>
   );
 }
 
-function InfoPill({ label, value, helper }: { label: string; value: string; helper: string }) { return <div className="rounded-2xl border bg-background/70 p-3"><div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div><div className="text-lg font-bold mt-1">{value}</div><div className="text-xs text-muted-foreground mt-1">{helper}</div></div>; }
-
-function Leaderboard({ entries, canViewTeams, competitionId, onViewTeam }: { entries: EnrichedEntry[]; canViewTeams: boolean; competitionId: number; onViewTeam: (competitionId: number, entryId: number) => void }) {
-  const [expanded, setExpanded] = useState(false);
-  if (entries.length === 0) return null;
-  const displayEntries = expanded ? entries : entries.slice(0, 5);
-  const rankColors = ["text-yellow-500", "text-zinc-400", "text-amber-700"];
-  return <div className="mt-3 border-t border-border pt-3"><button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-xs font-semibold text-muted-foreground mb-2 hover:text-foreground transition-colors w-full"><Trophy className="w-3 h-3" />Leaderboard ({entries.length}){entries.length > 5 && (expanded ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />)}</button><div className="space-y-1">{displayEntries.map((entry, idx) => <div key={entry.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs ${idx === 0 ? "bg-yellow-500/10" : idx < 3 ? "bg-muted/50" : ""}`}><span className={`font-bold w-5 text-center ${rankColors[idx] || "text-muted-foreground"}`}>{idx + 1}</span>{entry.userImage ? <img src={entry.userImage} alt="" loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover" /> : <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">{entry.userName.charAt(0).toUpperCase()}</div>}<span className="flex-1 truncate font-medium text-foreground">{canViewTeams ? <button className="truncate text-left hover:underline" onClick={() => onViewTeam(competitionId, entry.id)}>{entry.userName}</button> : entry.userName}</span><span className="font-mono font-bold text-foreground">{(entry.totalScore || 0).toFixed(1)}</span>{idx === 0 && <Crown className="w-3 h-3 text-yellow-500" />}</div>)}</div>{!expanded && entries.length > 5 && <button onClick={() => setExpanded(true)} className="text-xs text-primary hover:underline mt-1 w-full text-center">Show all {entries.length} entries</button>}</div>;
+function InfoPill({ label, value, helper }: { label: string; value: string; helper: string }) {
+  return <div className="rounded-2xl border bg-background/70 p-3"><div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div><div className="text-lg font-bold mt-1">{value}</div><div className="text-xs text-muted-foreground mt-1">{helper}</div></div>;
 }
 
-function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam, myEntryId }: { comp: CompetitionWithEntries; onJoin: () => void; canViewTeams: boolean; onViewTeam: (competitionId: number, entryId: number) => void; myEntryId?: number }) {
-  const endDate = new Date(comp.endDate);
-  const now = new Date();
-  const daysLeft = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-  const isOpen = comp.status === "open";
-  const isActive = comp.status === "active";
-  const hasMyEntry = Number.isFinite(Number(myEntryId));
-  const submissionOpen = comp.entryOpen !== false;
-  const ctaLabel = isOpen ? (submissionOpen ? (comp.entryFee > 0 ? `Enter (N$${comp.entryFee})` : "Enter Free") : "Submission Closed") : isActive ? (hasMyEntry ? "View My Live Lineup" : "Live (Entry Closed)") : comp.status === "upcoming" ? "Upcoming" : "Completed";
-  const ctaDisabled = isOpen ? !submissionOpen : isActive ? !hasMyEntry : true;
-  return <Card className="p-5 hover:border-primary/50 transition-colors"><div className="flex items-start justify-between mb-3"><div><h3 className="font-bold text-lg text-foreground">{comp.name}</h3><p className="text-sm text-muted-foreground">Game Week {comp.gameWeek}</p></div><Badge variant={comp.status === "open" ? "default" : comp.status === "active" ? "secondary" : "outline"}>{comp.status === "open" ? "Open" : comp.status === "active" ? "Active" : comp.status === "upcoming" ? "Upcoming" : "Completed"}</Badge></div><div className="grid grid-cols-2 gap-3 mb-4"><div className="flex items-center gap-2 text-sm"><DollarSign className="w-4 h-4 text-green-500" /><span className="text-muted-foreground">{comp.entryFee > 0 ? `N$${comp.entryFee} entry` : "Free entry"}</span></div><div className="flex items-center gap-2 text-sm"><Users className="w-4 h-4 text-blue-500" /><span className="text-muted-foreground">{comp.entryCount} entries</span></div><div className="flex items-center gap-2 text-sm"><Crown className="w-4 h-4 text-yellow-500" /><span className="text-muted-foreground">Prize: {comp.prizeCardRarity?.charAt(0).toUpperCase()}{comp.prizeCardRarity?.slice(1)} Card</span></div><div className="flex items-center gap-2 text-sm"><Clock className="w-4 h-4 text-orange-500" /><span className="text-muted-foreground">{daysLeft} days left</span></div></div><div className="mb-4 p-3 bg-muted/40 rounded-md text-xs text-muted-foreground">{String(comp.tier || "common").toLowerCase() === "common" ? "Common tournament: build with commons and try to win rare rewards." : `Tiered tournament: ${String(comp.tier || "common")} cards enter, premium rewards on the line.`}</div>{comp.submissionClosesAt ? <div className="mb-3 text-xs text-muted-foreground">Submission closes: {new Date(comp.submissionClosesAt).toLocaleString()}</div> : null}{comp.tier === "rare" && comp.entryCount > 0 && <div className="mb-4 p-2 bg-muted/50 rounded-md"><p className="text-xs text-muted-foreground mb-1">Prize Pool: N${(comp.entryCount * comp.entryFee).toFixed(2)}</p><div className="flex gap-2 text-xs"><span className="text-yellow-500">1st: 60%</span><span className="text-zinc-400">2nd: 30%</span><span className="text-amber-700">3rd: 10%</span></div></div>}{comp.status === "completed" && <div className="mb-4 p-3 bg-muted/40 rounded-md space-y-2"><p className="text-xs font-semibold text-muted-foreground">Winner & Rewards</p><div className="text-sm"><span className="font-semibold text-foreground">Winner:</span> <span className="text-foreground">{comp.winner?.userName || comp.entries?.[0]?.userName || "TBD"}</span>{(comp.winner?.totalScore ?? comp.entries?.[0]?.totalScore) !== undefined && <span className="text-muted-foreground"> • {Number((comp.winner?.totalScore ?? comp.entries?.[0]?.totalScore) || 0).toFixed(1)} pts</span>}</div><div className="flex flex-wrap gap-2 text-xs">{(Array.isArray(comp.entries) ? comp.entries : []).filter((entry) => Number(entry.prizeAmount || 0) > 0).slice(0, 3).map((entry, index) => <Badge key={entry.id} variant="outline">#{index + 1} {entry.userName}: N${Number(entry.prizeAmount || 0).toFixed(2)}</Badge>)}{comp.prizeCardRarity && <Badge variant="outline" className="text-green-500 border-green-500">Card Reward: {comp.prizeCardRarity.charAt(0).toUpperCase()}{comp.prizeCardRarity.slice(1)}</Badge>}</div></div>}<Leaderboard entries={comp.entries} canViewTeams={canViewTeams} competitionId={comp.id} onViewTeam={onViewTeam} /><Button className="w-full mt-4" onClick={onJoin} disabled={ctaDisabled}>{ctaLabel}</Button></Card>;
+function EconomyRow({ label, value }: { label: string; value: string }) {
+  return <div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">{label}</span><Badge variant="outline">{value}</Badge></div>;
+}
+
+function LoadingGrid() {
+  return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}</div>;
+}
+
+function EmptyCard({ text }: { text: string }) {
+  return <Card className="p-8 text-center"><p className="text-muted-foreground">{text}</p></Card>;
+}
+
+function CompetitionGrid({ comps, enteredIds, onJoin }: { comps: CompetitionWithEntries[]; enteredIds: Set<number>; onJoin: (comp: CompetitionWithEntries) => void }) {
+  return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{comps.map((comp) => <CompetitionCard key={comp.id} comp={comp} entered={enteredIds.has(comp.id)} onJoin={() => onJoin(comp)} />)}</div>;
+}
+
+function CompetitionCard({ comp, entered, onJoin }: { comp: CompetitionWithEntries; entered: boolean; onJoin: () => void }) {
+  const entryCount = Number(comp.entryCount || (comp.entries || []).length || 0);
+  const maxEntries = Number(comp.max_entries || comp.maxEntries || 0);
+  const prizePool = Number((comp as any).prize_pool_total || 0);
+  const platformFees = Number((comp as any).platform_fee_total || 0);
+  return <Card className="p-5 space-y-4 border-border/70">
+    <div className="flex items-start justify-between gap-3">
+      <div><h3 className="text-lg font-bold text-foreground">{comp.name}</h3><p className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><Clock className="w-3 h-3" />GW {comp.gameWeek} • {comp.status}</p></div>
+      <Badge className="capitalize">{comp.tier}</Badge>
+    </div>
+    <div className="grid grid-cols-2 gap-2 text-sm">
+      <MiniStat icon={<DollarSign className="w-3 h-3" />} label="Entry" value={`N$${money(comp.entryFee)}`} />
+      <MiniStat icon={<Users className="w-3 h-3" />} label="Players" value={`${entryCount}${maxEntries ? `/${maxEntries}` : ""}`} />
+      <MiniStat icon={<Trophy className="w-3 h-3" />} label="Prize pool" value={`N$${money(prizePool || Number(comp.entryFee || 0) * 0.8 * entryCount)}`} />
+      <MiniStat icon={<Shield className="w-3 h-3" />} label="Platform" value={`N$${money(platformFees || Number(comp.entryFee || 0) * 0.2 * entryCount)}`} />
+    </div>
+    <div className="flex flex-wrap gap-2"><Badge variant="outline" className="capitalize">Prize: {comp.prizeCardRarity || comp.tier} card</Badge>{entered && <Badge variant="outline" className="border-green-500 text-green-500">Entered</Badge>}</div>
+    <Button className="w-full" onClick={onJoin} disabled={entered || comp.status !== "open"}>{entered ? "Already Entered" : comp.status === "open" ? "Enter Tournament" : "Not Open"}</Button>
+  </Card>;
+}
+
+function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return <div className="rounded-xl border bg-muted/20 p-3"><div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-muted-foreground">{icon}{label}</div><div className="font-semibold mt-1">{value}</div></div>;
 }
