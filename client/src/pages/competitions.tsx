@@ -8,7 +8,7 @@ import { Badge } from "../components/ui/badge";
 import { Skeleton } from "../components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
-import { type PlayerCardWithPlayer, type Competition, type CompetitionEntry } from "../../../shared/schema";
+import { type PlayerCardWithPlayer, type Competition, type CompetitionEntry, type Lineup } from "../../../shared/schema";
 import { Trophy, Users, Clock, DollarSign, Crown, Medal, ChevronDown, ChevronUp, Sparkles, Shield } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
@@ -56,6 +56,15 @@ export default function CompetitionsPage() {
       if (!res.ok) throw new Error("Failed to fetch my cards");
       const data = await res.json();
       return Array.isArray(data) ? data : data.cards || [];
+    },
+  });
+
+  const { data: savedLineup } = useQuery<{ lineup: Lineup; cards: PlayerCardWithPlayer[] }>({
+    queryKey: ["/api/lineup"],
+    queryFn: async () => {
+      const res = await fetch("/api/lineup", { credentials: "include" });
+      if (!res.ok) return { lineup: { cardIds: [] } as Lineup, cards: [] };
+      return res.json();
     },
   });
 
@@ -132,6 +141,33 @@ export default function CompetitionsPage() {
   const enteredCompetitionIds = new Set(((Array.isArray(myEntries) ? myEntries : []) || []).map((entry) => entry.competitionId));
   const myCommonCards = (Array.isArray(myCards) ? myCards : []).filter((card) => String(card.rarity || "common").toLowerCase() === "common" && !card.forSale);
 
+  const cardIdsForTier = (ids: unknown, tier: string) => {
+    const sourceIds = Array.isArray(ids) ? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id)) : [];
+    const allowed = new Set((Array.isArray(myCards) ? myCards : [])
+      .filter((card) => !card.forSale && String(card.rarity || "common").toLowerCase() === String(tier || "").toLowerCase())
+      .map((card) => card.id));
+    return sourceIds.filter((id) => allowed.has(id)).slice(0, 5);
+  };
+
+  const previousEntryForTier = (tier: string, excludeCompetitionId?: number) => {
+    return [...(Array.isArray(myEntries) ? myEntries : [])]
+      .filter((entry) => entry.competitionId !== excludeCompetitionId && Array.isArray(entry.lineupCardIds) && entry.lineupCardIds.length > 0)
+      .sort((a: any, b: any) => new Date(b.joinedAt || 0).getTime() - new Date(a.joinedAt || 0).getTime())
+      .find((entry) => cardIdsForTier(entry.lineupCardIds, tier).length === 5);
+  };
+
+  const applyLineupPreset = (ids: unknown, label: string) => {
+    if (!selectedComp) return;
+    const validIds = cardIdsForTier(ids, selectedComp.tier);
+    if (validIds.length !== 5) {
+      toast({ title: `${label} not available`, description: `You need 5 available ${selectedComp.tier} cards for this tournament.`, variant: "destructive" });
+      return;
+    }
+    setSelectedCards(validIds);
+    setCaptainId(validIds[0]);
+    toast({ title: `${label} applied`, description: "Review your captain before entering." });
+  };
+
   const handleViewUserTeam = async (competitionId: number, entryId: number) => {
     try {
       setViewTeamOpen(true);
@@ -152,7 +188,6 @@ export default function CompetitionsPage() {
   };
 
   const unclaimedRewards = (Array.isArray(rewards) ? rewards : [])?.filter((r) => r && !r.claimed && (Number(r.prizeAmount || 0) > 0 || r.prizeCard)) || [];
-
   const selectedCardObjects = availableCards.filter((c) => selectedCards.includes(c.id));
   const positionCounts: Record<string, number> = {};
   selectedCardObjects.forEach((c) => {
@@ -174,8 +209,12 @@ export default function CompetitionsPage() {
         return;
       }
       setSelectedComp(comp);
-      setSelectedCards([]);
-      setCaptainId(null);
+      const savedIds = cardIdsForTier(savedLineup?.lineup?.cardIds, comp.tier);
+      const previousEntry = previousEntryForTier(comp.tier, comp.id);
+      const previousIds = cardIdsForTier(previousEntry?.lineupCardIds, comp.tier);
+      const startingIds = savedIds.length === 5 ? savedIds : previousIds;
+      setSelectedCards(startingIds);
+      setCaptainId(startingIds[0] || null);
       return;
     }
     if (comp.status === "active" && myEntry) {
@@ -185,6 +224,10 @@ export default function CompetitionsPage() {
     toast({ title: "Tournament unavailable", description: "This tournament is not open for new entries." });
   };
 
+  const previousEntry = selectedComp ? previousEntryForTier(selectedComp.tier, selectedComp.id) : undefined;
+  const previousLineupIds = cardIdsForTier(previousEntry?.lineupCardIds, selectedComp?.tier || "");
+  const savedLineupIds = cardIdsForTier(savedLineup?.lineup?.cardIds, selectedComp?.tier || "");
+
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
@@ -192,204 +235,55 @@ export default function CompetitionsPage() {
           <Card className="p-6 border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-11 h-11 rounded-2xl bg-primary/15 flex items-center justify-center"><Trophy className="w-5 h-5 text-primary" /></div>
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">Tournaments</h1>
-                <p className="text-sm text-muted-foreground">Play commons, climb leaderboards, and win better cards.</p>
-              </div>
+              <div><h1 className="text-2xl font-bold text-foreground">Tournaments</h1><p className="text-sm text-muted-foreground">Play commons, climb leaderboards, and win better cards.</p></div>
             </div>
-            <div className="grid sm:grid-cols-3 gap-3 mt-4">
-              <InfoPill label="Common cards ready" value={`${myCommonCards.length}`} helper="Use commons to compete." />
-              <InfoPill label="Live entries" value={`${myLiveComps.length}`} helper="Track your current runs." />
-              <InfoPill label="Unclaimed rewards" value={`${unclaimedRewards.length}`} helper="Rare prizes and payouts." />
-            </div>
+            <div className="grid sm:grid-cols-3 gap-3 mt-4"><InfoPill label="Common cards ready" value={`${myCommonCards.length}`} helper="Use commons to compete." /><InfoPill label="Live entries" value={`${myLiveComps.length}`} helper="Track your current runs." /><InfoPill label="Unclaimed rewards" value={`${unclaimedRewards.length}`} helper="Rare prizes and payouts." /></div>
           </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center gap-2 mb-3"><Sparkles className="w-4 h-4 text-yellow-500" /><h2 className="font-semibold">Reward Ladder</h2></div>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Daily / Common tournaments</span><Badge variant="outline" className="text-green-500 border-green-500">Win rare cards</Badge></div>
-              <div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Rare tournaments</span><Badge variant="outline" className="text-blue-500 border-blue-500">Cash + premium cards</Badge></div>
-              <div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Captain bonus</span><Badge variant="outline">+10% score</Badge></div>
-              <div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Lineup build</span><Badge variant="outline">1 GK / DEF / MID / FWD + 1 utility</Badge></div>
-            </div>
-          </Card>
+          <Card className="p-6"><div className="flex items-center gap-2 mb-3"><Sparkles className="w-4 h-4 text-yellow-500" /><h2 className="font-semibold">Reward Ladder</h2></div><div className="space-y-2 text-sm"><div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Daily / Common tournaments</span><Badge variant="outline" className="text-green-500 border-green-500">Win rare cards</Badge></div><div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Rare tournaments</span><Badge variant="outline" className="text-blue-500 border-blue-500">Cash + premium cards</Badge></div><div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Captain bonus</span><Badge variant="outline">+10% score</Badge></div><div className="flex items-center justify-between rounded-lg border p-3"><span className="text-muted-foreground">Lineup build</span><Badge variant="outline">1 GK / DEF / MID / FWD + 1 utility</Badge></div></div></Card>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          <div className="text-sm text-muted-foreground flex items-center gap-2"><Shield className="w-4 h-4" />Common cards are your entry layer. Higher rarities are the prize and progression layer.</div>
-          {unclaimedRewards.length > 0 && (
-            <Button onClick={() => setShowReward(true)} className="bg-yellow-500 hover:bg-yellow-600 text-black">
-              <Medal className="w-4 h-4 mr-1" /> View Rewards ({unclaimedRewards.length})
-            </Button>
-          )}
-        </div>
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6"><div className="text-sm text-muted-foreground flex items-center gap-2"><Shield className="w-4 h-4" />Common cards are your entry layer. Higher rarities are the prize and progression layer.</div>{unclaimedRewards.length > 0 && <Button onClick={() => setShowReward(true)} className="bg-yellow-500 hover:bg-yellow-600 text-black"><Medal className="w-4 h-4 mr-1" /> View Rewards ({unclaimedRewards.length})</Button>}</div>
 
         <Tabs defaultValue={myLiveComps.length > 0 ? "my-live" : "live"} className="w-full">
-          <TabsList className="mb-4">
-            <TabsTrigger value="my-live">⭐ My Live</TabsTrigger>
-            <TabsTrigger value="live">🔴 Live Tournaments</TabsTrigger>
-            <TabsTrigger value="upcoming">📅 Upcoming</TabsTrigger>
-            <TabsTrigger value="completed">✅ Completed</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="my-live">
-            {myLiveComps.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{myLiveComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div>
-            ) : (
-              <Card className="p-8 text-center"><p className="text-muted-foreground">You are not currently entered in a live tournament.</p></Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="live">
-            {isLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}</div>
-            ) : liveComps.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{liveComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div>
-            ) : (
-              <Card className="p-8 text-center"><p className="text-muted-foreground">No live tournaments available</p></Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="upcoming">
-            {isLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}</div>
-            ) : upcomingComps.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{upcomingComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div>
-            ) : (
-              <Card className="p-8 text-center"><p className="text-muted-foreground">No upcoming tournaments available</p></Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="completed">
-            {isLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}</div>
-            ) : completedComps.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{completedComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div>
-            ) : (
-              <Card className="p-8 text-center"><p className="text-muted-foreground">No completed tournaments yet</p></Card>
-            )}
-          </TabsContent>
+          <TabsList className="mb-4"><TabsTrigger value="my-live">⭐ My Live</TabsTrigger><TabsTrigger value="live">🔴 Live Tournaments</TabsTrigger><TabsTrigger value="upcoming">📅 Upcoming</TabsTrigger><TabsTrigger value="completed">✅ Completed</TabsTrigger></TabsList>
+          <TabsContent value="my-live">{myLiveComps.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{myLiveComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div> : <Card className="p-8 text-center"><p className="text-muted-foreground">You are not currently entered in a live tournament.</p></Card>}</TabsContent>
+          <TabsContent value="live">{isLoading ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}</div> : liveComps.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{liveComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div> : <Card className="p-8 text-center"><p className="text-muted-foreground">No live tournaments available</p></Card>}</TabsContent>
+          <TabsContent value="upcoming">{isLoading ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}</div> : upcomingComps.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{upcomingComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div> : <Card className="p-8 text-center"><p className="text-muted-foreground">No upcoming tournaments available</p></Card>}</TabsContent>
+          <TabsContent value="completed">{isLoading ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}</div> : completedComps.length > 0 ? <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{completedComps.map((comp) => <CompetitionCard key={comp.id} comp={comp} canViewTeams={enteredCompetitionIds.has(comp.id)} myEntryId={myEntryByCompetitionId.get(comp.id)?.id} onViewTeam={handleViewUserTeam} onJoin={() => openCompetitionAction(comp)} />)}</div> : <Card className="p-8 text-center"><p className="text-muted-foreground">No completed tournaments yet</p></Card>}</TabsContent>
         </Tabs>
       </div>
 
       <Dialog open={!!selectedComp} onOpenChange={() => setSelectedComp(null)}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">
           <DialogHeader><DialogTitle>Enter {selectedComp?.name}</DialogTitle></DialogHeader>
-          {selectedComp && (
-            <div className="py-4">
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 mb-4 text-sm text-muted-foreground">
-                This tournament uses <span className="font-semibold text-foreground capitalize">{selectedComp.tier}</span> cards. Build your 5-card lineup, choose a captain, and compete to win higher-tier rewards.
-              </div>
-
-              <div className="flex flex-wrap gap-2 mb-4">
-                {selectedComp.entryFee > 0 && <Badge variant="outline" className="text-amber-500 border-amber-500">Entry Fee: N${selectedComp.entryFee}</Badge>}
-                <Badge variant="outline" className="text-green-500 border-green-500">Prize: {selectedComp.prizeCardRarity?.charAt(0).toUpperCase()}{selectedComp.prizeCardRarity?.slice(1)} Card</Badge>
-                {selectedComp.tier === "rare" && <Badge variant="outline" className="text-blue-400 border-blue-400">+ Prize Pool (50/20/15/10/5 split)</Badge>}
-              </div>
-
-              <p className="text-sm text-muted-foreground mb-2">Select 5 cards for your lineup (1 GK, 1 DEF, 1 MID, 1 FWD + 1 Utility), then choose a captain for a 10% score bonus. {selectedCards.length}/5 selected.</p>
-              {selectedComp?.tier && <p className="text-xs text-muted-foreground mb-2">Tournament tier is <span className="font-semibold capitalize">{selectedComp.tier}</span>. Only {selectedComp.tier} cards are shown and allowed.</p>}
-              {lineupError && <p className="text-sm text-red-500 mb-2">{lineupError}</p>}
-              {selectedCards.length > 0 && selectedCards.length < 5 && (
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {!hasGK && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need GK</Badge>}
-                  {!hasDEF && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need DEF</Badge>}
-                  {!hasMID && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need MID</Badge>}
-                  {!hasFWD && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need FWD</Badge>}
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-4 mb-4 max-h-80 overflow-auto justify-center preserve-3d" style={{ transformStyle: "preserve-3d" }}>
-                {availableCards.map((card) => (
-                  <div key={card.id} className="card-3d-container bg-transparent shadow-none p-0" style={{ transformStyle: "preserve-3d", minHeight: "300px" }}>
-                    <CardThumbnail card={card} size="sm" selected={selectedCards.includes(card.id)} selectable onClick={() => toggleCard(card.id)} />
-                    {selectedCards.includes(card.id) && (
-                      <button className={`absolute -top-1 -left-1 z-30 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${captainId === card.id ? "bg-yellow-500 text-black" : "bg-muted text-muted-foreground hover:bg-yellow-500 hover:text-black"}`} onClick={(e) => { e.stopPropagation(); setCaptainId(card.id); }} title="Set as Captain">C</button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedComp(null)}>Cancel</Button>
-            <Button onClick={() => selectedComp && captainId && joinMutation.mutate({ competitionId: selectedComp.id, cardIds: selectedCards, captainId })} disabled={!lineupValid || !captainId || joinMutation.isPending}>{joinMutation.isPending ? "Entering..." : selectedComp?.entryFee ? `Enter (N$${selectedComp.entryFee})` : "Enter Free"}</Button>
-          </DialogFooter>
+          {selectedComp && <div className="py-4">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 mb-4 text-sm text-muted-foreground">This tournament uses <span className="font-semibold text-foreground capitalize">{selectedComp.tier}</span> cards. Choose your saved lineup, reuse your previous tournament lineup, or manually adjust your 5 cards.</div>
+            <div className="flex flex-wrap gap-2 mb-4">{selectedComp.entryFee > 0 && <Badge variant="outline" className="text-amber-500 border-amber-500">Entry Fee: N${selectedComp.entryFee}</Badge>}<Badge variant="outline" className="text-green-500 border-green-500">Prize: {selectedComp.prizeCardRarity?.charAt(0).toUpperCase()}{selectedComp.prizeCardRarity?.slice(1)} Card</Badge>{selectedComp.tier === "rare" && <Badge variant="outline" className="text-blue-400 border-blue-400">+ Prize Pool (50/20/15/10/5 split)</Badge>}</div>
+            <div className="mb-4 grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={() => applyLineupPreset(savedLineupIds, "Saved lineup")} disabled={savedLineupIds.length !== 5}>Use Saved Lineup ({savedLineupIds.length}/5)</Button><Button variant="outline" onClick={() => applyLineupPreset(previousLineupIds, "Previous tournament lineup")} disabled={previousLineupIds.length !== 5}>Use Previous Lineup ({previousLineupIds.length}/5)</Button></div>
+            <p className="text-sm text-muted-foreground mb-2">Selected lineup: 1 GK, 1 DEF, 1 MID, 1 FWD + 1 Utility. Choose a captain for a 10% bonus. {selectedCards.length}/5 selected.</p>
+            {selectedComp?.tier && <p className="text-xs text-muted-foreground mb-2">Tournament tier is <span className="font-semibold capitalize">{selectedComp.tier}</span>. Only {selectedComp.tier} cards are shown and allowed.</p>}
+            {lineupError && <p className="text-sm text-red-500 mb-2">{lineupError}</p>}
+            {selectedCards.length > 0 && selectedCards.length < 5 && <div className="flex flex-wrap gap-1 mb-2">{!hasGK && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need GK</Badge>}{!hasDEF && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need DEF</Badge>}{!hasMID && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need MID</Badge>}{!hasFWD && <Badge variant="outline" className="text-xs text-red-400 border-red-400">Need FWD</Badge>}</div>}
+            <div className="flex flex-wrap gap-4 mb-4 max-h-80 overflow-auto justify-center preserve-3d" style={{ transformStyle: "preserve-3d" }}>{availableCards.map((card) => <div key={card.id} className="card-3d-container bg-transparent shadow-none p-0" style={{ transformStyle: "preserve-3d", minHeight: "300px" }}><CardThumbnail card={card} size="sm" selected={selectedCards.includes(card.id)} selectable onClick={() => toggleCard(card.id)} />{selectedCards.includes(card.id) && <button className={`absolute -top-1 -left-1 z-30 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${captainId === card.id ? "bg-yellow-500 text-black" : "bg-muted text-muted-foreground hover:bg-yellow-500 hover:text-black"}`} onClick={(e) => { e.stopPropagation(); setCaptainId(card.id); }} title="Set as Captain">C</button>}</div>)}</div>
+          </div>}
+          <DialogFooter><Button variant="outline" onClick={() => setSelectedComp(null)}>Cancel</Button><Button onClick={() => selectedComp && captainId && joinMutation.mutate({ competitionId: selectedComp.id, cardIds: selectedCards, captainId })} disabled={!lineupValid || !captainId || joinMutation.isPending}>{joinMutation.isPending ? "Entering..." : selectedComp?.entryFee ? `Enter (N$${selectedComp.entryFee})` : "Enter Free"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       {showReward && unclaimedRewards.length > 0 && <RewardPopup rewards={unclaimedRewards} onClose={() => setShowReward(false)} />}
-
-      <Dialog open={viewTeamOpen} onOpenChange={setViewTeamOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-auto">
-          <DialogHeader><DialogTitle>{viewTeamData?.userName || "Manager"} Lineup • {Number(viewTeamData?.totalScore || 0).toFixed(1)} pts</DialogTitle></DialogHeader>
-          {viewTeamLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 py-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[260px] rounded-xl" />)}</div>
-          ) : (
-            <div className="py-2 space-y-3">
-              <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
-                <Badge variant="outline">Base: {Number(viewTeamData?.scoreBreakdown?.baseTotal || 0).toFixed(1)}</Badge>
-                <Badge variant="outline">Captain Bonus: +{Number(viewTeamData?.scoreBreakdown?.captainBonus || 0).toFixed(1)}</Badge>
-                <Badge variant="outline">Computed: {Number(viewTeamData?.scoreBreakdown?.computedTotal || 0).toFixed(1)}</Badge>
-                <Badge variant="outline">Stored: {Number(viewTeamData?.scoreBreakdown?.storedTotal || viewTeamData?.totalScore || 0).toFixed(1)}</Badge>
-              </div>
-              <div className="flex flex-wrap gap-4 justify-center">
-                {(viewTeamData?.cards || []).map((card: any) => (
-                  <div key={card.id} className="flex flex-col items-center gap-1 max-w-[180px]">
-                    <CardThumbnail card={card} size="sm" selected={viewTeamData?.captainId === card.id} />
-                    <Badge variant="outline" className="text-xs">{Number(card.points || 0).toFixed(1)} pts{viewTeamData?.captainId === card.id ? ` (C +${Number(card.captainBonus || 0).toFixed(1)})` : ""}</Badge>
-                    <div className="text-[10px] leading-tight text-muted-foreground text-center border rounded px-2 py-1 w-full">
-                      <div>D {Number(card?.pointsBreakdown?.decisive || 0).toFixed(1)} • P {Number(card?.pointsBreakdown?.performance || 0).toFixed(1)} • Pen {Number(card?.pointsBreakdown?.penalties || 0).toFixed(1)} • B {Number(card?.pointsBreakdown?.bonus || 0).toFixed(1)}</div>
-                      {(Array.isArray(card?.pointsExplanation) ? card.pointsExplanation : []).slice(0, 6).map((item: any, idx: number) => <div key={idx}>{item.label}: {item.value}</div>)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <Dialog open={viewTeamOpen} onOpenChange={setViewTeamOpen}><DialogContent className="max-w-4xl max-h-[80vh] overflow-auto"><DialogHeader><DialogTitle>{viewTeamData?.userName || "Manager"} Lineup • {Number(viewTeamData?.totalScore || 0).toFixed(1)} pts</DialogTitle></DialogHeader>{viewTeamLoading ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 py-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[260px] rounded-xl" />)}</div> : <div className="py-2 space-y-3"><div className="flex flex-wrap items-center justify-center gap-2 text-xs"><Badge variant="outline">Base: {Number(viewTeamData?.scoreBreakdown?.baseTotal || 0).toFixed(1)}</Badge><Badge variant="outline">Captain Bonus: +{Number(viewTeamData?.scoreBreakdown?.captainBonus || 0).toFixed(1)}</Badge><Badge variant="outline">Computed: {Number(viewTeamData?.scoreBreakdown?.computedTotal || 0).toFixed(1)}</Badge><Badge variant="outline">Stored: {Number(viewTeamData?.scoreBreakdown?.storedTotal || viewTeamData?.totalScore || 0).toFixed(1)}</Badge></div><div className="flex flex-wrap gap-4 justify-center">{(viewTeamData?.cards || []).map((card: any) => <div key={card.id} className="flex flex-col items-center gap-1 max-w-[180px]"><CardThumbnail card={card} size="sm" selected={viewTeamData?.captainId === card.id} /><Badge variant="outline" className="text-xs">{Number(card.points || 0).toFixed(1)} pts{viewTeamData?.captainId === card.id ? ` (C +${Number(card.captainBonus || 0).toFixed(1)})` : ""}</Badge><div className="text-[10px] leading-tight text-muted-foreground text-center border rounded px-2 py-1 w-full"><div>D {Number(card?.pointsBreakdown?.decisive || 0).toFixed(1)} • P {Number(card?.pointsBreakdown?.performance || 0).toFixed(1)} • Pen {Number(card?.pointsBreakdown?.penalties || 0).toFixed(1)} • B {Number(card?.pointsBreakdown?.bonus || 0).toFixed(1)}</div>{(Array.isArray(card?.pointsExplanation) ? card.pointsExplanation : []).slice(0, 6).map((item: any, idx: number) => <div key={idx}>{item.label}: {item.value}</div>)}</div></div>)}</div></div>}</DialogContent></Dialog>
     </div>
   );
 }
 
-function InfoPill({ label, value, helper }: { label: string; value: string; helper: string }) {
-  return (
-    <div className="rounded-2xl border bg-background/70 p-3">
-      <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
-      <div className="text-lg font-bold mt-1">{value}</div>
-      <div className="text-xs text-muted-foreground mt-1">{helper}</div>
-    </div>
-  );
-}
+function InfoPill({ label, value, helper }: { label: string; value: string; helper: string }) { return <div className="rounded-2xl border bg-background/70 p-3"><div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div><div className="text-lg font-bold mt-1">{value}</div><div className="text-xs text-muted-foreground mt-1">{helper}</div></div>; }
 
 function Leaderboard({ entries, canViewTeams, competitionId, onViewTeam }: { entries: EnrichedEntry[]; canViewTeams: boolean; competitionId: number; onViewTeam: (competitionId: number, entryId: number) => void }) {
   const [expanded, setExpanded] = useState(false);
   if (entries.length === 0) return null;
-
   const displayEntries = expanded ? entries : entries.slice(0, 5);
   const rankColors = ["text-yellow-500", "text-zinc-400", "text-amber-700"];
-
-  return (
-    <div className="mt-3 border-t border-border pt-3">
-      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-xs font-semibold text-muted-foreground mb-2 hover:text-foreground transition-colors w-full">
-        <Trophy className="w-3 h-3" />Leaderboard ({entries.length})
-        {entries.length > 5 && (expanded ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />)}
-      </button>
-      <div className="space-y-1">
-        {displayEntries.map((entry, idx) => (
-          <div key={entry.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs ${idx === 0 ? "bg-yellow-500/10" : idx < 3 ? "bg-muted/50" : ""}`}>
-            <span className={`font-bold w-5 text-center ${rankColors[idx] || "text-muted-foreground"}`}>{idx + 1}</span>
-            {entry.userImage ? <img src={entry.userImage} alt="" loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover" /> : <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">{entry.userName.charAt(0).toUpperCase()}</div>}
-            <span className="flex-1 truncate font-medium text-foreground">{canViewTeams ? <button className="truncate text-left hover:underline" onClick={() => onViewTeam(competitionId, entry.id)}>{entry.userName}</button> : entry.userName}</span>
-            <span className="font-mono font-bold text-foreground">{(entry.totalScore || 0).toFixed(1)}</span>
-            {idx === 0 && <Crown className="w-3 h-3 text-yellow-500" />}
-          </div>
-        ))}
-      </div>
-      {!expanded && entries.length > 5 && <button onClick={() => setExpanded(true)} className="text-xs text-primary hover:underline mt-1 w-full text-center">Show all {entries.length} entries</button>}
-    </div>
-  );
+  return <div className="mt-3 border-t border-border pt-3"><button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 text-xs font-semibold text-muted-foreground mb-2 hover:text-foreground transition-colors w-full"><Trophy className="w-3 h-3" />Leaderboard ({entries.length}){entries.length > 5 && (expanded ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />)}</button><div className="space-y-1">{displayEntries.map((entry, idx) => <div key={entry.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs ${idx === 0 ? "bg-yellow-500/10" : idx < 3 ? "bg-muted/50" : ""}`}><span className={`font-bold w-5 text-center ${rankColors[idx] || "text-muted-foreground"}`}>{idx + 1}</span>{entry.userImage ? <img src={entry.userImage} alt="" loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover" /> : <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">{entry.userName.charAt(0).toUpperCase()}</div>}<span className="flex-1 truncate font-medium text-foreground">{canViewTeams ? <button className="truncate text-left hover:underline" onClick={() => onViewTeam(competitionId, entry.id)}>{entry.userName}</button> : entry.userName}</span><span className="font-mono font-bold text-foreground">{(entry.totalScore || 0).toFixed(1)}</span>{idx === 0 && <Crown className="w-3 h-3 text-yellow-500" />}</div>)}</div>{!expanded && entries.length > 5 && <button onClick={() => setExpanded(true)} className="text-xs text-primary hover:underline mt-1 w-full text-center">Show all {entries.length} entries</button>}</div>;
 }
 
 function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam, myEntryId }: { comp: CompetitionWithEntries; onJoin: () => void; canViewTeams: boolean; onViewTeam: (competitionId: number, entryId: number) => void; myEntryId?: number }) {
@@ -400,49 +294,7 @@ function CompetitionCard({ comp, onJoin, canViewTeams, onViewTeam, myEntryId }: 
   const isActive = comp.status === "active";
   const hasMyEntry = Number.isFinite(Number(myEntryId));
   const submissionOpen = comp.entryOpen !== false;
-
   const ctaLabel = isOpen ? (submissionOpen ? (comp.entryFee > 0 ? `Enter (N$${comp.entryFee})` : "Enter Free") : "Submission Closed") : isActive ? (hasMyEntry ? "View My Live Lineup" : "Live (Entry Closed)") : comp.status === "upcoming" ? "Upcoming" : "Completed";
   const ctaDisabled = isOpen ? !submissionOpen : isActive ? !hasMyEntry : true;
-
-  return (
-    <Card className="p-5 hover:border-primary/50 transition-colors">
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <h3 className="font-bold text-lg text-foreground">{comp.name}</h3>
-          <p className="text-sm text-muted-foreground">Game Week {comp.gameWeek}</p>
-        </div>
-        <Badge variant={comp.status === "open" ? "default" : comp.status === "active" ? "secondary" : "outline"}>{comp.status === "open" ? "Open" : comp.status === "active" ? "Active" : comp.status === "upcoming" ? "Upcoming" : "Completed"}</Badge>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="flex items-center gap-2 text-sm"><DollarSign className="w-4 h-4 text-green-500" /><span className="text-muted-foreground">{comp.entryFee > 0 ? `N$${comp.entryFee} entry` : "Free entry"}</span></div>
-        <div className="flex items-center gap-2 text-sm"><Users className="w-4 h-4 text-blue-500" /><span className="text-muted-foreground">{comp.entryCount} entries</span></div>
-        <div className="flex items-center gap-2 text-sm"><Crown className="w-4 h-4 text-yellow-500" /><span className="text-muted-foreground">Prize: {comp.prizeCardRarity?.charAt(0).toUpperCase()}{comp.prizeCardRarity?.slice(1)} Card</span></div>
-        <div className="flex items-center gap-2 text-sm"><Clock className="w-4 h-4 text-orange-500" /><span className="text-muted-foreground">{daysLeft} days left</span></div>
-      </div>
-
-      <div className="mb-4 p-3 bg-muted/40 rounded-md text-xs text-muted-foreground">{String(comp.tier || "common").toLowerCase() === "common" ? "Common tournament: build with commons and try to win rare rewards." : `Tiered tournament: ${String(comp.tier || "common")} cards enter, premium rewards on the line.`}</div>
-
-      {comp.submissionClosesAt ? <div className="mb-3 text-xs text-muted-foreground">Submission closes: {new Date(comp.submissionClosesAt).toLocaleString()}</div> : null}
-
-      {comp.tier === "rare" && comp.entryCount > 0 && (
-        <div className="mb-4 p-2 bg-muted/50 rounded-md">
-          <p className="text-xs text-muted-foreground mb-1">Prize Pool: N${(comp.entryCount * comp.entryFee).toFixed(2)}</p>
-          <div className="flex gap-2 text-xs"><span className="text-yellow-500">1st: 60%</span><span className="text-zinc-400">2nd: 30%</span><span className="text-amber-700">3rd: 10%</span></div>
-        </div>
-      )}
-
-      {comp.status === "completed" && (
-        <div className="mb-4 p-3 bg-muted/40 rounded-md space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground">Winner & Rewards</p>
-          <div className="text-sm"><span className="font-semibold text-foreground">Winner:</span> <span className="text-foreground">{comp.winner?.userName || comp.entries?.[0]?.userName || "TBD"}</span>{(comp.winner?.totalScore ?? comp.entries?.[0]?.totalScore) !== undefined && <span className="text-muted-foreground"> • {Number((comp.winner?.totalScore ?? comp.entries?.[0]?.totalScore) || 0).toFixed(1)} pts</span>}</div>
-          <div className="flex flex-wrap gap-2 text-xs">{(Array.isArray(comp.entries) ? comp.entries : []).filter((entry) => Number(entry.prizeAmount || 0) > 0).slice(0, 3).map((entry, index) => <Badge key={entry.id} variant="outline">#{index + 1} {entry.userName}: N${Number(entry.prizeAmount || 0).toFixed(2)}</Badge>)}{comp.prizeCardRarity && <Badge variant="outline" className="text-green-500 border-green-500">Card Reward: {comp.prizeCardRarity.charAt(0).toUpperCase()}{comp.prizeCardRarity.slice(1)}</Badge>}</div>
-        </div>
-      )}
-
-      <Leaderboard entries={comp.entries} canViewTeams={canViewTeams} competitionId={comp.id} onViewTeam={onViewTeam} />
-
-      <Button className="w-full mt-4" onClick={onJoin} disabled={ctaDisabled}>{ctaLabel}</Button>
-    </Card>
-  );
+  return <Card className="p-5 hover:border-primary/50 transition-colors"><div className="flex items-start justify-between mb-3"><div><h3 className="font-bold text-lg text-foreground">{comp.name}</h3><p className="text-sm text-muted-foreground">Game Week {comp.gameWeek}</p></div><Badge variant={comp.status === "open" ? "default" : comp.status === "active" ? "secondary" : "outline"}>{comp.status === "open" ? "Open" : comp.status === "active" ? "Active" : comp.status === "upcoming" ? "Upcoming" : "Completed"}</Badge></div><div className="grid grid-cols-2 gap-3 mb-4"><div className="flex items-center gap-2 text-sm"><DollarSign className="w-4 h-4 text-green-500" /><span className="text-muted-foreground">{comp.entryFee > 0 ? `N$${comp.entryFee} entry` : "Free entry"}</span></div><div className="flex items-center gap-2 text-sm"><Users className="w-4 h-4 text-blue-500" /><span className="text-muted-foreground">{comp.entryCount} entries</span></div><div className="flex items-center gap-2 text-sm"><Crown className="w-4 h-4 text-yellow-500" /><span className="text-muted-foreground">Prize: {comp.prizeCardRarity?.charAt(0).toUpperCase()}{comp.prizeCardRarity?.slice(1)} Card</span></div><div className="flex items-center gap-2 text-sm"><Clock className="w-4 h-4 text-orange-500" /><span className="text-muted-foreground">{daysLeft} days left</span></div></div><div className="mb-4 p-3 bg-muted/40 rounded-md text-xs text-muted-foreground">{String(comp.tier || "common").toLowerCase() === "common" ? "Common tournament: build with commons and try to win rare rewards." : `Tiered tournament: ${String(comp.tier || "common")} cards enter, premium rewards on the line.`}</div>{comp.submissionClosesAt ? <div className="mb-3 text-xs text-muted-foreground">Submission closes: {new Date(comp.submissionClosesAt).toLocaleString()}</div> : null}{comp.tier === "rare" && comp.entryCount > 0 && <div className="mb-4 p-2 bg-muted/50 rounded-md"><p className="text-xs text-muted-foreground mb-1">Prize Pool: N${(comp.entryCount * comp.entryFee).toFixed(2)}</p><div className="flex gap-2 text-xs"><span className="text-yellow-500">1st: 60%</span><span className="text-zinc-400">2nd: 30%</span><span className="text-amber-700">3rd: 10%</span></div></div>}{comp.status === "completed" && <div className="mb-4 p-3 bg-muted/40 rounded-md space-y-2"><p className="text-xs font-semibold text-muted-foreground">Winner & Rewards</p><div className="text-sm"><span className="font-semibold text-foreground">Winner:</span> <span className="text-foreground">{comp.winner?.userName || comp.entries?.[0]?.userName || "TBD"}</span>{(comp.winner?.totalScore ?? comp.entries?.[0]?.totalScore) !== undefined && <span className="text-muted-foreground"> • {Number((comp.winner?.totalScore ?? comp.entries?.[0]?.totalScore) || 0).toFixed(1)} pts</span>}</div><div className="flex flex-wrap gap-2 text-xs">{(Array.isArray(comp.entries) ? comp.entries : []).filter((entry) => Number(entry.prizeAmount || 0) > 0).slice(0, 3).map((entry, index) => <Badge key={entry.id} variant="outline">#{index + 1} {entry.userName}: N${Number(entry.prizeAmount || 0).toFixed(2)}</Badge>)}{comp.prizeCardRarity && <Badge variant="outline" className="text-green-500 border-green-500">Card Reward: {comp.prizeCardRarity.charAt(0).toUpperCase()}{comp.prizeCardRarity.slice(1)}</Badge>}</div></div>}<Leaderboard entries={comp.entries} canViewTeams={canViewTeams} competitionId={comp.id} onViewTeam={onViewTeam} /><Button className="w-full mt-4" onClick={onJoin} disabled={ctaDisabled}>{ctaLabel}</Button></Card>;
 }
