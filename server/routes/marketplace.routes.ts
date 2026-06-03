@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import { auditLogs, playerCards, transactions, users, wallets } from "../../shared/schema.js";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../shared/card-economy.js";
+import { registerTournamentCreatorRoutes } from "./tournamentCreator.routes.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
@@ -199,6 +200,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
 
 export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplaceRoutesDeps) {
   const { requireAuth } = deps;
+  registerTournamentCreatorRoutes(app, { requireAuth });
 
   app.post("/api/user-tournaments/create", requireAuth, async (req: any, res) => {
     try {
