@@ -155,8 +155,10 @@ export default function TournamentCreatorHub() {
           const entries = n(tournament.entry_count ?? tournament.entryCount);
           const maxEntries = n(tournament.max_entries ?? tournament.maxEntries);
           const entryFee = n(tournament.entry_fee ?? tournament.entryFee);
-          const platformFee = n(tournament.platform_fee_total ?? tournament.platformFeeTotal || entryFee * 0.2 * entries);
-          const prizePool = n(tournament.prize_pool_total ?? tournament.prizePoolTotal || entryFee * 0.8 * entries);
+          const rawPlatformFee = tournament.platform_fee_total ?? tournament.platformFeeTotal;
+          const rawPrizePool = tournament.prize_pool_total ?? tournament.prizePoolTotal;
+          const platformFee = n(rawPlatformFee || entryFee * 0.2 * entries);
+          const prizePool = n(rawPrizePool || entryFee * 0.8 * entries);
           const link = inviteLink(pin);
           const isOpen = String(tournament.status || "") === "open";
 
