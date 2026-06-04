@@ -30,7 +30,7 @@ const DashboardPage = React.lazy(() => import("./pages/dashboard"));
 const AnalyticsPage = React.lazy(() => import("./pages/analytics"));
 const LiveLineupPage = React.lazy(() => import("./pages/live-lineup"));
 const CollectionPage = React.lazy(() => import("./pages/collection"));
-const MarketplacePage = React.lazy(() => import("./pages/marketplace"));
+const MarketplacePage = React.lazy(() => import("./pages/marketplace-v2"));
 const AuctionsPage = React.lazy(() => import("./pages/auctions"));
 const WalletPage = React.lazy(() => import("./pages/wallet"));
 const AccountPage = React.lazy(() => import("./pages/account"));
