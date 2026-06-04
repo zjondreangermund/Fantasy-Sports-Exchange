@@ -13,187 +13,50 @@ const TOURNAMENT_FEE_RATE = 0.2;
 const PIN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const TOURNAMENT_RARITIES = new Set(["common", "rare", "unique", "epic", "legendary"]);
 
-function toMoney(amount: unknown): number {
-  const value = Number(amount);
-  if (!Number.isFinite(value)) return 0;
-  return Math.round(value * 100) / 100;
-}
-
-function parseCardId(rawCardId: unknown): number {
-  if (typeof rawCardId === "number") return rawCardId;
-  const normalized = String(rawCardId ?? "").trim();
-  if (!normalized) return Number.NaN;
-  if (/^\d+$/.test(normalized)) return Number(normalized);
-  const match = normalized.match(/(\d+)/);
-  return match ? Number(match[1]) : Number.NaN;
-}
-
-function normalizePin(raw: unknown) {
-  return String(raw || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
-
-function randomPin(length = 6) {
-  let pin = "";
-  for (let i = 0; i < length; i += 1) pin += PIN_ALPHABET[Math.floor(Math.random() * PIN_ALPHABET.length)];
-  return pin;
-}
-
-async function generateUniqueTournamentPin() {
-  for (let i = 0; i < 25; i += 1) {
-    const pin = randomPin();
-    const existing = await db.execute(sql`select id from app.competitions where join_pin = ${pin} limit 1`);
-    const rows = Array.isArray((existing as any)?.rows) ? (existing as any).rows : [];
-    if (rows.length === 0) return pin;
-  }
-  throw new Error("Could not generate tournament PIN");
-}
-
-async function resolveCard(rawCardId: unknown, rawSerialId?: unknown) {
-  const cardId = parseCardId(rawCardId);
-  const serialId = String(rawSerialId ?? "").trim();
-
-  if (Number.isInteger(cardId) && cardId > 0) {
-    return { cardId, serialId };
-  }
-
-  if (serialId) {
-    const [card] = await db.select({ id: playerCards.id }).from(playerCards).where(eq(playerCards.serialId, serialId));
-    if (card?.id) return { cardId: Number(card.id), serialId };
-  }
-
-  return { cardId: Number.NaN, serialId };
-}
+function toMoney(amount: unknown): number { const value = Number(amount); if (!Number.isFinite(value)) return 0; return Math.round(value * 100) / 100; }
+function parseCardId(rawCardId: unknown): number { if (typeof rawCardId === "number") return rawCardId; const normalized = String(rawCardId ?? "").trim(); if (!normalized) return Number.NaN; if (/^\d+$/.test(normalized)) return Number(normalized); const match = normalized.match(/(\d+)/); return match ? Number(match[1]) : Number.NaN; }
+function normalizePin(raw: unknown) { return String(raw || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, ""); }
+function randomPin(length = 6) { let pin = ""; for (let i = 0; i < length; i += 1) pin += PIN_ALPHABET[Math.floor(Math.random() * PIN_ALPHABET.length)]; return pin; }
+async function generateUniqueTournamentPin() { for (let i = 0; i < 25; i += 1) { const pin = randomPin(); const existing = await db.execute(sql`select id from app.competitions where join_pin = ${pin} limit 1`); const rows = Array.isArray((existing as any)?.rows) ? (existing as any).rows : []; if (rows.length === 0) return pin; } throw new Error("Could not generate tournament PIN"); }
+async function resolveCard(rawCardId: unknown, rawSerialId?: unknown) { const cardId = parseCardId(rawCardId); const serialId = String(rawSerialId ?? "").trim(); if (Number.isInteger(cardId) && cardId > 0) return { cardId, serialId }; if (serialId) { const [card] = await db.select({ id: playerCards.id }).from(playerCards).where(eq(playerCards.serialId, serialId)); if (card?.id) return { cardId: Number(card.id), serialId }; } return { cardId: Number.NaN, serialId }; }
 
 async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, rawSerialId?: unknown) {
   const { cardId: resolvedCardId, serialId } = await resolveCard(rawCardId, rawSerialId);
-
-  if (!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) {
-    return { ok: false as const, status: 400, message: "Valid cardId required" };
-  }
-
+  if (!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) return { ok: false as const, status: 400, message: "Valid cardId required" };
   try {
     await db.transaction(async (tx) => {
       const [card] = await tx.select().from(playerCards).where(eq(playerCards.id, resolvedCardId)).for("update");
       if (!card) throw new Error("Card does not exist or was already sold");
       if (!card.forSale) throw new Error("Card is not for sale");
       if (!isMarketplaceTradableRarity(String(card.rarity))) throw new Error("Common cards cannot be traded");
-
-      const sellerId = String(card.ownerId || "");
-      const price = toMoney(card.price || 0);
+      const sellerId = String(card.ownerId || ""); const price = toMoney(card.price || 0);
       if (!sellerId) throw new Error("Card seller is invalid");
       if (sellerId === buyerId) throw new Error("Cannot buy your own card");
       if (price <= 0) throw new Error("Invalid price");
-
-      const floor = getMarketplaceFloorPrice(String(card.rarity));
-      if (floor > 0 && price < floor) throw new Error(`Below floor price (N$${floor})`);
-
+      const floor = getMarketplaceFloorPrice(String(card.rarity)); if (floor > 0 && price < floor) throw new Error(`Below floor price (N$${floor})`);
       const [buyerUser] = await tx.select().from(users).where(eq(users.id, buyerId));
       const [sellerUser] = await tx.select().from(users).where(eq(users.id, sellerId));
-      if (
-        buyerUser?.email &&
-        sellerUser?.email &&
-        String(buyerUser.email).trim().toLowerCase() === String(sellerUser.email).trim().toLowerCase()
-      ) {
-        throw new Error("Potential linked-account trade blocked");
-      }
-
-      const pairTx = await tx
-        .select()
-        .from(transactions)
-        .where(
-          and(
-            eq(transactions.type, BUY_TX_TYPE),
-            sql`${transactions.createdAt} >= now() - interval '7 days'`,
-            or(
-              sql`${transactions.description} ilike ${`%buyer:${buyerId}% seller:${sellerId}%`}`,
-              sql`${transactions.description} ilike ${`%buyer:${sellerId}% seller:${buyerId}%`}`,
-            ),
-          ),
-        )
-        .orderBy(desc(transactions.createdAt))
-        .limit(25);
-
+      if (buyerUser?.email && sellerUser?.email && String(buyerUser.email).trim().toLowerCase() === String(sellerUser.email).trim().toLowerCase()) throw new Error("Potential linked-account trade blocked");
+      const pairTx = await tx.select().from(transactions).where(and(eq(transactions.type, BUY_TX_TYPE), sql`${transactions.createdAt} >= now() - interval '7 days'`, or(sql`${transactions.description} ilike ${`%buyer:${buyerId}% seller:${sellerId}%`}`, sql`${transactions.description} ilike ${`%buyer:${sellerId}% seller:${buyerId}%`}`))).orderBy(desc(transactions.createdAt)).limit(25);
       const sameCardPairTx = pairTx.filter((row: any) => String(row.description || "").includes(`card:${resolvedCardId}`));
-      const excessivePairVolume = pairTx.length >= 6;
-      const repeatedSameCard = sameCardPairTx.length >= 2;
-
-      if (excessivePairVolume || repeatedSameCard) {
-        await tx.insert(auditLogs).values({
-          userId: buyerId,
-          action: "risk.wash_trade_blocked",
-          meta: { cardId: resolvedCardId, buyerId, sellerId, pairTrades7d: pairTx.length, sameCardPairTrades7d: sameCardPairTx.length },
-        } as any);
-        throw new Error("Trade blocked by anti-abuse controls");
-      }
-
-      const saleHistory = await tx
-        .select()
-        .from(transactions)
-        .where(and(eq(transactions.type, SALE_TX_TYPE), sql`${transactions.description} ilike ${`%card:${resolvedCardId}%`}`))
-        .orderBy(desc(transactions.createdAt))
-        .limit(5);
-
+      if (pairTx.length >= 6 || sameCardPairTx.length >= 2) { await tx.insert(auditLogs).values({ userId: buyerId, action: "risk.wash_trade_blocked", meta: { cardId: resolvedCardId, buyerId, sellerId, pairTrades7d: pairTx.length, sameCardPairTrades7d: sameCardPairTx.length } } as any); throw new Error("Trade blocked by anti-abuse controls"); }
+      const saleHistory = await tx.select().from(transactions).where(and(eq(transactions.type, SALE_TX_TYPE), sql`${transactions.description} ilike ${`%card:${resolvedCardId}%`}`)).orderBy(desc(transactions.createdAt)).limit(5);
       const lastSale = Number(saleHistory[0]?.grossAmount || saleHistory[0]?.amount || 0);
-      if (lastSale > 0 && price > lastSale * 3) {
-        await tx.insert(auditLogs).values({
-          userId: buyerId,
-          action: "risk.price_spike_trade",
-          meta: { cardId: resolvedCardId, buyerId, sellerId, listedPrice: price, lastSale },
-        } as any);
-      }
-
+      if (lastSale > 0 && price > lastSale * 3) await tx.insert(auditLogs).values({ userId: buyerId, action: "risk.price_spike_trade", meta: { cardId: resolvedCardId, buyerId, sellerId, listedPrice: price, lastSale } } as any);
       const [buyerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, buyerId)).for("update");
       if (!buyerWallet || toMoney(buyerWallet.balance || 0) < price) throw new Error("Insufficient balance");
-
-      const fee = toMoney(price * 0.08);
-      const sellerReceives = toMoney(price - fee);
-
+      const fee = toMoney(price * 0.08); const sellerReceives = toMoney(price - fee);
       await tx.update(wallets).set({ balance: sql`${wallets.balance} - ${price}` } as any).where(eq(wallets.userId, buyerId));
       await tx.update(wallets).set({ balance: sql`${wallets.balance} + ${sellerReceives}` } as any).where(eq(wallets.userId, sellerId));
       await tx.update(playerCards).set({ ownerId: buyerId, forSale: false, price: 0 } as any).where(eq(playerCards.id, resolvedCardId));
-
-      await tx.insert(transactions).values({
-        userId: buyerId,
-        type: BUY_TX_TYPE,
-        amount: -price,
-        grossAmount: price,
-        feeAmount: 0,
-        netAmount: -price,
-        sourceType: "marketplace_buy",
-        description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)}`,
-      } as any);
-
-      await tx.insert(transactions).values({
-        userId: sellerId,
-        type: SALE_TX_TYPE,
-        amount: sellerReceives,
-        grossAmount: price,
-        feeAmount: fee,
-        netAmount: sellerReceives,
-        sourceType: "marketplace_sale",
-        description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}`,
-      } as any);
-
-      await tx.insert(auditLogs).values({
-        userId: buyerId,
-        action: "marketplace.purchase.completed",
-        meta: { cardId: resolvedCardId, serialId, buyerId, sellerId, price, fee, sellerReceives },
-      } as any);
+      await tx.insert(transactions).values({ userId: buyerId, type: BUY_TX_TYPE, amount: -price, grossAmount: price, feeAmount: 0, netAmount: -price, sourceType: "marketplace_buy", description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)}` } as any);
+      await tx.insert(transactions).values({ userId: sellerId, type: SALE_TX_TYPE, amount: sellerReceives, grossAmount: price, feeAmount: fee, netAmount: sellerReceives, sourceType: "marketplace_sale", description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}` } as any);
+      await tx.insert(auditLogs).values({ userId: buyerId, action: "marketplace.purchase.completed", meta: { cardId: resolvedCardId, serialId, buyerId, sellerId, price, fee, sellerReceives } } as any);
     });
-
     return { ok: true as const, cardId: resolvedCardId };
   } catch (error: any) {
-    const message = String(error?.message || "Failed to buy card");
-    const status = message.includes("not found") || message.includes("does not exist") ? 404 : 400;
-    try {
-      await db.insert(auditLogs).values({
-        userId: buyerId,
-        action: "marketplace.purchase.failed",
-        meta: { cardId: resolvedCardId, serialId, message },
-      } as any);
-    } catch (auditError) {
-      console.error("Failed to write marketplace purchase failure audit:", auditError);
-    }
+    const message = String(error?.message || "Failed to buy card"); const status = message.includes("not found") || message.includes("does not exist") ? 404 : 400;
+    try { await db.insert(auditLogs).values({ userId: buyerId, action: "marketplace.purchase.failed", meta: { cardId: resolvedCardId, serialId, message } } as any); } catch (auditError) { console.error("Failed to write marketplace purchase failure audit:", auditError); }
     return { ok: false as const, status, message };
   }
 }
@@ -204,258 +67,62 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
 
   app.post("/api/user-tournaments/create", requireAuth, async (req: any, res) => {
     try {
-      const userId = String(req.authUserId || "");
-      const name = String(req.body?.name || "").trim().slice(0, 80);
-      const tier = String(req.body?.tier || "common").toLowerCase().trim();
-      const entryFee = toMoney(req.body?.entryFee);
-      const maxEntriesRaw = Number(req.body?.maxEntries || 0);
-      const maxEntries = Number.isInteger(maxEntriesRaw) && maxEntriesRaw > 1 ? Math.min(maxEntriesRaw, 500) : null;
+      const userId = String(req.authUserId || ""); const name = String(req.body?.name || "").trim().slice(0, 80); const tier = String(req.body?.tier || "common").toLowerCase().trim(); const entryFee = toMoney(req.body?.entryFee);
+      const maxEntriesRaw = Number(req.body?.maxEntries || 0); const maxEntries = Number.isInteger(maxEntriesRaw) && maxEntriesRaw > 1 ? Math.min(maxEntriesRaw, 500) : null;
       const visibility = String(req.body?.visibility || "private").toLowerCase() === "public" ? "public" : "private";
       const gameWeek = Number.isInteger(Number(req.body?.gameWeek)) && Number(req.body?.gameWeek) > 0 ? Number(req.body?.gameWeek) : 1;
-      const startDate = req.body?.startDate ? new Date(String(req.body.startDate)) : new Date();
-      const endDate = req.body?.endDate ? new Date(String(req.body.endDate)) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      if (!name) return res.status(400).json({ message: "Tournament name required" });
-      if (!TOURNAMENT_RARITIES.has(tier)) return res.status(400).json({ message: "Invalid rarity tier" });
-      if (entryFee < 0) return res.status(400).json({ message: "Entry fee cannot be negative" });
-      if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()) || endDate <= startDate) return res.status(400).json({ message: "Valid start and end dates required" });
-      const pin = visibility === "private" ? await generateUniqueTournamentPin() : null;
-      const prizeRarity = tier === "common" ? "rare" : tier;
-      const result = await db.execute(sql`
-        insert into app.competitions (name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity, created_by_user_id, join_pin, visibility, max_entries, platform_fee_rate, platform_fee_total, prize_pool_total)
-        values (${name}, ${tier}, ${entryFee}, 'open', ${gameWeek}, ${startDate}, ${endDate}, ${prizeRarity}, ${userId}, ${pin}, ${visibility}, ${maxEntries}, ${TOURNAMENT_FEE_RATE}, 0, 0)
-        returning *
-      `);
-      const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : [];
-      return res.json({ success: true, tournament: rows[0] || null, pin });
-    } catch (error: any) {
-      console.error("Failed to create user tournament:", error);
-      return res.status(500).json({ message: error?.message || "Failed to create tournament" });
-    }
+      const startDate = req.body?.startDate ? new Date(String(req.body.startDate)) : new Date(); const endDate = req.body?.endDate ? new Date(String(req.body.endDate)) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      if (!name) return res.status(400).json({ message: "Tournament name required" }); if (!TOURNAMENT_RARITIES.has(tier)) return res.status(400).json({ message: "Invalid rarity tier" }); if (entryFee < 0) return res.status(400).json({ message: "Entry fee cannot be negative" }); if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()) || endDate <= startDate) return res.status(400).json({ message: "Valid start and end dates required" });
+      const pin = visibility === "private" ? await generateUniqueTournamentPin() : null; const prizeRarity = tier === "common" ? "rare" : tier;
+      const result = await db.execute(sql`insert into app.competitions (name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity, created_by_user_id, join_pin, visibility, max_entries, platform_fee_rate, platform_fee_total, prize_pool_total) values (${name}, ${tier}, ${entryFee}, 'open', ${gameWeek}, ${startDate}, ${endDate}, ${prizeRarity}, ${userId}, ${pin}, ${visibility}, ${maxEntries}, ${TOURNAMENT_FEE_RATE}, 0, 0) returning *`);
+      const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : []; return res.json({ success: true, tournament: rows[0] || null, pin });
+    } catch (error: any) { console.error("Failed to create user tournament:", error); return res.status(500).json({ message: error?.message || "Failed to create tournament" }); }
   });
 
   app.get("/api/user-tournaments/pin/:pin", requireAuth, async (req: any, res) => {
-    try {
-      const pin = normalizePin(req.params.pin);
-      if (!pin) return res.status(400).json({ message: "PIN required" });
-      const result = await db.execute(sql`
-        select c.*, count(ce.id)::int as entry_count
-        from app.competitions c
-        left join app.competition_entries ce on ce.competition_id = c.id
-        where c.join_pin = ${pin}
-        group by c.id
-        limit 1
-      `);
-      const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : [];
-      if (!rows[0]) return res.status(404).json({ message: "Tournament PIN not found" });
-      return res.json({ tournament: rows[0] });
-    } catch (error: any) {
-      console.error("Failed to find tournament PIN:", error);
-      return res.status(500).json({ message: error?.message || "Failed to find tournament" });
-    }
+    try { const pin = normalizePin(req.params.pin); if (!pin) return res.status(400).json({ message: "PIN required" }); const result = await db.execute(sql`select c.*, count(ce.id)::int as entry_count from app.competitions c left join app.competition_entries ce on ce.competition_id = c.id where c.join_pin = ${pin} group by c.id limit 1`); const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : []; if (!rows[0]) return res.status(404).json({ message: "Tournament PIN not found" }); return res.json({ tournament: rows[0] }); } catch (error: any) { console.error("Failed to find tournament PIN:", error); return res.status(500).json({ message: error?.message || "Failed to find tournament" }); }
   });
 
   app.get("/api/competitions/:id/leaderboard", requireAuth, async (req: any, res) => {
-    try {
-      const competitionId = Number(req.params.id);
-      if (!Number.isInteger(competitionId) || competitionId <= 0) return res.status(400).json({ message: "Valid competition ID required" });
-      const viewerId = String(req.authUserId || "");
-      const result = await db.execute(sql`
-        with ranked as (
-          select
-            ce.id as "entryId",
-            ce.user_id as "userId",
-            coalesce(u.manager_team_name, u.name, u.email, 'Manager') as "teamName",
-            coalesce(ce.total_score, 0)::float as "totalScore",
-            ce.lineup_card_ids as "lineupCardIds",
-            ce.captain_id as "captainId",
-            ce.joined_at as "joinedAt",
-            rank() over (order by coalesce(ce.total_score, 0) desc, ce.joined_at asc, ce.id asc) as rank
-          from app.competition_entries ce
-          left join app.users u on u.id = ce.user_id
-          where ce.competition_id = ${competitionId}
-        )
-        select * from ranked order by rank asc, "entryId" asc
-      `);
-      const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : [];
-      const leaderScore = Number(rows[0]?.totalScore || 0);
-      const leaderboard = rows.map((row: any) => {
-        const score = Number(row.totalScore || 0);
-        return {
-          ...row,
-          rank: Number(row.rank || 0),
-          totalScore: score,
-          behindLeader: Math.max(0, leaderScore - score),
-          isViewer: String(row.userId || "") === viewerId,
-          prizePosition: Number(row.rank || 0) === 1,
-        };
-      });
-      const viewerEntry = leaderboard.find((row: any) => row.isViewer) || null;
-      return res.json({ competitionId, leaderboard, topThree: leaderboard.slice(0, 3), viewerEntry, entryCount: leaderboard.length });
-    } catch (error: any) {
-      console.error("Failed to fetch competition leaderboard:", error);
-      return res.status(500).json({ message: error?.message || "Failed to fetch leaderboard" });
-    }
+    try { const competitionId = Number(req.params.id); if (!Number.isInteger(competitionId) || competitionId <= 0) return res.status(400).json({ message: "Valid competition ID required" }); const viewerId = String(req.authUserId || ""); const result = await db.execute(sql`with ranked as (select ce.id as "entryId", ce.user_id as "userId", coalesce(u.manager_team_name, u.name, u.email, 'Manager') as "teamName", coalesce(ce.total_score, 0)::float as "totalScore", ce.lineup_card_ids as "lineupCardIds", ce.captain_id as "captainId", ce.joined_at as "joinedAt", rank() over (order by coalesce(ce.total_score, 0) desc, ce.joined_at asc, ce.id asc) as rank from app.competition_entries ce left join app.users u on u.id = ce.user_id where ce.competition_id = ${competitionId}) select * from ranked order by rank asc, "entryId" asc`); const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : []; const leaderScore = Number(rows[0]?.totalScore || 0); const leaderboard = rows.map((row: any) => { const score = Number(row.totalScore || 0); return { ...row, rank: Number(row.rank || 0), totalScore: score, behindLeader: Math.max(0, leaderScore - score), isViewer: String(row.userId || "") === viewerId, prizePosition: Number(row.rank || 0) === 1 }; }); const viewerEntry = leaderboard.find((row: any) => row.isViewer) || null; return res.json({ competitionId, leaderboard, topThree: leaderboard.slice(0, 3), viewerEntry, entryCount: leaderboard.length }); } catch (error: any) { console.error("Failed to fetch competition leaderboard:", error); return res.status(500).json({ message: error?.message || "Failed to fetch leaderboard" }); }
   });
 
   app.post("/api/user-tournaments/join-pin", requireAuth, async (req: any, res) => {
     try {
-      const userId = String(req.authUserId || "");
-      const pin = normalizePin(req.body?.pin);
-      const cardIds = Array.isArray(req.body?.cardIds) ? req.body.cardIds.map((id: unknown) => Number(id)).filter((id: number) => Number.isInteger(id) && id > 0).slice(0, 5) : [];
-      const captainId = Number(req.body?.captainId || cardIds[0] || 0);
-      if (!pin) return res.status(400).json({ message: "PIN required" });
-      if (cardIds.length !== 5) return res.status(400).json({ message: "Select exactly 5 cards" });
-      if (!cardIds.includes(captainId)) return res.status(400).json({ message: "Captain must be in selected lineup" });
+      const userId = String(req.authUserId || ""); const pin = normalizePin(req.body?.pin); const cardIds = Array.isArray(req.body?.cardIds) ? req.body.cardIds.map((id: unknown) => Number(id)).filter((id: number) => Number.isInteger(id) && id > 0).slice(0, 5) : []; const captainId = Number(req.body?.captainId || cardIds[0] || 0);
+      if (!pin) return res.status(400).json({ message: "PIN required" }); if (cardIds.length !== 5) return res.status(400).json({ message: "Select exactly 5 cards" }); if (!cardIds.includes(captainId)) return res.status(400).json({ message: "Captain must be in selected lineup" });
       let joined: any = null;
       await db.transaction(async (tx) => {
-        const tournamentResult = await tx.execute(sql`
-          select c.*, count(ce.id)::int as entry_count
-          from app.competitions c
-          left join app.competition_entries ce on ce.competition_id = c.id
-          where c.join_pin = ${pin}
-          group by c.id
-          limit 1
-        `);
+        const tournamentResult = await tx.execute(sql`select c.*, count(ce.id)::int as entry_count from app.competitions c left join app.competition_entries ce on ce.competition_id = c.id where c.join_pin = ${pin} group by c.id limit 1`);
         const tournament = (Array.isArray((tournamentResult as any)?.rows) ? (tournamentResult as any).rows : [])[0];
-        if (!tournament) throw new Error("Tournament PIN not found");
-        if (String(tournament.status || "") !== "open") throw new Error("Tournament is not open");
-        if (tournament.max_entries && Number(tournament.entry_count || 0) >= Number(tournament.max_entries)) throw new Error("Tournament is full");
+        if (!tournament) throw new Error("Tournament PIN not found"); if (String(tournament.status || "") !== "open") throw new Error("Tournament is not open"); if (tournament.max_entries && Number(tournament.entry_count || 0) >= Number(tournament.max_entries)) throw new Error("Tournament is full");
         const duplicate = await tx.execute(sql`select id from app.competition_entries where competition_id = ${Number(tournament.id)} and user_id = ${userId} limit 1`);
         if ((Array.isArray((duplicate as any)?.rows) ? (duplicate as any).rows : []).length > 0) throw new Error("You already entered this tournament");
-        const cardsResult = await tx.execute(sql`
-          select id, rarity, owner_id, for_sale
-          from app.player_cards
-          where id = any(${cardIds}::int[])
-          for update
-        `);
+        const cardIdJson = JSON.stringify(cardIds);
+        const cardsResult = await tx.execute(sql`select id, rarity, owner_id, for_sale from app.player_cards where id in (select value::int from jsonb_array_elements_text(${cardIdJson}::jsonb)) for update`);
         const cards = Array.isArray((cardsResult as any)?.rows) ? (cardsResult as any).rows : [];
         if (cards.length !== 5) throw new Error("One or more cards were not found");
         const tier = String(tournament.tier || "common").toLowerCase();
-        for (const card of cards) {
-          if (String(card.owner_id || "") !== userId) throw new Error("You can only enter cards you own");
-          if (card.for_sale) throw new Error("Listed cards cannot enter tournaments");
-          if (String(card.rarity || "common").toLowerCase() !== tier) throw new Error(`This tournament requires ${tier} cards only`);
-        }
-        const entryFee = toMoney(tournament.entry_fee || 0);
-        const fee = toMoney(entryFee * TOURNAMENT_FEE_RATE);
-        const prizePool = toMoney(entryFee - fee);
-        if (entryFee > 0) {
-          const walletResult = await tx.execute(sql`update app.wallets set balance = balance - ${entryFee} where user_id = ${userId} and balance >= ${entryFee} returning *`);
-          if ((Array.isArray((walletResult as any)?.rows) ? (walletResult as any).rows : []).length === 0) throw new Error("Insufficient balance");
-          await tx.insert(transactions).values({
-            userId,
-            type: "entry_fee" as any,
-            amount: -entryFee,
-            grossAmount: entryFee,
-            feeAmount: fee,
-            netAmount: -entryFee,
-            sourceType: "user_tournament_entry",
-            description: `PIN tournament ${pin} entry competition:${tournament.id} platform_fee:${fee.toFixed(2)} prize_pool:${prizePool.toFixed(2)}`,
-          } as any);
-        }
-        const entryResult = await tx.execute(sql`
-          insert into app.competition_entries (competition_id, user_id, lineup_card_ids, captain_id, total_score)
-          values (${Number(tournament.id)}, ${userId}, ${JSON.stringify(cardIds)}::jsonb, ${captainId}, 0)
-          returning *
-        `);
-        await tx.execute(sql`
-          update app.competitions
-          set platform_fee_total = coalesce(platform_fee_total, 0) + ${fee},
-              prize_pool_total = coalesce(prize_pool_total, 0) + ${prizePool}
-          where id = ${Number(tournament.id)}
-        `);
+        for (const card of cards) { if (String(card.owner_id || "") !== userId) throw new Error("You can only enter cards you own"); if (card.for_sale) throw new Error("Listed cards cannot enter tournaments"); if (String(card.rarity || "common").toLowerCase() !== tier) throw new Error(`This tournament requires ${tier} cards only`); }
+        const entryFee = toMoney(tournament.entry_fee || 0); const fee = toMoney(entryFee * TOURNAMENT_FEE_RATE); const prizePool = toMoney(entryFee - fee);
+        if (entryFee > 0) { const walletResult = await tx.execute(sql`update app.wallets set balance = balance - ${entryFee} where user_id = ${userId} and balance >= ${entryFee} returning *`); if ((Array.isArray((walletResult as any)?.rows) ? (walletResult as any).rows : []).length === 0) throw new Error("Insufficient balance"); await tx.insert(transactions).values({ userId, type: "entry_fee" as any, amount: -entryFee, grossAmount: entryFee, feeAmount: fee, netAmount: -entryFee, sourceType: "user_tournament_entry", description: `PIN tournament ${pin} entry competition:${tournament.id} platform_fee:${fee.toFixed(2)} prize_pool:${prizePool.toFixed(2)}` } as any); }
+        const entryResult = await tx.execute(sql`insert into app.competition_entries (competition_id, user_id, lineup_card_ids, captain_id, total_score) values (${Number(tournament.id)}, ${userId}, ${JSON.stringify(cardIds)}::jsonb, ${captainId}, 0) returning *`);
+        await tx.execute(sql`update app.competitions set platform_fee_total = coalesce(platform_fee_total, 0) + ${fee}, prize_pool_total = coalesce(prize_pool_total, 0) + ${prizePool} where id = ${Number(tournament.id)}`);
         joined = (Array.isArray((entryResult as any)?.rows) ? (entryResult as any).rows : [])[0] || null;
       });
       return res.json({ success: true, entry: joined });
-    } catch (error: any) {
-      console.error("Failed to join PIN tournament:", error);
-      const message = String(error?.message || "Failed to join tournament");
-      return res.status(message.includes("not found") ? 404 : 400).json({ message });
-    }
+    } catch (error: any) { console.error("Failed to join PIN tournament:", error); const message = String(error?.message || "Failed to join tournament"); return res.status(message.includes("not found") ? 404 : 400).json({ message }); }
   });
 
   app.post("/api/marketplace/list", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const { cardId, price } = req.body || {};
-      const parsedCardId = Number(cardId);
-      const parsedPrice = Number(price);
-
-      if (!Number.isInteger(parsedCardId) || parsedCardId <= 0 || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
-        return res.status(400).json({ message: "Valid cardId and positive price required" });
-      }
-
-      const card = await db.select().from(playerCards).where(eq(playerCards.id, parsedCardId)).then((rows) => rows[0]);
-      if (!card) return res.status(404).json({ message: "Card not found" });
-      if (String(card.ownerId || "") !== String(userId)) return res.status(403).json({ message: "You don't own this card" });
-      if (card.forSale) return res.status(400).json({ message: "Card is already listed for sale" });
-      if (!isMarketplaceTradableRarity(String(card.rarity))) {
-        return res.status(400).json({ message: "Common cards are tournament-only and cannot be traded" });
-      }
-
-      const floor = getMarketplaceFloorPrice(String(card.rarity));
-      if (floor > 0 && parsedPrice < floor) {
-        return res.status(400).json({ message: `Price below minimum floor of N$${floor}` });
-      }
-
-      await db.update(playerCards).set({ forSale: true, price: parsedPrice } as any).where(eq(playerCards.id, parsedCardId));
-      try {
-        await db.insert(auditLogs).values({
-          userId,
-          action: "marketplace.listing.created",
-          meta: { cardId: parsedCardId, price: parsedPrice, rarity: card.rarity, floor },
-        } as any);
-      } catch (auditError) {
-        console.error("Failed to write marketplace listing audit:", auditError);
-      }
-      return res.json({ success: true, message: "Card listed for sale", cardId: parsedCardId, price: parsedPrice, floor });
-    } catch (error: any) {
-      console.error("Marketplace list override failed:", error);
-      return res.status(500).json({ message: error?.message || "Failed to list card" });
-    }
+    try { const userId = req.authUserId; const { cardId, price } = req.body || {}; const parsedCardId = Number(cardId); const parsedPrice = Number(price); if (!Number.isInteger(parsedCardId) || parsedCardId <= 0 || !Number.isFinite(parsedPrice) || parsedPrice <= 0) return res.status(400).json({ message: "Valid cardId and positive price required" }); const card = await db.select().from(playerCards).where(eq(playerCards.id, parsedCardId)).then((rows) => rows[0]); if (!card) return res.status(404).json({ message: "Card not found" }); if (String(card.ownerId || "") !== String(userId)) return res.status(403).json({ message: "You don't own this card" }); if (card.forSale) return res.status(400).json({ message: "Card is already listed for sale" }); if (!isMarketplaceTradableRarity(String(card.rarity))) return res.status(400).json({ message: "Common cards are tournament-only and cannot be traded" }); const floor = getMarketplaceFloorPrice(String(card.rarity)); if (floor > 0 && parsedPrice < floor) return res.status(400).json({ message: `Price below minimum floor of N$${floor}` }); await db.update(playerCards).set({ forSale: true, price: parsedPrice } as any).where(eq(playerCards.id, parsedCardId)); try { await db.insert(auditLogs).values({ userId, action: "marketplace.listing.created", meta: { cardId: parsedCardId, price: parsedPrice, rarity: card.rarity, floor } } as any); } catch (auditError) { console.error("Failed to write marketplace listing audit:", auditError); } return res.json({ success: true, message: "Card listed for sale", cardId: parsedCardId, price: parsedPrice, floor }); } catch (error: any) { console.error("Marketplace list override failed:", error); return res.status(500).json({ message: error?.message || "Failed to list card" }); }
   });
 
   app.post("/api/marketplace/cancel/:cardId", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const cardId = Number(req.params.cardId);
-      if (!Number.isInteger(cardId) || cardId <= 0) return res.status(400).json({ message: "Valid cardId required" });
-
-      const [card] = await db.select().from(playerCards).where(eq(playerCards.id, cardId));
-      if (!card) return res.status(404).json({ message: "Card not found" });
-      if (String(card.ownerId || "") !== String(userId)) return res.status(403).json({ message: "Not your card" });
-
-      await db.update(playerCards).set({ forSale: false, price: 0 } as any).where(eq(playerCards.id, cardId));
-      try {
-        await db.insert(auditLogs).values({
-          userId,
-          action: "marketplace.listing.cancelled",
-          meta: { cardId, previousPrice: card.price || 0 },
-        } as any);
-      } catch (auditError) {
-        console.error("Failed to write marketplace cancellation audit:", auditError);
-      }
-      return res.json({ success: true, cardId });
-    } catch (error: any) {
-      console.error("Cancel marketplace listing failed:", error);
-      return res.status(500).json({ message: error?.message || "Failed to cancel listing" });
-    }
+    try { const userId = req.authUserId; const cardId = Number(req.params.cardId); if (!Number.isInteger(cardId) || cardId <= 0) return res.status(400).json({ message: "Valid cardId required" }); const [card] = await db.select().from(playerCards).where(eq(playerCards.id, cardId)); if (!card) return res.status(404).json({ message: "Card not found" }); if (String(card.ownerId || "") !== String(userId)) return res.status(403).json({ message: "Not your card" }); await db.update(playerCards).set({ forSale: false, price: 0 } as any).where(eq(playerCards.id, cardId)); try { await db.insert(auditLogs).values({ userId, action: "marketplace.listing.cancelled", meta: { cardId, previousPrice: card.price || 0 } } as any); } catch (auditError) { console.error("Failed to write marketplace cancellation audit:", auditError); } return res.json({ success: true, cardId }); } catch (error: any) { console.error("Cancel marketplace listing failed:", error); return res.status(500).json({ message: error?.message || "Failed to cancel listing" }); }
   });
 
-  app.post("/api/marketplace/sell", requireAuth, async (req: any, res) => {
-    req.body = { ...(req.body || {}), cardId: req.body?.cardId, price: req.body?.price };
-    return (app as any)._router.handle({ ...req, method: "POST", url: "/api/marketplace/list" }, res, () => undefined);
-  });
-
-  app.post("/api/marketplace/buy/:cardId", requireAuth, async (req: any, res) => {
-    const result = await processMarketplacePurchase(req.authUserId, req.params.cardId, req.body?.serialId);
-    if (!result.ok) return res.status(result.status).json({ message: result.message });
-    return res.json({ success: true, cardId: result.cardId });
-  });
-
-  app.post("/api/marketplace/buy", requireAuth, async (req: any, res) => {
-    const result = await processMarketplacePurchase(req.authUserId, req.body?.cardId, req.body?.serialId);
-    if (!result.ok) return res.status(result.status).json({ message: result.message });
-    return res.json({ success: true, cardId: result.cardId });
-  });
+  app.post("/api/marketplace/sell", requireAuth, async (req: any, res) => { req.body = { ...(req.body || {}), cardId: req.body?.cardId, price: req.body?.price }; return (app as any)._router.handle({ ...req, method: "POST", url: "/api/marketplace/list" }, res, () => undefined); });
+  app.post("/api/marketplace/buy/:cardId", requireAuth, async (req: any, res) => { const result = await processMarketplacePurchase(req.authUserId, req.params.cardId, req.body?.serialId); if (!result.ok) return res.status(result.status).json({ message: result.message }); return res.json({ success: true, cardId: result.cardId }); });
+  app.post("/api/marketplace/buy", requireAuth, async (req: any, res) => { const result = await processMarketplacePurchase(req.authUserId, req.body?.cardId, req.body?.serialId); if (!result.ok) return res.status(result.status).json({ message: result.message }); return res.json({ success: true, cardId: result.cardId }); });
 }
