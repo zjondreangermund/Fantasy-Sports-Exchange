@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "../hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
@@ -11,6 +12,7 @@ import {
   SidebarMenuItem,
   SidebarFooter,
   SidebarHeader,
+  useSidebar,
 } from "./ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
@@ -60,6 +62,15 @@ function isActivePath(location: string, href: string) {
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  useEffect(() => {
+    if (isMobile) setOpenMobile(false);
+  }, [isMobile, location, setOpenMobile]);
+
+  const closeMobileDrawer = () => {
+    if (isMobile) setOpenMobile(false);
+  };
 
   const { data: adminCheck } = useQuery<{ isAdmin: boolean }>({
     queryKey: ["/api/admin/check"],
@@ -73,7 +84,7 @@ export function AppSidebar() {
     <Sidebar className="border-r border-slate-800/80 bg-[#050812] text-slate-300">
       <SidebarHeader className="border-b border-slate-800/80 p-4">
         <Link href="/">
-          <div className="group flex cursor-pointer items-center gap-3" data-testid="link-home">
+          <div className="group flex cursor-pointer items-center gap-3" data-testid="link-home" onClick={closeMobileDrawer}>
             <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/30 bg-gradient-to-br from-cyan-400 via-blue-600 to-slate-950 shadow-[0_0_28px_rgba(59,130,246,0.28)]">
               <Target className="relative z-10 h-5 w-5 text-white" />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.55),transparent_35%)]" />
@@ -104,6 +115,7 @@ export function AppSidebar() {
                           <Link
                             href={item.href}
                             data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                            onClick={closeMobileDrawer}
                             className={[
                               "group flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm font-semibold transition-all",
                               active
@@ -145,6 +157,7 @@ export function AppSidebar() {
           size="sm"
           className="w-full justify-start rounded-xl text-slate-400 hover:bg-red-500/10 hover:text-red-200"
           onClick={async () => {
+            closeMobileDrawer();
             await Promise.resolve(logout());
             window.location.assign("/");
           }}
