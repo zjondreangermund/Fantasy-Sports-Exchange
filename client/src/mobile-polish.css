@@ -1,0 +1,148 @@
+/* Mobile polish layer: fixes overflow, cramped tabs, heavy lights and bottom dock overlap */
+@media (max-width: 767px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  * {
+    min-width: 0;
+  }
+
+  main {
+    overscroll-behavior-y: contain;
+  }
+
+  /* Reduce background intensity on mobile so text stays readable */
+  main [aria-hidden="true"] {
+    opacity: 0.62;
+  }
+
+  /* Make page sections breathe on small screens */
+  main > div,
+  main section,
+  main [class*="LivePageShell"],
+  .cinematic-glass {
+    max-width: 100%;
+  }
+
+  /* Mobile hero/stat cards should stack neatly */
+  [class*="LiveHero"] {
+    border-radius: 1.35rem !important;
+  }
+
+  /* Tournament tabs: horizontal swipe instead of broken wrapping */
+  [role="tablist"] {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap !important;
+    justify-content: flex-start !important;
+    gap: 0.45rem !important;
+    padding-bottom: 0.35rem !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  [role="tablist"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [role="tab"] {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    min-height: 2.45rem;
+    font-size: 0.9rem;
+  }
+
+  /* Prevent tournament/event cards from overflowing */
+  [class*="grid"] > .cinematic-glass,
+  .cinematic-glass,
+  [data-radix-tabs-content] .rounded-2xl,
+  [data-radix-tabs-content] .rounded-xl {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* Force stat boxes inside tournament cards to a clean single column if cramped */
+  [data-radix-tabs-content] .grid.grid-cols-2,
+  [data-radix-tabs-content] .grid.sm\:grid-cols-3,
+  [data-radix-tabs-content] .grid.md\:grid-cols-2 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* But keep compact small filter/stat rows usable when they are clearly button rows */
+  [data-radix-tabs-content] .grid.grid-cols-2:has(button),
+  [data-radix-tabs-content] .grid.sm\:grid-cols-2:has(button) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Dialogs and tournament lineup modal */
+  [role="dialog"] {
+    width: calc(100vw - 1rem) !important;
+    max-width: calc(100vw - 1rem) !important;
+    max-height: calc(100vh - 1rem) !important;
+    border-radius: 1rem !important;
+  }
+
+  [role="dialog"] [class*="max-h-96"],
+  [role="dialog"] .overflow-auto {
+    max-height: 58vh !important;
+  }
+
+  [role="dialog"] .card-3d-container,
+  [role="dialog"] [style*="preserve-3d"] {
+    transform: scale(0.92);
+    transform-origin: top center;
+  }
+
+  /* Marketplace/collection rows and cards */
+  .card-shell:hover,
+  .realistic-hover-lift:hover {
+    transform: none !important;
+  }
+
+  /* Make card galleries swipe instead of forcing huge vertical/horizontal overflow */
+  .preserve-3d,
+  [style*="preserve-3d"] {
+    max-width: 100%;
+  }
+
+  /* Bottom nav should not cover page CTAs */
+  main {
+    padding-bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Floating help button smaller and above dock */
+  .arena-support-floating,
+  .fixed.bottom-20.right-3 {
+    bottom: calc(5.9rem + env(safe-area-inset-bottom, 0px)) !important;
+    right: 0.75rem !important;
+  }
+
+  .arena-support-floating button,
+  .fixed.bottom-20.right-3 > button {
+    width: 2.45rem !important;
+    height: 2.45rem !important;
+  }
+
+  /* Toasts should not sit behind bottom nav */
+  [data-sonner-toaster],
+  [data-radix-toast-viewport] {
+    bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Top live pulse dock/header: allow wrapping with less visual crush */
+  header + * {
+    max-width: 100vw;
+  }
+
+  /* Better buttons on mobile */
+  button,
+  a[role="button"] {
+    touch-action: manipulation;
+  }
+}
