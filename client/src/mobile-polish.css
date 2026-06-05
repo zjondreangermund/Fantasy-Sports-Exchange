@@ -34,8 +34,25 @@
     border-radius: 1.35rem !important;
   }
 
-  /* Tournament tabs: horizontal swipe instead of broken wrapping */
-  [role="tablist"] {
+  /* Mobile drawer/header: keep content full-width and never reserve desktop sidebar space */
+  [data-slot="sidebar-wrapper"] {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+
+  [data-sidebar="sidebar"][data-mobile="true"] {
+    width: min(88vw, 21rem) !important;
+    max-width: min(88vw, 21rem) !important;
+  }
+
+  header {
+    padding-left: max(0.65rem, env(safe-area-inset-left, 0px)) !important;
+    padding-right: max(0.65rem, env(safe-area-inset-right, 0px)) !important;
+  }
+
+  /* Tournament tabs/filter chips: horizontal swipe instead of broken wrapping */
+  [role="tablist"],
+  .arena-filter-chips {
     width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
@@ -47,15 +64,28 @@
     scrollbar-width: none;
   }
 
-  [role="tablist"]::-webkit-scrollbar {
+  [role="tablist"]::-webkit-scrollbar,
+  .arena-filter-chips::-webkit-scrollbar {
     display: none;
   }
 
-  [role="tab"] {
+  [role="tab"],
+  .arena-filter-chips > * {
     flex: 0 0 auto;
     white-space: nowrap;
     min-height: 2.45rem;
     font-size: 0.9rem;
+  }
+
+  /* Tournament cards: poster-like mobile cards without horizontal overflow */
+  [data-radix-tabs-content] .cinematic-glass {
+    border-radius: 1.35rem !important;
+    padding: 1rem !important;
+  }
+
+  [data-radix-tabs-content] h3,
+  [data-radix-tabs-content] code {
+    overflow-wrap: anywhere;
   }
 
   /* Prevent tournament/event cards from overflowing */
@@ -78,6 +108,44 @@
   [data-radix-tabs-content] .grid.grid-cols-2:has(button),
   [data-radix-tabs-content] .grid.sm\:grid-cols-2:has(button) {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Collection vault: exactly two readable cards per row and swipeable showcase */
+  .collection-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    column-gap: 0.65rem !important;
+    row-gap: 1.15rem !important;
+    justify-items: stretch !important;
+  }
+
+  .collection-card-grid > div {
+    width: 100%;
+  }
+
+  .collection-card-grid .card-shell,
+  .collection-card-grid [style*="preserve-3d"] {
+    width: 100% !important;
+    max-width: 11.25rem !important;
+    margin-inline: auto !important;
+  }
+
+  .collection-showcase-carousel {
+    display: grid !important;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(10.5rem, 72vw);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .collection-showcase-carousel::-webkit-scrollbar {
+    display: none;
+  }
+
+  .collection-showcase-carousel > * {
+    scroll-snap-align: center;
   }
 
   /* Dialogs and tournament lineup modal */
@@ -113,13 +181,13 @@
 
   /* Bottom nav should not cover page CTAs */
   main {
-    padding-bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: calc(8rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
-  /* Floating help button smaller and above dock */
+  /* Floating help button smaller, lifted above bottom nav, and not on top of CTAs */
   .arena-support-floating,
   .fixed.bottom-20.right-3 {
-    bottom: calc(5.9rem + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: calc(7.15rem + env(safe-area-inset-bottom, 0px)) !important;
     right: 0.75rem !important;
   }
 
@@ -127,6 +195,11 @@
   .fixed.bottom-20.right-3 > button {
     width: 2.45rem !important;
     height: 2.45rem !important;
+  }
+
+  .fixed.bottom-20.right-3 > div,
+  .fixed.bottom-20.right-3 [role="tabpanel"] {
+    max-height: 54vh !important;
   }
 
   /* Toasts should not sit behind bottom nav */
