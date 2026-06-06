@@ -52,6 +52,26 @@ function getInviteLink(pin: string) {
   return `${base}/join/${pin}`;
 }
 
+function tournamentCountdown(comp: CompetitionWithEntries) {
+  const raw = comp.submissionClosesAt || (comp as any).endsAt || (comp as any).endDate || (comp as any).startsAt;
+  if (!raw) return comp.status === "open" ? "Open now" : String(comp.status || "Arena ready");
+
+  const target = new Date(raw).getTime();
+  if (!Number.isFinite(target)) return comp.status === "open" ? "Open now" : String(comp.status || "Arena ready");
+
+  const diff = target - Date.now();
+  if (diff <= 0) return comp.entryOpen === false ? "Locked" : "Final moments";
+
+  const totalMinutes = Math.ceil(diff / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 export default function CompetitionsPage() {
   const { toast } = useToast();
   const initialPin = typeof window !== "undefined" ? (window.location.pathname.match(/\/join\/([A-Z0-9]+)/i)?.[1] || "") : "";
@@ -236,8 +256,19 @@ export default function CompetitionsPage() {
         <LiveStatCard label="Prize Pool" value={`N$${money(totalPrizePool)}`} helper="Current arena" />
       </LiveHero>
 
+      <section className="relative overflow-hidden rounded-[2rem] border border-cyan-300/15 bg-slate-950/80 p-4 text-white shadow-[0_24px_80px_rgba(8,47,73,.28)] sm:p-5">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(34,211,238,.24),transparent_35%),radial-gradient(circle_at_90%_20%,rgba(168,85,247,.22),transparent_34%),linear-gradient(180deg,rgba(255,255,255,.08),transparent_46%)]" />
+        <div className="pointer-events-none absolute inset-x-8 top-0 h-24 bg-cyan-300/20 blur-3xl" />
+        <div className="relative grid gap-3 md:grid-cols-4">
+          <ArenaPulse label="Live stadium" value={`${liveComps.length} cups`} helper={`${upcomingComps.length} upcoming`} icon={<Flame className="h-4 w-4" />} />
+          <ArenaPulse label="Entrants" value={String(liveComps.reduce((sum, comp) => sum + Number(comp.entryCount || 0), 0))} helper="Across open cups" icon={<Users className="h-4 w-4" />} />
+          <ArenaPulse label="Prize lights" value={`N$${money(totalPrizePool)}`} helper="Available pool" icon={<Trophy className="h-4 w-4" />} />
+          <ArenaPulse label="Ready cards" value={String(myCommonCards.length)} helper="Common eligible" icon={<Sparkles className="h-4 w-4" />} />
+        </div>
+      </section>
+
       <Tabs defaultValue={initialPin ? "pin" : "live"} className="w-full">
-        <TabsList className="mb-4 flex h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
+        <TabsList className="arena-filter-chips mb-4 flex h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
           <TabsTrigger value="live" className="rounded-full border border-white/15 bg-black/30 px-4 text-white">🔴 Public</TabsTrigger>
           <TabsTrigger value="pin" className="rounded-full border border-white/15 bg-black/30 px-4 text-white">🔐 Join by PIN</TabsTrigger>
           <TabsTrigger value="create" className="rounded-full border border-white/15 bg-black/30 px-4 text-white">➕ Create</TabsTrigger>
@@ -267,9 +298,12 @@ export default function CompetitionsPage() {
   );
 }
 
+function ArenaPulse({ label, value, helper, icon }: { label: string; value: string; helper: string; icon: ReactNode }) {
+  return <div className="rounded-3xl border border-white/10 bg-black/30 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.08)]"><div className="mb-3 flex items-center justify-between"><div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-2 text-cyan-100">{icon}</div><span className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">Arena</span></div><div className="text-[11px] uppercase tracking-[0.2em] text-white/45">{label}</div><div className="mt-1 text-2xl font-black text-white">{value}</div><div className="mt-1 text-xs text-white/45">{helper}</div></div>;
+}
 function InfoPill({ label, value, helper }: { label: string; value: string; helper: string }) { return <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><div className="text-[11px] uppercase tracking-[0.2em] text-white/45">{label}</div><div className="text-lg font-bold mt-1 text-white">{value}</div><div className="text-xs text-white/45 mt-1">{helper}</div></div>; }
-function LoadingGrid() { return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-md" />)}</div>; }
+function LoadingGrid() { return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-56 rounded-[2rem]" />)}</div>; }
 function EmptyCard({ text }: { text: string }) { return <Card className="p-8 text-center border-white/10 bg-white/[0.06] text-white backdrop-blur-xl"><p className="text-white/55">{text}</p></Card>; }
 function CompetitionGrid({ comps, enteredIds, onJoin }: { comps: CompetitionWithEntries[]; enteredIds: Set<number>; onJoin: (comp: CompetitionWithEntries) => void }) { return <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{comps.map((comp) => <CompetitionCard key={comp.id} comp={comp} entered={enteredIds.has(comp.id)} onJoin={() => onJoin(comp)} />)}</div>; }
-function CompetitionCard({ comp, entered, onJoin }: { comp: CompetitionWithEntries; entered: boolean; onJoin: () => void }) { const entryCount = Number(comp.entryCount || (comp.entries || []).length || 0); const maxEntries = Number(comp.max_entries || comp.maxEntries || 0); const prizePool = Number((comp as any).prize_pool_total || 0); const platformFees = Number((comp as any).platform_fee_total || 0); const isPrivate = Boolean(comp.join_pin || comp.joinPin || String(comp.visibility || "") === "private"); return <Card className="cinematic-glass p-5 space-y-4 border-white/10 bg-white/[0.06] text-white backdrop-blur-xl"><div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-bold text-white">{comp.name}</h3><p className="text-xs text-white/50 flex items-center gap-1 mt-1"><Clock className="w-3 h-3" />GW {comp.gameWeek} • {comp.status}</p></div><div className="flex flex-col items-end gap-1"><Badge className="capitalize">{comp.tier}</Badge>{isPrivate && <Badge variant="outline" className="border-amber-300/40 text-amber-200"><Lock className="mr-1 h-3 w-3" />PIN</Badge>}</div></div><div className="grid grid-cols-2 gap-2 text-sm"><MiniStat icon={<DollarSign className="w-3 h-3" />} label="Entry" value={`N$${money(comp.entryFee)}`} /><MiniStat icon={<Users className="w-3 h-3" />} label="Players" value={`${entryCount}${maxEntries ? `/${maxEntries}` : ""}`} /><MiniStat icon={<Trophy className="w-3 h-3" />} label="Prize pool" value={`N$${money(prizePool || Number(comp.entryFee || 0) * 0.8 * entryCount)}`} /><MiniStat icon={<Shield className="w-3 h-3" />} label="Platform" value={`N$${money(platformFees || Number(comp.entryFee || 0) * 0.2 * entryCount)}`} /></div>{(comp.status === "open" || comp.status === "active") && <TournamentLeaderboardMini competitionId={comp.id} compact />}<div className="flex flex-wrap gap-2"><Badge variant="outline" className="capitalize border-white/20 text-white">Prize: {comp.prizeCardRarity || comp.tier} card</Badge>{entered && <Badge variant="outline" className="border-green-400 text-green-300">Entered</Badge>}<Badge variant="outline" className="border-orange-300/40 text-orange-200"><Flame className="mr-1 h-3 w-3" />20% fee</Badge></div><Button className="w-full" onClick={onJoin} disabled={entered || comp.status !== "open"}>{entered ? "Already Entered" : comp.status === "open" ? "Enter Tournament" : "Not Open"}</Button></Card>; }
-function MiniStat({ icon, label, value }: { icon: ReactNode; label: string; value: string }) { return <div className="rounded-xl border border-white/10 bg-black/25 p-3"><div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-white/45">{icon}{label}</div><div className="font-semibold mt-1 text-white">{value}</div></div>; }
+function CompetitionCard({ comp, entered, onJoin }: { comp: CompetitionWithEntries; entered: boolean; onJoin: () => void }) { const entryCount = Number(comp.entryCount || (comp.entries || []).length || 0); const maxEntries = Number(comp.max_entries || comp.maxEntries || 0); const prizePool = Number((comp as any).prize_pool_total || 0); const platformFees = Number((comp as any).platform_fee_total || 0); const isPrivate = Boolean(comp.join_pin || comp.joinPin || String(comp.visibility || "") === "private"); const progress = maxEntries ? Math.min(100, Math.round((entryCount / maxEntries) * 100)) : Math.min(100, entryCount * 10); const countdown = tournamentCountdown(comp); return <Card className="group relative overflow-hidden rounded-[2rem] border-white/10 bg-slate-950/70 p-0 text-white backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,.28)]"><div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,.22),transparent_38%),radial-gradient(circle_at_92%_18%,rgba(249,115,22,.18),transparent_34%)] opacity-90" /><div className="pointer-events-none absolute inset-x-6 top-0 h-20 bg-white/10 blur-3xl" /><div className="relative space-y-4 p-5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="mb-2 flex flex-wrap gap-2"><Badge className="capitalize bg-cyan-300 text-slate-950">{comp.tier}</Badge>{isPrivate && <Badge variant="outline" className="border-amber-300/40 text-amber-200"><Lock className="mr-1 h-3 w-3" />PIN</Badge>}{entered && <Badge variant="outline" className="border-green-400 text-green-300">Entered</Badge>}</div><h3 className="text-xl font-black leading-tight text-white">{comp.name}</h3><p className="mt-1 flex items-center gap-1 text-xs text-white/50"><Clock className="h-3 w-3" />GW {comp.gameWeek} • {comp.status}</p></div><div className="rounded-3xl border border-white/10 bg-black/30 px-3 py-2 text-right"><div className="text-[10px] uppercase tracking-[0.18em] text-white/40">Countdown</div><div className="text-sm font-black text-cyan-100">{countdown}</div></div></div><div className="grid grid-cols-2 gap-2 text-sm"><MiniStat icon={<DollarSign className="w-3 h-3" />} label="Entry" value={`N$${money(comp.entryFee)}`} /><MiniStat icon={<Users className="w-3 h-3" />} label="Players" value={`${entryCount}${maxEntries ? `/${maxEntries}` : ""}`} /><MiniStat icon={<Trophy className="w-3 h-3" />} label="Prize pool" value={`N$${money(prizePool || Number(comp.entryFee || 0) * 0.8 * entryCount)}`} /><MiniStat icon={<Shield className="w-3 h-3" />} label="Platform" value={`N$${money(platformFees || Number(comp.entryFee || 0) * 0.2 * entryCount)}`} /></div><div className="rounded-2xl border border-white/10 bg-black/25 p-3"><div className="mb-2 flex items-center justify-between text-xs"><span className="font-bold text-white/65">Entrant counter</span><span className="text-white/45">{progress}% full</span></div><div className="h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-blue-300 to-violet-300" style={{ width: `${progress}%` }} /></div></div>{(comp.status === "open" || comp.status === "active") && <TournamentLeaderboardMini competitionId={comp.id} compact />}<div className="flex flex-wrap gap-2"><Badge variant="outline" className="capitalize border-white/20 text-white">Prize: {comp.prizeCardRarity || comp.tier} card</Badge><Badge variant="outline" className="border-orange-300/40 text-orange-200"><Flame className="mr-1 h-3 w-3" />20% fee</Badge></div><Button className="w-full rounded-2xl font-black" onClick={onJoin} disabled={entered || comp.status !== "open"}>{entered ? "Already Entered" : comp.status === "open" ? "Enter Tournament" : "Not Open"}</Button></div></Card>; }
+function MiniStat({ icon, label, value }: { icon: ReactNode; label: string; value: string }) { return <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-white/45">{icon}{label}</div><div className="font-semibold mt-1 text-white">{value}</div></div>; }
