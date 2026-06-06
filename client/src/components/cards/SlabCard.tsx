@@ -51,7 +51,6 @@ type Theme = {
   pattern: string;
   particle: string;
   shape: string;
-  sweepOpacity: number;
   icon: typeof Shield;
 };
 
@@ -59,69 +58,67 @@ const cardShape = "polygon(9% 1%,91% 1%,99% 10%,99% 88%,86% 99%,14% 99%,1% 88%,1
 const shieldShape = "polygon(10% 1%,90% 1%,99% 12%,99% 86%,50% 99%,1% 86%,1% 12%)";
 const crystalShape = "polygon(7% 8%,20% 1%,37% 5%,50% 1%,63% 5%,80% 1%,93% 8%,99% 23%,96% 88%,84% 99%,16% 99%,4% 88%,1% 23%)";
 const crownShape = "polygon(7% 12%,18% 4%,30% 8%,40% 1%,50% 10%,60% 1%,70% 8%,82% 4%,93% 12%,99% 30%,96% 88%,84% 99%,16% 99%,4% 88%,1% 30%)";
+const octagonShape = "polygon(24% 0,76% 0,100% 24%,100% 76%,76% 100%,24% 100%,0 76%,0 24%)";
 
 const themes: Record<SlabRarity, Theme> = {
   common: {
     label: "COMMON",
-    surface: "linear-gradient(180deg,#f8fafc 0%,#e2e8f0 48%,#cbd5e1 100%)",
-    frame: "linear-gradient(145deg,#ffffff 0%,#dbeafe 18%,#64748b 48%,#f8fafc 78%,#94a3b8 100%)",
-    side: "linear-gradient(90deg,#475569,#e2e8f0 35%,#334155 100%)",
-    edge: "rgba(226,232,240,.78)",
-    glow: "0 30px 78px rgba(226,232,240,.34)",
-    pedestal: "rgba(226,232,240,.42)",
+    surface: "linear-gradient(180deg,#f8fafc 0%,#dbeafe 45%,#cbd5e1 100%)",
+    frame: "linear-gradient(145deg,#ffffff 0%,#e2e8f0 16%,#64748b 42%,#f8fafc 72%,#475569 100%)",
+    side: "linear-gradient(90deg,#334155,#cbd5e1 38%,#0f172a 100%)",
+    edge: "rgba(226,232,240,.92)",
+    glow: "0 44px 110px rgba(226,232,240,.40)",
+    pedestal: "rgba(226,232,240,.62)",
     text: "text-slate-950",
     muted: "text-slate-700",
-    badge: "border-slate-400/55 bg-white/78 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.8)]",
-    statPanel: "border-slate-400/40 bg-white/72 text-slate-950",
-    glass: "rgba(255,255,255,.58)",
-    line: "rgba(15,23,42,.13)",
-    portraitGlow: "radial-gradient(circle at 50% 35%,rgba(255,255,255,.98),rgba(148,163,184,.34) 48%,transparent 72%)",
-    pattern: "rgba(15,23,42,.11)",
-    particle: "rgba(15,23,42,.12)",
+    badge: "border-slate-400/60 bg-white/85 text-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,.9)]",
+    statPanel: "border-slate-400/45 bg-white/78 text-slate-950",
+    glass: "rgba(255,255,255,.62)",
+    line: "rgba(15,23,42,.16)",
+    portraitGlow: "radial-gradient(circle at 50% 36%,rgba(255,255,255,1),rgba(148,163,184,.42) 46%,transparent 72%)",
+    pattern: "rgba(15,23,42,.12)",
+    particle: "rgba(15,23,42,.13)",
     shape: shieldShape,
-    sweepOpacity: 0.34,
     icon: Shield,
   },
   rare: {
     label: "RARE",
-    surface: "linear-gradient(180deg,#061a3d 0%,#073a78 50%,#020617 100%)",
-    frame: "linear-gradient(145deg,#a5f3fc 0%,#22d3ee 16%,#0f172a 48%,#0284c7 66%,#67e8f9 100%)",
-    side: "linear-gradient(90deg,#03111f,#0369a1 34%,#020617 100%)",
-    edge: "rgba(103,232,249,.82)",
-    glow: "0 34px 86px rgba(56,189,248,.54)",
-    pedestal: "rgba(56,189,248,.52)",
+    surface: "linear-gradient(180deg,#061a3d 0%,#075985 48%,#020617 100%)",
+    frame: "linear-gradient(145deg,#cffafe 0%,#22d3ee 15%,#0f172a 43%,#0284c7 66%,#67e8f9 100%)",
+    side: "linear-gradient(90deg,#020617,#0369a1 36%,#020617 100%)",
+    edge: "rgba(103,232,249,.96)",
+    glow: "0 48px 120px rgba(56,189,248,.68)",
+    pedestal: "rgba(56,189,248,.72)",
     text: "text-white",
-    muted: "text-cyan-100/76",
-    badge: "border-cyan-200/35 bg-cyan-300/14 text-cyan-50 shadow-[0_0_22px_rgba(34,211,238,.18)]",
-    statPanel: "border-cyan-200/24 bg-slate-950/56 text-white",
-    glass: "rgba(8,47,73,.52)",
-    line: "rgba(125,211,252,.36)",
-    portraitGlow: "radial-gradient(circle at 50% 35%,rgba(125,211,252,.92),rgba(14,165,233,.30) 43%,transparent 74%)",
-    pattern: "rgba(125,211,252,.24)",
-    particle: "rgba(103,232,249,.42)",
+    muted: "text-cyan-100/80",
+    badge: "border-cyan-100/45 bg-cyan-300/18 text-cyan-50 shadow-[0_0_28px_rgba(34,211,238,.32)]",
+    statPanel: "border-cyan-100/30 bg-slate-950/64 text-white",
+    glass: "rgba(8,47,73,.58)",
+    line: "rgba(125,211,252,.44)",
+    portraitGlow: "radial-gradient(circle at 50% 35%,rgba(165,243,252,.96),rgba(14,165,233,.38) 43%,transparent 74%)",
+    pattern: "rgba(125,211,252,.26)",
+    particle: "rgba(103,232,249,.48)",
     shape: cardShape,
-    sweepOpacity: 0.58,
     icon: Zap,
   },
   unique: {
     label: "UNIQUE",
-    surface: "linear-gradient(180deg,#1e0b3f 0%,#4c1d95 46%,#12051f 100%)",
-    frame: "linear-gradient(145deg,#fde68a 0%,#f0abfc 18%,#4c1d95 48%,#a855f7 68%,#facc15 100%)",
+    surface: "linear-gradient(180deg,#1e0b3f 0%,#581c87 48%,#12051f 100%)",
+    frame: "linear-gradient(145deg,#fde68a 0%,#f0abfc 17%,#4c1d95 45%,#a855f7 67%,#facc15 100%)",
     side: "linear-gradient(90deg,#17052f,#7e22ce 38%,#0f051d 100%)",
-    edge: "rgba(240,171,252,.82)",
-    glow: "0 36px 92px rgba(168,85,247,.62)",
-    pedestal: "rgba(217,70,239,.52)",
+    edge: "rgba(240,171,252,.96)",
+    glow: "0 50px 126px rgba(217,70,239,.70)",
+    pedestal: "rgba(217,70,239,.76)",
     text: "text-white",
-    muted: "text-fuchsia-100/78",
-    badge: "border-yellow-200/45 bg-white/13 text-white shadow-[0_0_26px_rgba(217,70,239,.22)]",
-    statPanel: "border-fuchsia-100/24 bg-black/42 text-white",
-    glass: "rgba(76,29,149,.42)",
-    line: "rgba(253,224,71,.36)",
-    portraitGlow: "radial-gradient(circle at 50% 34%,rgba(253,224,71,.58),rgba(168,85,247,.48) 42%,transparent 74%)",
-    pattern: "rgba(255,255,255,.18)",
-    particle: "rgba(253,224,71,.38)",
+    muted: "text-fuchsia-100/82",
+    badge: "border-yellow-200/50 bg-white/14 text-white shadow-[0_0_32px_rgba(217,70,239,.34)]",
+    statPanel: "border-fuchsia-100/30 bg-black/48 text-white",
+    glass: "rgba(76,29,149,.48)",
+    line: "rgba(253,224,71,.42)",
+    portraitGlow: "radial-gradient(circle at 50% 34%,rgba(253,224,71,.68),rgba(168,85,247,.56) 42%,transparent 74%)",
+    pattern: "rgba(255,255,255,.20)",
+    particle: "rgba(253,224,71,.42)",
     shape: crystalShape,
-    sweepOpacity: 0.68,
     icon: Gem,
   },
   epic: {
@@ -129,41 +126,39 @@ const themes: Record<SlabRarity, Theme> = {
     surface: "linear-gradient(180deg,#140629 0%,#3b0764 48%,#0b0418 100%)",
     frame: "linear-gradient(145deg,#ddd6fe 0%,#a78bfa 18%,#312e81 50%,#7c3aed 70%,#c4b5fd 100%)",
     side: "linear-gradient(90deg,#17072f,#6d28d9 36%,#070312 100%)",
-    edge: "rgba(196,181,253,.82)",
-    glow: "0 36px 92px rgba(139,92,246,.62)",
-    pedestal: "rgba(139,92,246,.54)",
+    edge: "rgba(196,181,253,.96)",
+    glow: "0 50px 126px rgba(139,92,246,.72)",
+    pedestal: "rgba(139,92,246,.74)",
     text: "text-violet-50",
-    muted: "text-violet-100/76",
-    badge: "border-violet-200/45 bg-violet-300/14 text-violet-50 shadow-[0_0_26px_rgba(139,92,246,.30)]",
-    statPanel: "border-violet-200/25 bg-black/45 text-violet-50",
-    glass: "rgba(76,29,149,.44)",
-    line: "rgba(196,181,253,.38)",
-    portraitGlow: "radial-gradient(circle at 50% 33%,rgba(221,214,254,.62),rgba(124,58,237,.40) 42%,transparent 74%)",
-    pattern: "rgba(196,181,253,.24)",
-    particle: "rgba(167,139,250,.42)",
+    muted: "text-violet-100/80",
+    badge: "border-violet-200/50 bg-violet-300/16 text-violet-50 shadow-[0_0_32px_rgba(139,92,246,.36)]",
+    statPanel: "border-violet-200/30 bg-black/50 text-violet-50",
+    glass: "rgba(76,29,149,.50)",
+    line: "rgba(196,181,253,.42)",
+    portraitGlow: "radial-gradient(circle at 50% 33%,rgba(221,214,254,.70),rgba(124,58,237,.48) 42%,transparent 74%)",
+    pattern: "rgba(196,181,253,.26)",
+    particle: "rgba(167,139,250,.46)",
     shape: crystalShape,
-    sweepOpacity: 0.7,
     icon: Gem,
   },
   legendary: {
     label: "LEGENDARY",
     surface: "linear-gradient(180deg,#050505 0%,#151008 46%,#000000 100%)",
-    frame: "linear-gradient(145deg,#fff7ad 0%,#facc15 18%,#111827 45%,#000 60%,#f59e0b 78%,#fef3c7 100%)",
+    frame: "linear-gradient(145deg,#fff7ad 0%,#facc15 18%,#111827 43%,#000 60%,#f59e0b 78%,#fef3c7 100%)",
     side: "linear-gradient(90deg,#090703,#92400e 35%,#000 100%)",
-    edge: "rgba(250,204,21,.88)",
-    glow: "0 40px 102px rgba(250,204,21,.66)",
-    pedestal: "rgba(250,204,21,.58)",
+    edge: "rgba(250,204,21,.98)",
+    glow: "0 54px 136px rgba(250,204,21,.78)",
+    pedestal: "rgba(250,204,21,.82)",
     text: "text-yellow-50",
-    muted: "text-yellow-100/76",
-    badge: "border-yellow-200/55 bg-yellow-300/14 text-yellow-100 shadow-[0_0_30px_rgba(250,204,21,.25)]",
-    statPanel: "border-yellow-200/28 bg-black/58 text-yellow-50",
-    glass: "rgba(0,0,0,.48)",
-    line: "rgba(250,204,21,.48)",
-    portraitGlow: "radial-gradient(circle at 50% 33%,rgba(255,247,173,.86),rgba(245,158,11,.38) 42%,transparent 74%)",
-    pattern: "rgba(250,204,21,.20)",
-    particle: "rgba(250,204,21,.46)",
+    muted: "text-yellow-100/80",
+    badge: "border-yellow-200/60 bg-yellow-300/16 text-yellow-100 shadow-[0_0_36px_rgba(250,204,21,.40)]",
+    statPanel: "border-yellow-200/34 bg-black/62 text-yellow-50",
+    glass: "rgba(0,0,0,.54)",
+    line: "rgba(250,204,21,.55)",
+    portraitGlow: "radial-gradient(circle at 50% 33%,rgba(255,247,173,.92),rgba(245,158,11,.48) 42%,transparent 74%)",
+    pattern: "rgba(250,204,21,.24)",
+    particle: "rgba(250,204,21,.52)",
     shape: crownShape,
-    sweepOpacity: 0.78,
     icon: Crown,
   },
 };
@@ -210,10 +205,20 @@ function RarityPattern({ theme, rarity }: { theme: Theme; rarity: SlabRarity }) 
       : `linear-gradient(126deg,transparent 0 25%,${theme.pattern} 25% 27%,transparent 27% 54%,${theme.pattern} 54% 56%,transparent 56%),linear-gradient(36deg,transparent 0 44%,${theme.pattern} 44% 46%,transparent 46%)`;
   return (
     <>
-      <div className="absolute inset-0 opacity-85 mix-blend-overlay" style={{ backgroundImage: bg, backgroundSize: "42px 42px,20px 20px" }} />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,.42),transparent_36%),linear-gradient(115deg,transparent_0%,rgba(255,255,255,.22)_18%,transparent_31%,transparent_62%,rgba(255,255,255,.16)_76%,transparent_92%)]" />
-      <div className="absolute -inset-y-24 -left-24 w-20 rotate-[17deg] bg-white/35 blur-xl opacity-0 transition-all duration-700 group-hover:translate-x-96 group-hover:opacity-100" />
+      <div className="absolute inset-0 opacity-90 mix-blend-overlay" style={{ backgroundImage: bg, backgroundSize: "42px 42px,20px 20px" }} />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,.45),transparent_36%),linear-gradient(115deg,transparent_0%,rgba(255,255,255,.24)_18%,transparent_31%,transparent_62%,rgba(255,255,255,.18)_76%,transparent_92%)]" />
+      <div className="absolute -inset-y-28 -left-28 w-24 rotate-[17deg] bg-white/40 blur-xl opacity-0 transition-all duration-700 group-hover:translate-x-[28rem] group-hover:opacity-100" />
     </>
+  );
+}
+
+function NeonChamber({ theme }: { theme: Theme }) {
+  return (
+    <div className="absolute inset-x-[11%] top-[19%] z-10 h-[37%]" style={{ clipPath: octagonShape }}>
+      <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 50% 45%,${theme.edge},${theme.glass} 38%,rgba(0,0,0,.58) 100%)` }} />
+      <div className="absolute inset-[3px] border border-white/20" style={{ clipPath: octagonShape, boxShadow: `inset 0 0 26px ${theme.edge},0 0 22px ${theme.edge}` }} />
+      <div className="absolute inset-x-[12%] bottom-[11%] h-4 rounded-full blur-lg" style={{ background: theme.edge }} />
+    </div>
   );
 }
 
@@ -221,21 +226,20 @@ function PortraitLayer({ theme, imageSrc, name, fallbackText }: { theme: Theme; 
   const [failed, setFailed] = useState(false);
   const showImage = Boolean(imageSrc) && !failed;
   return (
-    <div className="absolute inset-x-[-3%] top-[9%] z-20 h-[61%] overflow-visible">
-      <div className="absolute inset-x-[1%] top-[12%] h-[78%] rounded-[2rem] blur-[1px]" style={{ background: theme.portraitGlow }} />
-      <div className="absolute inset-x-[9%] bottom-[-1%] h-14 rounded-full blur-xl" style={{ background: `radial-gradient(ellipse at center,${theme.edge},rgba(0,0,0,.58),transparent 72%)` }} />
-      <div className="absolute inset-x-[10%] bottom-[9%] h-px" style={{ background: theme.line }} />
+    <div className="absolute inset-x-[-10%] top-[3%] z-20 h-[70%] overflow-visible">
+      <div className="absolute inset-x-[5%] top-[18%] h-[72%] rounded-[2.4rem] blur-[1px]" style={{ background: theme.portraitGlow }} />
+      <div className="absolute inset-x-[13%] bottom-[-2%] h-16 rounded-full blur-xl" style={{ background: `radial-gradient(ellipse at center,${theme.edge},rgba(0,0,0,.65),transparent 72%)` }} />
       {showImage ? (
         <img
           src={imageSrc}
           alt={name}
           onError={() => setFailed(true)}
-          className="absolute left-1/2 top-[-18%] h-[138%] w-[132%] -translate-x-1/2 object-contain object-bottom drop-shadow-[0_28px_20px_rgba(0,0,0,.72)] transition-transform duration-300 group-hover:scale-[1.07] group-hover:-translate-y-2"
+          className="absolute left-1/2 top-[-28%] h-[166%] w-[158%] -translate-x-1/2 object-contain object-bottom drop-shadow-[0_32px_24px_rgba(0,0,0,.78)] transition-transform duration-300 group-hover:scale-[1.08] group-hover:-translate-y-2"
           loading="lazy"
           decoding="async"
         />
       ) : (
-        <div className="absolute left-1/2 top-[9%] flex h-[76%] w-[70%] -translate-x-1/2 items-center justify-center rounded-[1.6rem] border border-white/18 bg-white/10 text-center text-[38px] font-black uppercase tracking-[-.12em] text-white/35 backdrop-blur-sm">
+        <div className="absolute left-1/2 top-[18%] flex h-[58%] w-[56%] -translate-x-1/2 items-center justify-center rounded-[1.8rem] border border-white/18 bg-white/10 text-center text-[42px] font-black uppercase tracking-[-.12em] text-white/36 backdrop-blur-sm">
           {fallbackText}
         </div>
       )}
@@ -257,7 +261,7 @@ function LiveBadge({ status, eligible, trend, theme }: { status?: SlabCardProps[
 function CardBackGhost({ theme, season, teamCode }: { theme: Theme; season: string; teamCode: string }) {
   return (
     <div className="pointer-events-none absolute inset-[12px] z-10 opacity-[0.10]" style={{ clipPath: theme.shape }}>
-      <div className="absolute inset-x-0 top-[41%] text-center text-[42px] font-black tracking-[.22em] text-current">FSE</div>
+      <div className="absolute inset-x-0 top-[42%] text-center text-[42px] font-black tracking-[.22em] text-current">FSE</div>
       <div className="absolute inset-x-0 bottom-[18%] text-center text-[9px] font-black tracking-[.28em] text-current">{season} • {teamCode}</div>
     </div>
   );
@@ -266,9 +270,9 @@ function CardBackGhost({ theme, season, teamCode }: { theme: Theme; season: stri
 function BackCardStack({ theme }: { theme: Theme }) {
   return (
     <>
-      <div className="pointer-events-none absolute inset-y-[4%] -right-[8%] z-0 w-[84%] rotate-[6deg] rounded-[1.7rem] border border-white/14 opacity-50 blur-[0.2px]" style={{ background: theme.side }} />
-      <div className="pointer-events-none absolute inset-y-[7%] -left-[8%] z-0 w-[80%] -rotate-[5deg] rounded-[1.6rem] border border-white/12 opacity-32" style={{ background: `linear-gradient(170deg,transparent,${theme.glass})` }} />
-      <div className="pointer-events-none absolute -inset-x-[10%] bottom-[-9%] z-0 h-14 rounded-full blur-2xl" style={{ background: `radial-gradient(ellipse at center,${theme.pedestal},transparent 68%)` }} />
+      <div className="pointer-events-none absolute inset-y-[3%] -right-[9%] z-0 w-[86%] rotate-[6deg] rounded-[2rem] border border-white/14 opacity-52 blur-[0.2px]" style={{ background: theme.side }} />
+      <div className="pointer-events-none absolute inset-y-[7%] -left-[8%] z-0 w-[80%] -rotate-[5deg] rounded-[1.8rem] border border-white/12 opacity-30" style={{ background: `linear-gradient(170deg,transparent,${theme.glass})` }} />
+      <div className="pointer-events-none absolute -inset-x-[16%] bottom-[-12%] z-0 h-20 rounded-full blur-3xl" style={{ background: `radial-gradient(ellipse at center,${theme.pedestal},transparent 70%)` }} />
     </>
   );
 }
@@ -307,35 +311,38 @@ export default function SlabCard({
     <article
       data-rarity={rarity}
       className={[
-        "group relative w-[190px] max-w-full aspect-[5/7] select-none transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.03]",
+        "group relative w-[230px] max-w-full aspect-[5/7] select-none transition-all duration-300 hover:-translate-y-2 hover:scale-[1.035]",
         className,
       ].join(" ")}
       style={{ filter: `drop-shadow(${theme.glow})`, transformStyle: "preserve-3d" }}
     >
       <BackCardStack theme={theme} />
-      <div className="absolute inset-[5px] translate-x-[8px] translate-y-[10px] opacity-90" style={{ clipPath: theme.shape, background: theme.side }} />
+      <div className="absolute inset-[6px] translate-x-[15px] translate-y-[18px] opacity-95" style={{ clipPath: theme.shape, background: theme.side, boxShadow: "0 24px 46px rgba(0,0,0,.56)" }} />
+      <div className="absolute inset-[3px] translate-x-[8px] translate-y-[10px] opacity-90" style={{ clipPath: theme.shape, background: `linear-gradient(120deg,rgba(0,0,0,.68),${theme.edge},rgba(0,0,0,.72))` }} />
       <div className="absolute inset-0" style={{ clipPath: theme.shape, background: theme.frame }} />
-      <div className="absolute inset-[5px]" style={{ clipPath: theme.shape, background: `linear-gradient(145deg,rgba(255,255,255,.50),transparent 20%,rgba(0,0,0,.46) 54%,${theme.edge} 100%)` }} />
-      <div className="absolute inset-[10px]" style={{ clipPath: theme.shape, background: theme.surface }} />
-      <div className="absolute inset-[15px]" style={{ clipPath: theme.shape, background: `linear-gradient(145deg,transparent,${theme.glass},transparent)` }} />
-      <div className="absolute inset-[7px] opacity-95" style={{ clipPath: theme.shape, boxShadow: `inset 0 0 0 2px ${theme.edge}, inset 0 0 28px ${theme.edge}, 0 0 28px ${theme.edge}` }} />
+      <div className="absolute inset-[5px]" style={{ clipPath: theme.shape, background: `linear-gradient(145deg,rgba(255,255,255,.58),transparent 18%,rgba(0,0,0,.54) 52%,${theme.edge} 100%)` }} />
+      <div className="absolute inset-[12px]" style={{ clipPath: theme.shape, background: theme.surface }} />
+      <div className="absolute inset-[18px]" style={{ clipPath: theme.shape, background: `linear-gradient(145deg,transparent,${theme.glass},transparent)` }} />
+      <div className="absolute inset-[7px] opacity-100" style={{ clipPath: theme.shape, boxShadow: `inset 0 0 0 3px ${theme.edge}, inset 0 0 36px ${theme.edge}, 0 0 34px ${theme.edge}` }} />
 
-      <div className="absolute inset-[10px] overflow-hidden" style={{ clipPath: theme.shape }}>
+      <div className="absolute inset-[12px] overflow-hidden" style={{ clipPath: theme.shape }}>
         <RarityPattern theme={theme} rarity={rarity} />
-        <div className="absolute inset-0 opacity-75" style={{ backgroundImage: `radial-gradient(circle at 15% 20%, ${theme.particle} 0 1px, transparent 2px), radial-gradient(circle at 80% 35%, ${theme.particle} 0 1px, transparent 2px), radial-gradient(circle at 55% 75%, ${theme.particle} 0 1px, transparent 2px)`, backgroundSize: "36px 36px, 44px 44px, 52px 52px" }} />
+        <div className="absolute inset-0 opacity-80" style={{ backgroundImage: `radial-gradient(circle at 15% 20%, ${theme.particle} 0 1px, transparent 2px), radial-gradient(circle at 80% 35%, ${theme.particle} 0 1px, transparent 2px), radial-gradient(circle at 55% 75%, ${theme.particle} 0 1px, transparent 2px)`, backgroundSize: "36px 36px, 44px 44px, 52px 52px" }} />
         <CardBackGhost theme={theme} season={season} teamCode={teamCode} />
-        <div className="absolute inset-x-0 bottom-0 h-[48%] bg-gradient-to-t from-black/78 via-black/34 to-transparent" />
-        <div className="absolute inset-x-[7%] top-[8%] h-[60%] rounded-[2rem] border border-white/12 bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,.16)]" />
+        <div className="absolute inset-x-0 bottom-0 h-[48%] bg-gradient-to-t from-black/82 via-black/40 to-transparent" />
+        <div className="absolute inset-x-[7%] top-[8%] h-[60%] rounded-[2rem] border border-white/14 bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,.18)]" />
       </div>
 
+      <NeonChamber theme={theme} />
+
       <div className={`absolute left-[9%] top-[7%] z-30 ${theme.text}`}>
-        <div className="text-[35px] font-black leading-none tracking-tighter drop-shadow-[0_4px_8px_rgba(0,0,0,.50)]">{rating}</div>
+        <div className="text-[38px] font-black leading-none tracking-tighter drop-shadow-[0_4px_8px_rgba(0,0,0,.55)]">{rating}</div>
         <div className="mt-1 text-[13px] font-black leading-none tracking-wide">{String(position || "ST").slice(0, 3).toUpperCase()}</div>
       </div>
 
       <div className={`absolute right-[8%] top-[7%] z-30 flex flex-col items-end gap-1 ${theme.text}`}>
         <div className={`rounded-full border px-2.5 py-1 text-[7px] font-black tracking-[.18em] ${theme.badge}`}>{theme.label}</div>
-        <div className={`flex h-7 w-7 items-center justify-center rounded-full border ${theme.badge}`}>
+        <div className={`flex h-8 w-8 items-center justify-center rounded-full border ${theme.badge}`}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
@@ -344,14 +351,14 @@ export default function SlabCard({
       <PortraitLayer theme={theme} imageSrc={imageSrc} name={name} fallbackText={initials} />
 
       <div className={`absolute inset-x-[8%] top-[61%] z-30 ${theme.text}`}>
-        <div className="truncate text-[18px] font-black leading-none tracking-wide drop-shadow-[0_3px_8px_rgba(0,0,0,.70)]">{lastName}</div>
+        <div className="truncate text-[20px] font-black leading-none tracking-wide drop-shadow-[0_4px_9px_rgba(0,0,0,.78)]">{lastName}</div>
         <div className={`mt-1 flex items-center gap-1 truncate text-[8px] font-black uppercase tracking-[.16em] ${theme.muted}`}>
           <Sparkles className="h-2.5 w-2.5 shrink-0" />
           <span className="truncate">{firstName} • {teamCode} • {shirt}</span>
         </div>
       </div>
 
-      <div className={`absolute inset-x-[7%] bottom-[12.5%] z-30 rounded-2xl border px-3 py-2 ${theme.statPanel} backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,.16),0_10px_26px_rgba(0,0,0,.30)]`}>
+      <div className={`absolute inset-x-[7%] bottom-[12.5%] z-30 rounded-2xl border px-3 py-2 ${theme.statPanel} backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,.18),0_12px_30px_rgba(0,0,0,.36)]`}>
         <div className="grid grid-cols-3 gap-x-3 gap-y-1.5">
           {statRows.map(([label, stat]) => (
             <div key={label} className="flex items-baseline justify-between gap-1 text-[9px] font-black">
@@ -378,12 +385,12 @@ export default function SlabCard({
       <div className={`absolute bottom-[5.2%] right-[9%] z-30 text-[7px] font-black ${theme.muted}`}>{serialNumber}</div>
       {provenanceMarker ? <div className={`absolute bottom-[8.4%] right-[9%] z-30 text-[6px] ${theme.muted}`}>{provenanceMarker}</div> : null}
 
-      <div className="pointer-events-none absolute inset-0 opacity-90" style={{ clipPath: theme.shape, boxShadow: `inset 0 0 0 2px ${theme.line}, inset 0 0 54px ${theme.line}, 0 0 18px ${theme.edge}` }} />
-      <div className="pointer-events-none absolute inset-y-[4%] left-[-2px] w-4 opacity-80 blur-[1px]" style={{ background: `linear-gradient(180deg,transparent,${theme.edge},transparent)` }} />
-      <div className="pointer-events-none absolute inset-y-[4%] right-[-2px] w-4 opacity-80 blur-[1px]" style={{ background: `linear-gradient(180deg,transparent,${theme.edge},transparent)` }} />
-      <div className="pointer-events-none absolute -inset-[18%] opacity-0 mix-blend-screen transition-opacity duration-300 group-hover:opacity-100" style={{ background: `linear-gradient(105deg,transparent 15%,rgba(255,255,255,${theme.sweepOpacity}) 45%,transparent 62%)`, transform: "translateX(-36%) rotate(10deg)" }} />
-      <div className="pointer-events-none absolute inset-0 rounded-[2rem] bg-[radial-gradient(circle_at_50%_110%,rgba(255,255,255,.22),transparent_44%)]" />
-      <span className="sr-only">{theme.label} neon 3D fantasy player card</span>
+      <div className="pointer-events-none absolute inset-0 opacity-100" style={{ clipPath: theme.shape, boxShadow: `inset 0 0 0 2px ${theme.line}, inset 0 0 64px ${theme.line}, 0 0 28px ${theme.edge},0 0 72px ${theme.edge}` }} />
+      <div className="pointer-events-none absolute inset-y-[4%] left-[-3px] w-5 opacity-100 blur-[1px]" style={{ background: `linear-gradient(180deg,transparent,${theme.edge},transparent)` }} />
+      <div className="pointer-events-none absolute inset-y-[4%] right-[-3px] w-5 opacity-100 blur-[1px]" style={{ background: `linear-gradient(180deg,transparent,${theme.edge},transparent)` }} />
+      <div className="pointer-events-none absolute -inset-[18%] opacity-0 mix-blend-screen transition-opacity duration-300 group-hover:opacity-100" style={{ background: "linear-gradient(105deg,transparent 15%,rgba(255,255,255,.74) 45%,transparent 62%)", transform: "translateX(-36%) rotate(10deg)" }} />
+      <div className="pointer-events-none absolute inset-0 rounded-[2rem] bg-[radial-gradient(circle_at_50%_110%,rgba(255,255,255,.26),transparent_44%)]" />
+      <span className="sr-only">{theme.label} premium neon 3D fantasy player card</span>
     </article>
   );
 }
