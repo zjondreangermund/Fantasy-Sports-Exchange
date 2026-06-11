@@ -33,8 +33,9 @@ export default function CollectionPlayerCard({
     <button
       type="button"
       onClick={onClick}
-      className={onClick ? "cursor-pointer" : "cursor-default"}
+      className={`premium-card-button ${onClick ? "cursor-pointer" : "cursor-default"}`}
       data-testid={`collection-v3-card-${card.id}`}
+      aria-label={`${card.name || "Player"} card`}
     >
       <UnifiedPlayerCard
         player={card}
@@ -42,7 +43,7 @@ export default function CollectionPlayerCard({
         variant={size === "lg" ? "showcase" : "default"}
         selected={selected}
         interactive={Boolean(onClick)}
-        className={className}
+        className={`premium-card-stage ${className}`.trim()}
       />
     </button>
   );
