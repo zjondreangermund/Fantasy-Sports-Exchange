@@ -37,6 +37,7 @@ export default function CollectionPlayerCard({
   const card = player || EMPTY_PLAYER;
   const isShowcase = size === "lg";
   const rarity = normalizeRarity(card.rarity);
+  const stageClassName = `premium-card-stage ${className}`.trim();
 
   return (
     <button
@@ -50,27 +51,29 @@ export default function CollectionPlayerCard({
         <div className="relative flex flex-col items-center">
           <div className="absolute -top-6 h-24 w-56 rounded-full bg-white/10 blur-2xl" />
           <div className="absolute bottom-10 h-10 w-48 rounded-full bg-black/50 blur-2xl" />
-          <UnifiedPlayerCard
-            player={card}
-            size={size}
-            variant="showcase"
-            selected={selected}
-            interactive={Boolean(onClick)}
-            className={`premium-card-stage relative z-10 transition-transform duration-500 group-hover:-translate-y-2 ${className}`.trim()}
-            data-rarity={rarity}
-          />
+          <div data-rarity={rarity} className="relative z-10 transition-transform duration-500 group-hover:-translate-y-2">
+            <UnifiedPlayerCard
+              player={card}
+              size={size}
+              variant="showcase"
+              selected={selected}
+              interactive={Boolean(onClick)}
+              className={stageClassName}
+            />
+          </div>
           <div className="-mt-4 h-12 w-36 rounded-full bg-white/10 blur-md opacity-70" />
         </div>
       ) : (
-        <UnifiedPlayerCard
-          player={card}
-          size={size}
-          variant="default"
-          selected={selected}
-          interactive={Boolean(onClick)}
-          className={`premium-card-stage ${className}`.trim()}
-          data-rarity={rarity}
-        />
+        <div data-rarity={rarity}>
+          <UnifiedPlayerCard
+            player={card}
+            size={size}
+            variant="default"
+            selected={selected}
+            interactive={Boolean(onClick)}
+            className={stageClassName}
+          />
+        </div>
       )}
     </button>
   );
