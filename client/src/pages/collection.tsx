@@ -215,22 +215,24 @@ export default function CollectionPage() {
           <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3 text-sm text-white/55">Strongest section: <span className="font-black capitalize text-white">{strongestRarity}</span></div>
         </Card>
 
-        <Card className="overflow-hidden border-white/10 bg-slate-950/70 p-5 text-white backdrop-blur-xl">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <div><h2 className="font-black">Featured Asset</h2><p className="text-sm text-white/50">Your highest rarity card with market stats.</p></div>
+        <Card className="overflow-hidden border-white/10 bg-slate-950/70 p-4 text-white backdrop-blur-xl">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div><h2 className="font-black">Featured Asset</h2><p className="text-sm text-white/50">Highest rarity card with market stats.</p></div>
             <Badge variant="outline" className="border-white/20 text-white"><Trophy className="mr-1 h-3 w-3" /> Showcase</Badge>
           </div>
-          {isLoading ? <div className="grid gap-3 md:grid-cols-2"><Skeleton className="h-72 rounded-2xl" /><Skeleton className="h-72 rounded-2xl" /></div> : featuredCard && featuredFantasyCard ? (
-            <div className="grid gap-4 md:grid-cols-[0.9fr_1fr] md:items-center">
-              <div className="flex min-h-[310px] items-center justify-center rounded-3xl border border-white/10 bg-black/25 p-3">
-                <div className="scale-[0.78] sm:scale-[0.88]">
+          {isLoading ? <div className="grid gap-3 md:grid-cols-2"><Skeleton className="h-64 rounded-2xl" /><Skeleton className="h-64 rounded-2xl" /></div> : featuredCard && featuredFantasyCard ? (
+            <div className="grid gap-3 md:grid-cols-[0.78fr_1fr] md:items-center">
+              <div className="relative flex min-h-[235px] items-start justify-center overflow-hidden rounded-3xl border border-white/10 bg-black/25 p-2 pt-3">
+                <div className="absolute bottom-7 h-12 w-44 rounded-full bg-black/60 blur-2xl" />
+                <div className="absolute bottom-5 h-7 w-40 rounded-full border border-white/10 bg-white/10" />
+                <div className="relative z-10 -mt-3 scale-[0.58] sm:scale-[0.72] md:scale-[0.78]">
                   <CollectionPlayerCard player={featuredFantasyCard} size="lg" />
                 </div>
               </div>
-              <div className="space-y-3">
-                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+              <div className="space-y-2">
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-3">
                   <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">Top Asset</p>
-                  <h3 className="mt-2 text-2xl font-black">{featuredCard.player?.name || "Featured Card"}</h3>
+                  <h3 className="mt-1 text-xl font-black">{featuredCard.player?.name || "Featured Card"}</h3>
                   <p className="text-sm capitalize text-white/55">{featuredCard.rarity} • {featuredCard.player?.position || "Player"}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -290,7 +292,7 @@ export default function CollectionPage() {
 }
 
 function AssetStat({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-white/35">{label}</p><p className="mt-1 text-lg font-black text-white">{value}</p></div>;
+  return <div className="rounded-2xl border border-white/10 bg-black/25 p-2.5"><p className="text-[9px] font-black uppercase tracking-widest text-white/35">{label}</p><p className="mt-1 text-base font-black text-white">{value}</p></div>;
 }
 
 function ProgressRow({ label, value, target }: { label: string; value: number; target: number }) {
