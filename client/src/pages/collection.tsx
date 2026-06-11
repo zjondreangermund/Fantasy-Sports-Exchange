@@ -35,6 +35,12 @@ function pct(value: number, target: number) {
   return Math.max(0, Math.min(100, Math.round((value / target) * 100)));
 }
 
+function cardValue(card: PlayerCardWithPlayer) {
+  const listed = Number(card.price || 0);
+  if (Number.isFinite(listed) && listed > 0) return listed;
+  return BASE_PRICES[rarityOf(card)] || 0;
+}
+
 export default function CollectionPage() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -118,6 +124,9 @@ export default function CollectionPage() {
   const listedCount = (cards || []).filter((card) => card.forSale).length;
   const eligibleCount = (cards || []).filter((card) => !card.forSale).length;
   const strongestRarity = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "common";
+  const collectionValue = useMemo(() => (cards || []).reduce((sum, card) => sum + cardValue(card), 0), [cards]);
+  const momentum = Math.max(0, counts.legendary * 9 + counts.unique * 5 + counts.rare * 2 - listedCount);
+  const namibiaRank = collectionValue > 0 ? `#${Math.max(1, 250 - Math.min(220, Math.floor(collectionValue / 25)))}` : "—";
 
   const filteredCards = useMemo(() => (cards || []).filter((c) => filter === "all" || rarityOf(c) === filter), [cards, filter]);
   const visibleCards = isMobile ? filteredCards.slice(0, visibleCount) : filteredCards;
@@ -177,6 +186,21 @@ export default function CollectionPage() {
         <LiveStatCard label="Playable" value={String(eligibleCount)} helper="Not listed" />
         <LiveStatCard label="Listed" value={String(listedCount)} helper="On market" />
       </LiveHero>
+
+      <Card className="overflow-hidden border-white/10 bg-gradient-to-r from-slate-950 via-violet-950/70 to-slate-950 p-5 text-white shadow-2xl shadow-violet-950/30 backdrop-blur-xl">
+        <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] md:items-center">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-violet-200/70">Collection Value</p>
+            <div className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">{money(collectionValue)}</div>
+            <p className="mt-2 text-sm text-white/55">Estimated from rarity floors and active listing prices.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-white/35">Rank</p><p className="mt-1 text-lg font-black">{namibiaRank}</p></div>
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-white/35">Momentum</p><p className="mt-1 text-lg font-black">+{momentum}</p></div>
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-white/35">Legendary</p><p className="mt-1 text-lg font-black">{counts.legendary || 0}</p></div>
+          </div>
+        </div>
+      </Card>
 
       <section className="grid gap-4 lg:grid-cols-[0.78fr_1.22fr]">
         <Card className="cinematic-glass border-white/10 bg-white/[0.06] p-5 text-white backdrop-blur-xl">
