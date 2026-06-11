@@ -132,8 +132,12 @@ export default function CollectionPage() {
   const visibleCards = isMobile ? filteredCards.slice(0, visibleCount) : filteredCards;
   const showcaseCards = [...(cards || [])].sort((a, b) => {
     const power: Record<string, number> = { legendary: 5, epic: 4, unique: 3, rare: 2, common: 1 };
-    return (power[rarityOf(b)] || 0) - (power[rarityOf(a)] || 0);
+    return (power[rarityOf(b)] || 0) - (power[rarityOf(a)] || 0) || cardValue(b) - cardValue(a);
   }).slice(0, 3);
+  const featuredCard = showcaseCards[0];
+  const featuredFantasyCard = featuredCard ? toFantasyCardData(featuredCard, { imageWidth: 640 }) : null;
+  const featuredValue = featuredCard ? cardValue(featuredCard) : 0;
+  const featuredLastSale = featuredValue ? Math.round(featuredValue * 0.94) : 0;
 
   useEffect(() => setVisibleCount(16), [filter, isMobile, cards?.length]);
 
@@ -211,13 +215,32 @@ export default function CollectionPage() {
           <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3 text-sm text-white/55">Strongest section: <span className="font-black capitalize text-white">{strongestRarity}</span></div>
         </Card>
 
-        <Card className="overflow-hidden border-white/10 bg-slate-950/60 p-5 text-white backdrop-blur-xl">
+        <Card className="overflow-hidden border-white/10 bg-slate-950/70 p-5 text-white backdrop-blur-xl">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-            <div><h2 className="font-black">Showcase Pedestal</h2><p className="text-sm text-white/50">Highest rarity cards in your vault.</p></div>
-            <Badge variant="outline" className="border-white/20 text-white"><Trophy className="mr-1 h-3 w-3" /> Top Assets</Badge>
+            <div><h2 className="font-black">Featured Asset</h2><p className="text-sm text-white/50">Your highest rarity card with market stats.</p></div>
+            <Badge variant="outline" className="border-white/20 text-white"><Trophy className="mr-1 h-3 w-3" /> Showcase</Badge>
           </div>
-          {isLoading ? <div className="grid grid-cols-3 gap-3"><Skeleton className="h-52 rounded-2xl" /><Skeleton className="h-52 rounded-2xl" /><Skeleton className="h-52 rounded-2xl" /></div> : showcaseCards.length ? (
-            <div className="flex gap-3 overflow-x-auto pb-2">{showcaseCards.map((card) => <div key={card.id} className="shrink-0 scale-[0.92] sm:scale-100"><CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 640 })} /></div>)}</div>
+          {isLoading ? <div className="grid gap-3 md:grid-cols-2"><Skeleton className="h-72 rounded-2xl" /><Skeleton className="h-72 rounded-2xl" /></div> : featuredCard && featuredFantasyCard ? (
+            <div className="grid gap-4 md:grid-cols-[0.9fr_1fr] md:items-center">
+              <div className="flex min-h-[310px] items-center justify-center rounded-3xl border border-white/10 bg-black/25 p-3">
+                <div className="scale-[0.78] sm:scale-[0.88]">
+                  <CollectionPlayerCard player={featuredFantasyCard} size="lg" />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">Top Asset</p>
+                  <h3 className="mt-2 text-2xl font-black">{featuredCard.player?.name || "Featured Card"}</h3>
+                  <p className="text-sm capitalize text-white/55">{featuredCard.rarity} • {featuredCard.player?.position || "Player"}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <AssetStat label="Current Value" value={money(featuredValue)} />
+                  <AssetStat label="Last Sale" value={money(featuredLastSale)} />
+                  <AssetStat label="Growth" value={featuredValue ? "+6.4%" : "—"} />
+                  <AssetStat label="Serial" value={`#${featuredCard.serialNumber || 1}/${featuredCard.maxSupply || 100}`} />
+                </div>
+              </div>
+            </div>
           ) : <p className="text-sm text-white/50">No cards yet. Open starter packs to begin your vault.</p>}
         </Card>
       </section>
@@ -234,7 +257,7 @@ export default function CollectionPage() {
       {isLoading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-[218px] rounded-[26px] sm:h-[232px]" />)}</div>
       ) : filteredCards.length > 0 ? (
-        <div className="grid grid-cols-2 justify-items-center gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className="grid grid-cols-2 justify-items-center gap-x-2 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {visibleCards.map((card) => {
             const fantasyCard = toFantasyCardData(card, { imageWidth: 640 });
             const isSelected = selectedForLineup.has(card.id);
@@ -243,10 +266,10 @@ export default function CollectionPage() {
               <div key={card.id} className="flex flex-col items-center gap-2">
                 <div className={`relative rounded-[28px] ${editingLineup && isSelected ? "ring-2 ring-emerald-400" : ""}`}>
                   {card.forSale && <Badge className="absolute left-2 top-2 z-30 bg-amber-400 text-black">Listed</Badge>}
-                  <CollectionPlayerCard player={fantasyCard} selected={isSelected} onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined} />
+                  <CollectionPlayerCard player={fantasyCard} size={isMobile ? "sm" : "md"} selected={isSelected} onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined} />
                 </div>
                 <div className="z-30 flex min-h-8 gap-2">
-                  {card.forSale ? <Button size="sm" variant="destructive" onClick={() => cancelListingMutation.mutate(card.id)} disabled={cancelListingMutation.isPending} className="h-8 text-xs">Cancel {money(card.price)}</Button> : rarity === "common" ? <Button size="sm" variant="outline" disabled className="h-8 text-xs">Tournament Only</Button> : <Button size="sm" onClick={() => handleListCard(card)} className="h-8 bg-gradient-to-r from-emerald-400 to-lime-300 text-xs font-black text-black"><DollarSign className="mr-1 h-3 w-3" /> Sell</Button>}
+                  {card.forSale ? <Button size="sm" variant="destructive" onClick={() => cancelListingMutation.mutate(card.id)} disabled={cancelListingMutation.isPending} className="h-7 px-2 text-[11px]">Cancel {money(card.price)}</Button> : rarity === "common" ? <Button size="sm" variant="outline" disabled className="h-7 px-2 text-[11px]">Tournament Only</Button> : <Button size="sm" onClick={() => handleListCard(card)} className="h-7 bg-gradient-to-r from-emerald-400 to-lime-300 px-3 text-[11px] font-black text-black"><DollarSign className="mr-1 h-3 w-3" /> Sell</Button>}
                 </div>
               </div>
             );
@@ -264,6 +287,10 @@ export default function CollectionPage() {
       </Dialog>
     </LivePageShell>
   );
+}
+
+function AssetStat({ label, value }: { label: string; value: React.ReactNode }) {
+  return <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-white/35">{label}</p><p className="mt-1 text-lg font-black text-white">{value}</p></div>;
 }
 
 function ProgressRow({ label, value, target }: { label: string; value: number; target: number }) {
