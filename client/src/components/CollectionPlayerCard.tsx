@@ -1,3 +1,4 @@
+import "./cards/card-rarity-effects.css";
 import UnifiedPlayerCard from "./cards/UnifiedPlayerCard";
 import { type PlayerCardData } from "./cards/types";
 
@@ -20,6 +21,12 @@ const EMPTY_PLAYER: PlayerCardData = {
   maxSupply: 0,
 };
 
+function normalizeRarity(value: unknown) {
+  const rarity = String(value || "common").toLowerCase();
+  if (rarity === "rare" || rarity === "unique" || rarity === "epic" || rarity === "legendary") return rarity;
+  return "common";
+}
+
 export default function CollectionPlayerCard({
   player,
   className = "",
@@ -29,6 +36,7 @@ export default function CollectionPlayerCard({
 }: CollectionPlayerCardProps) {
   const card = player || EMPTY_PLAYER;
   const isShowcase = size === "lg";
+  const rarity = normalizeRarity(card.rarity);
 
   return (
     <button
@@ -49,6 +57,7 @@ export default function CollectionPlayerCard({
             selected={selected}
             interactive={Boolean(onClick)}
             className={`premium-card-stage relative z-10 transition-transform duration-500 group-hover:-translate-y-2 ${className}`.trim()}
+            data-rarity={rarity}
           />
           <div className="-mt-4 h-12 w-36 rounded-full bg-white/10 blur-md opacity-70" />
         </div>
@@ -60,6 +69,7 @@ export default function CollectionPlayerCard({
           selected={selected}
           interactive={Boolean(onClick)}
           className={`premium-card-stage ${className}`.trim()}
+          data-rarity={rarity}
         />
       )}
     </button>
