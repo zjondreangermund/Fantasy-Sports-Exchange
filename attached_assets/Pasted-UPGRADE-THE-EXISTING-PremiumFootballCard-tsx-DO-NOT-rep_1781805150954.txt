@@ -1,0 +1,143 @@
+UPGRADE THE EXISTING PremiumFootballCard.tsx.
+
+DO NOT replace the component.
+DO NOT redesign from scratch.
+DO NOT create a new card system.
+
+Keep:
+
+- current sizing
+- current rarity system
+- current mobile responsiveness
+- current image loading pipeline
+- current data bindings
+
+Only improve visuals.
+
+REQUIRED CHANGES
+
+1. REMOVE IMAGE RECTANGLE
+
+- Remove the rectangular photo frame.
+- Player image must sit directly on the card.
+- Player should feel cut out from the background.
+- Image occupies 75-80% of available height.
+
+2. ENGRAVED METAL BACKGROUND
+   Replace flat background with:
+
+- Large geometric metallic facets.
+- Multiple polygon shapes.
+- Embossed / engraved appearance.
+- Inner shadows.
+- Highlight edges.
+- Different rarity colors use same pattern.
+
+Goal:
+Topps Chrome
+Panini Prizm
+Premium fantasy collectible card.
+
+3. CHROME SLAB FRAME
+   Add:
+
+- Transparent acrylic outer slab.
+- Glass edge.
+- Visible thickness.
+- Inner bevel.
+- Outer bevel.
+- Reflection around perimeter.
+
+Must feel like a physical premium slab.
+
+4. PREMIUM FOIL EFFECT
+   Add:
+
+- Diagonal chrome shine sweep.
+- Metallic reflections.
+- Specular highlights.
+- Sparkle points.
+- Foil reflections.
+
+Legendary:
+strongest effect
+
+Unique:
+purple crystal effect
+
+Rare:
+blue chrome
+
+Common:
+brushed silver chrome
+
+5. IMPROVE PLAYER PRESENTATION
+
+Player image:
+
+- 40% larger than current.
+- Bottom aligned.
+- Slight overlap over geometry.
+- Strong shadow behind player.
+- Slight glow matching rarity.
+
+6. IMPROVE NAME PLATE
+
+Replace current flat text area with:
+
+- Metallic engraved plate.
+- Premium embossed typography.
+- Better spacing.
+
+Layout:
+
+PLAYER NAME
+
+POSITION
+
+PTS
+
+EDITION
+
+7. DEPTH
+
+Card must have:
+
+- foreground
+- midground
+- background
+
+Layers should be visually separated.
+
+8. KEEP PERFORMANCE
+
+No Card3D.
+
+No canvas.
+
+No heavy animations.
+
+No excessive blur.
+
+Target:
+60fps mobile.
+
+9. TARGET STYLE
+
+Match the feeling of:
+
+- Topps Chrome
+- Panini Prizm
+- FUT special cards
+- Sorare premium cards
+
+The card should feel valuable and collectible.
+
+When finished:
+
+- update only PremiumFootballCard.tsx
+- keep all existing props
+- keep all existing functionality
+- keep image fallback system
+- keep rarity system
+- keep mobile support
