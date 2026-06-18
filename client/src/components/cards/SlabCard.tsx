@@ -68,8 +68,27 @@ function formTrend(last5?: number[]) { const values = Array.isArray(last5) ? las
 function normalizeLast5(last5?: number[]) { const values = Array.isArray(last5) ? last5.slice(0, 5).map((v) => Math.max(0, Math.round(Number(v || 0)))) : []; while (values.length < 5) values.push(0); return values; }
 
 function RarityPattern({ theme, rarity }: { theme: Theme; rarity: SlabRarity }) {
-  const bg = rarity === "legendary" ? `radial-gradient(circle at 24% 18%,${theme.particle} 0 1px,transparent 2px),linear-gradient(135deg,transparent 0 31%,${theme.pattern} 31% 32%,transparent 32% 66%,${theme.pattern} 66% 67%,transparent 67%)` : rarity === "rare" ? `linear-gradient(90deg,transparent 0 47%,${theme.pattern} 47% 48%,transparent 48%),linear-gradient(135deg,transparent 0 38%,${theme.pattern} 38% 40%,transparent 40%)` : `linear-gradient(126deg,transparent 0 25%,${theme.pattern} 25% 27%,transparent 27% 54%,${theme.pattern} 54% 56%,transparent 56%),linear-gradient(36deg,transparent 0 44%,${theme.pattern} 44% 46%,transparent 46%)`;
-  return <><div className="absolute inset-0 opacity-85 mix-blend-overlay" style={{ backgroundImage: bg, backgroundSize: "42px 42px,20px 20px" }} /><div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,.38),transparent_34%),linear-gradient(115deg,transparent_0%,rgba(255,255,255,.20)_18%,transparent_31%,transparent_62%,rgba(255,255,255,.14)_76%,transparent_92%)]" /><div className="absolute -inset-y-28 -left-28 w-24 rotate-[17deg] bg-white/35 blur-xl opacity-0 transition-all duration-700 group-hover:translate-x-[28rem] group-hover:opacity-100" /></>;
+  const shapeSet = rarity === "legendary"
+    ? [crownShape, crystalShape, octagonShape, cardShape, shieldShape]
+    : rarity === "unique" || rarity === "epic"
+      ? [crystalShape, cardShape, octagonShape, shieldShape, crystalShape]
+      : [cardShape, shieldShape, octagonShape, cardShape, shieldShape];
+
+  const shapes = [
+    { className: "left-[-22%] top-[7%] h-[25%] w-[64%] rotate-[-18deg]", clipPath: shapeSet[0] },
+    { className: "right-[-30%] top-[16%] h-[29%] w-[78%] rotate-[-18deg]", clipPath: shapeSet[1] },
+    { className: "left-[8%] top-[39%] h-[18%] w-[48%] rotate-[-18deg]", clipPath: shapeSet[2] },
+    { className: "right-[-12%] bottom-[21%] h-[24%] w-[66%] rotate-[-18deg]", clipPath: shapeSet[3] },
+    { className: "left-[-12%] bottom-[34%] h-[17%] w-[40%] rotate-[-18deg]", clipPath: shapeSet[4] },
+  ];
+
+  return <>
+    <div className="absolute inset-0 opacity-55 mix-blend-overlay" style={{ backgroundImage: `linear-gradient(126deg,transparent 0 24%,${theme.pattern} 24% 25.5%,transparent 25.5% 55%,${theme.pattern} 55% 56.5%,transparent 56.5%),radial-gradient(circle at 24% 18%,${theme.particle} 0 1px,transparent 2px)`, backgroundSize: "58px 58px,38px 38px" }} />
+    <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 50% 0%,rgba(255,255,255,.34),transparent 34%),linear-gradient(115deg,transparent 0%,rgba(255,255,255,.18) 18%,transparent 31%,transparent 62%,rgba(255,255,255,.12) 76%,transparent 92%)" }} />
+    {shapes.map((shape, index) => <div key={index} className={`absolute ${shape.className} rounded-[1.4rem] border border-black/25 bg-white/[0.055] opacity-60 mix-blend-overlay`} style={{ clipPath: shape.clipPath, boxShadow: `inset 7px 7px 14px rgba(0,0,0,.58), inset -5px -5px 11px rgba(255,255,255,.20), 1px 1px 2px rgba(255,255,255,.18), 0 0 0 1px ${theme.line}` }} />)}
+    <div className="absolute inset-[5%] rounded-[1.8rem] opacity-45" style={{ clipPath: theme.shape, boxShadow: "inset 12px 12px 24px rgba(0,0,0,.30), inset -10px -10px 18px rgba(255,255,255,.12)" }} />
+    <div className="absolute -inset-y-28 -left-28 w-24 rotate-[17deg] bg-white/35 blur-xl opacity-0 transition-all duration-700 group-hover:translate-x-[28rem] group-hover:opacity-100" />
+  </>;
 }
 
 function NeonChamber({ theme }: { theme: Theme }) {
@@ -132,6 +151,6 @@ export default function SlabCard({ name, rarity, avgScore, serialNumber, classNa
     <div className="pointer-events-none absolute inset-y-[5%] right-[-2px] w-4 opacity-90 blur-[1px]" style={{ background: `linear-gradient(180deg,transparent,${theme.edge},transparent)` }} />
     <div className="pointer-events-none absolute -inset-[18%] opacity-0 mix-blend-screen transition-opacity duration-300 group-hover:opacity-100" style={{ background: "linear-gradient(105deg,transparent 15%,rgba(255,255,255,.62) 45%,transparent 62%)", transform: "translateX(-36%) rotate(10deg)" }} />
     <div className="pointer-events-none absolute inset-0 rounded-[2rem] bg-[radial-gradient(circle_at_50%_110%,rgba(255,255,255,.20),transparent_44%)]" />
-    <span className="sr-only">{theme.label} premium neon 3D fantasy player card</span>
+    <span className="sr-only">{theme.label} premium engraved 3D fantasy player card</span>
   </article>;
 }
