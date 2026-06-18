@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { type PlayerCardData } from "./cards/types";
 
 type PremiumFootballCardProps = {
@@ -68,6 +68,7 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
   const theme = themes[rarity] || themes.common;
   const dimensions = sizeMap[size];
   const images = useMemo(() => firstValidImage(player), [player]);
+  const imageKey = useMemo(() => images.join("|"), [images]);
   const [imageIndex, setImageIndex] = useState(0);
   const [failed, setFailed] = useState(false);
   const currentImage = images[imageIndex];
@@ -79,6 +80,11 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
   const [firstName, lastName] = splitName(player.name);
   const national = player.nationality || "FC";
   const position = player.position || "PLAYER";
+
+  useEffect(() => {
+    setImageIndex(0);
+    setFailed(false);
+  }, [player.id, imageKey]);
 
   const handleImageError = () => {
     if (imageIndex < images.length - 1) setImageIndex((index) => index + 1);
