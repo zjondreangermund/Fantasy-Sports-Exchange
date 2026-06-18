@@ -1,5 +1,5 @@
 import { memo } from "react";
-import PlayerTile from "./PlayerTile";
+import PremiumFootballCard from "./PremiumFootballCard";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
@@ -14,12 +14,6 @@ type CardShowcaseProps = {
   withSpotlight?: boolean;
 };
 
-function getSizeClass(size: CardShowcaseProps["size"]) {
-  if (size === "sm") return "!h-[218px] !w-[156px]";
-  if (size === "lg") return "!h-[252px] !w-[186px]";
-  return "";
-}
-
 function CardShowcaseBase({
   withSpotlight = true,
   card,
@@ -33,15 +27,15 @@ function CardShowcaseBase({
   return (
     <div className="relative inline-flex flex-col items-center justify-center px-2 pb-6 pt-4">
       {withSpotlight ? (
-        <div className="pointer-events-none absolute left-1/2 top-[42%] h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-300/12 blur-2xl" />
+        <div className="pointer-events-none absolute left-1/2 top-[42%] h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-yellow-300/14 blur-2xl" />
       ) : null}
 
-      <PlayerTile
+      <PremiumFootballCard
         player={player}
         selected={selected}
         onClick={onClick}
         showPrice={showPrice}
-        className={getSizeClass(size)}
+        size={size}
       />
 
       <div className="pointer-events-none absolute bottom-0 h-7 w-[80%] rounded-full bg-black/45 blur-xl" />
