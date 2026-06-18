@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState, type MouseEvent } from "react";
+import { memo, useMemo, useState } from "react";
 import { type PlayerCardData } from "./cards/types";
 
 type PremiumFootballCardProps = {
@@ -12,105 +12,77 @@ type PremiumFootballCardProps = {
 
 type RarityTheme = {
   label: string;
-  palette: string[];
-  base: string;
-  depth: string[];
-  glow: string;
-  muted: string;
-  soft: string;
+  primary: string;
+  secondary: string;
+  dark: string;
+  light: string;
+  border: string;
+  shadow: string;
   text: string;
 };
 
-const PTS: [number, number][][] = [
-  [[0, 0], [70, 9], [140, 0], [212, 7], [280, 0]],
-  [[4, 68], [76, 58], [148, 72], [218, 60], [280, 68]],
-  [[0, 136], [72, 146], [144, 132], [220, 148], [280, 138]],
-  [[8, 204], [80, 194], [152, 208], [222, 196], [280, 206]],
-  [[0, 272], [74, 282], [148, 268], [216, 278], [280, 274]],
-  [[6, 340], [78, 330], [150, 344], [224, 334], [280, 342]],
-  [[0, 408], [70, 418], [142, 404], [212, 416], [280, 410]],
-  [[0, 476], [70, 476], [140, 476], [210, 476], [280, 476]],
-];
-
 const themes: Record<string, RarityTheme> = {
   common: {
-    label: "Common",
-    palette: ["#f8fafc", "#e2e8f0", "#94a3b8", "#475569", "#1e293b"],
-    base: "#475569",
-    depth: ["#334155", "#1e293b", "#0f172a", "#080e19"],
-    glow: "rgba(148,163,184,0.34)",
-    muted: "#94a3b8",
-    soft: "rgba(203,213,225,0.52)",
-    text: "#ffffff",
+    label: "COMMON",
+    primary: "#cbd5e1",
+    secondary: "#94a3b8",
+    dark: "#334155",
+    light: "#f8fafc",
+    border: "#e2e8f0",
+    shadow: "rgba(148,163,184,.42)",
+    text: "#0f172a",
   },
   rare: {
-    label: "Rare",
-    palette: ["#eff6ff", "#bfdbfe", "#60a5fa", "#2563eb", "#1e3a8a"],
-    base: "#1d4ed8",
-    depth: ["#1e3a8a", "#172554", "#0d1a3f", "#070e24"],
-    glow: "rgba(59,130,246,0.45)",
-    muted: "#93c5fd",
-    soft: "rgba(147,197,253,0.58)",
-    text: "#ffffff",
+    label: "RARE",
+    primary: "#60a5fa",
+    secondary: "#2563eb",
+    dark: "#1e3a8a",
+    light: "#dbeafe",
+    border: "#bfdbfe",
+    shadow: "rgba(37,99,235,.42)",
+    text: "#06152f",
   },
   unique: {
-    label: "Unique",
-    palette: ["#fae8ff", "#f0abfc", "#d946ef", "#9333ea", "#4c1d95"],
-    base: "#7e22ce",
-    depth: ["#581c87", "#4c1d95", "#2e1065", "#1a0b35"],
-    glow: "rgba(168,85,247,0.50)",
-    muted: "#f0abfc",
-    soft: "rgba(240,171,252,0.60)",
-    text: "#ffffff",
+    label: "UNIQUE",
+    primary: "#d946ef",
+    secondary: "#9333ea",
+    dark: "#581c87",
+    light: "#fae8ff",
+    border: "#f0abfc",
+    shadow: "rgba(147,51,234,.46)",
+    text: "#2e073f",
   },
   epic: {
-    label: "Epic",
-    palette: ["#e0f2fe", "#a5f3fc", "#38bdf8", "#4f46e5", "#312e81"],
-    base: "#4338ca",
-    depth: ["#3730a3", "#312e81", "#1e1b4b", "#11102a"],
-    glow: "rgba(99,102,241,0.50)",
-    muted: "#a5b4fc",
-    soft: "rgba(165,180,252,0.62)",
-    text: "#ffffff",
+    label: "EPIC",
+    primary: "#818cf8",
+    secondary: "#2563eb",
+    dark: "#312e81",
+    light: "#e0e7ff",
+    border: "#c7d2fe",
+    shadow: "rgba(79,70,229,.44)",
+    text: "#111244",
   },
   legendary: {
-    label: "Legendary",
-    palette: ["#fff7ed", "#fde68a", "#f59e0b", "#b45309", "#78350f"],
-    base: "#b45309",
-    depth: ["#92400e", "#78350f", "#451a03", "#261002"],
-    glow: "rgba(245,158,11,0.58)",
-    muted: "#fde68a",
-    soft: "rgba(253,230,138,0.68)",
-    text: "#ffffff",
+    label: "LEGENDARY",
+    primary: "#f5d442",
+    secondary: "#d4af37",
+    dark: "#7c4a03",
+    light: "#fff2a8",
+    border: "#f7e27a",
+    shadow: "rgba(245,158,11,.55)",
+    text: "#171006",
   },
 };
 
 const sizeMap = {
-  sm: { width: 156, height: 265, scale: 0.557 },
-  md: { width: 168, height: 286, scale: 0.6 },
-  lg: { width: 208, height: 354, scale: 0.743 },
+  sm: { width: 156, height: 218, scale: 0.433 },
+  md: { width: 178, height: 249, scale: 0.494 },
+  lg: { width: 230, height: 322, scale: 0.639 },
 };
 
-type Tri = { points: string; colorIndex: number };
-
-function buildTris(): Tri[] {
-  const out: Tri[] = [];
-  for (let r = 0; r < PTS.length - 1; r += 1) {
-    for (let c = 0; c < PTS[r].length - 1; c += 1) {
-      const t1: [number, number][] = [PTS[r][c], PTS[r][c + 1], PTS[r + 1][c]];
-      const t2: [number, number][] = [PTS[r][c + 1], PTS[r + 1][c + 1], PTS[r + 1][c]];
-      for (const t of [t1, t2]) {
-        const cx = (t[0][0] + t[1][0] + t[2][0]) / 3;
-        const cy = (t[0][1] + t[1][1] + t[2][1]) / 3;
-        const colorIndex = Math.abs(Math.round(Math.sin(cx * 0.055 + cy * 0.038) * 2.2 + Math.cos(cx * 0.034 - cy * 0.062) * 1.8)) % 5;
-        out.push({ points: t.map((p) => p.join(",")).join(" "), colorIndex });
-      }
-    }
-  }
-  return out;
+function firstValidImage(player: PlayerCardData) {
+  return [player.image, player.imageUrl, player.photo, ...(player.imageCandidates || [])].filter(Boolean) as string[];
 }
-
-const TRIS = buildTris();
 
 function initials(name: string) {
   return String(name || "Player")
@@ -122,34 +94,23 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function firstValidImage(player: PlayerCardData) {
-  return [player.image, player.imageUrl, player.photo, ...(player.imageCandidates || [])].filter(Boolean) as string[];
+function splitName(name: string) {
+  const parts = String(name || "Unknown Player").trim().split(/\s+/);
+  if (parts.length <= 1) return [parts[0] || "UNKNOWN", ""];
+  return [parts[0], parts.slice(1).join(" ")];
 }
 
-function shortText(value: string | undefined, fallback: string, max = 18) {
-  const text = String(value || fallback).trim();
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+function shortClub(value?: string) {
+  const text = String(value || "FA").trim();
+  if (!text) return "FA";
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
+  return words.slice(0, 3).map((word) => word[0]).join("").toUpperCase();
 }
 
 function statTotal(player: PlayerCardData) {
   const scores = Array.isArray(player.last5Scores) ? player.last5Scores.map((v) => Number(v || 0)).slice(0, 5) : [];
-  const total = Number(player.totalPoints || scores.reduce((sum, value) => sum + value, 0) || player.form || player.rating || 0);
-  return Math.max(0, Math.round(total));
-}
-
-function depthShadow(theme: RarityTheme) {
-  return [
-    `1px 1px 0 ${theme.depth[0]}`,
-    `2px 2px 0 ${theme.depth[0]}`,
-    `3px 3px 0 ${theme.depth[1]}`,
-    `4px 4px 0 ${theme.depth[1]}`,
-    `5px 5px 0 ${theme.depth[2]}`,
-    `6px 6px 0 ${theme.depth[2]}`,
-    `7px 7px 0 ${theme.depth[3]}`,
-    `8px 8px 0 ${theme.depth[3]}`,
-    `0 26px 56px ${theme.glow}`,
-    "0 0 0 1px rgba(255,255,255,0.14)",
-  ].join(",");
+  return Math.max(0, Math.round(Number(player.totalPoints || scores.reduce((sum, value) => sum + value, 0) || player.form || player.rating || 0)));
 }
 
 function PremiumFootballCardBase({ player, selected = false, onClick, showPrice = false, className = "", size = "md" }: PremiumFootballCardProps) {
@@ -159,80 +120,86 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
   const images = useMemo(() => firstValidImage(player), [player]);
   const [imageIndex, setImageIndex] = useState(0);
   const [failed, setFailed] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
-  const [gloss, setGloss] = useState({ x: 50, y: 50 });
-  const ref = useRef<HTMLButtonElement>(null);
   const currentImage = images[imageIndex];
   const showImage = Boolean(currentImage) && !failed;
   const rating = Math.max(0, Math.round(Number(player.rating || player.form || statTotal(player) || 0)));
-  const serial = player.serial && player.maxSupply ? `${player.serial} / ${player.maxSupply}` : player.maxSupply ? `1 / ${player.maxSupply}` : player.season || "25-26";
-  const teamName = player.team || player.club || "Fantasy Arena";
-  const clubMark = shortText(teamName, "FA", 1).toUpperCase();
-
-  const handleMouseMove = (event: MouseEvent<HTMLButtonElement>) => {
-    if (!ref.current || window.matchMedia("(pointer: coarse)").matches) return;
-    const rect = ref.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    setTilt({ x: ((y - rect.height / 2) / (rect.height / 2)) * -8, y: ((x - rect.width / 2) / (rect.width / 2)) * 8 });
-    setGloss({ x: (x / rect.width) * 100, y: (y / rect.height) * 100 });
-    setHovered(true);
-  };
-
-  const handleMouseLeave = () => {
-    setTilt({ x: 0, y: 0 });
-    setHovered(false);
-  };
+  const season = player.season || "2025 - 26";
+  const serial = player.serial && player.maxSupply ? `${player.serial}/${player.maxSupply}` : player.maxSupply ? `1/${player.maxSupply}` : "1000/1000";
+  const club = player.team || player.club || "Fantasy Arena";
+  const [firstName, lastName] = splitName(player.name);
+  const national = player.nationality || "FC";
+  const position = player.position || "PLAYER";
 
   const handleImageError = () => {
-    if (imageIndex < images.length - 1) {
-      setImageIndex((index) => index + 1);
-    } else {
-      setFailed(true);
-    }
+    if (imageIndex < images.length - 1) setImageIndex((index) => index + 1);
+    else setFailed(true);
   };
 
   return (
     <button
-      ref={ref}
       type="button"
       onClick={onClick}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
       className={[
         "group relative isolate bg-transparent p-0 text-left outline-none transition-transform duration-200",
-        onClick ? "cursor-pointer" : "cursor-default",
+        onClick ? "cursor-pointer hover:-translate-y-1" : "cursor-default",
         selected ? "ring-2 ring-emerald-300 ring-offset-2 ring-offset-slate-950" : "",
         className,
       ].join(" ")}
-      style={{ width: dimensions.width, height: dimensions.height, borderRadius: 18 * dimensions.scale }}
+      style={{ width: dimensions.width, height: dimensions.height, borderRadius: 20 * dimensions.scale }}
       data-testid={`premium-football-card-${player.id}`}
       aria-label={`${player.name || "Player"} card`}
     >
       <div
         style={{
           position: "relative",
-          width: 280,
-          height: 476,
-          borderRadius: 18,
+          width: 360,
+          height: 504,
           overflow: "hidden",
-          background: theme.base,
+          borderRadius: 22,
+          color: theme.text,
+          background: `linear-gradient(145deg, ${theme.primary}, ${theme.secondary})`,
+          border: `2px solid ${theme.border}`,
           transformOrigin: "top left",
-          transform: `scale(${dimensions.scale}) perspective(900px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) translateY(${hovered ? -5 : 0}px)`,
-          transition: hovered ? "transform 90ms ease-out" : "transform 220ms ease-out",
-          boxShadow: depthShadow(theme),
+          transform: `scale(${dimensions.scale})`,
+          boxShadow: `0 0 0 1px rgba(255,255,255,.22) inset, 0 8px 24px rgba(0,0,0,.25), 0 20px 48px ${theme.shadow}`,
+          fontFamily: "Inter, system-ui, sans-serif",
         }}
       >
-        <svg viewBox="0 0 280 476" xmlns="http://www.w3.org/2000/svg" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block", zIndex: 0 }}>
-          {TRIS.map((triangle, index) => (
-            <polygon key={index} points={triangle.points} fill={theme.palette[triangle.colorIndex]} stroke="rgba(255,255,255,0.12)" strokeWidth="0.4" />
-          ))}
-        </svg>
+        <div
+          style={{
+            position: "absolute",
+            inset: 8,
+            borderRadius: 18,
+            background: `linear-gradient(145deg, ${theme.primary}, ${theme.secondary})`,
+            boxShadow: "inset 0 0 10px rgba(255,255,255,.32), inset 0 8px 20px rgba(255,255,255,.14), inset 0 -14px 30px rgba(0,0,0,.24)",
+          }}
+        />
 
-        <div style={{ position: "absolute", inset: 0, zIndex: 1, background: `radial-gradient(circle at 50% 4%, rgba(255,255,255,0.34), transparent 28%), linear-gradient(135deg, rgba(255,255,255,0.20), transparent 22%, rgba(0,0,0,0.18) 72%, rgba(255,255,255,0.08))`, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", inset: 0, overflow: "hidden", zIndex: 1 }}>
+          <div style={{ position: "absolute", top: -30, left: -32, width: 250, height: 250, clipPath: "polygon(0 0, 75% 0, 48% 100%, 0 68%)", background: "linear-gradient(145deg, rgba(0,0,0,.10), rgba(255,255,255,.06))", boxShadow: "inset 0 6px 12px rgba(0,0,0,.20), inset 0 -5px 10px rgba(255,255,255,.16)" }} />
+          <div style={{ position: "absolute", top: 42, right: -28, width: 185, height: 180, clipPath: "polygon(24% 0, 100% 0, 100% 82%, 16% 100%)", background: "linear-gradient(145deg, rgba(255,255,255,.08), rgba(0,0,0,.13))", boxShadow: "inset 0 7px 14px rgba(0,0,0,.22), inset 0 -5px 10px rgba(255,255,255,.13)" }} />
+          <div style={{ position: "absolute", bottom: 118, left: -40, width: 220, height: 170, clipPath: "polygon(0 0, 100% 26%, 72% 100%, 0 86%)", background: "linear-gradient(145deg, rgba(0,0,0,.10), rgba(255,255,255,.09))", boxShadow: "inset 0 6px 14px rgba(0,0,0,.22), inset 0 -5px 10px rgba(255,255,255,.12)" }} />
+          <div style={{ position: "absolute", bottom: 86, right: -18, width: 190, height: 125, clipPath: "polygon(14% 0, 100% 20%, 100% 100%, 0 78%)", background: "linear-gradient(145deg, rgba(255,255,255,.09), rgba(0,0,0,.12))", boxShadow: "inset 0 6px 14px rgba(0,0,0,.22), inset 0 -4px 10px rgba(255,255,255,.14)" }} />
+          <div style={{ position: "absolute", top: 138, left: 74, width: 150, height: 95, clipPath: "polygon(0 16%, 86% 0, 100% 72%, 24% 100%)", background: "linear-gradient(145deg, rgba(0,0,0,.11), rgba(255,255,255,.10))", boxShadow: "inset 0 6px 13px rgba(0,0,0,.20), inset 0 -4px 10px rgba(255,255,255,.15)" }} />
+          <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 40% 18%, rgba(255,255,255,.32), transparent 28%), linear-gradient(115deg, transparent 0%, rgba(255,255,255,.16) 34%, transparent 48%, rgba(0,0,0,.12) 100%)" }} />
+        </div>
 
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 148, zIndex: 2, overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: 20, left: 22, right: 22, zIndex: 8, display: "flex", justifyContent: "space-between", alignItems: "flex-start", fontWeight: 900 }}>
+          <div style={{ fontSize: 18, letterSpacing: ".04em", lineHeight: 1.1 }}>
+            <div>{season}</div>
+            <div>{serial}</div>
+          </div>
+          <div style={{ textAlign: "right", fontSize: 18, lineHeight: 1.1 }}>
+            <div>{shortClub(club)}</div>
+            <div>#{rating || 1}</div>
+          </div>
+        </div>
+
+        <div style={{ position: "absolute", top: 48, right: 34, width: 34, height: 34, borderRadius: "50%", zIndex: 9, background: "rgba(255,255,255,.28)", border: "2px solid rgba(0,0,0,.18)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 950, boxShadow: "0 3px 8px rgba(0,0,0,.22)" }}>
+          {shortClub(club).slice(0, 2)}
+        </div>
+
+        <div style={{ position: "absolute", left: 22, right: 22, top: 70, bottom: 157, zIndex: 4, overflow: "hidden", borderRadius: "16px 16px 34px 34px" }}>
           {showImage ? (
             <img
               src={currentImage}
@@ -240,78 +207,41 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
               loading="lazy"
               decoding="async"
               onError={handleImageError}
-              style={{
-                width: "100%",
-                height: "106%",
-                objectFit: "contain",
-                objectPosition: "bottom center",
-                transform: "translateY(6px)",
-                filter: "drop-shadow(0 12px 28px rgba(0,0,0,0.58))",
-              }}
+              style={{ width: "122%", height: "116%", marginLeft: "-11%", objectFit: "contain", objectPosition: "bottom center", filter: "drop-shadow(0 16px 16px rgba(0,0,0,.42))", transform: "translateY(9px)", transition: "transform .25s ease" }}
+              className="group-hover:scale-[1.03]"
             />
           ) : (
-            <div style={{ position: "absolute", left: "50%", bottom: 38, transform: "translateX(-50%)", width: 128, height: 128, borderRadius: 24, border: "1px solid rgba(255,255,255,0.18)", background: "rgba(0,0,0,0.18)", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.55)", fontSize: 36, fontWeight: 900 }}>
+            <div style={{ position: "absolute", left: "50%", top: "46%", transform: "translate(-50%, -50%)", width: 126, height: 126, borderRadius: 24, border: "2px solid rgba(0,0,0,.18)", background: "rgba(255,255,255,.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 38, fontWeight: 950, color: "rgba(0,0,0,.42)" }}>
               {initials(player.name)}
             </div>
           )}
         </div>
 
-        <div style={{ position: "absolute", bottom: 148, left: 0, right: 0, height: 82, background: `linear-gradient(to top, ${theme.base}, transparent)`, zIndex: 3, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", left: 24, right: 24, bottom: 132, height: 34, zIndex: 6, background: `linear-gradient(180deg, transparent, ${theme.primary} 68%)` }} />
 
-        <div style={{ position: "absolute", top: 10, left: 10, right: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start", zIndex: 10 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            <span style={{ fontSize: 8, fontWeight: 900, color: "#fff", background: "rgba(0,0,0,0.52)", padding: "2px 6px", borderRadius: 3, letterSpacing: "0.08em" }}>{player.season || "25-26"}</span>
-            <span style={{ fontSize: 7, fontWeight: 800, color: theme.muted, background: "rgba(0,0,0,0.42)", padding: "1px 5px", borderRadius: 2 }}>{shortText(teamName, "Fantasy Arena", 18)}</span>
+        <div style={{ position: "absolute", left: 18, right: 18, bottom: 18, zIndex: 12, textAlign: "center" }}>
+          <div style={{ fontSize: 35, lineHeight: .92, fontWeight: 950, letterSpacing: ".05em", textTransform: "uppercase", color: theme.text, textShadow: "0 1px 0 rgba(255,255,255,.22)" }}>
+            <div>{firstName}</div>
+            {lastName ? <div>{lastName}</div> : null}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(0,0,0,0.45)", border: `1.5px solid ${theme.soft}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 950, color: "#fff" }}>{clubMark}</div>
-            <span style={{ fontSize: 10, fontWeight: 950, color: "#fff", background: "rgba(0,0,0,0.45)", padding: "1px 5px", borderRadius: 3 }}>{rating}</span>
+
+          <div style={{ marginTop: 10, fontSize: 15, fontWeight: 950, letterSpacing: ".12em", textTransform: "uppercase" }}>{position}</div>
+
+          <div style={{ marginTop: 11, display: "flex", justifyContent: "center", alignItems: "center", gap: 14, fontSize: 13, fontWeight: 900, letterSpacing: ".05em" }}>
+            <span>PTS {statTotal(player)}</span>
+            <span style={{ width: 18, height: 12, borderRadius: 2, background: "linear-gradient(to bottom, #111 0 33%, #d00 33% 66%, #fc0 66% 100%)", display: "inline-block", boxShadow: "0 0 0 1px rgba(0,0,0,.2)" }} />
+            <span>{national}</span>
+          </div>
+
+          <div style={{ margin: "12px auto 0", width: 126, borderRadius: 8, border: "1px solid rgba(0,0,0,.22)", background: "rgba(255,255,255,.18)", padding: "6px 8px", fontSize: 10, fontWeight: 950, letterSpacing: ".08em", textTransform: "uppercase", boxShadow: "inset 0 1px 0 rgba(255,255,255,.24)" }}>
+            {showPrice && Number(player.price || player.listedPrice || 0) > 0 ? `N$${Number(player.price || player.listedPrice || 0).toFixed(2)}` : theme.label}
           </div>
         </div>
 
-        {hovered ? <div style={{ position: "absolute", inset: 0, zIndex: 20, pointerEvents: "none", background: `radial-gradient(ellipse at ${gloss.x}% ${gloss.y}%, rgba(255,255,255,0.24) 0%, transparent 58%)` }} /> : null}
-
-        <div
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 176,
-            background: "linear-gradient(to bottom, rgba(5,10,22,0) 0%, rgba(6,10,21,0.96) 18%, #050812 100%)",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "flex-end",
-            padding: "10px 14px 16px",
-            zIndex: 10,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 5 }}>
-            <div style={{ width: 11, height: 11, borderRadius: "50%", border: `1.5px solid ${theme.soft}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <div style={{ width: 3.5, height: 3.5, borderRadius: "50%", background: theme.soft }} />
-            </div>
-            <span style={{ fontSize: 7.5, fontWeight: 900, color: theme.muted, letterSpacing: "0.16em", textTransform: "uppercase" }}>{theme.label}</span>
-            <span style={{ marginLeft: "auto", fontSize: 7.5, fontFamily: "monospace", color: theme.muted, opacity: 0.72 }}>{serial}</span>
-          </div>
-
-          <div style={{ fontSize: 30, fontWeight: 950, color: theme.text, textTransform: "uppercase", lineHeight: 0.92, letterSpacing: "-0.02em", marginBottom: 7 }}>
-            {String(player.name || "Unknown Player").split(/\s+/).slice(0, 2).map((part, index) => <span key={`${part}-${index}`}>{part}{index === 0 ? <br /> : null}</span>)}
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-            <span style={{ minWidth: 0, flex: 1, fontSize: 10, fontWeight: 800, color: theme.muted, letterSpacing: "0.12em", textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{player.position || "Player"}</span>
-            <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-              <span style={{ fontSize: 8.5, color: theme.muted }}>PTS {statTotal(player)}</span>
-              <span style={{ fontSize: 8.5, color: theme.muted, background: "rgba(255,255,255,0.08)", padding: "1px 4px", borderRadius: 2 }}>{player.nationality || "FC"}</span>
-            </div>
-          </div>
-
-          {showPrice && Number(player.price || player.listedPrice || 0) > 0 ? (
-            <div style={{ marginTop: 7, borderRadius: 7, background: "rgba(16,185,129,0.92)", color: "#022c22", textAlign: "center", fontSize: 10, fontWeight: 950, padding: "4px 6px" }}>
-              N${Number(player.price || player.listedPrice || 0).toFixed(2)}
-            </div>
-          ) : null}
+        <div style={{ position: "absolute", left: 22, bottom: 23, width: 30, height: 30, borderRadius: "50%", border: "3px solid rgba(0,0,0,.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14 }}>
+          <div style={{ width: 12, height: 12, clipPath: "polygon(50% 0, 61% 34%, 97% 34%, 68% 55%, 79% 91%, 50% 69%, 21% 91%, 32% 55%, 3% 34%, 39% 34%)", background: "rgba(0,0,0,.78)" }} />
         </div>
+        <div style={{ position: "absolute", right: 21, bottom: 23, width: 34, height: 34, borderRadius: "50%", border: "2px solid rgba(0,0,0,.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 14, fontSize: 10, fontWeight: 950 }}>FA</div>
       </div>
     </button>
   );
