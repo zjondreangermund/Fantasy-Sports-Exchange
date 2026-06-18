@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import CollectionPlayerCard from "../components/CollectionPlayerCard";
-import PlayerTile from "../components/PlayerTile";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
@@ -178,7 +177,7 @@ export default function CollectionPage() {
     listForSaleMutation.mutate({ cardId: listCard.id, price });
   };
 
-  const rarityFilters: Array<{ value: RarityKey; label: string; icon: React.ReactNode }> = [
+  const rarityFilters: Array<{ value: RarityKey; label: string; icon: ReactNode }> = [
     { value: "all", label: "All", icon: <Archive className="h-4 w-4" /> },
     { value: "common", label: "Common", icon: <ShieldCheck className="h-4 w-4" /> },
     { value: "rare", label: "Rare", icon: <Sparkles className="h-4 w-4" /> },
@@ -228,7 +227,7 @@ export default function CollectionPage() {
               <div className="relative flex min-h-[235px] items-start justify-center overflow-hidden rounded-3xl border border-white/10 bg-black/25 p-2 pt-3">
                 <div className="absolute bottom-7 h-12 w-44 rounded-full bg-black/60 blur-2xl" />
                 <div className="absolute bottom-5 h-7 w-40 rounded-full border border-white/10 bg-white/10" />
-                <div className="relative z-10 -mt-3 scale-[0.58] sm:scale-[0.72] md:scale-[0.78]">
+                <div className="relative z-10 -mt-3 scale-[0.78] sm:scale-[0.86] md:scale-[0.92]">
                   <CollectionPlayerCard player={featuredFantasyCard} size="lg" />
                 </div>
               </div>
@@ -263,7 +262,7 @@ export default function CollectionPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-[218px] rounded-[26px] sm:h-[232px]" />)}</div>
       ) : filteredCards.length > 0 ? (
         <div className="space-y-5">
-          <div className="grid grid-cols-2 justify-items-center gap-x-2 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          <div className="grid grid-cols-2 justify-items-center gap-x-3 gap-y-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {visibleCards.map((card) => {
               const fantasyCard = toFantasyCardData(card, { imageWidth: 320 });
               const isSelected = selectedForLineup.has(card.id);
@@ -272,12 +271,12 @@ export default function CollectionPage() {
                 <div key={card.id} className="flex flex-col items-center gap-2">
                   <div className={`relative rounded-[28px] ${editingLineup && isSelected ? "ring-2 ring-emerald-400" : ""}`}>
                     {card.forSale && <Badge className="absolute left-2 top-2 z-30 bg-amber-400 text-black">Listed</Badge>}
-                    <PlayerTile
+                    <CollectionPlayerCard
                       player={fantasyCard}
                       selected={isSelected}
                       onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined}
                       showPrice={Boolean(card.forSale)}
-                      className={isMobile ? "!h-[218px] !w-[156px]" : "!h-[232px] !w-[168px]"}
+                      size={isMobile ? "sm" : "md"}
                     />
                   </div>
                   <div className="z-30 flex min-h-8 gap-2">
@@ -302,7 +301,7 @@ export default function CollectionPage() {
   );
 }
 
-function AssetStat({ label, value }: { label: string; value: React.ReactNode }) {
+function AssetStat({ label, value }: { label: string; value: ReactNode }) {
   return <div className="rounded-2xl border border-white/10 bg-black/25 p-2.5"><p className="text-[9px] font-black uppercase tracking-widest text-white/35">{label}</p><p className="mt-1 text-base font-black text-white">{value}</p></div>;
 }
 
