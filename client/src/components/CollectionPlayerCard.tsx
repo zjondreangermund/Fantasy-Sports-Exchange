@@ -1,5 +1,4 @@
-import "./cards/card-rarity-effects.css";
-import UnifiedPlayerCard from "./cards/UnifiedPlayerCard";
+import PremiumFootballCard from "./PremiumFootballCard";
 import { type PlayerCardData } from "./cards/types";
 
 type CollectionPlayerCardProps = {
@@ -21,60 +20,24 @@ const EMPTY_PLAYER: PlayerCardData = {
   maxSupply: 0,
 };
 
-function normalizeRarity(value: unknown) {
-  const rarity = String(value || "common").toLowerCase();
-  if (rarity === "rare" || rarity === "unique" || rarity === "epic" || rarity === "legendary") return rarity;
-  return "common";
-}
-
 export default function CollectionPlayerCard({
   player,
   className = "",
   selected = false,
   onClick,
+  showPrice = false,
   size = "md",
 }: CollectionPlayerCardProps) {
   const card = player || EMPTY_PLAYER;
-  const isShowcase = size === "lg";
-  const rarity = normalizeRarity(card.rarity);
-  const stageClassName = `premium-card-stage ${className}`.trim();
 
   return (
-    <button
-      type="button"
+    <PremiumFootballCard
+      player={card}
+      selected={selected}
       onClick={onClick}
-      className={`premium-card-button group relative ${onClick ? "cursor-pointer" : "cursor-default"}`}
-      data-testid={`collection-v3-card-${card.id}`}
-      aria-label={`${card.name || "Player"} card`}
-    >
-      {isShowcase ? (
-        <div className="relative flex flex-col items-center">
-          <div className="absolute -top-6 h-24 w-56 rounded-full bg-white/10 blur-2xl" />
-          <div className="absolute bottom-10 h-10 w-48 rounded-full bg-black/50 blur-2xl" />
-          <div data-rarity={rarity} className="relative z-10 transition-transform duration-500 group-hover:-translate-y-2">
-            <UnifiedPlayerCard
-              player={card}
-              size={size}
-              variant="showcase"
-              selected={selected}
-              interactive={Boolean(onClick)}
-              className={stageClassName}
-            />
-          </div>
-          <div className="-mt-4 h-12 w-36 rounded-full bg-white/10 blur-md opacity-70" />
-        </div>
-      ) : (
-        <div data-rarity={rarity}>
-          <UnifiedPlayerCard
-            player={card}
-            size={size}
-            variant="default"
-            selected={selected}
-            interactive={Boolean(onClick)}
-            className={stageClassName}
-          />
-        </div>
-      )}
-    </button>
+      showPrice={showPrice}
+      size={size}
+      className={className}
+    />
   );
 }
