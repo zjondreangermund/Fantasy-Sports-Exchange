@@ -4,11 +4,15 @@ export const CARD_IMAGE_FALLBACK = "/players/fallback.png";
 
 type CardLike = Partial<PlayerCardWithPlayer> & {
   player?: {
-    id?: number | null;
+    id?: number | string | null;
+    fplId?: number | string | null;
+    code?: number | string | null;
     photo?: string | null;
     photoUrl?: string | null;
+    image?: string | null;
     imageUrl?: string | null;
     image_url?: string | null;
+    imageCandidates?: string[] | null;
   } | null;
 };
 
@@ -27,6 +31,18 @@ function lowercaseFilenamePath(url: string): string {
   const lowerFileName = fileName.toLowerCase();
   const rebuilt = `${parts.join("/")}/${lowerFileName}`.replace(/\/+/g, "/");
   return search ? `${rebuilt}?${search}` : rebuilt;
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter(Boolean) as string[]));
+}
+
+function premierLeaguePhotoFromCode(value?: string | number | null): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  const match = text.match(/(\d+)/);
+  if (!match) return null;
+  return `https://resources.premierleague.com/premierleague/photos/players/250x250/p${match[1]}.png`;
 }
 
 export function toSafeImageUrl(url: string): string {
@@ -61,19 +77,31 @@ export function buildCardImageCandidates(
     candidates.push(`/api/players/${playerId}/photo`);
   }
 
-  const imageUrl =
-    player?.photo ||
-    player?.photoUrl ||
-    player?.imageUrl ||
-    player?.image_url ||
-    null;
+  const rawValues = uniqueStrings([
+    player?.image,
+    player?.photo,
+    player?.photoUrl,
+    player?.imageUrl,
+    player?.image_url,
+    ...(Array.isArray(player?.imageCandidates) ? player?.imageCandidates || [] : []),
+  ]);
 
-  const normalized = normalizeImageUrl(imageUrl);
-  if (normalized) {
+  for (const raw of rawValues) {
+    const normalized = normalizeImageUrl(raw);
+    if (!normalized) continue;
+
+    const directFpl = premierLeaguePhotoFromCode(raw);
+    if (directFpl) candidates.push(directFpl);
+
     candidates.push(toSafeImageUrl(normalized));
     if (!normalized.startsWith("data:")) {
       candidates.push(toSafeImageUrl(lowercaseFilenamePath(normalized)));
     }
+  }
+
+  for (const codeLike of [player?.code, player?.fplId, player?.photo]) {
+    const plPhoto = premierLeaguePhotoFromCode(codeLike);
+    if (plPhoto) candidates.push(plPhoto);
   }
 
   candidates.push(CARD_IMAGE_FALLBACK);
