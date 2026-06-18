@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import CollectionPlayerCard from "../components/CollectionPlayerCard";
+import PlayerTile from "../components/PlayerTile";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
@@ -19,6 +20,8 @@ type RarityKey = "all" | "common" | "rare" | "unique" | "legendary";
 
 const BASE_PRICES: Record<string, number> = { common: 0, rare: 20, unique: 50, epic: 50, legendary: 100 };
 const COLLECTION_TARGETS: Record<string, number> = { common: 120, rare: 120, unique: 120, legendary: 120 };
+const INITIAL_VISIBLE_CARDS = 24;
+const LOAD_MORE_CARDS = 24;
 
 function rarityOf(card: PlayerCardWithPlayer) {
   return String(card.rarity || "common").toLowerCase();
@@ -45,7 +48,7 @@ export default function CollectionPage() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [filter, setFilter] = useState<RarityKey>("all");
-  const [visibleCount, setVisibleCount] = useState(16);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_CARDS);
   const [editingLineup, setEditingLineup] = useState(false);
   const [selectedForLineup, setSelectedForLineup] = useState<Set<number>>(new Set());
   const [listCard, setListCard] = useState<PlayerCardWithPlayer | null>(null);
@@ -129,7 +132,7 @@ export default function CollectionPage() {
   const namibiaRank = collectionValue > 0 ? `#${Math.max(1, 250 - Math.min(220, Math.floor(collectionValue / 25)))}` : "—";
 
   const filteredCards = useMemo(() => (cards || []).filter((c) => filter === "all" || rarityOf(c) === filter), [cards, filter]);
-  const visibleCards = isMobile ? filteredCards.slice(0, visibleCount) : filteredCards;
+  const visibleCards = useMemo(() => filteredCards.slice(0, visibleCount), [filteredCards, visibleCount]);
   const showcaseCards = [...(cards || [])].sort((a, b) => {
     const power: Record<string, number> = { legendary: 5, epic: 4, unique: 3, rare: 2, common: 1 };
     return (power[rarityOf(b)] || 0) - (power[rarityOf(a)] || 0) || cardValue(b) - cardValue(a);
@@ -139,7 +142,7 @@ export default function CollectionPage() {
   const featuredValue = featuredCard ? cardValue(featuredCard) : 0;
   const featuredLastSale = featuredValue ? Math.round(featuredValue * 0.94) : 0;
 
-  useEffect(() => setVisibleCount(16), [filter, isMobile, cards?.length]);
+  useEffect(() => setVisibleCount(INITIAL_VISIBLE_CARDS), [filter, isMobile, cards?.length]);
 
   const startEditLineup = () => {
     setEditingLineup(true);
@@ -259,24 +262,32 @@ export default function CollectionPage() {
       {isLoading ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-[218px] rounded-[26px] sm:h-[232px]" />)}</div>
       ) : filteredCards.length > 0 ? (
-        <div className="grid grid-cols-2 justify-items-center gap-x-2 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {visibleCards.map((card) => {
-            const fantasyCard = toFantasyCardData(card, { imageWidth: 640 });
-            const isSelected = selectedForLineup.has(card.id);
-            const rarity = rarityOf(card);
-            return (
-              <div key={card.id} className="flex flex-col items-center gap-2">
-                <div className={`relative rounded-[28px] ${editingLineup && isSelected ? "ring-2 ring-emerald-400" : ""}`}>
-                  {card.forSale && <Badge className="absolute left-2 top-2 z-30 bg-amber-400 text-black">Listed</Badge>}
-                  <CollectionPlayerCard player={fantasyCard} size={isMobile ? "sm" : "md"} selected={isSelected} onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined} />
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 justify-items-center gap-x-2 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {visibleCards.map((card) => {
+              const fantasyCard = toFantasyCardData(card, { imageWidth: 320 });
+              const isSelected = selectedForLineup.has(card.id);
+              const rarity = rarityOf(card);
+              return (
+                <div key={card.id} className="flex flex-col items-center gap-2">
+                  <div className={`relative rounded-[28px] ${editingLineup && isSelected ? "ring-2 ring-emerald-400" : ""}`}>
+                    {card.forSale && <Badge className="absolute left-2 top-2 z-30 bg-amber-400 text-black">Listed</Badge>}
+                    <PlayerTile
+                      player={fantasyCard}
+                      selected={isSelected}
+                      onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined}
+                      showPrice={Boolean(card.forSale)}
+                      className={isMobile ? "!h-[218px] !w-[156px]" : "!h-[232px] !w-[168px]"}
+                    />
+                  </div>
+                  <div className="z-30 flex min-h-8 gap-2">
+                    {card.forSale ? <Button size="sm" variant="destructive" onClick={() => cancelListingMutation.mutate(card.id)} disabled={cancelListingMutation.isPending} className="h-7 px-2 text-[11px]">Cancel {money(card.price)}</Button> : rarity === "common" ? <Button size="sm" variant="outline" disabled className="h-7 px-2 text-[11px]">Tournament Only</Button> : <Button size="sm" onClick={() => handleListCard(card)} className="h-7 bg-gradient-to-r from-emerald-400 to-lime-300 px-3 text-[11px] font-black text-black"><DollarSign className="mr-1 h-3 w-3" /> Sell</Button>}
+                  </div>
                 </div>
-                <div className="z-30 flex min-h-8 gap-2">
-                  {card.forSale ? <Button size="sm" variant="destructive" onClick={() => cancelListingMutation.mutate(card.id)} disabled={cancelListingMutation.isPending} className="h-7 px-2 text-[11px]">Cancel {money(card.price)}</Button> : rarity === "common" ? <Button size="sm" variant="outline" disabled className="h-7 px-2 text-[11px]">Tournament Only</Button> : <Button size="sm" onClick={() => handleListCard(card)} className="h-7 bg-gradient-to-r from-emerald-400 to-lime-300 px-3 text-[11px] font-black text-black"><DollarSign className="mr-1 h-3 w-3" /> Sell</Button>}
-                </div>
-              </div>
-            );
-          })}
-          {isMobile && filteredCards.length > visibleCount ? <div className="col-span-2 mt-2 flex w-full justify-center sm:col-span-3"><Button variant="outline" onClick={() => setVisibleCount((prev) => prev + 16)}>Load More</Button></div> : null}
+              );
+            })}
+          </div>
+          {filteredCards.length > visibleCount ? <div className="flex w-full justify-center"><Button variant="outline" onClick={() => setVisibleCount((prev) => prev + LOAD_MORE_CARDS)}>Load More ({Math.min(LOAD_MORE_CARDS, filteredCards.length - visibleCount)} more)</Button></div> : null}
         </div>
       ) : <Card className="border-white/10 bg-white/[0.06] p-8 text-center text-white"><p className="text-white/60">No cards found with this filter.</p></Card>}
 
