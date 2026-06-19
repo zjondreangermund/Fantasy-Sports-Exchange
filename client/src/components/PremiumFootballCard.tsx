@@ -16,49 +16,61 @@ type Theme = {
   plate: string;
   border: string;
   glow: string;
+  shadow: string;
   text: string;
+  foil: string;
 };
 
 const themes: Record<string, Theme> = {
   common: {
     label: "COMMON",
-    face: "linear-gradient(145deg,#ffffff 0%,#d7dde5 36%,#9ca6b2 72%,#f8fafc 100%)",
-    plate: "linear-gradient(145deg,#ffffff,#cfd6df 52%,#8b95a1)",
+    face: "linear-gradient(145deg,#ffffff 0%,#edf1f5 16%,#b9c1cb 38%,#f8fafc 54%,#8d98a6 74%,#f7fafc 100%)",
+    plate: "linear-gradient(145deg,#ffffff 0%,#d9dee6 40%,#8994a0 72%,#f7fafc 100%)",
     border: "#ffffff",
-    glow: "rgba(226,232,240,.70)",
+    glow: "rgba(226,232,240,.82)",
+    shadow: "rgba(148,163,184,.62)",
     text: "#0b1220",
+    foil: "rgba(226,232,240,.55)",
   },
   rare: {
     label: "RARE",
-    face: "linear-gradient(145deg,#eef7ff 0%,#61b4ff 35%,#1557da 72%,#dcefff 100%)",
-    plate: "linear-gradient(145deg,#f0f9ff,#4aa3ff 50%,#1450cc)",
+    face: "linear-gradient(145deg,#f1f9ff 0%,#90cdfd 16%,#308bff 39%,#eaf7ff 53%,#0f55d8 76%,#dcefff 100%)",
+    plate: "linear-gradient(145deg,#f3fbff 0%,#5db5ff 42%,#1450cc 72%,#d9eeff 100%)",
     border: "#dbeafe",
-    glow: "rgba(59,130,246,.78)",
+    glow: "rgba(59,130,246,.90)",
+    shadow: "rgba(37,99,235,.72)",
     text: "#06152f",
+    foil: "rgba(147,197,253,.62)",
   },
   unique: {
     label: "UNIQUE",
-    face: "linear-gradient(145deg,#fff1ff 0%,#ef65ff 34%,#8628dd 72%,#f5d0fe 100%)",
-    plate: "linear-gradient(145deg,#fff1ff,#df56ff 48%,#8326dc)",
+    face: "linear-gradient(145deg,#fff3ff 0%,#f2a7ff 15%,#df4cff 38%,#fff1ff 53%,#8122d8 76%,#f5d0fe 100%)",
+    plate: "linear-gradient(145deg,#fff3ff 0%,#ed7aff 42%,#8426dc 74%,#ffd7ff 100%)",
     border: "#ffd7ff",
-    glow: "rgba(217,70,239,.82)",
+    glow: "rgba(217,70,239,.92)",
+    shadow: "rgba(147,51,234,.76)",
     text: "#270334",
+    foil: "rgba(240,171,252,.68)",
   },
   epic: {
     label: "EPIC",
-    face: "linear-gradient(145deg,#eef2ff 0%,#99a5ff 34%,#2454e6 72%,#e0e7ff 100%)",
-    plate: "linear-gradient(145deg,#eef2ff,#8793ff 48%,#2354e6)",
+    face: "linear-gradient(145deg,#f3f5ff 0%,#b9c0ff 16%,#7c89ff 39%,#eef2ff 53%,#2354e6 76%,#dbe4ff 100%)",
+    plate: "linear-gradient(145deg,#f3f5ff 0%,#96a1ff 42%,#2354e6 74%,#e0e7ff 100%)",
     border: "#e0e7ff",
-    glow: "rgba(99,102,241,.78)",
+    glow: "rgba(99,102,241,.90)",
+    shadow: "rgba(79,70,229,.74)",
     text: "#08113f",
+    foil: "rgba(165,180,252,.65)",
   },
   legendary: {
     label: "LEGENDARY",
-    face: "linear-gradient(145deg,#fff8c7 0%,#ffd027 34%,#c28305 72%,#fff2a8 100%)",
-    plate: "linear-gradient(145deg,#fff8c7,#ffd027 46%,#c28305)",
+    face: "linear-gradient(145deg,#fff9d6 0%,#ffe36f 16%,#f9bf12 36%,#fff6b8 52%,#a86600 76%,#fff2a8 100%)",
+    plate: "linear-gradient(145deg,#fff9d6 0%,#ffd84d 38%,#c98d00 68%,#fff4a3 100%)",
     border: "#fff2a8",
-    glow: "rgba(245,158,11,.92)",
+    glow: "rgba(245,158,11,.98)",
+    shadow: "rgba(217,119,6,.82)",
     text: "#171006",
+    foil: "rgba(253,230,138,.78)",
   },
 };
 
@@ -80,9 +92,8 @@ function initials(name?: string) {
   return String(name || "Player").split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 }
 
-function nameParts(name?: string) {
-  const parts = String(name || "Unknown Player").trim().split(/\s+/);
-  return [parts[0] || "UNKNOWN", parts.slice(1).join(" ")];
+function shortName(name?: string) {
+  return String(name || "Unknown Player").trim().toUpperCase();
 }
 
 function clubCode(club?: string) {
@@ -98,10 +109,24 @@ function points(player: PlayerCardData) {
 
 function Spark({ x, y, s = 14 }: { x: number; y: number; s?: number }) {
   return (
-    <span style={{ position: "absolute", left: x, top: y, width: s, height: s, zIndex: 35, filter: "drop-shadow(0 0 10px white)" }}>
+    <span aria-hidden="true" style={{ position: "absolute", left: x, top: y, width: s, height: s, zIndex: 42, pointerEvents: "none", filter: "drop-shadow(0 0 8px white) drop-shadow(0 0 16px rgba(255,255,255,.75))" }}>
       <i style={{ position: "absolute", left: "50%", top: 0, width: 2, height: s, transform: "translateX(-50%)", background: "white", borderRadius: 2 }} />
       <i style={{ position: "absolute", left: 0, top: "50%", width: s, height: 2, transform: "translateY(-50%)", background: "white", borderRadius: 2 }} />
+      <i style={{ position: "absolute", inset: s * 0.37, borderRadius: "50%", background: "white" }} />
     </span>
+  );
+}
+
+function Facet({ style }: { style: React.CSSProperties }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        background: "linear-gradient(145deg,rgba(255,255,255,.42),rgba(0,0,0,.18) 72%,rgba(255,255,255,.16))",
+        boxShadow: "inset 0 10px 22px rgba(0,0,0,.28), inset 0 -9px 18px rgba(255,255,255,.42), 0 1px 0 rgba(255,255,255,.22)",
+        ...style,
+      }}
+    />
   );
 }
 
@@ -115,11 +140,11 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
   const [failed, setFailed] = useState(false);
   const img = imgs[index];
   const showImg = Boolean(img) && !failed;
-  const [first, last] = nameParts(player.name);
   const team = player.team || player.club || "Fantasy Arena";
   const rating = Math.round(Number(player.rating || player.form || points(player) || 0));
   const serial = player.serial && player.maxSupply ? `${player.serial}/${player.maxSupply}` : player.maxSupply ? `1/${player.maxSupply}` : "1000/1000";
   const price = Number(player.price || player.listedPrice || 0);
+  const displayName = shortName(player.name);
 
   useEffect(() => {
     setIndex(0);
@@ -139,44 +164,76 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
       style={{ width: dim.w, height: dim.h, borderRadius: 22 * dim.s }}
       data-testid={`premium-football-card-${player.id}`}
     >
-      <div style={{ position: "relative", width: 360, height: 504, transform: `scale(${dim.s})`, transformOrigin: "top left", overflow: "hidden", borderRadius: 26, color: theme.text, background: theme.face, border: `3px solid ${theme.border}`, boxShadow: `0 0 0 1px rgba(255,255,255,.8) inset,0 0 0 7px rgba(255,255,255,.12) inset,0 0 44px ${theme.glow},0 24px 70px rgba(0,0,0,.5)`, fontFamily: "Inter,system-ui,sans-serif" }}>
-        <div style={{ position: "absolute", inset: 7, borderRadius: 22, border: "1px solid rgba(255,255,255,.85)", boxShadow: `inset 0 0 22px rgba(255,255,255,.7),0 0 24px ${theme.glow}`, zIndex: 5 }} />
-        <div style={{ position: "absolute", inset: 13, borderRadius: 18, border: "1px solid rgba(0,0,0,.24)", boxShadow: "inset 0 2px 0 rgba(255,255,255,.7),inset 0 -14px 28px rgba(0,0,0,.28)", zIndex: 5 }} />
+      <div
+        style={{
+          position: "relative",
+          width: 360,
+          height: 504,
+          transform: `scale(${dim.s})`,
+          transformOrigin: "top left",
+          overflow: "hidden",
+          borderRadius: 28,
+          color: theme.text,
+          background: theme.face,
+          border: `3px solid ${theme.border}`,
+          boxShadow: `0 0 0 1px rgba(255,255,255,.92) inset, 0 0 0 8px rgba(255,255,255,.14) inset, 0 0 34px rgba(255,255,255,.55), 0 0 54px ${theme.glow}, 0 28px 80px rgba(0,0,0,.52)`,
+          fontFamily: "Inter, system-ui, sans-serif",
+        }}
+      >
+        <div style={{ position: "absolute", inset: 6, zIndex: 6, borderRadius: 24, pointerEvents: "none", border: "1px solid rgba(255,255,255,.92)", boxShadow: `inset 0 0 24px rgba(255,255,255,.78), inset 0 0 46px rgba(255,255,255,.24), 0 0 26px ${theme.glow}` }} />
+        <div style={{ position: "absolute", inset: 13, zIndex: 6, borderRadius: 19, pointerEvents: "none", border: "1px solid rgba(0,0,0,.24)", boxShadow: "inset 0 2px 0 rgba(255,255,255,.78), inset 0 -16px 30px rgba(0,0,0,.32)" }} />
 
-        <div style={{ position: "absolute", inset: 0, overflow: "hidden", zIndex: 1 }}>
-          <div style={{ position: "absolute", top: -28, left: -28, width: 260, height: 252, clipPath: "polygon(0 0,76% 0,48% 100%,0 68%)", background: "linear-gradient(145deg,rgba(0,0,0,.2),rgba(255,255,255,.35))", boxShadow: "inset 0 10px 20px rgba(0,0,0,.3),inset 0 -8px 16px rgba(255,255,255,.4)" }} />
-          <div style={{ position: "absolute", top: 44, right: -18, width: 200, height: 188, clipPath: "polygon(22% 0,100% 0,100% 84%,15% 100%)", background: "linear-gradient(145deg,rgba(255,255,255,.38),rgba(0,0,0,.2))", boxShadow: "inset 0 9px 20px rgba(0,0,0,.28),inset 0 -8px 16px rgba(255,255,255,.42)" }} />
-          <div style={{ position: "absolute", top: 142, left: 74, width: 164, height: 106, clipPath: "polygon(0 18%,86% 0,100% 74%,24% 100%)", background: "linear-gradient(145deg,rgba(0,0,0,.15),rgba(255,255,255,.42))", boxShadow: "inset 0 8px 18px rgba(0,0,0,.26),inset 0 -7px 15px rgba(255,255,255,.42)" }} />
-          <div style={{ position: "absolute", bottom: 138, left: -40, width: 234, height: 176, clipPath: "polygon(0 0,100% 26%,72% 100%,0 86%)", background: "linear-gradient(145deg,rgba(0,0,0,.16),rgba(255,255,255,.34))" }} />
+        <div style={{ position: "absolute", inset: 0, zIndex: 1, overflow: "hidden" }}>
+          <Facet style={{ top: -28, left: -30, width: 260, height: 258, clipPath: "polygon(0 0,78% 0,48% 100%,0 68%)" }} />
+          <Facet style={{ top: 42, right: -18, width: 205, height: 194, clipPath: "polygon(22% 0,100% 0,100% 84%,15% 100%)" }} />
+          <Facet style={{ top: 136, left: 76, width: 170, height: 110, clipPath: "polygon(0 18%,86% 0,100% 74%,24% 100%)" }} />
+          <Facet style={{ bottom: 142, left: -38, width: 240, height: 182, clipPath: "polygon(0 0,100% 26%,72% 100%,0 86%)" }} />
+          <Facet style={{ bottom: 108, right: -24, width: 210, height: 142, clipPath: "polygon(14% 0,100% 20%,100% 100%,0 78%)" }} />
           <div style={{ position: "absolute", inset: 0, opacity: .22, backgroundImage: "radial-gradient(circle,rgba(255,255,255,.95) 0 1px,transparent 1.4px)", backgroundSize: "8px 8px" }} />
-          <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 28% 12%,rgba(255,255,255,.65),transparent 24%),linear-gradient(115deg,transparent,rgba(255,255,255,.34) 30%,transparent 46%,rgba(0,0,0,.18))" }} />
+          <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 28% 12%,rgba(255,255,255,.68),transparent 24%), radial-gradient(circle at 82% 34%,${theme.foil},transparent 20%), linear-gradient(115deg,transparent 0%,rgba(255,255,255,.42) 30%,transparent 46%,rgba(0,0,0,.20) 100%)` }} />
         </div>
 
-        <div style={{ position: "absolute", top: 18, left: 22, right: 22, zIndex: 30, display: "flex", justifyContent: "space-between", fontWeight: 950, textShadow: "0 1px 0 rgba(255,255,255,.48)" }}>
+        <div style={{ position: "absolute", top: 18, left: 22, right: 22, zIndex: 36, display: "flex", justifyContent: "space-between", fontWeight: 950, textShadow: "0 1px 0 rgba(255,255,255,.55)" }}>
           <div style={{ fontSize: 18, lineHeight: 1.08 }}><div>{player.season || "2026-27"}</div><div>{serial}</div></div>
           <div style={{ textAlign: "right", fontSize: 18, lineHeight: 1.08 }}><div>{clubCode(team)}</div><div>#{rating || 1}</div></div>
         </div>
 
-        <div style={{ position: "absolute", top: 48, right: 34, zIndex: 31, width: 36, height: 36, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(145deg,rgba(255,255,255,.88),rgba(255,255,255,.28))", border: "2px solid rgba(0,0,0,.2)", fontSize: 12, fontWeight: 950 }}>{clubCode(team).slice(0, 2)}</div>
+        <div style={{ position: "absolute", top: 48, right: 34, zIndex: 37, width: 36, height: 36, borderRadius: "50%", display: "grid", placeItems: "center", background: "linear-gradient(145deg,rgba(255,255,255,.92),rgba(255,255,255,.30))", border: "2px solid rgba(0,0,0,.22)", boxShadow: "0 4px 10px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.80)", fontSize: 12, fontWeight: 950 }}>{clubCode(team).slice(0, 2)}</div>
 
-        <div style={{ position: "absolute", left: 18, right: 18, top: 68, bottom: 148, zIndex: 12, overflow: "visible" }}>
-          {showImg ? <img src={img} alt={player.name || "Player"} loading="lazy" decoding="async" onError={onImageError} style={{ position: "absolute", left: "50%", bottom: -10, width: "146%", height: "132%", transform: "translateX(-50%)", objectFit: "contain", objectPosition: "bottom center", filter: "drop-shadow(0 22px 18px rgba(0,0,0,.52)) saturate(1.16) contrast(1.08)", zIndex: 14 }} className="transition-transform duration-200 group-hover:scale-[1.035]" /> : <div style={{ position: "absolute", left: "50%", top: "48%", transform: "translate(-50%,-50%)", width: 128, height: 128, borderRadius: 26, border: "2px solid rgba(0,0,0,.18)", background: "rgba(255,255,255,.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 38, fontWeight: 950, color: "rgba(0,0,0,.38)" }}>{initials(player.name)}</div>}
+        <div style={{ position: "absolute", left: 10, right: 10, top: 55, bottom: 132, zIndex: 14, overflow: "visible" }}>
+          {showImg ? (
+            <img
+              src={img}
+              alt={player.name || "Player"}
+              loading="lazy"
+              decoding="async"
+              onError={onImageError}
+              style={{ position: "absolute", left: "50%", bottom: -20, width: "165%", height: "148%", transform: "translateX(-50%)", objectFit: "contain", objectPosition: "bottom center", filter: `drop-shadow(0 24px 20px rgba(0,0,0,.58)) drop-shadow(0 0 18px ${theme.shadow}) saturate(1.18) contrast(1.08)`, zIndex: 16 }}
+              className="transition-transform duration-200 group-hover:scale-[1.04]"
+            />
+          ) : (
+            <div style={{ position: "absolute", left: "50%", top: "48%", transform: "translate(-50%,-50%)", width: 128, height: 128, borderRadius: 26, border: "2px solid rgba(0,0,0,.18)", background: "rgba(255,255,255,.22)", display: "grid", placeItems: "center", fontSize: 38, fontWeight: 950, color: "rgba(0,0,0,.40)" }}>{initials(player.name)}</div>
+          )}
         </div>
 
-        <div style={{ position: "absolute", left: 18, right: 18, bottom: 132, height: 62, zIndex: 18, clipPath: "polygon(0 42%,50% 0,100% 40%,100% 100%,0 100%)", background: theme.plate, borderTop: "2px solid rgba(255,255,255,.7)", boxShadow: "0 -12px 24px rgba(255,255,255,.24),inset 0 -12px 22px rgba(0,0,0,.22)" }} />
-        <div style={{ position: "absolute", inset: 0, zIndex: 21, pointerEvents: "none", background: "linear-gradient(118deg,transparent 0%,transparent 26%,rgba(255,255,255,.82) 38%,rgba(255,255,255,.18) 46%,transparent 56%)", mixBlendMode: "screen", opacity: .82 }} />
-        <div style={{ position: "absolute", left: -88, top: 8, zIndex: 22, width: 530, height: 92, transform: "rotate(-32deg)", pointerEvents: "none", background: "linear-gradient(90deg,transparent,rgba(255,255,255,.96),transparent)", filter: "blur(1px)", opacity: .76 }} />
+        <div style={{ position: "absolute", left: 16, right: 16, bottom: 124, height: 72, zIndex: 20, clipPath: "polygon(0 44%,50% 0,100% 42%,100% 100%,0 100%)", background: theme.plate, borderTop: "2px solid rgba(255,255,255,.78)", boxShadow: "0 -14px 28px rgba(255,255,255,.28), inset 0 2px 0 rgba(255,255,255,.75), inset 0 -14px 24px rgba(0,0,0,.26)" }} />
+
+        <div style={{ position: "absolute", inset: 0, zIndex: 26, pointerEvents: "none", background: "linear-gradient(118deg,transparent 0%,transparent 25%,rgba(255,255,255,.90) 38%,rgba(255,255,255,.18) 47%,transparent 58%)", mixBlendMode: "screen", opacity: .86 }} />
+        <div style={{ position: "absolute", left: -92, top: 4, zIndex: 27, width: 540, height: 96, transform: "rotate(-32deg)", pointerEvents: "none", background: "linear-gradient(90deg,transparent,rgba(255,255,255,.98),transparent)", filter: "blur(1px)", opacity: .82 }} />
+        <div style={{ position: "absolute", inset: 0, zIndex: 28, pointerEvents: "none", background: `radial-gradient(circle at 14% 18%,rgba(255,255,255,.86),transparent 7%), radial-gradient(circle at 86% 24%,rgba(255,255,255,.82),transparent 6%), radial-gradient(circle at 76% 56%,${theme.foil},transparent 5%), radial-gradient(circle at 21% 78%,rgba(255,255,255,.58),transparent 6%)`, mixBlendMode: "screen" }} />
         <Spark x={45} y={78} s={16} /><Spark x={278} y={96} s={19} /><Spark x={306} y={250} s={14} /><Spark x={74} y={348} s={13} />
 
-        <div style={{ position: "absolute", left: 18, right: 18, bottom: 18, zIndex: 32, textAlign: "center" }}>
-          <div style={{ fontSize: 34, lineHeight: .92, fontWeight: 950, letterSpacing: ".045em", textTransform: "uppercase", color: theme.text, textShadow: "0 1px 0 rgba(255,255,255,.46),0 7px 14px rgba(0,0,0,.18)" }}><div>{first}</div>{last ? <div>{last}</div> : null}</div>
-          <div style={{ marginTop: 9, fontSize: 15, fontWeight: 950, letterSpacing: ".12em", textTransform: "uppercase" }}>{player.position || "PLAYER"}</div>
-          <div style={{ marginTop: 10, display: "flex", justifyContent: "center", alignItems: "center", gap: 13, fontSize: 13, fontWeight: 900 }}><span>PTS {points(player)}</span><span>{player.nationality || "FC"}</span></div>
-          <div style={{ margin: "11px auto 0", width: 140, borderRadius: 10, border: "1px solid rgba(0,0,0,.24)", background: "linear-gradient(145deg,rgba(255,255,255,.8),rgba(255,255,255,.18))", padding: "6px 8px", fontSize: 10, fontWeight: 950, letterSpacing: ".08em", textTransform: "uppercase" }}>{showPrice && price > 0 ? `N$${price.toFixed(2)}` : `${theme.label} EDITION`}</div>
+        <div style={{ position: "absolute", left: 18, right: 18, bottom: 17, zIndex: 38, textAlign: "center" }}>
+          <div style={{ minHeight: 58, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 8px" }}>
+            <div style={{ fontSize: displayName.length > 18 ? 25 : 30, lineHeight: .95, fontWeight: 950, letterSpacing: ".035em", textTransform: "uppercase", color: theme.text, textShadow: "0 1px 0 rgba(255,255,255,.50), 0 8px 15px rgba(0,0,0,.20)" }}>{displayName}</div>
+          </div>
+          <div style={{ marginTop: 3, fontSize: 14, fontWeight: 950, letterSpacing: ".12em", textTransform: "uppercase" }}>{player.position || "PLAYER"}</div>
+          <div style={{ marginTop: 8, display: "flex", justifyContent: "center", alignItems: "center", gap: 12, fontSize: 12, fontWeight: 900 }}><span>PTS {points(player)}</span><span>{player.nationality || "FC"}</span></div>
+          <div style={{ margin: "9px auto 0", width: 142, borderRadius: 10, border: "1px solid rgba(0,0,0,.24)", background: "linear-gradient(145deg,rgba(255,255,255,.86),rgba(255,255,255,.22))", padding: "6px 8px", fontSize: 10, fontWeight: 950, letterSpacing: ".08em", textTransform: "uppercase", boxShadow: "inset 0 1px 0 rgba(255,255,255,.74),0 0 14px rgba(255,255,255,.34)" }}>{showPrice && price > 0 ? `N$${price.toFixed(2)}` : `${theme.label} EDITION`}</div>
         </div>
 
-        <div style={{ position: "absolute", left: 22, bottom: 23, zIndex: 34, width: 30, height: 30, borderRadius: "50%", border: "3px solid rgba(0,0,0,.74)", display: "grid", placeItems: "center" }}>★</div>
-        <div style={{ position: "absolute", right: 21, bottom: 23, zIndex: 34, width: 34, height: 34, borderRadius: "50%", border: "2px solid rgba(0,0,0,.74)", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 950 }}>FA</div>
+        <div style={{ position: "absolute", left: 22, bottom: 23, zIndex: 40, width: 30, height: 30, borderRadius: "50%", border: "3px solid rgba(0,0,0,.74)", display: "grid", placeItems: "center", fontSize: 14 }}>★</div>
+        <div style={{ position: "absolute", right: 21, bottom: 23, zIndex: 40, width: 34, height: 34, borderRadius: "50%", border: "2px solid rgba(0,0,0,.74)", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 950 }}>FA</div>
       </div>
     </button>
   );
