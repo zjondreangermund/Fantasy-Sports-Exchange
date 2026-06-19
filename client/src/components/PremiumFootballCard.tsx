@@ -1,6 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { type PlayerCardData } from "./cards/types";
-
 type Props = {
   player: PlayerCardData;
   selected?: boolean;
@@ -9,7 +8,6 @@ type Props = {
   className?: string;
   size?: "sm" | "md" | "lg";
 };
-
 type Theme = {
   label: string;
   face: string;
@@ -20,7 +18,6 @@ type Theme = {
   text: string;
   foil: string;
 };
-
 const themes: Record<string, Theme> = {
   common: {
     label: "COMMON",
@@ -73,40 +70,32 @@ const themes: Record<string, Theme> = {
     foil: "rgba(253,230,138,.78)",
   },
 };
-
 const sizes = {
   sm: { w: 176, h: 246, s: 0.489 },
   md: { w: 204, h: 286, s: 0.567 },
   lg: { w: 254, h: 356, s: 0.706 },
 };
-
 function uniq(values: Array<string | undefined | null>) {
   return Array.from(new Set(values.filter(Boolean) as string[]));
 }
-
 function imagesFor(player: PlayerCardData) {
   return uniq([player.image, player.imageUrl, player.photo, ...(player.imageCandidates || [])]);
 }
-
 function initials(name?: string) {
   return String(name || "Player").split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 }
-
 function shortName(name?: string) {
   return String(name || "Unknown Player").trim().toUpperCase();
 }
-
 function clubCode(club?: string) {
   const words = String(club || "FA").trim().split(/\s+/).filter(Boolean);
   if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
   return words.slice(0, 3).map((w) => w[0]).join("").toUpperCase();
 }
-
 function points(player: PlayerCardData) {
   const scores = Array.isArray(player.last5Scores) ? player.last5Scores.map((v) => Number(v || 0)) : [];
   return Math.max(0, Math.round(Number(player.totalPoints || scores.reduce((a, b) => a + b, 0) || player.form || player.rating || 0)));
 }
-
 function Spark({ x, y, s = 14 }: { x: number; y: number; s?: number }) {
   return (
     <span aria-hidden="true" style={{ position: "absolute", left: x, top: y, width: s, height: s, zIndex: 42, pointerEvents: "none", filter: "drop-shadow(0 0 8px white) drop-shadow(0 0 16px rgba(255,255,255,.75))" }}>
@@ -116,7 +105,6 @@ function Spark({ x, y, s = 14 }: { x: number; y: number; s?: number }) {
     </span>
   );
 }
-
 function Facet({ style }: { style: React.CSSProperties }) {
   return (
     <div
@@ -129,7 +117,6 @@ function Facet({ style }: { style: React.CSSProperties }) {
     />
   );
 }
-
 function PremiumFootballCardBase({ player, selected = false, onClick, showPrice = false, className = "", size = "md" }: Props) {
   const rarity = String(player.rarity || "common").toLowerCase();
   const theme = themes[rarity] || themes.common;
@@ -145,17 +132,14 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
   const serial = player.serial && player.maxSupply ? `${player.serial}/${player.maxSupply}` : player.maxSupply ? `1/${player.maxSupply}` : "1000/1000";
   const price = Number(player.price || player.listedPrice || 0);
   const displayName = shortName(player.name);
-
   useEffect(() => {
     setIndex(0);
     setFailed(false);
   }, [player.id, imageKey]);
-
   function onImageError() {
     if (index < imgs.length - 1) setIndex((v) => v + 1);
     else setFailed(true);
   }
-
   return (
     <button
       type="button"
@@ -182,7 +166,6 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
       >
         <div style={{ position: "absolute", inset: 6, zIndex: 6, borderRadius: 24, pointerEvents: "none", border: "1px solid rgba(255,255,255,.92)", boxShadow: `inset 0 0 24px rgba(255,255,255,.78), inset 0 0 46px rgba(255,255,255,.24), 0 0 26px ${theme.glow}` }} />
         <div style={{ position: "absolute", inset: 13, zIndex: 6, borderRadius: 19, pointerEvents: "none", border: "1px solid rgba(0,0,0,.24)", boxShadow: "inset 0 2px 0 rgba(255,255,255,.78), inset 0 -16px 30px rgba(0,0,0,.32)" }} />
-
         <div style={{ position: "absolute", inset: 0, zIndex: 1, overflow: "hidden" }}>
           <Facet style={{ top: -28, left: -30, width: 260, height: 258, clipPath: "polygon(0 0,78% 0,48% 100%,0 68%)" }} />
           <Facet style={{ top: 42, right: -18, width: 205, height: 194, clipPath: "polygon(22% 0,100% 0,100% 84%,15% 100%)" }} />
@@ -192,14 +175,11 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
           <div style={{ position: "absolute", inset: 0, opacity: .22, backgroundImage: "radial-gradient(circle,rgba(255,255,255,.95) 0 1px,transparent 1.4px)", backgroundSize: "8px 8px" }} />
           <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 28% 12%,rgba(255,255,255,.68),transparent 24%), radial-gradient(circle at 82% 34%,${theme.foil},transparent 20%), linear-gradient(115deg,transparent 0%,rgba(255,255,255,.42) 30%,transparent 46%,rgba(0,0,0,.20) 100%)` }} />
         </div>
-
         <div style={{ position: "absolute", top: 18, left: 22, right: 22, zIndex: 36, display: "flex", justifyContent: "space-between", fontWeight: 950, textShadow: "0 1px 0 rgba(255,255,255,.55)" }}>
           <div style={{ fontSize: 18, lineHeight: 1.08 }}><div>{player.season || "2026-27"}</div><div>{serial}</div></div>
           <div style={{ textAlign: "right", fontSize: 18, lineHeight: 1.08 }}><div>{clubCode(team)}</div><div>#{rating || 1}</div></div>
         </div>
-
         <div style={{ position: "absolute", top: 48, right: 34, zIndex: 37, width: 36, height: 36, borderRadius: "50%", display: "grid", placeItems: "center", background: "linear-gradient(145deg,rgba(255,255,255,.92),rgba(255,255,255,.30))", border: "2px solid rgba(0,0,0,.22)", boxShadow: "0 4px 10px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.80)", fontSize: 12, fontWeight: 950 }}>{clubCode(team).slice(0, 2)}</div>
-
         <div style={{ position: "absolute", left: 10, right: 10, top: 55, bottom: 132, zIndex: 14, overflow: "visible" }}>
           {showImg ? (
             <img
@@ -215,14 +195,11 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
             <div style={{ position: "absolute", left: "50%", top: "48%", transform: "translate(-50%,-50%)", width: 128, height: 128, borderRadius: 26, border: "2px solid rgba(0,0,0,.18)", background: "rgba(255,255,255,.22)", display: "grid", placeItems: "center", fontSize: 38, fontWeight: 950, color: "rgba(0,0,0,.40)" }}>{initials(player.name)}</div>
           )}
         </div>
-
         <div style={{ position: "absolute", left: 16, right: 16, bottom: 124, height: 72, zIndex: 20, clipPath: "polygon(0 44%,50% 0,100% 42%,100% 100%,0 100%)", background: theme.plate, borderTop: "2px solid rgba(255,255,255,.78)", boxShadow: "0 -14px 28px rgba(255,255,255,.28), inset 0 2px 0 rgba(255,255,255,.75), inset 0 -14px 24px rgba(0,0,0,.26)" }} />
-
         <div style={{ position: "absolute", inset: 0, zIndex: 26, pointerEvents: "none", background: "linear-gradient(118deg,transparent 0%,transparent 25%,rgba(255,255,255,.90) 38%,rgba(255,255,255,.18) 47%,transparent 58%)", mixBlendMode: "screen", opacity: .86 }} />
         <div style={{ position: "absolute", left: -92, top: 4, zIndex: 27, width: 540, height: 96, transform: "rotate(-32deg)", pointerEvents: "none", background: "linear-gradient(90deg,transparent,rgba(255,255,255,.98),transparent)", filter: "blur(1px)", opacity: .82 }} />
         <div style={{ position: "absolute", inset: 0, zIndex: 28, pointerEvents: "none", background: `radial-gradient(circle at 14% 18%,rgba(255,255,255,.86),transparent 7%), radial-gradient(circle at 86% 24%,rgba(255,255,255,.82),transparent 6%), radial-gradient(circle at 76% 56%,${theme.foil},transparent 5%), radial-gradient(circle at 21% 78%,rgba(255,255,255,.58),transparent 6%)`, mixBlendMode: "screen" }} />
         <Spark x={45} y={78} s={16} /><Spark x={278} y={96} s={19} /><Spark x={306} y={250} s={14} /><Spark x={74} y={348} s={13} />
-
         <div style={{ position: "absolute", left: 18, right: 18, bottom: 17, zIndex: 38, textAlign: "center" }}>
           <div style={{ minHeight: 58, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 8px" }}>
             <div style={{ fontSize: displayName.length > 18 ? 25 : 30, lineHeight: .95, fontWeight: 950, letterSpacing: ".035em", textTransform: "uppercase", color: theme.text, textShadow: "0 1px 0 rgba(255,255,255,.50), 0 8px 15px rgba(0,0,0,.20)" }}>{displayName}</div>
@@ -231,12 +208,10 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
           <div style={{ marginTop: 8, display: "flex", justifyContent: "center", alignItems: "center", gap: 12, fontSize: 12, fontWeight: 900 }}><span>PTS {points(player)}</span><span>{player.nationality || "FC"}</span></div>
           <div style={{ margin: "9px auto 0", width: 142, borderRadius: 10, border: "1px solid rgba(0,0,0,.24)", background: "linear-gradient(145deg,rgba(255,255,255,.86),rgba(255,255,255,.22))", padding: "6px 8px", fontSize: 10, fontWeight: 950, letterSpacing: ".08em", textTransform: "uppercase", boxShadow: "inset 0 1px 0 rgba(255,255,255,.74),0 0 14px rgba(255,255,255,.34)" }}>{showPrice && price > 0 ? `N$${price.toFixed(2)}` : `${theme.label} EDITION`}</div>
         </div>
-
         <div style={{ position: "absolute", left: 22, bottom: 23, zIndex: 40, width: 30, height: 30, borderRadius: "50%", border: "3px solid rgba(0,0,0,.74)", display: "grid", placeItems: "center", fontSize: 14 }}>★</div>
         <div style={{ position: "absolute", right: 21, bottom: 23, zIndex: 40, width: 34, height: 34, borderRadius: "50%", border: "2px solid rgba(0,0,0,.74)", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 950 }}>FA</div>
       </div>
     </button>
   );
 }
-
 export default memo(PremiumFootballCardBase);
