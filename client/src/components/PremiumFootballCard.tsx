@@ -1,209 +1,448 @@
-import { memo, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { memo, useState } from "react";
 import { type PlayerCardData } from "./cards/types";
 
-type Props = {
+type PremiumFootballCardProps = {
   player: PlayerCardData;
+  className?: string;
   selected?: boolean;
   onClick?: () => void;
   showPrice?: boolean;
-  className?: string;
   size?: "sm" | "md" | "lg";
 };
 
-type Theme = {
-  label: string;
-  chrome: string;
-  plate: string;
-  border: string;
-  glow: string;
-  glowStrong: string;
-  text: string;
-  tint: string;
-  beam: string;
+type RarityTokens = {
+  base1: string;
+  base2: string;
+  base3: string;
+  facetHi: string;
+  facetMid: string;
+  facetLo: string;
+  rimColor: string;
+  glowColor: string;
+  textAccent: string;
+  edgeBorder: string;
+  plateBg: string;
+  editionLabel: string;
 };
 
-const themes: Record<string, Theme> = {
+const RARITY_TOKENS: Record<string, RarityTokens> = {
   common: {
-    label: "COMMON",
-    chrome: "linear-gradient(135deg,#ffffff 0%,#eef3f8 12%,#8d99a8 31%,#ffffff 47%,#65717d 63%,#f8fbff 82%,#cfd8e3 100%)",
-    plate: "linear-gradient(135deg,#ffffff,#dce4ee 48%,#7b8794 72%,#f7fbff)",
-    border: "#f8fbff",
-    glow: "rgba(226,232,240,.88)",
-    glowStrong: "rgba(255,255,255,.96)",
-    text: "#06111f",
-    tint: "rgba(226,232,240,.50)",
-    beam: "rgba(255,255,255,.92)",
+    base1: "#e8eef4",
+    base2: "#8fa4bc",
+    base3: "#2a3848",
+    facetHi: "rgba(255,255,255,0.38)",
+    facetMid: "rgba(180,200,220,0.22)",
+    facetLo: "rgba(40,60,80,0.30)",
+    rimColor: "#b0c8e0",
+    glowColor: "rgba(154,174,194,0.50)",
+    textAccent: "#c8daf0",
+    edgeBorder: "rgba(200,220,240,0.55)",
+    plateBg: "rgba(10,18,28,0.88)",
+    editionLabel: "STANDARD EDITION",
   },
   rare: {
-    label: "RARE",
-    chrome: "linear-gradient(135deg,#f2fbff 0%,#7ec8ff 16%,#1764ff 34%,#eaf8ff 50%,#0d2f94 68%,#dbf3ff 100%)",
-    plate: "linear-gradient(135deg,#f3fbff,#5cb8ff 45%,#1450cc 72%,#e9f7ff)",
-    border: "#dbeafe",
-    glow: "rgba(59,130,246,.96)",
-    glowStrong: "rgba(147,197,253,1)",
-    text: "#03132e",
-    tint: "rgba(37,99,235,.45)",
-    beam: "rgba(125,211,252,.92)",
+    base1: "#c0d8ff",
+    base2: "#1c50c8",
+    base3: "#060e26",
+    facetHi: "rgba(140,190,255,0.40)",
+    facetMid: "rgba(40,100,220,0.22)",
+    facetLo: "rgba(4,10,40,0.35)",
+    rimColor: "#4a90f0",
+    glowColor: "rgba(30,80,200,0.60)",
+    textAccent: "#80c0ff",
+    edgeBorder: "rgba(100,170,255,0.55)",
+    plateBg: "rgba(4,8,28,0.90)",
+    editionLabel: "◆ RARE EDITION",
   },
   unique: {
-    label: "UNIQUE",
-    chrome: "linear-gradient(135deg,#fff1ff 0%,#fb83ff 15%,#d946ef 35%,#fff6ff 50%,#7417c9 70%,#ffd9ff 100%)",
-    plate: "linear-gradient(135deg,#fff1ff,#f06cff 44%,#7e22ce 72%,#ffe4ff)",
-    border: "#ffd7ff",
-    glow: "rgba(217,70,239,.98)",
-    glowStrong: "rgba(244,114,182,1)",
-    text: "#250331",
-    tint: "rgba(217,70,239,.45)",
-    beam: "rgba(244,114,182,.94)",
+    base1: "#e0c0ff",
+    base2: "#7820d0",
+    base3: "#0e0228",
+    facetHi: "rgba(210,140,255,0.40)",
+    facetMid: "rgba(140,60,220,0.22)",
+    facetLo: "rgba(10,2,40,0.35)",
+    rimColor: "#b060f0",
+    glowColor: "rgba(120,30,210,0.62)",
+    textAccent: "#d090ff",
+    edgeBorder: "rgba(190,110,255,0.55)",
+    plateBg: "rgba(8,2,24,0.90)",
+    editionLabel: "✦ UNIQUE EDITION",
   },
   epic: {
-    label: "EPIC",
-    chrome: "linear-gradient(135deg,#eef2ff 0%,#aab6ff 15%,#6366f1 34%,#f6f7ff 50%,#1d4ed8 70%,#dbeafe 100%)",
-    plate: "linear-gradient(135deg,#eef2ff,#818cf8 44%,#2563eb 72%,#e0e7ff)",
-    border: "#e0e7ff",
-    glow: "rgba(99,102,241,.96)",
-    glowStrong: "rgba(129,140,248,1)",
-    text: "#07113f",
-    tint: "rgba(99,102,241,.45)",
-    beam: "rgba(165,180,252,.94)",
+    base1: "#c8c0f8",
+    base2: "#3828b0",
+    base3: "#080418",
+    facetHi: "rgba(180,160,255,0.38)",
+    facetMid: "rgba(80,60,180,0.22)",
+    facetLo: "rgba(6,2,30,0.35)",
+    rimColor: "#7860e0",
+    glowColor: "rgba(80,50,200,0.58)",
+    textAccent: "#c0b0ff",
+    edgeBorder: "rgba(150,130,240,0.52)",
+    plateBg: "rgba(6,2,20,0.90)",
+    editionLabel: "◈ EPIC EDITION",
   },
   legendary: {
-    label: "LEGENDARY",
-    chrome: "linear-gradient(135deg,#fff7bf 0%,#ffd84d 15%,#f59e0b 34%,#fff9d6 50%,#9a5b00 69%,#fff2a8 100%)",
-    plate: "linear-gradient(135deg,#fff7bf,#ffd43b 40%,#b87500 70%,#fff4a3)",
-    border: "#fff2a8",
-    glow: "rgba(245,158,11,1)",
-    glowStrong: "rgba(253,230,138,1)",
-    text: "#171006",
-    tint: "rgba(245,158,11,.48)",
-    beam: "rgba(253,224,71,.96)",
+    base1: "#fff8c0",
+    base2: "#f0c030",
+    base3: "#3a1800",
+    facetHi: "rgba(255,240,120,0.50)",
+    facetMid: "rgba(240,180,40,0.28)",
+    facetLo: "rgba(60,24,0,0.40)",
+    rimColor: "#f0c040",
+    glowColor: "rgba(220,158,16,0.70)",
+    textAccent: "#ffe060",
+    edgeBorder: "rgba(255,220,80,0.65)",
+    plateBg: "rgba(16,8,0,0.90)",
+    editionLabel: "⭐ LAUNCH EDITION",
   },
 };
 
-const sizes = {
-  sm: { w: 176, h: 246, s: 0.489 },
-  md: { w: 204, h: 286, s: 0.567 },
-  lg: { w: 254, h: 356, s: 0.706 },
+const SIZE_DIMS = {
+  sm: { w: 140, h: 200, nameSize: 14, subSize: 8, ratingSize: 18, photoScale: 1.12 },
+  md: { w: 168, h: 240, nameSize: 16, subSize: 9, ratingSize: 20, photoScale: 1.15 },
+  lg: { w: 240, h: 340, nameSize: 22, subSize: 11, ratingSize: 26, photoScale: 1.18 },
 };
 
-function uniq(values: Array<string | undefined | null>) {
-  return Array.from(new Set(values.filter(Boolean) as string[]));
-}
-function imagesFor(player: PlayerCardData) {
-  return uniq([player.image, ...(player.imageCandidates || [])]);
-}
-function initials(name?: string) {
-  return String(name || "Player").split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
-}
-function shortName(name?: string) {
-  return String(name || "Unknown Player").trim().toUpperCase();
-}
-function clubCode(club?: string) {
-  const words = String(club || "FA").trim().split(/\s+/).filter(Boolean);
-  if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
-  return words.slice(0, 3).map((w) => w[0]).join("").toUpperCase();
-}
-function positionLabel(position?: string) {
-  const value = String(position || "PLAYER").toUpperCase();
-  if (value === "FWD") return "FORWARD";
-  if (value === "MID") return "MIDFIELDER";
-  if (value === "DEF") return "DEFENDER";
-  if (value === "GK") return "GOALKEEPER";
-  return value;
-}
-function points(player: PlayerCardData) {
-  const scores = Array.isArray(player.last5Scores) ? player.last5Scores.map((v) => Number(v || 0)) : [];
-  return Math.max(0, Math.round(Number(player.totalPoints || scores.reduce((a, b) => a + b, 0) || player.form || player.rating || 0)));
-}
-function Spark({ x, y, s = 14 }: { x: number; y: number; s?: number }) {
-  return <span aria-hidden style={{ position: "absolute", left: x, top: y, width: s, height: s, zIndex: 44, pointerEvents: "none", filter: "drop-shadow(0 0 8px white) drop-shadow(0 0 16px rgba(255,255,255,.88))" }}><i style={{ position: "absolute", left: "50%", top: 0, width: 2, height: s, transform: "translateX(-50%)", background: "white", borderRadius: 2 }} /><i style={{ position: "absolute", left: 0, top: "50%", width: s, height: 2, transform: "translateY(-50%)", background: "white", borderRadius: 2 }} /><i style={{ position: "absolute", inset: s * 0.38, borderRadius: "50%", background: "white" }} /></span>;
-}
-function ChromeFacet({ style }: { style: CSSProperties }) {
-  return <div style={{ position: "absolute", background: "linear-gradient(135deg,rgba(255,255,255,.96),rgba(255,255,255,.12) 38%,rgba(0,0,0,.58) 68%,rgba(255,255,255,.42))", boxShadow: "inset 0 12px 20px rgba(255,255,255,.42), inset 0 -14px 22px rgba(0,0,0,.42)", ...style }} />;
+function initials(name: string) {
+  return String(name || "?").trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 }
 
-function PremiumFootballCardBase({ player, selected = false, onClick, showPrice = false, className = "", size = "md" }: Props) {
+function PremiumFootballCardBase({
+  player,
+  className = "",
+  selected = false,
+  onClick,
+  showPrice = false,
+  size = "md",
+}: PremiumFootballCardProps) {
+  const [imgFailed, setImgFailed] = useState(false);
   const rarity = String(player.rarity || "common").toLowerCase();
-  const theme = themes[rarity] || themes.common;
-  const dim = sizes[size] || sizes.md;
-  const imgs = useMemo(() => imagesFor(player), [player]);
-  const imageKey = imgs.join("|");
-  const [index, setIndex] = useState(0);
-  const [failed, setFailed] = useState(false);
-  const img = imgs[index];
-  const showImg = Boolean(img) && !failed;
-  const team = player.team || player.club || "Fantasy Arena";
-  const rating = Math.round(Number(player.rating || player.form || points(player) || 0));
-  const serial = player.serial && player.maxSupply ? `${player.serial}/${player.maxSupply}` : player.maxSupply ? `1/${player.maxSupply}` : "1000/1000";
-  const price = Number(player.price || player.listedPrice || 0);
-  const displayName = shortName(player.name);
+  const t = RARITY_TOKENS[rarity] || RARITY_TOKENS.common;
+  const dims = SIZE_DIMS[size] || SIZE_DIMS.md;
 
-  useEffect(() => {
-    setIndex(0);
-    setFailed(false);
-  }, [player.id, imageKey]);
+  const image = player.image || player.imageUrl || player.photo || player.imageCandidates?.[0];
+  const showImage = Boolean(image) && !imgFailed;
+  const serial = player.serial && player.maxSupply
+    ? `${String(player.serial).padStart(String(player.maxSupply).length, "0")}/${player.maxSupply}`
+    : null;
+  const pts = Number(player.totalPoints || player.form || player.rating || 0).toFixed(0);
 
-  function onImageError() {
-    if (index < imgs.length - 1) setIndex((v) => v + 1);
-    else setFailed(true);
-  }
+  /* ─── Layered faceted background ─── */
+  const facetedBg = [
+    /* outer card base */
+    `linear-gradient(158deg, ${t.base1} 0%, ${t.base2} 45%, ${t.base3} 100%)`,
+    /* top-left large facet */
+    `radial-gradient(ellipse 70% 55% at 15% 10%, ${t.facetHi} 0%, transparent 60%)`,
+    /* top-right facet */
+    `radial-gradient(ellipse 55% 48% at 88% 8%, ${t.facetHi} 0%, transparent 55%)`,
+    /* center diamond peak */
+    `radial-gradient(ellipse 45% 40% at 50% 38%, ${t.facetMid} 0%, transparent 52%)`,
+    /* bottom-left */
+    `radial-gradient(ellipse 55% 44% at 12% 90%, ${t.facetMid} 0%, transparent 55%)`,
+    /* bottom-right */
+    `radial-gradient(ellipse 48% 42% at 90% 85%, ${t.facetHi} 0%, transparent 52%)`,
+    /* mid-left shadow */
+    `radial-gradient(ellipse 40% 35% at 5% 50%, ${t.facetLo} 0%, transparent 50%)`,
+    /* polygon lines — diagonal strokes */
+    `repeating-linear-gradient(62deg, transparent 0px, transparent 22px, ${t.facetHi.replace(/[\d.]+\)$/, "0.06)")} 22px, ${t.facetHi.replace(/[\d.]+\)$/, "0.06)")} 23px)`,
+    `repeating-linear-gradient(-55deg, transparent 0px, transparent 28px, ${t.facetMid.replace(/[\d.]+\)$/, "0.05)")} 28px, ${t.facetMid.replace(/[\d.]+\)$/, "0.05)")} 29px)`,
+  ].join(", ");
+
+  /* ─── Foil diagonal sweep ─── */
+  const foilSweep = `linear-gradient(118deg, transparent 0%, transparent 28%, ${t.facetHi.replace(/[\d.]+\)$/, "0.28)")} 38%, ${t.facetHi.replace(/[\d.]+\)$/, "0.12)")} 48%, transparent 58%)`;
+
+  /* ─── Chrome slab frame gradients ─── */
+  const outerSlabBorder = `linear-gradient(145deg, ${t.base1} 0%, ${t.rimColor} 25%, ${t.base2} 50%, ${t.rimColor} 75%, ${t.base1} 100%)`;
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={["group relative bg-transparent p-0 text-left outline-none transition-transform duration-200 hover:-translate-y-1", selected ? "ring-2 ring-emerald-300 ring-offset-2 ring-offset-slate-950" : "", onClick ? "cursor-pointer" : "cursor-default", className].join(" ")}
-      style={{ width: dim.w, height: dim.h, borderRadius: 22 * dim.s }}
-      data-testid={`premium-football-card-${player.id}`}
+      aria-label={`${player.name || "Player"} card`}
+      data-testid={`premium-card-${player.id}`}
+      style={{
+        width: dims.w,
+        height: dims.h,
+        /* Outer drop-shadow + rarity glow */
+        filter: `drop-shadow(0 8px 24px ${t.glowColor}) drop-shadow(0 2px 6px rgba(0,0,0,0.6))`,
+        transition: "filter 200ms ease, transform 200ms ease",
+        flexShrink: 0,
+      }}
+      className={[
+        "group relative inline-block",
+        onClick ? "cursor-pointer hover:-translate-y-1.5" : "cursor-default",
+        className,
+      ].join(" ")}
     >
-      <div style={{ position: "relative", width: 360, height: 504, transform: `scale(${dim.s})`, transformOrigin: "top left", overflow: "hidden", borderRadius: 30, color: theme.text, background: theme.chrome, border: `3px solid ${theme.border}`, boxShadow: `0 0 0 1px rgba(255,255,255,.98) inset, 0 0 0 8px rgba(255,255,255,.18) inset, 0 0 38px rgba(255,255,255,.82), 0 0 70px ${theme.glow}, 0 0 110px ${theme.tint}, 0 26px 74px rgba(0,0,0,.64)`, fontFamily: "Inter, system-ui, sans-serif" }}>
-        <div style={{ position: "absolute", inset: 5, zIndex: 8, borderRadius: 26, pointerEvents: "none", border: "1px solid rgba(255,255,255,.96)", boxShadow: `inset 0 0 24px rgba(255,255,255,.86), inset 0 0 54px rgba(255,255,255,.30), 0 0 28px ${theme.glowStrong}` }} />
-        <div style={{ position: "absolute", inset: 13, zIndex: 8, borderRadius: 20, pointerEvents: "none", border: "1px solid rgba(0,0,0,.24)", boxShadow: "inset 0 2px 0 rgba(255,255,255,.88), inset 0 -16px 30px rgba(0,0,0,.34)" }} />
-
-        <div style={{ position: "absolute", inset: 0, zIndex: 1, overflow: "hidden" }}>
-          <ChromeFacet style={{ top: -30, left: -34, width: 270, height: 266, clipPath: "polygon(0 0,78% 0,50% 100%,0 68%)" }} />
-          <ChromeFacet style={{ top: 40, right: -24, width: 220, height: 202, clipPath: "polygon(20% 0,100% 0,100% 86%,12% 100%)" }} />
-          <ChromeFacet style={{ top: 140, left: 78, width: 180, height: 118, clipPath: "polygon(0 18%,86% 0,100% 74%,24% 100%)" }} />
-          <ChromeFacet style={{ bottom: 130, left: -42, width: 248, height: 190, clipPath: "polygon(0 0,100% 26%,72% 100%,0 86%)" }} />
-          <ChromeFacet style={{ bottom: 104, right: -26, width: 216, height: 146, clipPath: "polygon(14% 0,100% 20%,100% 100%,0 78%)" }} />
-          <div style={{ position: "absolute", inset: 0, opacity: .26, backgroundImage: "radial-gradient(circle,rgba(255,255,255,.95) 0 1px,transparent 1.5px)", backgroundSize: "8px 8px" }} />
-          <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle at 18% 7%,rgba(255,255,255,.96),transparent 22%), radial-gradient(circle at 85% 34%,${theme.beam},transparent 18%), radial-gradient(circle at 54% 72%,${theme.tint},transparent 24%), linear-gradient(118deg,rgba(255,255,255,.82) 0%,transparent 18%,rgba(0,0,0,.24) 42%,rgba(255,255,255,.64) 58%,transparent 75%)` }} />
-        </div>
-
-        <div style={{ position: "absolute", left: 10, right: 10, top: 54, bottom: 125, zIndex: 14, overflow: "hidden", borderRadius: 10, background: `radial-gradient(circle at 50% 18%,rgba(255,255,255,.72),transparent 28%), linear-gradient(to bottom,rgba(0,0,0,.02),rgba(0,0,0,.10))` }}>
-          <div style={{ position: "absolute", inset: 0, background: `linear-gradient(142deg,transparent 0%,transparent 31%,${theme.beam} 44%,transparent 54%,transparent 100%)`, opacity: .48, mixBlendMode: "screen" }} />
-          {showImg ? (
-            <img src={img} alt={player.name || "Player"} loading="lazy" decoding="async" onError={onImageError} className="transition-transform duration-200 group-hover:scale-[1.05]" style={{ position: "absolute", left: "50%", bottom: 2, width: "166%", height: "151%", transform: "translateX(-50%)", objectFit: "contain", objectPosition: "bottom center", filter: `saturate(1.24) contrast(1.14) brightness(1.14) drop-shadow(0 23px 18px rgba(0,0,0,.62)) drop-shadow(0 0 18px ${theme.glow})`, zIndex: 10, opacity: 1 }} />
-          ) : (
-            <div style={{ position: "absolute", left: "50%", top: "48%", transform: "translate(-50%,-50%)", width: 128, height: 128, borderRadius: 26, border: "2px solid rgba(0,0,0,.18)", background: "rgba(255,255,255,.22)", display: "grid", placeItems: "center", fontSize: 38, fontWeight: 950, color: "rgba(0,0,0,.40)" }}>{initials(player.name)}</div>
-          )}
-        </div>
-
-        <div style={{ position: "absolute", top: 17, left: 22, right: 22, zIndex: 38, display: "flex", justifyContent: "space-between", fontWeight: 950, color: "white", textShadow: "0 2px 8px rgba(0,0,0,.80), 0 0 12px rgba(255,255,255,.60)" }}>
-          <div style={{ fontSize: 18, lineHeight: 1.08 }}><div>{player.season || "2026-27"}</div><div>{serial}</div></div>
-          <div style={{ textAlign: "right", fontSize: 18, lineHeight: 1.08 }}><div>{clubCode(team)}</div><div>+{Math.max(1, rating || 1)}</div><div>{player.position || "PL"}</div></div>
-        </div>
-
-        <div style={{ position: "absolute", left: 16, right: 16, bottom: 107, height: 58, zIndex: 20, clipPath: "polygon(0 42%,50% 0,100% 42%,100% 100%,0 100%)", background: theme.plate, borderTop: "2px solid rgba(255,255,255,.92)", boxShadow: "0 -14px 30px rgba(255,255,255,.34), inset 0 2px 0 rgba(255,255,255,.92), inset 0 -12px 22px rgba(0,0,0,.24)", backdropFilter: "blur(6px)" }} />
-        <div style={{ position: "absolute", inset: 0, zIndex: 30, pointerEvents: "none", background: "linear-gradient(118deg,transparent 0%,transparent 22%,rgba(255,255,255,.95) 36%,rgba(255,255,255,.24) 45%,transparent 58%)", mixBlendMode: "screen", opacity: .48 }} />
-        <div style={{ position: "absolute", left: -120, top: 20, zIndex: 31, width: 580, height: 74, transform: "rotate(-30deg)", pointerEvents: "none", background: "linear-gradient(90deg,transparent,rgba(255,255,255,.98),transparent)", filter: "blur(1px)", opacity: .36 }} />
-        <div style={{ position: "absolute", inset: 0, zIndex: 32, pointerEvents: "none", background: `linear-gradient(52deg,transparent 0%,transparent 54%,${theme.beam} 66%,rgba(255,255,255,.14) 72%,transparent 81%)`, mixBlendMode: "screen", opacity: .34 }} />
-        <div style={{ position: "absolute", inset: 0, zIndex: 33, pointerEvents: "none", background: `radial-gradient(circle at 15% 18%,rgba(255,255,255,.95),transparent 7%), radial-gradient(circle at 86% 23%,rgba(255,255,255,.92),transparent 6%), radial-gradient(circle at 79% 54%,${theme.beam},transparent 5%), radial-gradient(circle at 22% 78%,rgba(255,255,255,.70),transparent 6%)`, mixBlendMode: "screen" }} />
-        <Spark x={42} y={76} s={15} /><Spark x={279} y={93} s={18} /><Spark x={304} y={245} s={14} /><Spark x={74} y={344} s={13} />
-
-        <div style={{ position: "absolute", left: 18, right: 18, bottom: 18, zIndex: 40, textAlign: "center" }}>
-          <div style={{ minHeight: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 10px" }}>
-            <div style={{ fontSize: displayName.length > 18 ? 19 : 24, lineHeight: .98, fontWeight: 950, letterSpacing: ".03em", textTransform: "uppercase", color: theme.text, textShadow: "0 1px 0 rgba(255,255,255,.66), 0 2px 8px rgba(0,0,0,.55)" }}>{displayName}</div>
-          </div>
-          <div style={{ marginTop: 2, fontSize: 12, fontWeight: 950, letterSpacing: ".08em", textTransform: "uppercase" }}>{positionLabel(player.position)}</div>
-          <div style={{ marginTop: 6, display: "flex", justifyContent: "center", alignItems: "center", gap: 10, fontSize: 11, fontWeight: 900 }}><span>PTS {points(player)}</span><span>{player.nationality || "Unknown"}</span></div>
-          <div style={{ margin: "7px auto 0", width: 138, borderRadius: 10, border: "1px solid rgba(0,0,0,.22)", background: "linear-gradient(145deg,rgba(255,255,255,.92),rgba(255,255,255,.30))", padding: "5px 8px", fontSize: 9, fontWeight: 950, letterSpacing: ".08em", textTransform: "uppercase", boxShadow: "inset 0 1px 0 rgba(255,255,255,.84),0 0 16px rgba(255,255,255,.44)" }}>{showPrice && price > 0 ? `N$${price.toFixed(2)}` : `${theme.label} EDITION`}</div>
-        </div>
-        <div style={{ position: "absolute", left: 22, bottom: 22, zIndex: 42, width: 26, height: 26, borderRadius: "50%", border: "2px solid rgba(0,0,0,.70)", display: "grid", placeItems: "center", fontSize: 12 }}>★</div>
-        <div style={{ position: "absolute", right: 22, bottom: 22, zIndex: 42, width: 28, height: 28, borderRadius: "50%", border: "2px solid rgba(0,0,0,.70)", display: "grid", placeItems: "center", fontSize: 9, fontWeight: 950 }}>FA</div>
+      {/* ── LAYER 0: Chrome outer slab (2px metallic frame) ── */}
+      <div
+        className="absolute inset-0 rounded-[18px]"
+        style={{
+          background: outerSlabBorder,
+          padding: 2,
+          /* inner bevel */
+          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -1px 0 rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.4)`,
+        }}
+      >
+        {/* Inner slab edge (acrylic thickness effect) */}
+        <div
+          className="h-full w-full rounded-[16px]"
+          style={{
+            background: `linear-gradient(to bottom, rgba(255,255,255,0.12) 0%, transparent 6%, transparent 94%, rgba(0,0,0,0.18) 100%)`,
+            boxShadow: `inset 0 2px 4px rgba(255,255,255,0.20), inset 0 -2px 4px rgba(0,0,0,0.20)`,
+          }}
+        />
       </div>
+
+      {/* ── LAYER 1: Engraved faceted metal background ── */}
+      <div
+        className="absolute inset-[2px] rounded-[16px] overflow-hidden"
+        style={{ background: facetedBg }}
+      />
+
+      {/* ── LAYER 2: Foil shimmer sweep ── */}
+      <div
+        className="pointer-events-none absolute inset-[2px] rounded-[16px]"
+        style={{
+          background: foilSweep,
+          mixBlendMode: "screen",
+          opacity: 0.85,
+        }}
+      />
+
+      {/* ── LAYER 3: Top shine (glass surface glint) ── */}
+      <div
+        className="pointer-events-none absolute inset-[2px] rounded-[16px]"
+        style={{
+          background: `radial-gradient(ellipse 90% 35% at 50% 0%, rgba(255,255,255,0.30) 0%, transparent 65%)`,
+          mixBlendMode: "screen",
+        }}
+      />
+
+      {/* ── LAYER 4: Rim inset highlight ── */}
+      <div
+        className="pointer-events-none absolute inset-[2px] rounded-[16px]"
+        style={{
+          boxShadow: `inset 0 0 0 1px ${t.edgeBorder}, inset 0 1px 0 rgba(255,255,255,0.35)`,
+        }}
+      />
+
+      {/* ── LAYER 5 (CONTENT) ── */}
+      <div className="absolute inset-[2px] rounded-[16px] overflow-hidden flex flex-col">
+
+        {/* Top info row */}
+        <div
+          className="relative z-20 flex items-start justify-between px-2 pt-1.5"
+          style={{ gap: 4 }}
+        >
+          <div>
+            {player.season && (
+              <p
+                className="font-black leading-none"
+                style={{
+                  fontSize: dims.subSize - 1,
+                  color: "rgba(0,0,0,0.65)",
+                  textShadow: `0 1px 0 rgba(255,255,255,0.3)`,
+                  fontFamily: "system-ui, sans-serif",
+                }}
+              >
+                {player.season}
+              </p>
+            )}
+            {serial && (
+              <p
+                className="font-bold leading-none mt-0.5"
+                style={{
+                  fontSize: dims.subSize - 1,
+                  color: "rgba(0,0,0,0.55)",
+                  textShadow: `0 1px 0 rgba(255,255,255,0.3)`,
+                }}
+              >
+                {serial}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-col items-end">
+            <p
+              className="font-black leading-none"
+              style={{
+                fontSize: dims.subSize,
+                color: "rgba(0,0,0,0.65)",
+                textShadow: `0 1px 0 rgba(255,255,255,0.3)`,
+              }}
+            >
+              {player.team || player.club || "FFC"}
+            </p>
+            {player.serial && (
+              <p
+                className="font-bold leading-none mt-0.5"
+                style={{
+                  fontSize: dims.subSize - 1,
+                  color: "rgba(0,0,0,0.55)",
+                  textShadow: `0 1px 0 rgba(255,255,255,0.3)`,
+                }}
+              >
+                #{player.serial}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Player photo zone — midground, fills the card */}
+        <div className="relative flex-1 flex items-end justify-center">
+          {showImage ? (
+            <img
+              src={image}
+              alt={player.name}
+              onError={() => setImgFailed(true)}
+              loading="lazy"
+              decoding="async"
+              style={{
+                position: "absolute",
+                bottom: 0,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: `${Math.round(dims.w * dims.photoScale)}px`,
+                height: `${Math.round(dims.h * 0.78)}px`,
+                objectFit: "contain",
+                objectPosition: "bottom center",
+                /* Cut-out feel — no rectangle, just the player */
+                filter: `drop-shadow(0 8px 20px rgba(0,0,0,0.70)) drop-shadow(0 2px 6px rgba(0,0,0,0.50))`,
+                zIndex: 10,
+              }}
+            />
+          ) : (
+            <div
+              className="mb-10 flex items-center justify-center rounded-2xl border border-white/20 bg-black/20"
+              style={{ width: dims.w * 0.55, height: dims.h * 0.44 }}
+            >
+              <span
+                className="font-black text-white/40 select-none"
+                style={{ fontSize: dims.nameSize + 8 }}
+              >
+                {initials(player.name)}
+              </span>
+            </div>
+          )}
+
+          {/* Rarity sparkle points (foreground, above photo) */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background: `radial-gradient(circle 3px at 15% 25%, ${t.facetHi} 0%, transparent 100%), radial-gradient(circle 2px at 82% 18%, ${t.facetHi} 0%, transparent 100%), radial-gradient(circle 2px at 70% 55%, ${t.facetMid} 0%, transparent 100%), radial-gradient(circle 3px at 25% 70%, ${t.facetMid} 0%, transparent 100%)`,
+              zIndex: 5,
+              mixBlendMode: "screen",
+            }}
+          />
+
+          {/* Bottom gradient — fades photo into name plate */}
+          <div
+            className="absolute inset-x-0 bottom-0"
+            style={{
+              height: "45%",
+              background: `linear-gradient(to top, ${t.plateBg} 0%, ${t.plateBg.replace(/[\d.]+\)$/, "0.80)")} 35%, transparent 100%)`,
+              zIndex: 11,
+            }}
+          />
+        </div>
+
+        {/* ── LAYER 6: Name plate — foreground ── */}
+        <div
+          className="relative z-20 px-2 pb-2"
+          style={{
+            /* Metallic engraved plate */
+            background: `linear-gradient(to top, ${t.plateBg} 0%, rgba(0,0,0,0) 100%)`,
+          }}
+        >
+          {/* Plate top rule */}
+          <div
+            className="w-full mb-1"
+            style={{
+              height: 1,
+              background: `linear-gradient(to right, transparent, ${t.rimColor}, transparent)`,
+              opacity: 0.55,
+            }}
+          />
+
+          {/* Player name — large, bold, embossed */}
+          <p
+            className="font-black uppercase leading-none tracking-tight text-white"
+            style={{
+              fontSize: dims.nameSize,
+              textShadow: `0 1px 0 rgba(255,255,255,0.08), 0 2px 8px rgba(0,0,0,0.9), 0 0 16px ${t.glowColor}`,
+              fontFamily: "'Inter', 'Arial Black', system-ui, sans-serif",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {player.name}
+          </p>
+
+          {/* Position */}
+          <p
+            className="mt-0.5 font-bold uppercase tracking-widest"
+            style={{
+              fontSize: dims.subSize,
+              color: t.textAccent,
+              textShadow: `0 1px 4px rgba(0,0,0,0.8), 0 0 8px ${t.glowColor}`,
+            }}
+          >
+            {player.position || "PLAYER"}
+          </p>
+
+          {/* PTS row */}
+          <div className="mt-1 flex items-center justify-between">
+            <span
+              className="font-black"
+              style={{
+                fontSize: dims.subSize,
+                color: "rgba(255,255,255,0.70)",
+                textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+              }}
+            >
+              {pts !== "0" ? `PTS ${pts}` : ""}
+            </span>
+            {showPrice && Number(player.price || player.listedPrice || 0) > 0 && (
+              <span
+                className="rounded px-1.5 font-black"
+                style={{
+                  fontSize: dims.subSize,
+                  color: "#4ade80",
+                  background: "rgba(74,222,128,0.15)",
+                  border: "1px solid rgba(74,222,128,0.30)",
+                }}
+              >
+                N${Number(player.price || player.listedPrice || 0).toFixed(2)}
+              </span>
+            )}
+          </div>
+
+          {/* Edition label */}
+          <div
+            className="mt-1 w-full text-center font-black uppercase tracking-widest"
+            style={{
+              fontSize: dims.subSize - 1,
+              color: t.textAccent,
+              textShadow: `0 0 6px ${t.glowColor}`,
+              borderTop: `1px solid ${t.edgeBorder}`,
+              paddingTop: 3,
+            }}
+          >
+            {t.editionLabel}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Selected ring ── */}
+      {selected && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-[18px]"
+          style={{ boxShadow: "0 0 0 3px #34d399, 0 0 12px rgba(52,211,153,0.5)" }}
+        />
+      )}
     </button>
   );
 }
 
-export default memo(PremiumFootballCardBase);
+const PremiumFootballCard = memo(PremiumFootballCardBase);
+export default PremiumFootballCard;
