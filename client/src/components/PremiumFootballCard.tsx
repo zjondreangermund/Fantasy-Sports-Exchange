@@ -16,6 +16,7 @@ type Theme = {
   plate: string;
   border: string;
   glow: string;
+  glowSpread: string;
   shadow: string;
   text: string;
   foil: string;
@@ -28,6 +29,7 @@ const themes: Record<string, Theme> = {
     plate: "linear-gradient(145deg,#ffffff 0%,#d9dee6 40%,#8994a0 72%,#f7fafc 100%)",
     border: "#ffffff",
     glow: "rgba(226,232,240,.82)",
+    glowSpread: "0 0 55px rgba(226,232,240,.82)",
     shadow: "rgba(148,163,184,.62)",
     text: "#0b1220",
     foil: "rgba(226,232,240,.55)",
@@ -38,6 +40,7 @@ const themes: Record<string, Theme> = {
     plate: "linear-gradient(145deg,#f3fbff 0%,#5db5ff 42%,#1450cc 72%,#d9eeff 100%)",
     border: "#dbeafe",
     glow: "rgba(59,130,246,.90)",
+    glowSpread: "0 0 75px rgba(59,130,246,.90)",
     shadow: "rgba(37,99,235,.72)",
     text: "#06152f",
     foil: "rgba(147,197,253,.62)",
@@ -48,6 +51,7 @@ const themes: Record<string, Theme> = {
     plate: "linear-gradient(145deg,#fff3ff 0%,#ed7aff 42%,#8426dc 74%,#ffd7ff 100%)",
     border: "#ffd7ff",
     glow: "rgba(217,70,239,.92)",
+    glowSpread: "0 0 75px rgba(217,70,239,.92)",
     shadow: "rgba(147,51,234,.76)",
     text: "#270334",
     foil: "rgba(240,171,252,.68)",
@@ -58,6 +62,7 @@ const themes: Record<string, Theme> = {
     plate: "linear-gradient(145deg,#f3f5ff 0%,#96a1ff 42%,#2354e6 74%,#e0e7ff 100%)",
     border: "#e0e7ff",
     glow: "rgba(99,102,241,.90)",
+    glowSpread: "0 0 75px rgba(99,102,241,.90)",
     shadow: "rgba(79,70,229,.74)",
     text: "#08113f",
     foil: "rgba(165,180,252,.65)",
@@ -68,6 +73,7 @@ const themes: Record<string, Theme> = {
     plate: "linear-gradient(145deg,#fff9d6 0%,#ffd84d 38%,#c98d00 68%,#fff4a3 100%)",
     border: "#fff2a8",
     glow: "rgba(245,158,11,.98)",
+    glowSpread: "0 0 90px rgba(245,158,11,.98)",
     shadow: "rgba(217,119,6,.82)",
     text: "#171006",
     foil: "rgba(253,230,138,.78)",
@@ -122,7 +128,7 @@ function Facet({ style }: { style: React.CSSProperties }) {
     <div
       style={{
         position: "absolute",
-        background: "linear-gradient(145deg,rgba(255,255,255,.65),rgba(0,0,0,.32) 72%,rgba(255,255,255,.28))",
+        background: "linear-gradient(145deg,rgba(255,255,255,.85),rgba(0,0,0,.55) 72%,rgba(255,255,255,.28))",
         boxShadow: "inset 0 10px 22px rgba(0,0,0,.42), inset 0 -9px 18px rgba(255,255,255,.65), 0 1px 0 rgba(255,255,255,.30)",
         ...style,
       }}
@@ -176,7 +182,7 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
           color: theme.text,
           background: theme.face,
           border: `3px solid ${theme.border}`,
-          boxShadow: `0 0 0 1px rgba(255,255,255,.92) inset, 0 0 0 8px rgba(255,255,255,.14) inset, 0 0 34px rgba(255,255,255,.55), 0 0 54px ${theme.glow}, 0 28px 80px rgba(0,0,0,.52)`,
+          boxShadow: `0 0 0 1px rgba(255,255,255,.92) inset, 0 0 0 8px rgba(255,255,255,.14) inset, 0 0 34px rgba(255,255,255,.55), ${theme.glowSpread}, 0 28px 80px rgba(0,0,0,.52)`,
           fontFamily: "Inter, system-ui, sans-serif",
         }}
       >
@@ -200,7 +206,7 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
 
         <div style={{ position: "absolute", top: 48, right: 34, zIndex: 37, width: 36, height: 36, borderRadius: "50%", display: "grid", placeItems: "center", background: "linear-gradient(145deg,rgba(255,255,255,.92),rgba(255,255,255,.30))", border: "2px solid rgba(0,0,0,.22)", boxShadow: "0 4px 10px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.80)", fontSize: 12, fontWeight: 950 }}>{clubCode(team).slice(0, 2)}</div>
 
-        <div style={{ position: "absolute", left: 10, right: 10, top: 55, bottom: 132, zIndex: 14, overflow: "visible" }}>
+        <div style={{ position: "absolute", left: 10, right: 10, top: 55, bottom: 132, zIndex: 14, overflow: "visible", background: "linear-gradient(to bottom,rgba(0,0,0,.10),rgba(0,0,0,.28))" }}>
           {showImg ? (
             <img
               src={img}
@@ -208,7 +214,7 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
               loading="lazy"
               decoding="async"
               onError={onImageError}
-              style={{ position: "absolute", left: "50%", bottom: 10, width: "185%", height: "165%", transform: "translateX(-50%)", objectFit: "contain", objectPosition: "bottom center", filter: `drop-shadow(0 24px 20px rgba(0,0,0,.58)) drop-shadow(0 0 18px ${theme.shadow})`, zIndex: 16 }}
+              style={{ position: "absolute", left: "50%", bottom: 10, width: "160%", height: "145%", transform: "translateX(-50%)", objectFit: "contain", objectPosition: "bottom center", filter: `drop-shadow(0 24px 20px rgba(0,0,0,.58)) drop-shadow(0 0 18px ${theme.shadow})`, zIndex: 10, opacity: 0.78 }}
               className="transition-transform duration-200 group-hover:scale-[1.04]"
             />
           ) : (
@@ -216,20 +222,20 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
           )}
         </div>
 
-        <div style={{ position: "absolute", left: 16, right: 16, bottom: 100, height: 52, zIndex: 20, clipPath: "polygon(0 44%,50% 0,100% 42%,100% 100%,0 100%)", background: theme.plate, borderTop: "2px solid rgba(255,255,255,.78)", boxShadow: "0 -14px 28px rgba(255,255,255,.28), inset 0 2px 0 rgba(255,255,255,.75), inset 0 -14px 24px rgba(0,0,0,.26)" }} />
+        <div style={{ position: "absolute", left: 16, right: 16, bottom: 100, height: 64, zIndex: 20, clipPath: "polygon(0 44%,50% 0,100% 42%,100% 100%,0 100%)", background: theme.plate, borderTop: "2px solid rgba(255,255,255,.78)", boxShadow: "0 -14px 28px rgba(255,255,255,.28), inset 0 2px 0 rgba(255,255,255,.75), inset 0 -14px 24px rgba(0,0,0,.26)", backdropFilter: "blur(6px)" }} />
 
         {/* Foil sweep 1 — primary diagonal */}
-        <div style={{ position: "absolute", inset: 0, zIndex: 26, pointerEvents: "none", background: "linear-gradient(118deg,transparent 0%,transparent 25%,rgba(255,255,255,.90) 38%,rgba(255,255,255,.18) 47%,transparent 58%)", mixBlendMode: "screen", opacity: .86 }} />
+        <div style={{ position: "absolute", inset: 0, zIndex: 30, pointerEvents: "none", background: "linear-gradient(118deg,transparent 0%,transparent 25%,rgba(255,255,255,.90) 38%,rgba(255,255,255,.18) 47%,transparent 58%)", mixBlendMode: "screen", opacity: .35 }} />
         {/* Foil sweep 2 — wide bar */}
-        <div style={{ position: "absolute", left: -92, top: 4, zIndex: 27, width: 540, height: 96, transform: "rotate(-32deg)", pointerEvents: "none", background: "linear-gradient(90deg,transparent,rgba(255,255,255,.98),transparent)", filter: "blur(1px)", opacity: .82 }} />
+        <div style={{ position: "absolute", left: -92, top: 4, zIndex: 31, width: 540, height: 96, transform: "rotate(-32deg)", pointerEvents: "none", background: "linear-gradient(90deg,transparent,rgba(255,255,255,.98),transparent)", filter: "blur(1px)", opacity: .28 }} />
         {/* Foil sweep 3 — secondary narrow sweep at opposite angle */}
-        <div style={{ position: "absolute", inset: 0, zIndex: 27, pointerEvents: "none", background: "linear-gradient(52deg,transparent 0%,transparent 55%,rgba(255,255,255,.55) 66%,rgba(255,255,255,.10) 72%,transparent 80%)", mixBlendMode: "screen", opacity: .72 }} />
+        <div style={{ position: "absolute", inset: 0, zIndex: 31, pointerEvents: "none", background: "linear-gradient(52deg,transparent 0%,transparent 55%,rgba(255,255,255,.55) 66%,rgba(255,255,255,.10) 72%,transparent 80%)", mixBlendMode: "screen", opacity: .20 }} />
         <div style={{ position: "absolute", inset: 0, zIndex: 28, pointerEvents: "none", background: `radial-gradient(circle at 14% 18%,rgba(255,255,255,.86),transparent 7%), radial-gradient(circle at 86% 24%,rgba(255,255,255,.82),transparent 6%), radial-gradient(circle at 76% 56%,${theme.foil},transparent 5%), radial-gradient(circle at 21% 78%,rgba(255,255,255,.58),transparent 6%)`, mixBlendMode: "screen" }} />
         <Spark x={45} y={78} s={16} /><Spark x={278} y={96} s={19} /><Spark x={306} y={250} s={14} /><Spark x={74} y={348} s={13} />
 
         <div style={{ position: "absolute", left: 18, right: 18, bottom: 17, zIndex: 38, textAlign: "center" }}>
           <div style={{ minHeight: 58, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 8px" }}>
-            <div style={{ fontSize: displayName.length > 18 ? 21 : 26, lineHeight: .95, fontWeight: 950, letterSpacing: ".035em", textTransform: "uppercase", color: theme.text, textShadow: "0 1px 0 rgba(255,255,255,.50), 0 8px 15px rgba(0,0,0,.20)" }}>{displayName}</div>
+            <div style={{ fontSize: displayName.length > 18 ? 21 : 26, lineHeight: .95, fontWeight: 950, letterSpacing: ".035em", textTransform: "uppercase", color: theme.text, textShadow: "0 1px 0 rgba(255,255,255,.50), 0 2px 8px rgba(0,0,0,.60)" }}>{displayName}</div>
           </div>
           <div style={{ marginTop: 3, fontSize: 14, fontWeight: 950, letterSpacing: ".12em", textTransform: "uppercase" }}>{player.position || "PLAYER"}</div>
           <div style={{ marginTop: 8, display: "flex", justifyContent: "center", alignItems: "center", gap: 12, fontSize: 12, fontWeight: 900 }}><span>PTS {points(player)}</span><span>{player.nationality || "FC"}</span></div>
