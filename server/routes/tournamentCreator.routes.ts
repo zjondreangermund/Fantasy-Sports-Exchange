@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { registerLoanMarketRoutes } from "./loanMarket.routes.js";
 
 interface RegisterTournamentCreatorRoutesDeps {
   requireAuth: any;
@@ -46,6 +47,8 @@ async function getOwnedTournament(userId: string, competitionId: number) {
 
 export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTournamentCreatorRoutesDeps) {
   const { requireAuth } = deps;
+
+  registerLoanMarketRoutes(app, { requireAuth });
 
   app.get("/api/user-tournaments/mine", requireAuth, async (req: any, res) => {
     try {
