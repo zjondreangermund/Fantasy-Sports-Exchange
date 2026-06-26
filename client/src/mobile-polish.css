@@ -148,6 +148,12 @@
     scroll-snap-align: center;
   }
 
+  /* Collection app mode: phones skip the desktop vault analytics and go straight to cards. */
+  main:has([data-testid="button-filter-all"]) .bg-gradient-to-r.from-slate-950,
+  main:has([data-testid="button-filter-all"]) section.grid.gap-4:not(.sticky) {
+    display: none !important;
+  }
+
   /* Dialogs and tournament lineup modal */
   [role="dialog"] {
     width: calc(100vw - 1rem) !important;
