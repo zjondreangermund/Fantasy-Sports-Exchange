@@ -20,6 +20,11 @@ type MarketMode = "buy" | "loan";
 
 const rarityOrder: Record<string, number> = { common: 0, rare: 1, unique: 2, epic: 3, legendary: 4 };
 
+function initialMarketMode(): MarketMode {
+  if (typeof window === "undefined") return "buy";
+  return new URLSearchParams(window.location.search).get("mode") === "loan" ? "loan" : "buy";
+}
+
 function money(value: unknown) {
   const n = Number(value || 0);
   if (!Number.isFinite(n)) return "N$0.00";
@@ -49,7 +54,7 @@ function ownerName(card: PlayerCardWithPlayer) {
 
 export default function MarketplaceV2Page() {
   const { toast } = useToast();
-  const [marketMode, setMarketMode] = useState<MarketMode>("buy");
+  const [marketMode, setMarketMode] = useState<MarketMode>(() => initialMarketMode());
   const [search, setSearch] = useState("");
   const [rarity, setRarity] = useState("all");
   const [sortBy, setSortBy] = useState<SortMode>("performance");
@@ -58,6 +63,14 @@ export default function MarketplaceV2Page() {
   const [watchlist, setWatchlist] = useState<number[]>(() => {
     try { return JSON.parse(localStorage.getItem("market_watchlist_card_ids") || "[]"); } catch { return []; }
   });
+
+  const setMode = (mode: MarketMode) => {
+    setMarketMode(mode);
+    if (typeof window !== "undefined") {
+      const url = mode === "loan" ? "/marketplace?mode=loan" : "/marketplace";
+      window.history.replaceState(null, "", url);
+    }
+  };
 
   const { data: listings, isLoading } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/marketplace"],
@@ -162,8 +175,8 @@ export default function MarketplaceV2Page() {
       <section className="rounded-3xl border border-white/10 bg-black/35 p-4 backdrop-blur-2xl">
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <div className="flex rounded-2xl border border-white/10 bg-black/45 p-1">
-            <Button size="sm" variant={marketMode === "buy" ? "default" : "ghost"} onClick={() => setMarketMode("buy")} className="gap-2"><ShoppingCart className="h-4 w-4" /> Buy</Button>
-            <Button size="sm" variant={marketMode === "loan" ? "default" : "ghost"} onClick={() => setMarketMode("loan")} className="gap-2"><Handshake className="h-4 w-4" /> Loan</Button>
+            <Button size="sm" variant={marketMode === "buy" ? "default" : "ghost"} onClick={() => setMode("buy")} className="gap-2"><ShoppingCart className="h-4 w-4" /> Buy</Button>
+            <Button size="sm" variant={marketMode === "loan" ? "default" : "ghost"} onClick={() => setMode("loan")} className="gap-2"><Handshake className="h-4 w-4" /> Loan</Button>
           </div>
           <div className="relative min-w-[240px] flex-1 max-w-lg"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search players, team, position..." className="h-12 border-white/10 bg-black/45 pl-10 text-white" /></div>
           <select value={rarity} onChange={(e) => setRarity(e.target.value)} className="h-12 rounded-xl border border-white/10 bg-black/45 px-3 text-sm text-white outline-none"><option value="all">All Rarities</option><option value="common">Common</option><option value="rare">Rare</option><option value="unique">Unique</option><option value="epic">Epic</option><option value="legendary">Legendary</option></select>
