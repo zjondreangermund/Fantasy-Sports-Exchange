@@ -12,9 +12,9 @@ export type PlayerCardData = {
   serial?: number;
   maxSupply?: number;
   season?: string;
+  /** Chosen display image for the card. Database/player sources are normalized before reaching the UI. */
   image?: string;
-  imageUrl?: string;
-  photo?: string;
+  /** Ordered fallback images used when the chosen image fails to load. */
   imageCandidates?: string[];
   nationality?: string;
   stats?: {
