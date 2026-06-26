@@ -40,7 +40,7 @@ const menuItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard, section: "Main" },
   { title: "Play", href: "/competitions", icon: Trophy, section: "Main" },
   { title: "Collection", href: "/collection", icon: Swords, section: "Main" },
-  { title: "Marketplace", href: "/marketplace", icon: ShoppingCart, section: "Main" },
+  { title: "Transfer Marketplace", href: "/marketplace", icon: ShoppingCart, section: "Main" },
   { title: "Leagues", href: "/premier-league", icon: Activity, section: "Main" },
   { title: "Wallet", href: "/wallet", icon: Wallet, section: "Account" },
   { title: "Profile", href: "/account", icon: UserCircle, section: "Account" },
