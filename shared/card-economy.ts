@@ -20,9 +20,9 @@ export const TOURNAMENT_ENTRY_BY_RARITY: Record<RarityTier, number> = {
 };
 
 export const MARKETPLACE_FLOOR_BY_RARITY: Partial<Record<RarityTier, number>> = {
-  rare: 20,
-  unique: 50,
-  legendary: 100,
+  rare: 100,
+  unique: 250,
+  legendary: 500,
 };
 
 const COVERED_LEAGUES = new Set(["premier league", "epl"]);
