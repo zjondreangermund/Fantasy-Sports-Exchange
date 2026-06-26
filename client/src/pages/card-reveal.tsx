@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
-import CollectionPlayerCard from "../components/CollectionPlayerCard";
+import PremiumFootballCard from "../components/PremiumFootballCard";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 
 type RevealRarity = "common" | "rare" | "epic" | "legendary";
@@ -95,7 +95,7 @@ export default function CardRevealPage() {
 
       <div className="relative z-10 flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-5">
         <div key={replayKey} className="animate-[fadeIn_500ms_ease-out]">
-          <CollectionPlayerCard player={toFantasyCardData(card, { imageWidth: 1200 })} className="!w-[260px]" />
+          <PremiumFootballCard player={toFantasyCardData(card, { imageWidth: 1200 })} className="!w-[260px]" />
         </div>
         <Badge className="bg-white/10 backdrop-blur-md">
           {rewardMode ? "Tournament reward reveal" : "Pack reveal"} • 2D cinematic mode
