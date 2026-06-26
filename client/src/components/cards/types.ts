@@ -16,6 +16,10 @@ export type PlayerCardData = {
   image?: string;
   /** Ordered fallback images used when the chosen image fails to load. */
   imageCandidates?: string[];
+  /** @deprecated Use image/imageCandidates. Kept temporarily while card components are migrated. */
+  imageUrl?: string;
+  /** @deprecated Use image/imageCandidates. Kept temporarily while card components are migrated. */
+  photo?: string;
   nationality?: string;
   stats?: {
     pace: number;
