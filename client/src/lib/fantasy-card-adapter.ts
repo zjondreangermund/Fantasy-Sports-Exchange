@@ -123,8 +123,6 @@ export function toFantasyCardData(
     league: player?.league ? String(player.league) : undefined,
     season: "2026-27",
     image: primaryImage,
-    imageUrl: safeUrl(player?.imageUrl),
-    photo: safeUrl(player?.photo),
     imageCandidates: candidates,
     nationality: normalizeNationality(player),
     rarity: normalizeRarity(card.rarity),
