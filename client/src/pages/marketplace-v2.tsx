@@ -9,6 +9,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { LiveHero, LivePageShell, LiveStatCard } from "../components/layout/LivePageShell";
 import CardShowcase from "../components/CardShowcase";
+import { LoanMarketPanel } from "../components/marketplace/LoanMarketPanel";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
 import { Crown, Gem, Handshake, Heart, Search, Shield, ShoppingCart, Star, Tag, TrendingUp, WalletCards, Zap } from "lucide-react";
@@ -130,7 +131,7 @@ export default function MarketplaceV2Page() {
 
   return (
     <LivePageShell tone="trading">
-      <LiveHero eyebrow="Transfer Market" title="Transfer Marketplace" description="Buy premium cards now, track your listings, and prepare short-term loan deals for future competitions.">
+      <LiveHero eyebrow="Transfer Market" title="Transfer Marketplace" description="Buy premium cards now, loan cards short-term, and track every transfer from one market hub.">
         <LiveStatCard label="Sale Listings" value={String(filtered.length)} helper="Available now" />
         <LiveStatCard label="Average Sale" value={money(avgPrice)} helper="Filtered price" />
         <LiveStatCard label="Balance" value={money(wallet?.balance)} helper="Wallet funds" />
@@ -170,7 +171,7 @@ export default function MarketplaceV2Page() {
         </div>
 
         {marketMode === "loan" ? (
-          <LoanMarketPanel />
+          <LoanMarketPanel myCards={myCards || []} walletBalance={Number(wallet?.balance || 0)} />
         ) : (
           <div className="overflow-hidden rounded-2xl border border-cyan-900/30 bg-slate-950/45">
             {isLoading ? <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl bg-slate-800" />)}</div> : filtered.length ? filtered.map((card) => <MarketRow key={cardId(card)} card={card} watched={watchlist.includes(cardId(card))} onWatch={() => toggleWatch(cardId(card))} onBuy={() => setBuying(card)} onDetails={() => setSelected(card)} />) : <Card className="m-4 border-slate-800 bg-slate-950/60 p-12 text-center"><ShoppingCart className="mx-auto mb-4 h-12 w-12 text-slate-600" /><p className="text-lg text-slate-300">No cards match your search.</p></Card>}
@@ -187,27 +188,6 @@ export default function MarketplaceV2Page() {
       </Dialog>
     </LivePageShell>
   );
-}
-
-function LoanMarketPanel() {
-  return (
-    <Card className="border-cyan-300/15 bg-slate-950/70 p-8 text-white">
-      <div className="mx-auto max-w-2xl text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-200"><Handshake className="h-7 w-7" /></div>
-        <h2 className="text-2xl font-black">Loan Market</h2>
-        <p className="mt-2 text-sm text-slate-400">Loaning is now part of the Transfer Marketplace structure. The next backend step will add loan listings, loan fees, duration, expiry, recall rules and automatic return of cards.</p>
-        <div className="mt-5 grid gap-3 text-left sm:grid-cols-3">
-          <LoanRule title="Duration" value="1–4 gameweeks" />
-          <LoanRule title="Fee" value="Owner sets loan fee" />
-          <LoanRule title="Return" value="Auto-return on expiry" />
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function LoanRule({ title, value }: { title: string; value: string }) {
-  return <div className="rounded-2xl border border-white/10 bg-black/30 p-4"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/35">{title}</p><p className="mt-1 font-bold text-white">{value}</p></div>;
 }
 
 function Pulse({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
