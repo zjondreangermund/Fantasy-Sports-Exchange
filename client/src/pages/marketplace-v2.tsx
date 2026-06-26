@@ -10,12 +10,12 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { LiveHero, LivePageShell, LiveStatCard } from "../components/layout/LivePageShell";
 import CardShowcase from "../components/CardShowcase";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
-import { queryClient as qc } from "../lib/queryClient";
 import { type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
-import { Crown, Gem, Heart, Search, Shield, ShoppingCart, Star, Tag, TrendingUp, WalletCards, Zap } from "lucide-react";
+import { Crown, Gem, Handshake, Heart, Search, Shield, ShoppingCart, Star, Tag, TrendingUp, WalletCards, Zap } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 
 type SortMode = "performance" | "priceAsc" | "priceDesc" | "rarity";
+type MarketMode = "buy" | "loan";
 
 const rarityOrder: Record<string, number> = { common: 0, rare: 1, unique: 2, epic: 3, legendary: 4 };
 
@@ -48,6 +48,7 @@ function ownerName(card: PlayerCardWithPlayer) {
 
 export default function MarketplaceV2Page() {
   const { toast } = useToast();
+  const [marketMode, setMarketMode] = useState<MarketMode>("buy");
   const [search, setSearch] = useState("");
   const [rarity, setRarity] = useState("all");
   const [sortBy, setSortBy] = useState<SortMode>("performance");
@@ -129,9 +130,9 @@ export default function MarketplaceV2Page() {
 
   return (
     <LivePageShell tone="trading">
-      <LiveHero eyebrow="Trading Floor" title="Marketplace Exchange" description="A live transfer market for buying premium cards and tracking your own listings.">
-        <LiveStatCard label="Listings" value={String(filtered.length)} helper="Available now" />
-        <LiveStatCard label="Average" value={money(avgPrice)} helper="Filtered price" />
+      <LiveHero eyebrow="Transfer Market" title="Transfer Marketplace" description="Buy premium cards now, track your listings, and prepare short-term loan deals for future competitions.">
+        <LiveStatCard label="Sale Listings" value={String(filtered.length)} helper="Available now" />
+        <LiveStatCard label="Average Sale" value={money(avgPrice)} helper="Filtered price" />
         <LiveStatCard label="Balance" value={money(wallet?.balance)} helper="Wallet funds" />
       </LiveHero>
 
@@ -159,14 +160,22 @@ export default function MarketplaceV2Page() {
 
       <section className="rounded-3xl border border-white/10 bg-black/35 p-4 backdrop-blur-2xl">
         <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="flex rounded-2xl border border-white/10 bg-black/45 p-1">
+            <Button size="sm" variant={marketMode === "buy" ? "default" : "ghost"} onClick={() => setMarketMode("buy")} className="gap-2"><ShoppingCart className="h-4 w-4" /> Buy</Button>
+            <Button size="sm" variant={marketMode === "loan" ? "default" : "ghost"} onClick={() => setMarketMode("loan")} className="gap-2"><Handshake className="h-4 w-4" /> Loan</Button>
+          </div>
           <div className="relative min-w-[240px] flex-1 max-w-lg"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search players, team, position..." className="h-12 border-white/10 bg-black/45 pl-10 text-white" /></div>
           <select value={rarity} onChange={(e) => setRarity(e.target.value)} className="h-12 rounded-xl border border-white/10 bg-black/45 px-3 text-sm text-white outline-none"><option value="all">All Rarities</option><option value="common">Common</option><option value="rare">Rare</option><option value="unique">Unique</option><option value="epic">Epic</option><option value="legendary">Legendary</option></select>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortMode)} className="h-12 rounded-xl border border-white/10 bg-black/45 px-3 text-sm text-white outline-none"><option value="performance">Performance</option><option value="priceAsc">Price ↑</option><option value="priceDesc">Price ↓</option><option value="rarity">Rarity</option></select>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-cyan-900/30 bg-slate-950/45">
-          {isLoading ? <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl bg-slate-800" />)}</div> : filtered.length ? filtered.map((card) => <MarketRow key={cardId(card)} card={card} watched={watchlist.includes(cardId(card))} onWatch={() => toggleWatch(cardId(card))} onBuy={() => setBuying(card)} onDetails={() => setSelected(card)} />) : <Card className="m-4 border-slate-800 bg-slate-950/60 p-12 text-center"><ShoppingCart className="mx-auto mb-4 h-12 w-12 text-slate-600" /><p className="text-lg text-slate-300">No cards match your search.</p></Card>}
-        </div>
+        {marketMode === "loan" ? (
+          <LoanMarketPanel />
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-cyan-900/30 bg-slate-950/45">
+            {isLoading ? <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl bg-slate-800" />)}</div> : filtered.length ? filtered.map((card) => <MarketRow key={cardId(card)} card={card} watched={watchlist.includes(cardId(card))} onWatch={() => toggleWatch(cardId(card))} onBuy={() => setBuying(card)} onDetails={() => setSelected(card)} />) : <Card className="m-4 border-slate-800 bg-slate-950/60 p-12 text-center"><ShoppingCart className="mx-auto mb-4 h-12 w-12 text-slate-600" /><p className="text-lg text-slate-300">No cards match your search.</p></Card>}
+          </div>
+        )}
       </section>
 
       <Dialog open={!!buying} onOpenChange={(open) => !open && setBuying(null)}>
@@ -178,6 +187,27 @@ export default function MarketplaceV2Page() {
       </Dialog>
     </LivePageShell>
   );
+}
+
+function LoanMarketPanel() {
+  return (
+    <Card className="border-cyan-300/15 bg-slate-950/70 p-8 text-white">
+      <div className="mx-auto max-w-2xl text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-200"><Handshake className="h-7 w-7" /></div>
+        <h2 className="text-2xl font-black">Loan Market</h2>
+        <p className="mt-2 text-sm text-slate-400">Loaning is now part of the Transfer Marketplace structure. The next backend step will add loan listings, loan fees, duration, expiry, recall rules and automatic return of cards.</p>
+        <div className="mt-5 grid gap-3 text-left sm:grid-cols-3">
+          <LoanRule title="Duration" value="1–4 gameweeks" />
+          <LoanRule title="Fee" value="Owner sets loan fee" />
+          <LoanRule title="Return" value="Auto-return on expiry" />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function LoanRule({ title, value }: { title: string; value: string }) {
+  return <div className="rounded-2xl border border-white/10 bg-black/30 p-4"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/35">{title}</p><p className="mt-1 font-bold text-white">{value}</p></div>;
 }
 
 function Pulse({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
@@ -192,7 +222,7 @@ function RarityIcon({ rarity }: { rarity: string }) {
 }
 
 function MarketRow({ card, watched, onWatch, onBuy, onDetails }: { card: PlayerCardWithPlayer; watched: boolean; onWatch?: () => void; onBuy?: () => void; onDetails?: () => void }) {
-  const fantasy = toFantasyCardData(card, { imageWidth: 640 });
+  const fantasy = toFantasyCardData(card, { imageWidth: 320 });
   const price = cardPrice(card);
   const rarity = rarityOf(card);
   return <div className="grid gap-3 border-b border-cyan-900/30 bg-black/25 p-4 text-white hover:bg-cyan-400/5 lg:grid-cols-[1.6fr_0.7fr_0.7fr_0.7fr_0.8fr]"><button onClick={onDetails} className="flex items-center gap-3 text-left"><div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-xl font-black">{Number(fantasy.rating || 0).toFixed(0)}</div><div><p className="font-black">{fantasy.name}</p><p className="text-xs text-white/45">{fantasy.team || fantasy.club} • {fantasy.position}</p><p className="text-[11px] text-white/35">Seller: {ownerName(card)}</p></div></button><div className="flex items-center gap-2"><RarityIcon rarity={rarity} /><span className="capitalize">{rarity}</span></div><div><p className="text-xs text-white/40">Points</p><p className="font-black">{Number(fantasy.totalPoints || card.decisiveScore || 0).toFixed(0)}</p></div><div><p className="text-xs text-white/40">Price</p><p className="font-black text-emerald-300">{money(price)}</p></div><div className="flex items-center justify-end gap-2"><Button size="sm" onClick={onBuy} className="bg-cyan-400 font-black text-black hover:bg-cyan-300">Buy</Button><Button size="icon" variant="ghost" onClick={onWatch} className={watched ? "text-red-300" : "text-white/45"}><Heart className={watched ? "h-5 w-5 fill-current" : "h-5 w-5"} /></Button></div></div>;
