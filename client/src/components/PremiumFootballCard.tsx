@@ -85,7 +85,7 @@ function uniq(values: Array<string | undefined | null>) {
   return Array.from(new Set(values.filter(Boolean) as string[]));
 }
 function imagesFor(player: PlayerCardData) {
-  return uniq([player.image, player.imageUrl, player.photo, ...(player.imageCandidates || [])]);
+  return uniq([player.image, ...(player.imageCandidates || [])]);
 }
 function initials(name?: string) {
   return String(name || "Player").split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
