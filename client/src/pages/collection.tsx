@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
-import CollectionPlayerCard from "../components/CollectionPlayerCard";
+import PremiumFootballCard from "../components/PremiumFootballCard";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
@@ -228,7 +228,7 @@ export default function CollectionPage() {
                 <div className="absolute bottom-7 h-12 w-44 rounded-full bg-black/60 blur-2xl" />
                 <div className="absolute bottom-5 h-7 w-40 rounded-full border border-white/10 bg-white/10" />
                 <div className="relative z-10 -mt-3 scale-[0.78] sm:scale-[0.86] md:scale-[0.92]">
-                  <CollectionPlayerCard player={featuredFantasyCard} size="lg" />
+                  <PremiumFootballCard player={featuredFantasyCard} size="lg" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -271,7 +271,7 @@ export default function CollectionPage() {
                 <div key={card.id} className="flex flex-col items-center gap-2">
                   <div className={`relative rounded-[28px] ${editingLineup && isSelected ? "ring-2 ring-emerald-400" : ""}`}>
                     {card.forSale && <Badge className="absolute left-2 top-2 z-30 bg-amber-400 text-black">Listed</Badge>}
-                    <CollectionPlayerCard
+                    <PremiumFootballCard
                       player={fantasyCard}
                       selected={isSelected}
                       onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined}
