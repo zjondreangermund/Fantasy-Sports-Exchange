@@ -22,37 +22,31 @@ import {
   Wallet,
   Trophy,
   Activity,
-  Gem,
   LogOut,
   Shield,
-  Bell,
-  BarChart3,
   Target,
   Swords,
-  Radio,
+  UserCircle,
 } from "lucide-react";
 
 type NavItem = {
   title: string;
   href: string;
   icon: typeof LayoutDashboard;
-  section: "Play" | "Club" | "Market" | "Account";
+  section: "Main" | "Account";
 };
 
 const menuItems: NavItem[] = [
-  { title: "Dashboard", href: "/", icon: LayoutDashboard, section: "Play" },
-  { title: "Live Lineup", href: "/live-lineup", icon: Radio, section: "Play" },
-  { title: "Tournaments", href: "/competitions", icon: Trophy, section: "Play" },
-  { title: "My Team", href: "/collection", icon: Swords, section: "Club" },
-  { title: "Leagues", href: "/premier-league", icon: Activity, section: "Club" },
-  { title: "Analytics", href: "/analytics", icon: BarChart3, section: "Club" },
-  { title: "Marketplace", href: "/marketplace", icon: ShoppingCart, section: "Market" },
+  { title: "Dashboard", href: "/", icon: LayoutDashboard, section: "Main" },
+  { title: "Play", href: "/competitions", icon: Trophy, section: "Main" },
+  { title: "Collection", href: "/collection", icon: Swords, section: "Main" },
+  { title: "Marketplace", href: "/marketplace", icon: ShoppingCart, section: "Main" },
+  { title: "Leagues", href: "/premier-league", icon: Activity, section: "Main" },
   { title: "Wallet", href: "/wallet", icon: Wallet, section: "Account" },
-  { title: "Account", href: "/account", icon: Bell, section: "Account" },
-  { title: "Card Lab", href: "/card-lab", icon: Gem, section: "Account" },
+  { title: "Profile", href: "/account", icon: UserCircle, section: "Account" },
 ];
 
-const sectionOrder: NavItem["section"][] = ["Play", "Club", "Market", "Account"];
+const sectionOrder: NavItem["section"][] = ["Main", "Account"];
 
 function isActivePath(location: string, href: string) {
   if (href === "/") return location === "/" || location === "/dashboard";
