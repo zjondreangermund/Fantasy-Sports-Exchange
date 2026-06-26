@@ -150,7 +150,7 @@ export default function MarketplaceV2Page() {
         <LiveStatCard label="Balance" value={money(wallet?.balance)} helper="Wallet funds" />
       </LiveHero>
 
-      <section className="grid gap-4 lg:grid-cols-[0.75fr_1.25fr]">
+      <section className="hidden gap-4 md:grid lg:grid-cols-[0.75fr_1.25fr]">
         <Card className="cinematic-glass border-cyan-300/15 bg-white/[0.06] p-5 text-white backdrop-blur-xl">
           <div className="mb-4 flex items-center gap-2"><TrendingUp className="h-5 w-5 text-cyan-300" /><h2 className="font-black">Market Pulse</h2></div>
           <div className="grid grid-cols-2 gap-3">
