@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "com.fantasyfc.app",
-  appName: "FantasyFC",
+  appId: "com.fantasyarena.app",
+  appName: "Fantasy Arena",
   webDir: "dist",
   bundledWebRuntime: false,
   server: {
