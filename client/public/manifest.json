@@ -14,9 +14,10 @@
       "purpose": "any maskable"
     },
     {
-      "src": "/brand/fantasy-arena-wordmark.svg",
+      "src": "/icons/icon-512.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }
