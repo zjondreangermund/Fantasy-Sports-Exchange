@@ -154,6 +154,41 @@
     display: none !important;
   }
 
+  /* Dashboard app mode: keep next action and quick stats, hide deep desktop analytics on phones. */
+  main:has(a[href="/wallet"]) section.grid.gap-4.xl\:grid-cols-\[1\.2fr_0\.8fr\],
+  main:has(a[href="/wallet"]) section.grid.gap-4.lg\:grid-cols-3,
+  main:has(a[href="/wallet"]) section.grid.gap-4.lg\:grid-cols-\[0\.8fr_1\.2fr\] {
+    display: none !important;
+  }
+
+  main:has(a[href="/wallet"]) section.grid.gap-4.lg\:grid-cols-\[1\.2fr_0\.8fr\] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  main:has(a[href="/wallet"]) section.grid.gap-4.lg\:grid-cols-\[1\.2fr_0\.8fr\] > :nth-child(2) {
+    display: none !important;
+  }
+
+  main:has(a[href="/wallet"]) section.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-4 {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.65rem !important;
+  }
+
+  main:has(a[href="/wallet"]) section.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-4 .p-4 {
+    padding: 0.8rem !important;
+  }
+
+  main:has(a[href="/wallet"]) section.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-4 p[class*="tracking"] {
+    letter-spacing: 0.08em !important;
+    font-size: 0.62rem !important;
+  }
+
+  main:has(a[href="/wallet"]) section.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-4 p.text-2xl {
+    font-size: 1.18rem !important;
+    line-height: 1.45rem !important;
+  }
+
   /* Dialogs and tournament lineup modal */
   [role="dialog"] {
     width: calc(100vw - 1rem) !important;
