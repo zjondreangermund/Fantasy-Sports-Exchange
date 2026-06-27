@@ -1,40 +1,39 @@
-<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="96" fill="#020617"/>
-  <circle cx="256" cy="256" r="210" fill="url(#bgGlow)" opacity="0.95"/>
-  <path d="M256 42L421 100V229C421 337 351 431 256 470C161 431 91 337 91 229V100L256 42Z" fill="#061326" stroke="url(#chrome)" stroke-width="18"/>
-  <path d="M256 67L397 117V228C397 322 339 403 256 439C173 403 115 322 115 228V117L256 67Z" fill="url(#shield)" stroke="#22D3EE" stroke-width="6"/>
-  <path d="M159 159C181 126 216 106 256 106C296 106 331 126 353 159" stroke="#E5F6FF" stroke-width="16" stroke-linecap="round"/>
-  <path d="M149 308C175 355 214 382 256 382C298 382 337 355 363 308" stroke="#0284C7" stroke-width="14" stroke-linecap="round"/>
-  <circle cx="256" cy="230" r="76" fill="#F8FAFC" stroke="#0F172A" stroke-width="8"/>
-  <path d="M256 154L291 179L278 220H234L221 179L256 154Z" fill="#020617"/>
-  <path d="M234 220L206 250L218 296H256V220H234Z" fill="#CBD5E1"/>
-  <path d="M278 220L306 250L294 296H256V220H278Z" fill="#94A3B8"/>
-  <path d="M221 179L185 191L180 232L206 250L234 220L221 179Z" fill="#E2E8F0"/>
-  <path d="M291 179L327 191L332 232L306 250L278 220L291 179Z" fill="#CBD5E1"/>
-  <path d="M168 339H344" stroke="#22D3EE" stroke-width="8" stroke-linecap="round"/>
-  <path d="M192 366H320" stroke="#0EA5E9" stroke-width="6" stroke-linecap="round"/>
-  <text x="256" y="331" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="54" font-weight="900" fill="#F8FAFC" stroke="#020617" stroke-width="3">FANTASY</text>
-  <text x="256" y="383" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="48" font-weight="900" fill="#22D3EE" letter-spacing="6">ARENA</text>
-  <path d="M201 89L213 112L238 116L220 134L225 159L201 147L178 159L182 134L164 116L189 112L201 89Z" fill="#E0F2FE"/>
-  <path d="M256 77L270 104L300 108L278 129L284 158L256 144L228 158L234 129L212 108L242 104L256 77Z" fill="#22D3EE"/>
-  <path d="M311 89L323 112L348 116L330 134L334 159L311 147L287 159L292 134L274 116L299 112L311 89Z" fill="#E0F2FE"/>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" rx="184" fill="#020617"/>
+  <circle cx="512" cy="492" r="432" fill="url(#aura)" opacity=".9"/>
+  <path d="M512 56 852 176v275c0 232-145 407-340 506C317 858 172 683 172 451V176L512 56Z" fill="url(#outer)" stroke="url(#chrome)" stroke-width="30"/>
+  <path d="M512 104 810 210v239c0 202-124 352-298 442-174-90-298-240-298-442V210L512 104Z" fill="url(#inner)" stroke="#0BE7FF" stroke-width="12"/>
+  <path d="M246 434C286 250 386 170 512 170c126 0 226 80 266 264" stroke="#19D8FF" stroke-width="16" stroke-linecap="round" opacity=".95"/>
+  <path d="M304 362c51-76 124-114 208-114s157 38 208 114" stroke="#F8FAFC" stroke-width="18" stroke-linecap="round" opacity=".9"/>
+  <path d="M315 702c54 84 120 126 197 126s143-42 197-126" stroke="#0284C7" stroke-width="16" stroke-linecap="round"/>
+  <path d="M512 134 539 188l60 9-44 42 11 59-54-29-54 29 11-59-44-42 60-9 27-54Z" fill="url(#cyanStar)"/>
+  <path d="M386 178 407 221l47 7-34 33 8 47-42-22-42 22 8-47-34-33 47-7 21-43Z" fill="url(#silver)"/>
+  <path d="M638 178 659 221l47 7-34 33 8 47-42-22-42 22 8-47-34-33 47-7 21-43Z" fill="url(#silver)"/>
+  <circle cx="512" cy="408" r="142" fill="url(#ballGlow)" stroke="#0F172A" stroke-width="12"/>
+  <path d="M512 280 578 328l-25 78h-82l-25-78 66-48Z" fill="#020617"/>
+  <path d="M445 326 377 350l-9 78 50 39 53-61-26-80Z" fill="#F8FAFC"/>
+  <path d="M579 326 647 350l9 78-50 39-53-61 26-80Z" fill="#CBD5E1"/>
+  <path d="M418 467 395 541l66 49 51-37v-83l-41-64-53 61Z" fill="#DDE7F3"/>
+  <path d="M606 467 629 541l-66 49-51-37v-83l41-64 53 61Z" fill="#F8FAFC"/>
+  <path d="M461 590h102l44-48-44-51H461l-44 51 44 48Z" fill="#111827"/>
+  <path d="M512 280v128M377 350l94 56M647 350l-94 56M461 590l51-37 51 37" stroke="#0F172A" stroke-width="8" stroke-linecap="round"/>
+  <rect x="142" y="554" width="740" height="160" rx="30" fill="url(#nameplate)" stroke="url(#edge)" stroke-width="10"/>
+  <text x="512" y="670" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="132" font-weight="900" fill="url(#whiteMetal)" stroke="#020617" stroke-width="8" paint-order="stroke fill">FANTASY</text>
+  <text x="512" y="781" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="118" font-weight="900" fill="url(#arenaBlue)" stroke="#042F4F" stroke-width="6" paint-order="stroke fill" letter-spacing="8">ARENA</text>
+  <path d="M226 804h160M638 804h160" stroke="#04D9FF" stroke-width="12" stroke-linecap="round"/>
+  <path d="M512 884c-79-40-146-92-197-154h394c-51 62-118 114-197 154Z" fill="url(#bottomGlow)" opacity=".72"/>
   <defs>
-    <radialGradient id="bgGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(256 256) rotate(90) scale(230)">
-      <stop stop-color="#0EA5E9" stop-opacity="0.45"/>
-      <stop offset="0.5" stop-color="#1E3A8A" stop-opacity="0.35"/>
-      <stop offset="1" stop-color="#020617" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="chrome" x1="91" y1="42" x2="421" y2="470" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFFFFF"/>
-      <stop offset="0.22" stop-color="#93C5FD"/>
-      <stop offset="0.5" stop-color="#0EA5E9"/>
-      <stop offset="0.78" stop-color="#E0F2FE"/>
-      <stop offset="1" stop-color="#64748B"/>
-    </linearGradient>
-    <linearGradient id="shield" x1="256" y1="67" x2="256" y2="439" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0B1220"/>
-      <stop offset="0.5" stop-color="#071A33"/>
-      <stop offset="1" stop-color="#020617"/>
-    </linearGradient>
+    <radialGradient id="aura" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 492) rotate(90) scale(432)"><stop stop-color="#0EA5E9" stop-opacity=".42"/><stop offset=".58" stop-color="#1D4ED8" stop-opacity=".2"/><stop offset="1" stop-color="#020617" stop-opacity="0"/></radialGradient>
+    <linearGradient id="outer" x1="172" y1="56" x2="852" y2="957"><stop stop-color="#111827"/><stop offset=".5" stop-color="#061A33"/><stop offset="1" stop-color="#020617"/></linearGradient>
+    <linearGradient id="inner" x1="512" y1="104" x2="512" y2="891"><stop stop-color="#0A1730"/><stop offset=".55" stop-color="#020617"/><stop offset="1" stop-color="#071326"/></linearGradient>
+    <linearGradient id="chrome" x1="190" y1="92" x2="824" y2="912"><stop stop-color="#FFFFFF"/><stop offset=".18" stop-color="#B8D7FF"/><stop offset=".36" stop-color="#0EA5E9"/><stop offset=".65" stop-color="#7DD3FC"/><stop offset=".82" stop-color="#F8FAFC"/><stop offset="1" stop-color="#475569"/></linearGradient>
+    <linearGradient id="cyanStar" x1="512" y1="134" x2="512" y2="298"><stop stop-color="#A5F3FC"/><stop offset=".5" stop-color="#06B6D4"/><stop offset="1" stop-color="#0284C7"/></linearGradient>
+    <linearGradient id="silver" x1="386" y1="178" x2="386" y2="308"><stop stop-color="#FFFFFF"/><stop offset=".5" stop-color="#CBD5E1"/><stop offset="1" stop-color="#64748B"/></linearGradient>
+    <linearGradient id="ballGlow" x1="430" y1="290" x2="594" y2="550"><stop stop-color="#FFFFFF"/><stop offset=".45" stop-color="#E2E8F0"/><stop offset="1" stop-color="#94A3B8"/></linearGradient>
+    <linearGradient id="nameplate" x1="142" y1="554" x2="882" y2="714"><stop stop-color="#06101F"/><stop offset=".5" stop-color="#020617"/><stop offset="1" stop-color="#061C35"/></linearGradient>
+    <linearGradient id="edge" x1="142" y1="554" x2="882" y2="714"><stop stop-color="#06B6D4"/><stop offset=".5" stop-color="#F8FAFC"/><stop offset="1" stop-color="#0EA5E9"/></linearGradient>
+    <linearGradient id="whiteMetal" x1="512" y1="548" x2="512" y2="685"><stop stop-color="#FFFFFF"/><stop offset=".42" stop-color="#F8FAFC"/><stop offset=".64" stop-color="#94A3B8"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient>
+    <linearGradient id="arenaBlue" x1="512" y1="684" x2="512" y2="795"><stop stop-color="#A5F3FC"/><stop offset=".4" stop-color="#22D3EE"/><stop offset="1" stop-color="#0284C7"/></linearGradient>
+    <linearGradient id="bottomGlow" x1="512" y1="730" x2="512" y2="884"><stop stop-color="#0EA5E9" stop-opacity=".45"/><stop offset="1" stop-color="#020617" stop-opacity="0"/></linearGradient>
   </defs>
 </svg>
