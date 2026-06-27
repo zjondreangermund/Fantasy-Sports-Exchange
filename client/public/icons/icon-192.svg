@@ -1,21 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Fantasy Arena icon">
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="96" fill="#020617"/>
+  <circle cx="256" cy="256" r="210" fill="url(#bgGlow)" opacity="0.95"/>
+  <path d="M256 42L421 100V229C421 337 351 431 256 470C161 431 91 337 91 229V100L256 42Z" fill="#061326" stroke="url(#chrome)" stroke-width="18"/>
+  <path d="M256 67L397 117V228C397 322 339 403 256 439C173 403 115 322 115 228V117L256 67Z" fill="url(#shield)" stroke="#22D3EE" stroke-width="6"/>
+  <path d="M159 159C181 126 216 106 256 106C296 106 331 126 353 159" stroke="#E5F6FF" stroke-width="16" stroke-linecap="round"/>
+  <path d="M149 308C175 355 214 382 256 382C298 382 337 355 363 308" stroke="#0284C7" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="256" cy="230" r="76" fill="#F8FAFC" stroke="#0F172A" stroke-width="8"/>
+  <path d="M256 154L291 179L278 220H234L221 179L256 154Z" fill="#020617"/>
+  <path d="M234 220L206 250L218 296H256V220H234Z" fill="#CBD5E1"/>
+  <path d="M278 220L306 250L294 296H256V220H278Z" fill="#94A3B8"/>
+  <path d="M221 179L185 191L180 232L206 250L234 220L221 179Z" fill="#E2E8F0"/>
+  <path d="M291 179L327 191L332 232L306 250L278 220L291 179Z" fill="#CBD5E1"/>
+  <path d="M168 339H344" stroke="#22D3EE" stroke-width="8" stroke-linecap="round"/>
+  <path d="M192 366H320" stroke="#0EA5E9" stroke-width="6" stroke-linecap="round"/>
+  <text x="256" y="331" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="54" font-weight="900" fill="#F8FAFC" stroke="#020617" stroke-width="3">FANTASY</text>
+  <text x="256" y="383" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="48" font-weight="900" fill="#22D3EE" letter-spacing="6">ARENA</text>
+  <path d="M201 89L213 112L238 116L220 134L225 159L201 147L178 159L182 134L164 116L189 112L201 89Z" fill="#E0F2FE"/>
+  <path d="M256 77L270 104L300 108L278 129L284 158L256 144L228 158L234 129L212 108L242 104L256 77Z" fill="#22D3EE"/>
+  <path d="M311 89L323 112L348 116L330 134L334 159L311 147L287 159L292 134L274 116L299 112L311 89Z" fill="#E0F2FE"/>
   <defs>
-    <linearGradient id="bg" x1="56" y1="56" x2="456" y2="456" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7c3aed"/><stop offset="0.52" stop-color="#111827"/><stop offset="1" stop-color="#0ea5e9"/></linearGradient>
-    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff7b8"/><stop offset="0.28" stop-color="#f6c945"/><stop offset="0.55" stop-color="#a96800"/><stop offset="0.78" stop-color="#ffe28a"/><stop offset="1" stop-color="#704000"/></linearGradient>
-    <filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#000" flood-opacity=".55"/></filter>
-    <pattern id="hex" width="28" height="24" patternUnits="userSpaceOnUse"><path d="M7 1h14l7 11-7 11H7L0 12Z" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="1.4"/></pattern>
+    <radialGradient id="bgGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(256 256) rotate(90) scale(230)">
+      <stop stop-color="#0EA5E9" stop-opacity="0.45"/>
+      <stop offset="0.5" stop-color="#1E3A8A" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#020617" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="chrome" x1="91" y1="42" x2="421" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.22" stop-color="#93C5FD"/>
+      <stop offset="0.5" stop-color="#0EA5E9"/>
+      <stop offset="0.78" stop-color="#E0F2FE"/>
+      <stop offset="1" stop-color="#64748B"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="256" y1="67" x2="256" y2="439" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220"/>
+      <stop offset="0.5" stop-color="#071A33"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="104" fill="#08111f"/>
-  <rect x="42" y="42" width="428" height="428" rx="86" fill="url(#bg)"/>
-  <rect x="42" y="42" width="428" height="428" rx="86" fill="url(#hex)" opacity=".85"/>
-  <rect x="42" y="42" width="428" height="428" rx="86" fill="none" stroke="url(#gold)" stroke-width="12"/>
-  <path d="M256 86 392 158v126c0 78-52 124-136 158-84-34-136-80-136-158V158Z" fill="#0b1220" stroke="url(#gold)" stroke-width="9" filter="url(#s)"/>
-  <path d="M212 169 238 205 256 151 274 205 300 169 292 232H220Z" fill="url(#gold)" stroke="#fff0a6" stroke-width="3"/>
-  <path d="M188 252h136" stroke="url(#gold)" stroke-width="5" stroke-linecap="round"/>
-  <text x="256" y="318" text-anchor="middle" font-family="Impact, Haettenschweiler, Arial Black, sans-serif" font-size="70" font-weight="900" fill="url(#gold)" stroke="#3b2200" stroke-width="4" paint-order="stroke fill" letter-spacing="2">FANTASY</text>
-  <text x="256" y="382" text-anchor="middle" font-family="Impact, Haettenschweiler, Arial Black, sans-serif" font-size="66" font-weight="900" fill="url(#gold)" stroke="#3b2200" stroke-width="4" paint-order="stroke fill" letter-spacing="3">ARENA</text>
-  <g fill="url(#gold)" stroke="#2a1700" stroke-width="5">
-    <circle cx="94" cy="94" r="27"/><circle cx="418" cy="94" r="27"/><circle cx="94" cy="418" r="27"/><circle cx="418" cy="418" r="27"/>
-  </g>
-  <g stroke="#2a1700" stroke-width="7" stroke-linecap="round"><path d="M84 94h20M94 84v20M408 94h20M418 84v20M84 418h20M94 408v20M408 418h20M418 408v20"/></g>
 </svg>
