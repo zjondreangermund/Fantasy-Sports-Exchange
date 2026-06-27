@@ -24,7 +24,6 @@ import {
   Activity,
   LogOut,
   Shield,
-  Target,
   Swords,
   UserCircle,
 } from "lucide-react";
@@ -40,7 +39,7 @@ const menuItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard, section: "Main" },
   { title: "Play", href: "/competitions", icon: Trophy, section: "Main" },
   { title: "Collection", href: "/collection", icon: Swords, section: "Main" },
-  { title: "Transfer Marketplace", href: "/marketplace", icon: ShoppingCart, section: "Main" },
+  { title: "Marketplace", href: "/marketplace", icon: ShoppingCart, section: "Main" },
   { title: "Leagues", href: "/premier-league", icon: Activity, section: "Main" },
   { title: "Wallet", href: "/wallet", icon: Wallet, section: "Account" },
   { title: "Profile", href: "/account", icon: UserCircle, section: "Account" },
@@ -79,13 +78,13 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-slate-800/80 p-4">
         <Link href="/">
           <div className="group flex cursor-pointer items-center gap-3" data-testid="link-home" onClick={closeMobileDrawer}>
-            <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/30 bg-gradient-to-br from-cyan-400 via-blue-600 to-slate-950 shadow-[0_0_28px_rgba(59,130,246,0.28)]">
-              <Target className="relative z-10 h-5 w-5 text-white" />
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.55),transparent_35%)]" />
+            <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/30 bg-slate-950 shadow-[0_0_28px_rgba(34,211,238,0.22)]">
+              <img src="/brand/fantasy-arena-icon.svg" alt="Fantasy Arena" className="h-11 w-11 object-contain" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.22),transparent_35%)]" />
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-black tracking-wide text-white">Fantasy Arena</p>
-              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-200/60">Manager Hub</p>
+              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-200/60">Play • Compete • Win</p>
             </div>
           </div>
         </Link>
