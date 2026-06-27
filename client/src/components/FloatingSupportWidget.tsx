@@ -122,7 +122,7 @@ export default function FloatingSupportWidget() {
   };
 
   return (
-    <div className="fixed bottom-20 right-3 z-[90] sm:bottom-4 sm:right-4">
+    <div className="fixed bottom-20 right-3 z-[90] hidden md:block sm:bottom-4 sm:right-4">
       {open && (
         <Card className="mb-2 w-[min(92vw,360px)] max-h-[70vh] overflow-hidden border-border/70 bg-background/95 backdrop-blur-lg shadow-2xl sm:mb-3 sm:w-[min(92vw,380px)]">
           <div className="flex items-center justify-between border-b px-3 py-2">
