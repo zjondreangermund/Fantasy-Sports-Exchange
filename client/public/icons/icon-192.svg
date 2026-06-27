@@ -1,13 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="FantasyFC icon">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Fantasy Arena icon">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#7c3aed"/>
-      <stop offset="100%" stop-color="#0ea5e9"/>
-    </linearGradient>
+    <linearGradient id="bg" x1="56" y1="56" x2="456" y2="456" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7c3aed"/><stop offset="0.52" stop-color="#111827"/><stop offset="1" stop-color="#0ea5e9"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff7b8"/><stop offset="0.28" stop-color="#f6c945"/><stop offset="0.55" stop-color="#a96800"/><stop offset="0.78" stop-color="#ffe28a"/><stop offset="1" stop-color="#704000"/></linearGradient>
+    <filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#000" flood-opacity=".55"/></filter>
+    <pattern id="hex" width="28" height="24" patternUnits="userSpaceOnUse"><path d="M7 1h14l7 11-7 11H7L0 12Z" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="1.4"/></pattern>
   </defs>
-  <rect width="192" height="192" rx="36" fill="#0f172a"/>
-  <rect x="18" y="18" width="156" height="156" rx="30" fill="url(#g)"/>
-  <path d="M96 36 146 62v48c0 29-20 45-50 57-30-12-50-28-50-57V62z" fill="rgba(15,23,42,.88)"/>
-  <path d="M96 63v62" stroke="#e2e8f0" stroke-width="11" stroke-linecap="round"/>
-  <path d="M70 84h52" stroke="#e2e8f0" stroke-width="11" stroke-linecap="round"/>
+  <rect width="512" height="512" rx="104" fill="#08111f"/>
+  <rect x="42" y="42" width="428" height="428" rx="86" fill="url(#bg)"/>
+  <rect x="42" y="42" width="428" height="428" rx="86" fill="url(#hex)" opacity=".85"/>
+  <rect x="42" y="42" width="428" height="428" rx="86" fill="none" stroke="url(#gold)" stroke-width="12"/>
+  <path d="M256 86 392 158v126c0 78-52 124-136 158-84-34-136-80-136-158V158Z" fill="#0b1220" stroke="url(#gold)" stroke-width="9" filter="url(#s)"/>
+  <path d="M212 169 238 205 256 151 274 205 300 169 292 232H220Z" fill="url(#gold)" stroke="#fff0a6" stroke-width="3"/>
+  <path d="M188 252h136" stroke="url(#gold)" stroke-width="5" stroke-linecap="round"/>
+  <text x="256" y="318" text-anchor="middle" font-family="Impact, Haettenschweiler, Arial Black, sans-serif" font-size="70" font-weight="900" fill="url(#gold)" stroke="#3b2200" stroke-width="4" paint-order="stroke fill" letter-spacing="2">FANTASY</text>
+  <text x="256" y="382" text-anchor="middle" font-family="Impact, Haettenschweiler, Arial Black, sans-serif" font-size="66" font-weight="900" fill="url(#gold)" stroke="#3b2200" stroke-width="4" paint-order="stroke fill" letter-spacing="3">ARENA</text>
+  <g fill="url(#gold)" stroke="#2a1700" stroke-width="5">
+    <circle cx="94" cy="94" r="27"/><circle cx="418" cy="94" r="27"/><circle cx="94" cy="418" r="27"/><circle cx="418" cy="418" r="27"/>
+  </g>
+  <g stroke="#2a1700" stroke-width="7" stroke-linecap="round"><path d="M84 94h20M94 84v20M408 94h20M418 84v20M84 418h20M94 408v20M408 418h20M418 408v20"/></g>
 </svg>
