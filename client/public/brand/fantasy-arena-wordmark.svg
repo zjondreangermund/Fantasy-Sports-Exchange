@@ -1,0 +1,21 @@
+<svg width="860" height="220" viewBox="0 0 860 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="860" height="220" rx="38" fill="#020617"/>
+  <rect x="10" y="10" width="840" height="200" rx="30" stroke="#0EA5E9" stroke-opacity="0.24"/>
+  <g transform="translate(36 18) scale(.36)">
+    <rect width="512" height="512" rx="96" fill="#020617"/>
+    <circle cx="256" cy="256" r="210" fill="#0EA5E9" opacity="0.18"/>
+    <path d="M256 42L421 100V229C421 337 351 431 256 470C161 431 91 337 91 229V100L256 42Z" fill="#061326" stroke="#E2E8F0" stroke-width="18"/>
+    <path d="M256 67L397 117V228C397 322 339 403 256 439C173 403 115 322 115 228V117L256 67Z" fill="#071A33" stroke="#22D3EE" stroke-width="6"/>
+    <circle cx="256" cy="230" r="76" fill="#F8FAFC" stroke="#0F172A" stroke-width="8"/>
+    <path d="M256 154L291 179L278 220H234L221 179L256 154Z" fill="#020617"/>
+    <path d="M221 179L185 191L180 232L206 250L234 220L221 179Z" fill="#E2E8F0"/>
+    <path d="M291 179L327 191L332 232L306 250L278 220L291 179Z" fill="#CBD5E1"/>
+    <path d="M168 339H344" stroke="#22D3EE" stroke-width="8" stroke-linecap="round"/>
+    <text x="256" y="331" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="54" font-weight="900" fill="#F8FAFC" stroke="#020617" stroke-width="3">FANTASY</text>
+    <text x="256" y="383" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="48" font-weight="900" fill="#22D3EE" letter-spacing="6">ARENA</text>
+  </g>
+  <text x="245" y="92" font-family="Arial Black, Impact, sans-serif" font-size="62" font-weight="900" fill="#F8FAFC" letter-spacing="1">FANTASY</text>
+  <text x="246" y="153" font-family="Arial Black, Impact, sans-serif" font-size="58" font-weight="900" fill="#22D3EE" letter-spacing="9">ARENA</text>
+  <path d="M248 168H600" stroke="#0EA5E9" stroke-width="6" stroke-linecap="round"/>
+  <text x="248" y="194" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800" fill="#CBD5E1" letter-spacing="8">PLAY • COMPETE • WIN</text>
+</svg>
