@@ -111,22 +111,48 @@
   }
 
   /* Collection vault: exactly two readable cards per row and swipeable showcase */
-  .collection-card-grid {
+  .collection-card-grid,
+  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    column-gap: 0.65rem !important;
-    row-gap: 1.15rem !important;
-    justify-items: stretch !important;
+    column-gap: 0.35rem !important;
+    row-gap: 0.7rem !important;
+    justify-items: center !important;
+    align-items: start !important;
   }
 
-  .collection-card-grid > div {
-    width: 100%;
+  .collection-card-grid > div,
+  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div {
+    width: 100% !important;
+    max-width: 10.7rem !important;
+    align-items: center !important;
+    gap: 0 !important;
   }
 
   .collection-card-grid .card-shell,
-  .collection-card-grid [style*="preserve-3d"] {
+  .collection-card-grid [style*="preserve-3d"],
+  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center .card-shell,
+  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center [style*="preserve-3d"] {
     width: 100% !important;
-    max-width: 11.25rem !important;
+    max-width: 10.7rem !important;
     margin-inline: auto !important;
+  }
+
+  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div > div.relative {
+    line-height: 0 !important;
+    margin-bottom: 0.2rem !important;
+  }
+
+  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div > div:not(.relative) {
+    margin-top: 0.25rem !important;
+    max-width: 10.5rem !important;
+    border-radius: 0.9rem !important;
+    padding: 0.22rem !important;
+  }
+
+  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div > div:not(.relative) button {
+    height: 2.05rem !important;
+    border-radius: 0.7rem !important;
+    font-size: 0.64rem !important;
   }
 
   .collection-showcase-carousel {
