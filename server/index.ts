@@ -2,6 +2,7 @@
 
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes.js";
+import { seedDatabase } from "./seed.js";
 import { serveStatic } from "./static.js";
 import { createServer } from "http";
 import fs from "fs";
@@ -299,6 +300,11 @@ app.use((req, res, next) => {
 
 (async () => {
   await ensurePlayerImageColumns();
+  try {
+    await seedDatabase();
+  } catch (error) {
+    console.warn("Could not auto-seed player/card data:", error);
+  }
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
