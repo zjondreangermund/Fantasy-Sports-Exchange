@@ -256,7 +256,7 @@ export const playersRelations = relations(players, ({ many }) => ({ cards: many(
 export const playerCardsRelations = relations(playerCards, ({ one }) => ({ player: one(players, { fields: [playerCards.playerId], references: [players.id] }), owner: one(users, { fields: [playerCards.ownerId], references: [users.id] }) }));
 export const walletsRelations = relations(wallets, ({ one }) => ({ user: one(users, { fields: [wallets.userId], references: [users.id] }) }));
 export const transactionsRelations = relations(transactions, ({ one }) => ({ user: one(users, { fields: [transactions.userId], references: [users.id] }) }));
-export const lineupsRelations = relations(lineups, ({ one }) => ({ user: one(users, { fields: [lineups.userId], references: [lineups.id] }) }));
+export const lineupsRelations = relations(lineups, ({ one }) => ({ user: one(users, { fields: [lineups.userId], references: [users.id] }) }));
 export const userOnboardingRelations = relations(userOnboarding, ({ one }) => ({ user: one(users, { fields: [userOnboarding.userId], references: [users.id] }) }));
 export const competitionsRelations = relations(competitions, ({ many }) => ({ entries: many(competitionEntries) }));
 export const competitionEntriesRelations = relations(competitionEntries, ({ one }) => ({ competition: one(competitions, { fields: [competitionEntries.competitionId], references: [competitions.id] }), user: one(users, { fields: [competitionEntries.userId], references: [users.id] }) }));
