@@ -1,21 +1,15 @@
 {
   "name": "Fantasy Arena",
   "short_name": "Fantasy Arena",
-  "start_url": "/",
+  "start_url": "/?app=fa-premium-2026",
   "display": "standalone",
   "background_color": "#020617",
   "theme_color": "#020617",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/brand/fantasy-arena-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icons/icon-512.svg",
-      "sizes": "any",
+      "src": "/brand/fa-premium-2026.svg",
+      "sizes": "1024x1024",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
