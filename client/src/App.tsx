@@ -29,6 +29,7 @@ const CardRevealPage = React.lazy(() => import("./pages/card-reveal"));
 const DashboardPage = React.lazy(() => import("./pages/dashboard"));
 const AnalyticsPage = React.lazy(() => import("./pages/analytics"));
 const LiveLineupPage = React.lazy(() => import("./pages/live-lineup"));
+const SelectSquadPage = React.lazy(() => import("./pages/select-squad"));
 const CollectionPage = React.lazy(() => import("./pages/collection"));
 const MarketplacePage = React.lazy(() => import("./pages/marketplace-v2"));
 const AuctionsPage = React.lazy(() => import("./pages/auctions"));
@@ -48,16 +49,10 @@ function RouteFallback() {
 }
 
 function AuthenticatedRouter() {
-  const { data: onboarding, isLoading } = useQuery<{ completed: boolean }>({
-    queryKey: ["/api/onboarding/status"],
-  });
+  const { data: onboarding, isLoading } = useQuery<{ completed: boolean }>({ queryKey: ["/api/onboarding/status"] });
 
   if (isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <Skeleton className="w-32 h-8" />
-      </div>
-    );
+    return <div className="flex-1 flex items-center justify-center"><Skeleton className="w-32 h-8" /></div>;
   }
 
   if (onboarding && !onboarding.completed) {
@@ -81,6 +76,7 @@ function AuthenticatedRouter() {
         <Route path="/dashboard" component={DashboardPage} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/live-lineup" component={LiveLineupPage} />
+        <Route path="/select-squad" component={SelectSquadPage} />
         <Route path="/onboarding" component={OnboardingPage} />
         <Route path="/onboarding-packs" component={OnboardingPacksScene} />
         <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
@@ -102,15 +98,8 @@ function AuthenticatedRouter() {
 
 function AuthenticatedApp() {
   const [location] = useLocation();
-  const style = {
-    "--sidebar-width": "16rem",
-    "--sidebar-width-icon": "3rem",
-  };
-
-  const { data: user } = useQuery<{ managerTeamName?: string }>({
-    queryKey: ["/api/user"],
-  });
-
+  const style = { "--sidebar-width": "16rem", "--sidebar-width-icon": "3rem" };
+  const { data: user } = useQuery<{ managerTeamName?: string }>({ queryKey: ["/api/user"] });
   const teamName = user?.managerTeamName || "Your Stadium";
 
   return (
@@ -120,20 +109,16 @@ function AuthenticatedApp() {
         <div className="flex flex-col flex-1 min-w-0 relative isolate">
           <RouteSceneBackground pathname={location} />
           <StadiumAmbientLayer teamName={teamName} />
-
           <header className="flex items-center justify-between gap-2 p-2 border-b border-white/10 sticky top-0 z-50 bg-black/25 backdrop-blur-2xl">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <ThemeToggle />
           </header>
-
           <LivePulseDock />
-
           <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative z-10 pb-24 md:pb-0">
             <PageScene variant={routeToPageSceneVariant(location, true)} className="flex-1">
               <AuthenticatedRouter />
             </PageScene>
           </main>
-
           <MatchdayQuickDock />
           <MobileNavDock />
           <FloatingEventNotifications />
@@ -150,50 +135,25 @@ function AppContent() {
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const ref = String(params.get("ref") || "").trim();
-    if (!ref) return;
-    localStorage.setItem("fantasy_referral_code", ref);
+    if (ref) localStorage.setItem("fantasy_referral_code", ref);
   }, []);
 
   React.useEffect(() => {
     if (!user) return;
     const code = localStorage.getItem("fantasy_referral_code");
     if (!code) return;
-
-    fetch("/api/referrals/claim", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    })
-      .then(() => {
-        localStorage.removeItem("fantasy_referral_code");
-      })
-      .catch(() => {
-        // retry next load
-      });
+    fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) })
+      .then(() => localStorage.removeItem("fantasy_referral_code"))
+      .catch(() => {});
   }, [user]);
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <Skeleton className="w-12 h-12 rounded-md" />
-          <Skeleton className="w-32 h-4" />
-        </div>
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Skeleton className="w-12 h-12 rounded-md" /><Skeleton className="w-32 h-4" /></div></div>;
   }
 
   if (!user) {
     const pathname = window.location.pathname || "/";
-
-    return (
-      <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen">
-        <React.Suspense fallback={<RouteFallback />}>
-          <LandingPage />
-        </React.Suspense>
-      </PageScene>
-    );
+    return <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen"><React.Suspense fallback={<RouteFallback />}><LandingPage /></React.Suspense></PageScene>;
   }
 
   return <AuthenticatedApp />;
