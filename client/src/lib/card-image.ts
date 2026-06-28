@@ -15,6 +15,10 @@ type CardLike = Partial<PlayerCardWithPlayer> & {
     image?: string | null;
     imageUrl?: string | null;
     image_url?: string | null;
+    officialPortraitUrl?: string | null;
+    headshotUrl?: string | null;
+    cutoutUrl?: string | null;
+    fallbackImageUrl?: string | null;
     imageCandidates?: string[] | null;
   } | null;
 };
@@ -52,9 +56,7 @@ export function toSafeImageUrl(url: string): string {
   if (/^https?:\/\/resources\.premierleague\.com\//i.test(url)) {
     return `/api/image-proxy?url=${encodeURIComponent(url)}`;
   }
-  if (/^https?:\/\//i.test(url)) {
-    return url;
-  }
+  if (/^https?:\/\//i.test(url)) return url;
   return url;
 }
 
@@ -85,11 +87,15 @@ export function buildCardImageCandidates(
   const candidates: string[] = [];
 
   const rawValues = uniqueStrings([
+    player?.officialPortraitUrl,
+    player?.cutoutUrl,
+    player?.headshotUrl,
+    player?.imageUrl,
+    player?.image_url,
     player?.image,
     player?.photo,
     player?.photoUrl,
-    player?.imageUrl,
-    player?.image_url,
+    player?.fallbackImageUrl,
     ...(Array.isArray(player?.imageCandidates) ? player?.imageCandidates || [] : []),
   ]);
 
@@ -101,9 +107,7 @@ export function buildCardImageCandidates(
     if (directFpl) candidates.push(toSafeImageUrl(directFpl));
 
     candidates.push(toSafeImageUrl(normalized));
-    if (!normalized.startsWith("data:")) {
-      candidates.push(toSafeImageUrl(lowercaseFilenamePath(normalized)));
-    }
+    if (!normalized.startsWith("data:")) candidates.push(toSafeImageUrl(lowercaseFilenamePath(normalized)));
   }
 
   for (const codeLike of [player?.code, player?.fplId, player?.photo]) {
@@ -120,6 +124,5 @@ export function buildCardImageCandidates(
   if (resolver) candidates.push(resolver);
 
   candidates.push(CARD_IMAGE_FALLBACK);
-
   return Array.from(new Set(candidates.filter(Boolean)));
 }
