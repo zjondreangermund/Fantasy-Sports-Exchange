@@ -44,11 +44,62 @@ const marketplaceCards = [
   { playerIndex: 4, rarity: "rare" as const, level: 1, price: 25, scores: [52, 60, 65, 55, 62] },
 ];
 
+async function ensureMarketplaceListings(players: any[]) {
+  const existingListings = await storage.getMarketplaceListings();
+  if (existingListings.length > 0) {
+    console.log(`Marketplace already has ${existingListings.length} listings`);
+    return;
+  }
+
+  console.log("Repairing marketplace listings...");
+  let created = 0;
+  for (const listing of marketplaceCards) {
+    const player = players[listing.playerIndex] || players[created % Math.max(players.length, 1)];
+    if (!player) continue;
+
+    const supply = (RARITY_SUPPLY as any)[listing.rarity] || 0;
+    let serialId: string | null = null;
+    let serialNumber: number | null = null;
+    let maxSupply: number = supply;
+
+    if (supply > 0) {
+      const generated = await storage.generateSerialId(player.id, player.name, listing.rarity);
+      serialId = generated.serialId;
+      serialNumber = generated.serialNumber;
+      maxSupply = generated.maxSupply;
+    }
+
+    try {
+      await storage.createPlayerCard({
+        playerId: player.id,
+        ownerId: null,
+        rarity: listing.rarity,
+        serialId,
+        serialNumber,
+        maxSupply,
+        level: listing.level,
+        xp: listing.level * 100,
+        decisiveScore: Math.min(100, 35 + listing.level * 13),
+        last5Scores: listing.scores,
+        forSale: true,
+        price: listing.price,
+      } as any);
+      created++;
+    } catch (error) {
+      console.warn("Could not create marketplace listing:", error);
+    }
+  }
+  console.log(`Repaired ${created} marketplace listings`);
+}
+
 export async function seedDatabase() {
   const count = await storage.getPlayerCount();
+  let players: any[] = [];
 
   if (count > 0) {
-    console.log(`Database already has ${count} players, skipping seed`);
+    console.log(`Database already has ${count} players, checking marketplace repair`);
+    players = await storage.getPlayers();
+    await ensureMarketplaceListings(players);
     await storage.backfillSerialIds();
     return;
   }
@@ -61,45 +112,7 @@ export async function seedDatabase() {
   }
   console.log(`Seeded ${seedPlayers.length} players`);
 
-  console.log("Seeding marketplace listings...");
-
-  for (const listing of marketplaceCards) {
-    const player = createdPlayers[listing.playerIndex];
-    if (!player) continue;
-
-    const supply = (RARITY_SUPPLY as any)[listing.rarity] || 0;
-
-    let serialId: string | null = null;
-    let serialNumber: number | null = null;
-    let maxSupply: number = supply;
-
-    // Only generate serials if this rarity has a capped supply
-    if (supply > 0) {
-      const generated = await storage.generateSerialId(player.id, player.name, listing.rarity);
-      serialId = generated.serialId;
-      serialNumber = generated.serialNumber;
-      maxSupply = generated.maxSupply;
-    }
-
-    const decisiveScore = Math.min(100, 35 + listing.level * 13);
-
-    await storage.createPlayerCard({
-      playerId: player.id,
-      ownerId: null,
-      rarity: listing.rarity,
-      serialId,
-      serialNumber,
-      maxSupply,
-      level: listing.level,
-      xp: listing.level * 100,
-      decisiveScore,
-      last5Scores: listing.scores,
-      forSale: true,
-      price: listing.price,
-    } as any);
-  }
-
-  console.log(`Seeded ${marketplaceCards.length} marketplace listings`);
+  await ensureMarketplaceListings(createdPlayers);
 }
 
 export async function seedCompetitions() {
@@ -117,12 +130,8 @@ export async function seedCompetitions() {
   startOfNextWeek.setHours(0, 0, 0, 0);
 
   const baseGameWeek = 27;
-  const weeksToSeed = 4; // GW27, 28, 29, 30
-  const existingByWeek = new Set(
-    existing
-      .filter((c: any) => String(c.tier || "").toLowerCase() === "common")
-      .map((c: any) => Number(c.gameWeek)),
-  );
+  const weeksToSeed = 4;
+  const existingByWeek = new Set(existing.filter((c: any) => String(c.tier || "").toLowerCase() === "common").map((c: any) => Number(c.gameWeek)));
 
   let createdCount = 0;
 
@@ -134,7 +143,7 @@ export async function seedCompetitions() {
     startDate.setDate(startDate.getDate() + index * 7);
 
     const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + 6);
+    endDate.setDate(startDate.getDate() + 6);
     endDate.setHours(23, 59, 59, 999);
 
     await storage.createCompetition({
@@ -150,47 +159,29 @@ export async function seedCompetitions() {
     createdCount++;
   }
 
-  if (createdCount === 0) {
-    console.log("Common tournaments GW27-GW30 already present");
-  } else {
-    console.log(`Seeded ${createdCount} missing common tournaments (GW27-GW30)`);
-  }
+  if (createdCount === 0) console.log("Common tournaments GW27-GW30 already present");
+  else console.log(`Seeded ${createdCount} missing common tournaments (GW27-GW30)`);
 }
 
 export async function seedDemoUsers() {
   console.log("Seeding demo users...");
-  
   const demoUsers = [
     { id: "demo-buyer-1", email: "buyer@demo.com", name: "Demo Buyer" },
     { id: "demo-seller-1", email: "seller@demo.com", name: "Demo Seller" },
     { id: "demo-admin-1", email: "admin@demo.com", name: "Demo Admin" },
   ];
-  
+
   for (const userData of demoUsers) {
-    // Check if user exists
     const existing = await storage.getUser(userData.id);
     if (!existing) {
       await storage.createUser(userData);
       console.log(`Created user: ${userData.name}`);
     }
-    
-    // Ensure wallet exists
+
     let wallet = await storage.getWallet(userData.id);
     if (!wallet) {
-      wallet = await storage.createWallet({
-        userId: userData.id,
-        balance: 1000, // Start with $1000
-        lockedBalance: 0,
-      });
-      
-      // Create initial deposit transaction
-      await storage.createTransaction({
-        userId: userData.id,
-        type: "deposit",
-        amount: 1000,
-        description: "Initial demo wallet balance",
-      });
-      
+      wallet = await storage.createWallet({ userId: userData.id, balance: 1000, lockedBalance: 0 });
+      await storage.createTransaction({ userId: userData.id, type: "deposit", amount: 1000, description: "Initial demo wallet balance" });
       console.log(`Created wallet for ${userData.name} with $1000`);
     }
   }
@@ -198,179 +189,25 @@ export async function seedDemoUsers() {
 
 export async function seedDemoCards() {
   console.log("Seeding demo user cards...");
-  
   const buyerUserId = "demo-buyer-1";
   const sellerUserId = "demo-seller-1";
-  const adminUserId = "demo-admin-1";
-  
-  // Get existing player count
   const players = await storage.getPlayers();
   if (players.length < 10) {
     console.log("Not enough players in database. Run seedDatabase first.");
     return;
   }
-  
-  // Give buyer 5 common cards (for lineups)
+
   for (let i = 0; i < 5; i++) {
     const player = players[i];
-    await storage.createPlayerCard({
-      playerId: player.id,
-      ownerId: buyerUserId,
-      rarity: "common",
-      level: 1,
-      xp: 0,
-      decisiveScore: 35,
-      forSale: false,
-      price: 0,
-    } as any);
+    try {
+      await storage.createPlayerCard({ playerId: player.id, ownerId: buyerUserId, rarity: "common", level: 1, xp: 0, decisiveScore: 35, forSale: false, price: 0 } as any);
+    } catch {}
   }
-  console.log("Created 5 common cards for Demo Buyer");
-  
-  // Give seller some rare/unique cards for auctions
+
   for (let i = 5; i < 10; i++) {
     const player = players[i];
-    const rarity = i % 2 === 0 ? "rare" : "unique";
-    const supply = (RARITY_SUPPLY as any)[rarity] || 0;
-    
-    let serialId = null;
-    let serialNumber = null;
-    let maxSupply = supply;
-    
-    if (supply > 0) {
-      const generated = await storage.generateSerialId(player.id, player.name, rarity);
-      serialId = generated.serialId;
-      serialNumber = generated.serialNumber;
-      maxSupply = generated.maxSupply;
-    }
-    
-    await storage.createPlayerCard({
-      playerId: player.id,
-      ownerId: sellerUserId,
-      rarity,
-      serialId,
-      serialNumber,
-      maxSupply,
-      level: 2,
-      xp: 200,
-      decisiveScore: 60,
-      forSale: false,
-      price: 0,
-    } as any);
+    try {
+      await storage.createPlayerCard({ playerId: player.id, ownerId: sellerUserId, rarity: "rare", level: 1, xp: 0, decisiveScore: 50, forSale: true, price: 25 } as any);
+    } catch {}
   }
-  console.log("Created 5 rare/unique cards for Demo Seller");
-
-  const adminCards = await storage.getUserCards(adminUserId);
-  const adminRarities = new Set(adminCards.map((c: any) => String(c.rarity || "common").toLowerCase()));
-  const sampleRarities = ["common", "rare", "unique", "epic", "legendary"] as const;
-
-  for (let i = 0; i < sampleRarities.length; i++) {
-    const rarity = sampleRarities[i];
-    if (adminRarities.has(rarity)) continue;
-
-    const player = players[(10 + i) % players.length] || players[i] || players[0];
-    if (!player) continue;
-
-    const supply = (RARITY_SUPPLY as any)[rarity] || 0;
-    let serialId = null;
-    let serialNumber = null;
-    let maxSupply = supply;
-
-    if (supply > 0) {
-      const generated = await storage.generateSerialId(player.id, player.name, rarity);
-      serialId = generated.serialId;
-      serialNumber = generated.serialNumber;
-      maxSupply = generated.maxSupply;
-    }
-
-    await storage.createPlayerCard({
-      playerId: player.id,
-      ownerId: adminUserId,
-      rarity,
-      serialId,
-      serialNumber,
-      maxSupply,
-      level: 1,
-      xp: 0,
-      decisiveScore: 40,
-      last5Scores: [0, 0, 0, 0, 0],
-      forSale: false,
-      price: 0,
-    } as any);
-  }
-
-  console.log("Ensured Demo Admin has one sample card per rarity");
-}
-
-export async function seedDemoAuctions() {
-  console.log("Seeding demo auctions...");
-  
-  const { db } = await import("./db.js");
-  const { auctions, playerCards } = await import("../shared/schema.js");
-  const { eq } = await import("drizzle-orm");
-  
-  const sellerUserId = "demo-seller-1";
-  
-  // Get seller's cards
-  const sellerCards = await storage.getUserCards(sellerUserId);
-  
-  if (sellerCards.length < 2) {
-    console.log("Not enough seller cards for auctions. Run seedDemoCards first.");
-    return;
-  }
-  
-  // Create an active auction
-  const activeCard = sellerCards[0];
-  const now = new Date();
-  const endsAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
-  
-  await db.insert(auctions).values({
-    cardId: activeCard.id,
-    sellerUserId,
-    status: "live",
-    startPrice: 50,
-    buyNowPrice: 150,
-    reservePrice: 50,
-    minIncrement: 5,
-    startsAt: now,
-    endsAt,
-  } as any);
-  
-  console.log("Created 1 active auction");
-  
-  // Create an auction ending soon (for testing settlement)
-  if (sellerCards.length >= 2) {
-    const endingSoonCard = sellerCards[1];
-    const endingSoon = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours from now
-    
-    await db.insert(auctions).values({
-      cardId: endingSoonCard.id,
-      sellerUserId,
-      status: "live",
-      startPrice: 30,
-      reservePrice: 30,
-      minIncrement: 3,
-      startsAt: now,
-      endsAt: endingSoon,
-    } as any);
-    
-    console.log("Created 1 auction ending soon");
-  }
-}
-
-export async function seedAll() {
-  console.log("=== Starting comprehensive database seed ===");
-  
-  await seedDatabase();        // Players & marketplace listings
-  await seedCompetitions();    // Competitions
-  await seedDemoUsers();       // Demo users with wallets
-  await seedDemoCards();       // User-owned cards
-  await seedDemoAuctions();    // Active auctions
-  
-  console.log("=== Database seed complete! ===");
-  console.log("\nDemo accounts:");
-  console.log("  - Buyer: demo-buyer-1 (has 5 common cards & $1000)");
-  console.log("  - Seller: demo-seller-1 (has 5 rare/unique cards & $1000)");
-  console.log("  - Admin: demo-admin-1 ($1000)");
-  console.log("\nTo use these accounts in dev mode:");
-  console.log("  Set MOCK_USER_ID=demo-buyer-1 in your .env");
 }
