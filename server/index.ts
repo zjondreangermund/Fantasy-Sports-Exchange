@@ -15,6 +15,7 @@ import pgSession from "connect-pg-simple";
 
 const app = express();
 const httpServer = createServer(app);
+const playerImageCache = new Map<string, { expiresAt: number; url: string | null }>();
 
 declare module "http" {
   interface IncomingMessage {
@@ -108,6 +109,10 @@ function stripXml(value: string) {
   return String(value || "").replace(/<!\[CDATA\[(.*?)\]\]>/gs, "$1").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim();
 }
 
+function normalizeSearch(value: string) {
+  return String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 function normalizeSportsDbEvent(event: any) {
   return {
     id: event?.idEvent || `${event?.strHomeTeam}-${event?.strAwayTeam}-${event?.dateEvent}`,
@@ -117,6 +122,26 @@ function normalizeSportsDbEvent(event: any) {
     homeTeam: { name: event?.strHomeTeam || "TBD", badge: event?.strHomeTeamBadge || "", score: event?.intHomeScore ?? null },
     awayTeam: { name: event?.strAwayTeam || "TBD", badge: event?.strAwayTeamBadge || "", score: event?.intAwayScore ?? null },
   };
+}
+
+function bestSportsDbPlayerImage(players: any[], requestedTeam: string) {
+  const normalizedTeam = normalizeSearch(requestedTeam);
+  const scored = players
+    .map((player) => {
+      const image = player?.strCutout || player?.strRender || player?.strThumb || player?.strFanart1 || "";
+      const team = normalizeSearch(player?.strTeam || "");
+      const sport = normalizeSearch(player?.strSport || "");
+      let score = 0;
+      if (image) score += 20;
+      if (sport.includes("soccer")) score += 10;
+      if (normalizedTeam && team && (team.includes(normalizedTeam) || normalizedTeam.includes(team))) score += 12;
+      if (player?.strCutout) score += 6;
+      if (player?.strRender) score += 4;
+      return { image, score };
+    })
+    .filter((item) => item.image);
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.image || null;
 }
 
 app.get("/api/matchday/epl", async (_req, res) => {
@@ -162,6 +187,39 @@ app.get("/api/matchday/epl", async (_req, res) => {
 
   res.setHeader("Cache-Control", "public, max-age=300");
   return res.json(result);
+});
+
+app.get("/api/player-image/resolve", async (req, res) => {
+  const name = String(req.query.name || "").trim();
+  const team = String(req.query.team || "").trim();
+  if (!name || name.length < 2) return res.status(404).json({ message: "Missing player name" });
+
+  const cacheKey = `${normalizeSearch(name)}|${normalizeSearch(team)}`;
+  const cached = playerImageCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    if (cached.url) return res.redirect(302, cached.url);
+    return res.status(404).json({ message: "No image found" });
+  }
+
+  try {
+    const response = await fetch(`https://www.thesportsdb.com/api/v1/json/3/searchplayers.php?p=${encodeURIComponent(name)}`, {
+      headers: { Accept: "application/json", "User-Agent": "FantasyArena/1.0" },
+    });
+    if (!response.ok) throw new Error(`TheSportsDB ${response.status}`);
+    const payload = await response.json();
+    const players = Array.isArray(payload?.player) ? payload.player : [];
+    const image = bestSportsDbPlayerImage(players, team);
+    playerImageCache.set(cacheKey, { expiresAt: Date.now() + 24 * 60 * 60 * 1000, url: image });
+    if (image) {
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      return res.redirect(302, image);
+    }
+  } catch (error) {
+    console.warn("Player image resolve failed:", error);
+  }
+
+  playerImageCache.set(cacheKey, { expiresAt: Date.now() + 60 * 60 * 1000, url: null });
+  return res.status(404).json({ message: "No image found" });
 });
 
 app.get("/api/image-proxy", async (req, res) => {
