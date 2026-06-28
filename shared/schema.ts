@@ -13,37 +13,12 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// -----------------------------------------------------------------------------
-// IMPORTANT
-// -----------------------------------------------------------------------------
-// All application tables live under the `app` schema in Postgres.
-// This avoids conflicts with Postgres extensions/system views in `public`.
 export const appSchema = pgSchema("app");
 
-// -----------------------------------------------------------------------------
-// Enums
-// -----------------------------------------------------------------------------
 export const rarityEnum = pgEnum("rarity", ["common", "rare", "unique", "epic", "legendary"]);
 export const positionEnum = pgEnum("position", ["GK", "DEF", "MID", "FWD"]);
 export const transactionTypeEnum = pgEnum("transaction_type", [
-  "deposit",
-  "withdrawal",
-  "marketplace_buy",
-  "marketplace_sale",
-  "auction_bid_lock",
-  "auction_bid_release",
-  "auction_sale",
-  "tournament_entry",
-  "tournament_payout",
-  "admin_adjustment",
-  "bonus_credit",
-  "purchase",
-  "sale",
-  "entry_fee",
-  "prize",
-  "swap_fee",
-  "auction_bid",
-  "auction_settlement",
+  "deposit", "withdrawal", "marketplace_buy", "marketplace_sale", "auction_bid_lock", "auction_bid_release", "auction_sale", "tournament_entry", "tournament_payout", "admin_adjustment", "bonus_credit", "purchase", "sale", "entry_fee", "prize", "swap_fee", "auction_bid", "auction_settlement",
 ]);
 export const competitionTierEnum = pgEnum("competition_tier", ["common", "rare", "unique", "legendary"]);
 export const competitionStatusEnum = pgEnum("competition_status", ["open", "upcoming", "active", "completed"]);
@@ -52,16 +27,9 @@ export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "app
 export const paymentMethodEnum = pgEnum("payment_method", ["eft", "ewallet", "bank_transfer", "mobile_money", "other"]);
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "completed", "failed", "cancelled", "rejected"]);
 export const notificationTypeEnum = pgEnum("notification_type", ["win", "runner_up", "system"]);
-
 export const auctionStatusEnum = pgEnum("auction_status", ["draft", "live", "ended", "cancelled", "settled"]);
 export const lockReasonEnum = pgEnum("card_lock_reason", ["competition", "transfer_pending", "security_review"]);
 
-// -----------------------------------------------------------------------------
-// Users (simple table for FK references)
-// -----------------------------------------------------------------------------
-// Your auth layer can populate this table on first login (recommended).
-// Keeping this in shared/schema.ts prevents drizzle-kit from failing due to
-// missing imports (like ./models/auth).
 export const users = appSchema.table("users", {
   id: varchar("id", { length: 255 }).primaryKey(),
   email: text("email"),
@@ -78,9 +46,6 @@ export const users = appSchema.table("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// -----------------------------------------------------------------------------
-// Core football data
-// -----------------------------------------------------------------------------
 export const players = appSchema.table("players", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   name: text("name").notNull(),
@@ -91,6 +56,12 @@ export const players = appSchema.table("players", {
   age: integer("age").notNull(),
   overall: integer("overall").notNull(),
   imageUrl: text("image_url"),
+  officialPortraitUrl: text("official_portrait_url"),
+  headshotUrl: text("headshot_url"),
+  cutoutUrl: text("cutout_url"),
+  fallbackImageUrl: text("fallback_image_url"),
+  imageSource: text("image_source"),
+  imageUpdatedAt: timestamp("image_updated_at"),
 });
 
 export const playerCards = appSchema.table("player_cards", {
@@ -105,15 +76,11 @@ export const playerCards = appSchema.table("player_cards", {
   xp: integer("xp").notNull().default(0),
   decisiveScore: integer("decisive_score").default(35),
   last5Scores: jsonb("last_5_scores").$type<number[]>().default([0, 0, 0, 0, 0]),
-  // fixed-price sale flags
   forSale: boolean("for_sale").notNull().default(false),
   price: real("price").default(0),
   acquiredAt: timestamp("acquired_at").defaultNow(),
 });
 
-// -----------------------------------------------------------------------------
-// Wallet
-// -----------------------------------------------------------------------------
 export const wallets = appSchema.table("wallets", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id).unique(),
@@ -137,9 +104,6 @@ export const transactions = appSchema.table("transactions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// -----------------------------------------------------------------------------
-// Lineups / competitions
-// -----------------------------------------------------------------------------
 export const lineups = appSchema.table("lineups", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id).unique(),
@@ -181,9 +145,6 @@ export const competitionEntries = appSchema.table("competition_entries", {
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
-// -----------------------------------------------------------------------------
-// Swaps / withdrawals
-// -----------------------------------------------------------------------------
 export const swapOffers = appSchema.table("swap_offers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   offererUserId: varchar("offerer_user_id", { length: 255 }).notNull().references(() => users.id),
@@ -220,9 +181,6 @@ export const withdrawalRequests = appSchema.table("withdrawal_requests", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// -----------------------------------------------------------------------------
-// Auctions + card locks (for competitions / abuse prevention)
-// -----------------------------------------------------------------------------
 export const auctions = appSchema.table("auctions", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   cardId: integer("card_id").notNull().references(() => playerCards.id),
@@ -288,37 +246,11 @@ export const notifications = appSchema.table("notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// -----------------------------------------------------------------------------
-// Constants / helpers
-// -----------------------------------------------------------------------------
-export const RARITY_SUPPLY: Record<string, number> = {
-  common: 0,
-  rare: 100,
-  unique: 1,
-  epic: 10,
-  legendary: 5,
-};
+export const RARITY_SUPPLY: Record<string, number> = { common: 0, rare: 100, unique: 1, epic: 10, legendary: 5 };
+export const DECISIVE_LEVELS: { level: number; points: number }[] = [{ level: 0, points: 35 }, { level: 1, points: 60 }, { level: 2, points: 70 }, { level: 3, points: 80 }, { level: 4, points: 90 }, { level: 5, points: 100 }];
 
-export const DECISIVE_LEVELS: { level: number; points: number }[] = [
-  { level: 0, points: 35 },
-  { level: 1, points: 60 },
-  { level: 2, points: 70 },
-  { level: 3, points: 80 },
-  { level: 4, points: 90 },
-  { level: 5, points: 100 },
-];
-
-export function calculateDecisiveLevel(stats: {
-  goals?: number;
-  assists?: number;
-  cleanSheets?: number;
-  penaltySaves?: number;
-  redCards?: number;
-  ownGoals?: number;
-  errorsLeadingToGoal?: number;
-}): { level: number; points: number } {
-  const positives =
-    (stats.goals ?? 0) + (stats.assists ?? 0) + (stats.cleanSheets ?? 0) + (stats.penaltySaves ?? 0);
+export function calculateDecisiveLevel(stats: { goals?: number; assists?: number; cleanSheets?: number; penaltySaves?: number; redCards?: number; ownGoals?: number; errorsLeadingToGoal?: number; }): { level: number; points: number } {
+  const positives = (stats.goals ?? 0) + (stats.assists ?? 0) + (stats.cleanSheets ?? 0) + (stats.penaltySaves ?? 0);
   const negatives = (stats.redCards ?? 0) + (stats.ownGoals ?? 0) + (stats.errorsLeadingToGoal ?? 0);
   const rawLevel = Math.max(0, Math.min(5, positives - negatives));
   return DECISIVE_LEVELS[rawLevel];
@@ -326,66 +258,19 @@ export function calculateDecisiveLevel(stats: {
 
 export const SITE_FEE_RATE = 0.08;
 
-// -----------------------------------------------------------------------------
-// Relations
-// -----------------------------------------------------------------------------
-export const playersRelations = relations(players, ({ many }) => ({
-  cards: many(playerCards),
-}));
+export const playersRelations = relations(players, ({ many }) => ({ cards: many(playerCards) }));
+export const playerCardsRelations = relations(playerCards, ({ one }) => ({ player: one(players, { fields: [playerCards.playerId], references: [players.id] }), owner: one(users, { fields: [playerCards.ownerId], references: [users.id] }) }));
+export const walletsRelations = relations(wallets, ({ one }) => ({ user: one(users, { fields: [wallets.userId], references: [users.id] }) }));
+export const transactionsRelations = relations(transactions, ({ one }) => ({ user: one(users, { fields: [transactions.userId], references: [users.id] }) }));
+export const lineupsRelations = relations(lineups, ({ one }) => ({ user: one(users, { fields: [lineups.userId], references: [users.id] }) }));
+export const userOnboardingRelations = relations(userOnboarding, ({ one }) => ({ user: one(users, { fields: [userOnboarding.userId], references: [users.id] }) }));
+export const competitionsRelations = relations(competitions, ({ many }) => ({ entries: many(competitionEntries) }));
+export const competitionEntriesRelations = relations(competitionEntries, ({ one }) => ({ competition: one(competitions, { fields: [competitionEntries.competitionId], references: [competitions.id] }), user: one(users, { fields: [competitionEntries.userId], references: [users.id] }) }));
+export const auctionsRelations = relations(auctions, ({ one, many }) => ({ card: one(playerCards, { fields: [auctions.cardId], references: [playerCards.id] }), seller: one(users, { fields: [auctions.sellerUserId], references: [users.id] }), bids: many(auctionBids) }));
+export const auctionBidsRelations = relations(auctionBids, ({ one }) => ({ auction: one(auctions, { fields: [auctionBids.auctionId], references: [auctions.id] }), bidder: one(users, { fields: [auctionBids.bidderUserId], references: [users.id] }) }));
+export const cardLocksRelations = relations(cardLocks, ({ one }) => ({ card: one(playerCards, { fields: [cardLocks.cardId], references: [playerCards.id] }), user: one(users, { fields: [cardLocks.userId], references: [users.id] }) }));
+export const notificationsRelations = relations(notifications, ({ one }) => ({ user: one(users, { fields: [notifications.userId], references: [users.id] }) }));
 
-export const playerCardsRelations = relations(playerCards, ({ one }) => ({
-  player: one(players, { fields: [playerCards.playerId], references: [players.id] }),
-  owner: one(users, { fields: [playerCards.ownerId], references: [users.id] }),
-}));
-
-export const walletsRelations = relations(wallets, ({ one }) => ({
-  user: one(users, { fields: [wallets.userId], references: [users.id] }),
-}));
-
-export const transactionsRelations = relations(transactions, ({ one }) => ({
-  user: one(users, { fields: [transactions.userId], references: [users.id] }),
-}));
-
-export const lineupsRelations = relations(lineups, ({ one }) => ({
-  user: one(users, { fields: [lineups.userId], references: [users.id] }),
-}));
-
-export const userOnboardingRelations = relations(userOnboarding, ({ one }) => ({
-  user: one(users, { fields: [userOnboarding.userId], references: [users.id] }),
-}));
-
-export const competitionsRelations = relations(competitions, ({ many }) => ({
-  entries: many(competitionEntries),
-}));
-
-export const competitionEntriesRelations = relations(competitionEntries, ({ one }) => ({
-  competition: one(competitions, { fields: [competitionEntries.competitionId], references: [competitions.id] }),
-  user: one(users, { fields: [competitionEntries.userId], references: [users.id] }),
-}));
-
-export const auctionsRelations = relations(auctions, ({ one, many }) => ({
-  card: one(playerCards, { fields: [auctions.cardId], references: [playerCards.id] }),
-  seller: one(users, { fields: [auctions.sellerUserId], references: [users.id] }),
-  bids: many(auctionBids),
-}));
-
-export const auctionBidsRelations = relations(auctionBids, ({ one }) => ({
-  auction: one(auctions, { fields: [auctionBids.auctionId], references: [auctions.id] }),
-  bidder: one(users, { fields: [auctionBids.bidderUserId], references: [users.id] }),
-}));
-
-export const cardLocksRelations = relations(cardLocks, ({ one }) => ({
-  card: one(playerCards, { fields: [cardLocks.cardId], references: [playerCards.id] }),
-  user: one(users, { fields: [cardLocks.userId], references: [users.id] }),
-}));
-
-export const notificationsRelations = relations(notifications, ({ one }) => ({
-  user: one(users, { fields: [notifications.userId], references: [users.id] }),
-}));
-
-// -----------------------------------------------------------------------------
-// Zod insert schemas + Types
-// -----------------------------------------------------------------------------
 export const insertUserSchema = createInsertSchema(users);
 export const insertPlayerSchema = createInsertSchema(players);
 export const insertPlayerCardSchema = createInsertSchema(playerCards);
@@ -423,128 +308,23 @@ export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type User = typeof users.$inferSelect;
 
-export type PlayerCardWithPlayer = PlayerCard & {
-  player: Player;
-  ownerUsername?: string;
-  ownerName?: string;
-};
+export type PlayerCardWithPlayer = PlayerCard & { player: Player; ownerUsername?: string; ownerName?: string };
 export type CompetitionWithEntries = Competition & { entries: CompetitionEntry[]; entryCount: number };
 
-// -----------------------------------------------------------------------------
-// Inferred types for inserts/selects (used by server/storage)
-// -----------------------------------------------------------------------------
 export type InsertUser = typeof users.$inferInsert;
 export type InsertPlayer = typeof players.$inferInsert;
 export type InsertPlayerCard = typeof playerCards.$inferInsert;
 export type InsertWallet = typeof wallets.$inferInsert & { balance?: number; lockedBalance?: number };
-export type InsertTransaction = typeof transactions.$inferInsert & { 
-  description?: string; 
-  paymentMethod?: string; 
-  externalTransactionId?: string;
-};
+export type InsertTransaction = typeof transactions.$inferInsert & { description?: string; paymentMethod?: string; externalTransactionId?: string };
 export type InsertLineup = typeof lineups.$inferInsert;
 export type InsertOnboarding = typeof userOnboarding.$inferInsert;
 export type InsertCompetition = typeof competitions.$inferInsert;
-export type InsertCompetitionEntry = typeof competitionEntries.$inferInsert & { 
-  lineupCardIds?: number[];
-  captainId?: number;
-  totalScore?: number;
-};
+export type InsertCompetitionEntry = typeof competitionEntries.$inferInsert & { lineupCardIds?: number[]; captainId?: number; totalScore?: number };
 export type InsertSwapOffer = typeof swapOffers.$inferInsert;
 export type InsertNotification = typeof notifications.$inferInsert;
-export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert & { 
-  fee?: number;
-  destinationKey?: string;
-  destinationVerified?: boolean;
-  verificationToken?: string | null;
-  releaseAfter?: Date;
-  status?: "pending" | "processing" | "completed" | "rejected";
-  bankName?: string;
-  accountHolder?: string;
-  accountNumber?: string;
-  iban?: string;
-  swiftCode?: string;
-  ewalletProvider?: string;
-  ewalletId?: string;
-};
-
+export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert & { fee?: number; destinationKey?: string; destinationVerified?: boolean; verificationToken?: string | null; releaseAfter?: Date; status?: "pending" | "processing" | "completed" | "rejected"; bankName?: string; accountHolder?: string; accountNumber?: string; iban?: string; swiftCode?: string; ewalletProvider?: string; ewalletId?: string };
 export type SwapOffer = typeof swapOffers.$inferSelect;
 export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
 
-// FPL API Types
-export type EplPlayer = {
-  id: number;
-  name: string;
-  rating?: number | string;
-  goals?: number;
-  assists?: number;
-  appearances?: number;
-  minutes?: number;
-  position?: string;
-  club?: string;
-  team?: string;
-  photo?: string;
-  photoUrl?: string;
-  imageUrl?: string;
-  image_url?: string;
-  clubLogo?: string;
-  teamLogo?: string;
-  club_logo?: string;
-  team_logo?: string;
-  firstname?: string;
-  lastname?: string;
-  firstName?: string;
-  lastName?: string;
-  age?: number;
-  nationality?: string;
-  stats?: any;
-};
-
-export type EplFixture = {
-  id: number;
-  gameweek?: number;
-  round?: number;
-  homeTeam: string;
-  awayTeam: string;
-  homeTeamId?: number;
-  awayTeamId?: number;
-  status: string;
-  kickoffTime?: string;
-  matchDate?: string;
-  homeTeamLogoUrl?: string;
-  homeTeamLogo?: string;
-  awayTeamLogoUrl?: string;
-  awayTeamLogo?: string;
-  homeGoals?: number;
-  awayGoals?: number;
-  elapsed?: number;
-  venue?: string;
-};
-
-export type EplInjury = {
-  id?: number;
-  playerId: number;
-  playerName: string;
-  playerPhoto?: string;
-  status: string;
-  expectedReturn?: string;
-};
-
-export type EplStanding = {
-  position: number;
-  rank?: number;
-  teamId: number;
-  teamName: string;
-  played: number;
-  won: number;
-  drawn: number;
-  lost: number;
-  goalsFor: number;
-  goalsAgainst: number;
-  goalDifference?: number;
-  goalDiff?: number;
-  points: number;
-  logo?: string;
-  teamLogo?: string;
-  form?: string;
-};
+export type EplPlayer = { id: number; name: string; rating?: number | string; goals?: number; assists?: number; appearances?: number; minutes?: number; position?: string; club?: string; team?: string; photo?: string; photoUrl?: string; imageUrl?: string; image_url?: string; clubLogo?: string; teamLogo?: string; club_logo?: string; team_logo?: string; firstname?: string; lastname?: string; firstName?: string; lastName?: string; age?: number; nationality?: string; stats?: any };
+export type EplFixture = { id: number; gameweek?: number; round?: number; homeTeam: string; awayTeam: string; homeTeamId?: number; awayTeamId?: number; status: string; kickoffTime?: string; matchDate?: string; homeTeamLogoUrl?: string; homeTeamLogo?: string; awayTeamLogoUrl?: string; awayTeamLogo?: string; homeGoals?: number; awayGoals?: number; elapsed?: number };
