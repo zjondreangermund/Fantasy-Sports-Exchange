@@ -1,35 +1,52 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1024" height="1024" rx="184" fill="#020617"/>
-  <circle cx="512" cy="492" r="432" fill="url(#aura)" opacity=".9"/>
-  <path d="M512 56 852 176v275c0 232-145 407-340 506C317 858 172 683 172 451V176L512 56Z" fill="url(#outer)" stroke="url(#chrome)" stroke-width="30"/>
-  <path d="M512 104 810 210v239c0 202-124 352-298 442-174-90-298-240-298-442V210L512 104Z" fill="url(#inner)" stroke="#0BE7FF" stroke-width="12"/>
-  <path d="M246 434C286 250 386 170 512 170c126 0 226 80 266 264" stroke="#19D8FF" stroke-width="16" stroke-linecap="round" opacity=".95"/>
-  <path d="M304 362c51-76 124-114 208-114s157 38 208 114" stroke="#F8FAFC" stroke-width="18" stroke-linecap="round" opacity=".9"/>
-  <path d="M512 134 539 188l60 9-44 42 11 59-54-29-54 29 11-59-44-42 60-9 27-54Z" fill="url(#cyanStar)"/>
-  <path d="M386 178 407 221l47 7-34 33 8 47-42-22-42 22 8-47-34-33 47-7 21-43Z" fill="url(#silver)"/>
-  <path d="M638 178 659 221l47 7-34 33 8 47-42-22-42 22 8-47-34-33 47-7 21-43Z" fill="url(#silver)"/>
-  <circle cx="512" cy="408" r="142" fill="url(#ballGlow)" stroke="#0F172A" stroke-width="12"/>
-  <path d="M512 280 578 328l-25 78h-82l-25-78 66-48Z" fill="#020617"/>
-  <path d="M445 326 377 350l-9 78 50 39 53-61-26-80Z" fill="#F8FAFC"/>
-  <path d="M579 326 647 350l9 78-50 39-53-61 26-80Z" fill="#CBD5E1"/>
-  <path d="M418 467 395 541l66 49 51-37v-83l-41-64-53 61Z" fill="#DDE7F3"/>
-  <path d="M606 467 629 541l-66 49-51-37v-83l41-64 53 61Z" fill="#F8FAFC"/>
-  <path d="M461 590h102l44-48-44-51H461l-44 51 44 48Z" fill="#111827"/>
-  <rect x="142" y="554" width="740" height="160" rx="30" fill="url(#nameplate)" stroke="url(#edge)" stroke-width="10"/>
-  <text x="512" y="670" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="132" font-weight="900" fill="url(#whiteMetal)" stroke="#020617" stroke-width="8" paint-order="stroke fill">FANTASY</text>
-  <text x="512" y="781" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="118" font-weight="900" fill="url(#arenaBlue)" stroke="#042F4F" stroke-width="6" paint-order="stroke fill" letter-spacing="8">ARENA</text>
-  <path d="M226 804h160M638 804h160" stroke="#04D9FF" stroke-width="12" stroke-linecap="round"/>
+  <rect width="1024" height="1024" rx="210" fill="#020617"/>
+  <circle cx="512" cy="500" r="390" fill="url(#glow)" opacity="0.85"/>
+  <path d="M512 96L816 208V454C816 664 692 826 512 928C332 826 208 664 208 454V208L512 96Z" fill="url(#shield)" stroke="url(#chrome)" stroke-width="34"/>
+  <path d="M512 160L754 250V452C754 620 660 750 512 838C364 750 270 620 270 452V250L512 160Z" fill="#061225" stroke="#16D9FF" stroke-width="18"/>
+  <path d="M512 200L550 278L636 290L574 350L590 436L512 394L434 436L450 350L388 290L474 278L512 200Z" fill="url(#starBlue)"/>
+  <path d="M374 254L400 306L458 314L416 354L426 412L374 384L322 412L332 354L290 314L348 306L374 254Z" fill="url(#silver)"/>
+  <path d="M650 254L676 306L734 314L692 354L702 412L650 384L598 412L608 354L566 314L624 306L650 254Z" fill="url(#silver)"/>
+  <circle cx="512" cy="548" r="150" fill="url(#ball)" stroke="#0F172A" stroke-width="18"/>
+  <path d="M512 404L584 456L556 542H468L440 456L512 404Z" fill="#020617"/>
+  <path d="M438 454L362 482L352 570L412 614L468 542L438 454Z" fill="#F8FAFC"/>
+  <path d="M586 454L662 482L672 570L612 614L556 542L586 454Z" fill="#CBD5E1"/>
+  <path d="M412 614L388 694L464 750L512 714V624L468 542L412 614Z" fill="#DCE6F2"/>
+  <path d="M612 614L636 694L560 750L512 714V624L556 542L612 614Z" fill="#F8FAFC"/>
+  <path d="M464 750H560L636 694L612 614L556 542H468L412 614L388 694L464 750Z" stroke="#0F172A" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M512 404V624M362 482L468 542M662 482L556 542M464 750L512 714L560 750" stroke="#0F172A" stroke-width="10" stroke-linecap="round"/>
+  <path d="M338 804H686" stroke="#18D8FF" stroke-width="22" stroke-linecap="round"/>
+  <path d="M398 852H626" stroke="#7DD3FC" stroke-width="14" stroke-linecap="round"/>
   <defs>
-    <radialGradient id="aura" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 492) rotate(90) scale(432)"><stop stop-color="#0EA5E9" stop-opacity=".42"/><stop offset=".58" stop-color="#1D4ED8" stop-opacity=".2"/><stop offset="1" stop-color="#020617" stop-opacity="0"/></radialGradient>
-    <linearGradient id="outer" x1="172" y1="56" x2="852" y2="957"><stop stop-color="#111827"/><stop offset=".5" stop-color="#061A33"/><stop offset="1" stop-color="#020617"/></linearGradient>
-    <linearGradient id="inner" x1="512" y1="104" x2="512" y2="891"><stop stop-color="#0A1730"/><stop offset=".55" stop-color="#020617"/><stop offset="1" stop-color="#071326"/></linearGradient>
-    <linearGradient id="chrome" x1="190" y1="92" x2="824" y2="912"><stop stop-color="#FFFFFF"/><stop offset=".18" stop-color="#B8D7FF"/><stop offset=".36" stop-color="#0EA5E9"/><stop offset=".65" stop-color="#7DD3FC"/><stop offset=".82" stop-color="#F8FAFC"/><stop offset="1" stop-color="#475569"/></linearGradient>
-    <linearGradient id="cyanStar" x1="512" y1="134" x2="512" y2="298"><stop stop-color="#A5F3FC"/><stop offset=".5" stop-color="#06B6D4"/><stop offset="1" stop-color="#0284C7"/></linearGradient>
-    <linearGradient id="silver" x1="386" y1="178" x2="386" y2="308"><stop stop-color="#FFFFFF"/><stop offset=".5" stop-color="#CBD5E1"/><stop offset="1" stop-color="#64748B"/></linearGradient>
-    <linearGradient id="ballGlow" x1="430" y1="290" x2="594" y2="550"><stop stop-color="#FFFFFF"/><stop offset=".45" stop-color="#E2E8F0"/><stop offset="1" stop-color="#94A3B8"/></linearGradient>
-    <linearGradient id="nameplate" x1="142" y1="554" x2="882" y2="714"><stop stop-color="#06101F"/><stop offset=".5" stop-color="#020617"/><stop offset="1" stop-color="#061C35"/></linearGradient>
-    <linearGradient id="edge" x1="142" y1="554" x2="882" y2="714"><stop stop-color="#06B6D4"/><stop offset=".5" stop-color="#F8FAFC"/><stop offset="1" stop-color="#0EA5E9"/></linearGradient>
-    <linearGradient id="whiteMetal" x1="512" y1="548" x2="512" y2="685"><stop stop-color="#FFFFFF"/><stop offset=".42" stop-color="#F8FAFC"/><stop offset=".64" stop-color="#94A3B8"/><stop offset="1" stop-color="#FFFFFF"/></linearGradient>
-    <linearGradient id="arenaBlue" x1="512" y1="684" x2="512" y2="795"><stop stop-color="#A5F3FC"/><stop offset=".4" stop-color="#22D3EE"/><stop offset="1" stop-color="#0284C7"/></linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 500) rotate(90) scale(390)">
+      <stop stop-color="#0EA5E9" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#020617" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shield" x1="208" y1="96" x2="816" y2="928" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1B33"/>
+      <stop offset="0.55" stop-color="#020617"/>
+      <stop offset="1" stop-color="#071326"/>
+    </linearGradient>
+    <linearGradient id="chrome" x1="208" y1="96" x2="816" y2="928" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.25" stop-color="#93C5FD"/>
+      <stop offset="0.5" stop-color="#0EA5E9"/>
+      <stop offset="0.75" stop-color="#E0F2FE"/>
+      <stop offset="1" stop-color="#64748B"/>
+    </linearGradient>
+    <linearGradient id="starBlue" x1="512" y1="200" x2="512" y2="436" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A5F3FC"/>
+      <stop offset="0.55" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#0284C7"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="374" y1="254" x2="374" y2="412" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#CBD5E1"/>
+      <stop offset="1" stop-color="#64748B"/>
+    </linearGradient>
+    <linearGradient id="ball" x1="420" y1="420" x2="604" y2="694" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#E2E8F0"/>
+      <stop offset="1" stop-color="#94A3B8"/>
+    </linearGradient>
   </defs>
 </svg>
