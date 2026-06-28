@@ -6,7 +6,6 @@ import { serveStatic } from "./static.js";
 import { createServer } from "http";
 import fs from "fs";
 import path from "path";
-import { pool } from "./db.js";
 
 import session from "express-session";
 import cookieParser from "cookie-parser";
@@ -101,6 +100,8 @@ app.use(
 app.use(express.urlencoded({ extended: false }));
 
 async function ensurePlayerImageColumns() {
+  if (!process.env.DATABASE_URL) return;
+  const { pool } = await import("./db.js");
   await pool.query(`CREATE SCHEMA IF NOT EXISTS app`);
   await pool.query(`ALTER TABLE app.players ADD COLUMN IF NOT EXISTS official_portrait_url text`);
   await pool.query(`ALTER TABLE app.players ADD COLUMN IF NOT EXISTS headshot_url text`);
@@ -156,10 +157,18 @@ function bestSportsDbPlayerImage(players: any[], requestedTeam: string) {
 }
 
 app.get("/api/matchday/epl", async (_req, res) => {
-  const result: any = { updatedAt: new Date().toISOString(), source: "TheSportsDB + Guardian RSS", liveGames: [], nextFixtures: fallbackFixtures, news: [] };
+  const result: any = {
+    updatedAt: new Date().toISOString(),
+    source: "TheSportsDB + Guardian RSS",
+    liveGames: [],
+    nextFixtures: fallbackFixtures,
+    news: [],
+  };
 
   try {
-    const fixturesRes = await fetch("https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id=4328", { headers: { Accept: "application/json", "User-Agent": "FantasyArena/1.0" } });
+    const fixturesRes = await fetch("https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id=4328", {
+      headers: { Accept: "application/json", "User-Agent": "FantasyArena/1.0" },
+    });
     if (fixturesRes.ok) {
       const payload = await fixturesRes.json();
       const events = Array.isArray(payload?.events) ? payload.events : [];
@@ -170,13 +179,19 @@ app.get("/api/matchday/epl", async (_req, res) => {
   }
 
   try {
-    const newsRes = await fetch("https://www.theguardian.com/football/premierleague/rss", { headers: { Accept: "application/rss+xml,text/xml", "User-Agent": "FantasyArena/1.0" } });
+    const newsRes = await fetch("https://www.theguardian.com/football/premierleague/rss", {
+      headers: { Accept: "application/rss+xml,text/xml", "User-Agent": "FantasyArena/1.0" },
+    });
     if (newsRes.ok) {
       const xml = await newsRes.text();
-      result.news = [...xml.matchAll(/<item>[\s\S]*?<\/item>/g)].slice(0, 6).map((match) => {
+      const items = [...xml.matchAll(/<item>[\s\S]*?<\/item>/g)].slice(0, 6).map((match) => {
         const item = match[0];
-        return { title: stripXml(item.match(/<title>([\s\S]*?)<\/title>/)?.[1] || ""), url: stripXml(item.match(/<link>([\s\S]*?)<\/link>/)?.[1] || ""), publishedAt: stripXml(item.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || ""), source: "The Guardian" };
+        const title = stripXml(item.match(/<title>([\s\S]*?)<\/title>/)?.[1] || "");
+        const url = stripXml(item.match(/<link>([\s\S]*?)<\/link>/)?.[1] || "");
+        const publishedAt = stripXml(item.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || "");
+        return { title, url, publishedAt, source: "The Guardian" };
       }).filter((item) => item.title);
+      result.news = items;
     }
   } catch (error) {
     console.warn("Matchday news unavailable:", error);
@@ -199,7 +214,9 @@ app.get("/api/player-image/resolve", async (req, res) => {
   }
 
   try {
-    const response = await fetch(`https://www.thesportsdb.com/api/v1/json/3/searchplayers.php?p=${encodeURIComponent(name)}`, { headers: { Accept: "application/json", "User-Agent": "FantasyArena/1.0" } });
+    const response = await fetch(`https://www.thesportsdb.com/api/v1/json/3/searchplayers.php?p=${encodeURIComponent(name)}`, {
+      headers: { Accept: "application/json", "User-Agent": "FantasyArena/1.0" },
+    });
     if (!response.ok) throw new Error(`TheSportsDB ${response.status}`);
     const payload = await response.json();
     const players = Array.isArray(payload?.player) ? payload.player : [];
@@ -222,13 +239,29 @@ app.get("/api/image-proxy", async (req, res) => {
   if (!raw) return res.status(400).json({ message: "Image URL is required" });
 
   let target: URL;
-  try { target = new URL(raw); } catch { return res.status(400).json({ message: "Invalid URL" }); }
+  try {
+    target = new URL(raw);
+  } catch {
+    return res.status(400).json({ message: "Invalid URL" });
+  }
+
   if (target.hostname !== "resources.premierleague.com") return res.status(403).json({ message: "Host not allowed" });
 
   try {
-    const r = await fetch(target.toString(), { method: "GET", redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36", Referer: "https://www.premierleague.com/", Origin: "https://www.premierleague.com", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" } });
+    const r = await fetch(target.toString(), {
+      method: "GET",
+      redirect: "follow",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
+        Referer: "https://www.premierleague.com/",
+        Origin: "https://www.premierleague.com",
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+      },
+    });
+
     const ct = String(r.headers.get("content-type") || "");
     if (!r.ok || !ct.startsWith("image/")) return res.status(502).json({ message: "Upstream image fetch failed" });
+
     res.setHeader("Content-Type", ct);
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
@@ -249,7 +282,10 @@ app.use((req, res, next) => {
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
   const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) { capturedJsonResponse = bodyJson; return originalResJson.apply(res, [bodyJson, ...args]); };
+  res.json = function (bodyJson, ...args) {
+    capturedJsonResponse = bodyJson;
+    return originalResJson.apply(res, [bodyJson, ...args]);
+  };
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
