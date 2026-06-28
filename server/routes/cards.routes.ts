@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { seedDatabase } from "../seed.js";
 import { fplApi } from "../services/fplApi.js";
 import {
   calculatePlayerScore,
@@ -22,34 +23,79 @@ function normalizeLookupText(value: string): string {
 export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps) {
   const { requireAuth, storage } = deps;
 
+  const ensureStarterPlayersAvailable = async () => {
+    let playerCount = 0;
+    try {
+      playerCount = Number(await storage.getPlayerCount());
+    } catch (error) {
+      console.warn("Could not read player count before starter grant:", error);
+    }
+
+    if (playerCount > 0) return playerCount;
+
+    try {
+      console.log("No players available for starter grant. Running seed repair now...");
+      await seedDatabase();
+      playerCount = Number(await storage.getPlayerCount());
+    } catch (error) {
+      console.warn("Starter player seed repair failed:", error);
+    }
+
+    return playerCount;
+  };
+
   const ensureStarterCards = async (userId: string) => {
     const existing = await storage.getUserCards(userId);
     if (existing.length > 0) return existing;
 
-    const starterPlayers = await storage.getRandomPlayers(5);
-    if (!Array.isArray(starterPlayers) || starterPlayers.length === 0) {
+    const playerCount = await ensureStarterPlayersAvailable();
+    if (!playerCount || playerCount <= 0) {
+      console.warn(`Starter grant skipped for ${userId}: no players available`);
       return existing;
     }
 
-    const pickedPlayers = starterPlayers.slice(0, 5);
-    for (const player of pickedPlayers) {
+    let starterPlayers = await storage.getRandomPlayers(12);
+    if (!Array.isArray(starterPlayers) || starterPlayers.length === 0) {
+      starterPlayers = await storage.getPlayers();
+    }
+
+    if (!Array.isArray(starterPlayers) || starterPlayers.length === 0) {
+      console.warn(`Starter grant skipped for ${userId}: player query returned empty`);
+      return existing;
+    }
+
+    let createdCount = 0;
+    for (const player of starterPlayers) {
+      if (createdCount >= 5) break;
+      const playerId = Number(player?.id);
+      if (!Number.isFinite(playerId) || playerId <= 0) continue;
+
       try {
         await storage.createPlayerCard({
-          playerId: Number(player.id),
+          playerId,
           ownerId: userId,
           rarity: "common",
           level: 1,
           xp: 0,
           decisiveScore: 35,
+          last5Scores: [0, 0, 0, 0, 0],
           forSale: false,
           price: 0,
         } as any);
-      } catch {
-        continue;
+        createdCount++;
+      } catch (error) {
+        console.warn(`Starter card grant skipped player ${playerId} for ${userId}:`, error);
       }
     }
 
-    return storage.getUserCards(userId);
+    const granted = await storage.getUserCards(userId);
+    if (granted.length === 0) {
+      console.warn(`Starter grant produced 0 cards for ${userId}; created attempts: ${createdCount}; candidates: ${starterPlayers.length}`);
+    } else {
+      console.log(`Starter grant ready for ${userId}: ${granted.length} cards`);
+    }
+
+    return granted;
   };
 
   const sendUserCards = async (req: any, res: any) => {
