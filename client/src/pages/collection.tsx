@@ -1,76 +1,32 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import CollectionPlayerCard from "../components/CollectionPlayerCard";
-import PlayerTile from "../components/PlayerTile";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { Skeleton } from "../components/ui/skeleton";
-import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog";
+import { Skeleton } from "../components/ui/skeleton";
 import { type PlayerCardWithPlayer, type Lineup } from "../../../shared/schema";
-import { Archive, Crown, DollarSign, Filter, Gem, Lock, ShieldCheck, Sparkles, Trophy, Vault } from "lucide-react";
+import { Filter, Save } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
-import { toFantasyCardData } from "../lib/fantasy-card-adapter";
-import { useIsMobile } from "../hooks/use-mobile";
-import { LiveHero, LivePageShell, LiveStatCard } from "../components/layout/LivePageShell";
-
-type RarityKey = "all" | "common" | "rare" | "unique" | "legendary";
-
-const BASE_PRICES: Record<string, number> = { common: 0, rare: 20, unique: 50, epic: 50, legendary: 100 };
-const COLLECTION_TARGETS: Record<string, number> = { common: 120, rare: 120, unique: 120, legendary: 120 };
-const INITIAL_VISIBLE_CARDS = 24;
-const LOAD_MORE_CARDS = 24;
-
-function rarityOf(card: PlayerCardWithPlayer) {
-  return String(card.rarity || "common").toLowerCase();
-}
-
-function money(value: unknown) {
-  const n = Number(value || 0);
-  if (!Number.isFinite(n)) return "N$0.00";
-  return `N$${n.toFixed(2)}`;
-}
-
-function pct(value: number, target: number) {
-  if (!target) return 0;
-  return Math.max(0, Math.min(100, Math.round((value / target) * 100)));
-}
-
-function cardValue(card: PlayerCardWithPlayer) {
-  const listed = Number(card.price || 0);
-  if (Number.isFinite(listed) && listed > 0) return listed;
-  return BASE_PRICES[rarityOf(card)] || 0;
-}
 
 export default function CollectionPage() {
   const { toast } = useToast();
-  const isMobile = useIsMobile();
-  const [filter, setFilter] = useState<RarityKey>("all");
-  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_CARDS);
+  const [filter, setFilter] = useState<string>("all");
   const [editingLineup, setEditingLineup] = useState(false);
-  const [selectedForLineup, setSelectedForLineup] = useState<Set<number>>(new Set());
-  const [listCard, setListCard] = useState<PlayerCardWithPlayer | null>(null);
-  const [listPrice, setListPrice] = useState("");
+  const [selectedForLineup, setSelectedForLineup] = useState<Set<number>>(
+    new Set(),
+  );
 
   const { data: cards, isLoading } = useQuery<PlayerCardWithPlayer[]>({
-    queryKey: ["/api/user/cards"],
-    queryFn: async () => {
-      const res = await fetch("/api/user/cards", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch cards");
-      const data = await res.json();
-      return Array.isArray(data) ? data : data.cards || [];
-    },
+    queryKey: ["/api/cards"],
   });
 
-  const { data: lineupData } = useQuery<{ lineup: Lineup; cards: PlayerCardWithPlayer[] }>({
+  const { data: lineupData } = useQuery<{
+    lineup: Lineup;
+    cards: PlayerCardWithPlayer[];
+  }>({
     queryKey: ["/api/lineup"],
-    queryFn: async () => {
-      const res = await fetch("/api/lineup", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch lineup");
-      return res.json();
-    },
   });
 
   const saveLineupMutation = useMutation({
@@ -79,234 +35,161 @@ export default function CollectionPage() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
       queryClient.invalidateQueries({ queryKey: ["/api/lineup"] });
       setEditingLineup(false);
-      toast({ title: "Lineup saved" });
+      toast({ title: "Lineup saved!" });
     },
-    onError: (error: any) => toast({ title: "Error", description: error.message, variant: "destructive" }),
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
-  const listForSaleMutation = useMutation({
-    mutationFn: async ({ cardId, price }: { cardId: number; price: number }) => {
-      const res = await apiRequest("POST", "/api/marketplace/list", { cardId, price });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
-      setListCard(null);
-      setListPrice("");
-      toast({ title: "Card listed for sale" });
-    },
-    onError: (error: any) => toast({ title: "Error", description: error.message || "Failed to list card", variant: "destructive" }),
+  const filteredCards = cards?.filter((c) => {
+    if (filter === "all") return true;
+    return c.rarity === filter;
   });
-
-  const cancelListingMutation = useMutation({
-    mutationFn: async (cardId: number) => {
-      const res = await apiRequest("POST", `/api/marketplace/cancel/${cardId}`, {});
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
-      toast({ title: "Listing cancelled" });
-    },
-    onError: (error: any) => toast({ title: "Error", description: error.message || "Failed to cancel listing", variant: "destructive" }),
-  });
-
-  const counts = useMemo(() => {
-    const base: Record<string, number> = { common: 0, rare: 0, unique: 0, legendary: 0 };
-    for (const card of cards || []) {
-      const rarity = rarityOf(card);
-      if (base[rarity] !== undefined) base[rarity] += 1;
-    }
-    return base;
-  }, [cards]);
-
-  const listedCount = (cards || []).filter((card) => card.forSale).length;
-  const eligibleCount = (cards || []).filter((card) => !card.forSale).length;
-  const strongestRarity = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "common";
-  const collectionValue = useMemo(() => (cards || []).reduce((sum, card) => sum + cardValue(card), 0), [cards]);
-  const momentum = Math.max(0, counts.legendary * 9 + counts.unique * 5 + counts.rare * 2 - listedCount);
-  const namibiaRank = collectionValue > 0 ? `#${Math.max(1, 250 - Math.min(220, Math.floor(collectionValue / 25)))}` : "—";
-
-  const filteredCards = useMemo(() => (cards || []).filter((c) => filter === "all" || rarityOf(c) === filter), [cards, filter]);
-  const visibleCards = useMemo(() => filteredCards.slice(0, visibleCount), [filteredCards, visibleCount]);
-  const showcaseCards = [...(cards || [])].sort((a, b) => {
-    const power: Record<string, number> = { legendary: 5, epic: 4, unique: 3, rare: 2, common: 1 };
-    return (power[rarityOf(b)] || 0) - (power[rarityOf(a)] || 0) || cardValue(b) - cardValue(a);
-  }).slice(0, 3);
-  const featuredCard = showcaseCards[0];
-  const featuredFantasyCard = featuredCard ? toFantasyCardData(featuredCard, { imageWidth: 640 }) : null;
-  const featuredValue = featuredCard ? cardValue(featuredCard) : 0;
-  const featuredLastSale = featuredValue ? Math.round(featuredValue * 0.94) : 0;
-
-  useEffect(() => setVisibleCount(INITIAL_VISIBLE_CARDS), [filter, isMobile, cards?.length]);
 
   const startEditLineup = () => {
     setEditingLineup(true);
-    if (lineupData?.lineup?.cardIds) setSelectedForLineup(new Set(lineupData.lineup.cardIds));
+    if (lineupData?.lineup?.cardIds) {
+      setSelectedForLineup(new Set(lineupData.lineup.cardIds));
+    }
   };
 
   const toggleLineupCard = (cardId: number) => {
     setSelectedForLineup((prev) => {
       const next = new Set(prev);
-      if (next.has(cardId)) next.delete(cardId);
-      else if (next.size < 5) next.add(cardId);
+      if (next.has(cardId)) {
+        next.delete(cardId);
+      } else if (next.size < 5) {
+        next.add(cardId);
+      }
       return next;
     });
   };
 
-  const handleListCard = (card: PlayerCardWithPlayer) => {
-    const rarity = rarityOf(card);
-    if (rarity === "common") {
-      toast({ title: "Cannot sell common cards", description: "Common cards are tournament-only and can’t be sold.", variant: "destructive" });
-      return;
-    }
-    setListCard(card);
-    setListPrice(String(BASE_PRICES[rarity] || 1));
-  };
-
-  const handleConfirmList = () => {
-    if (!listCard) return;
-    const price = parseFloat(listPrice);
-    const rarity = rarityOf(listCard);
-    const basePrice = BASE_PRICES[rarity] || 0;
-    if (Number.isNaN(price) || price <= 0) return toast({ title: "Invalid price", variant: "destructive" });
-    if (basePrice && price < basePrice) return toast({ title: "Price too low", description: `Minimum price for ${rarity} cards is N$${basePrice}`, variant: "destructive" });
-    listForSaleMutation.mutate({ cardId: listCard.id, price });
-  };
-
-  const rarityFilters: Array<{ value: RarityKey; label: string; icon: React.ReactNode }> = [
-    { value: "all", label: "All", icon: <Archive className="h-4 w-4" /> },
-    { value: "common", label: "Common", icon: <ShieldCheck className="h-4 w-4" /> },
-    { value: "rare", label: "Rare", icon: <Sparkles className="h-4 w-4" /> },
-    { value: "unique", label: "Unique", icon: <Gem className="h-4 w-4" /> },
-    { value: "legendary", label: "Legendary", icon: <Crown className="h-4 w-4" /> },
+  const rarityFilters = [
+    { value: "all", label: "All" },
+    { value: "common", label: "Common" },
+    { value: "rare", label: "Rare" },
+    { value: "unique", label: "Unique" },
+    { value: "legendary", label: "Legendary" },
   ];
 
   return (
-    <LivePageShell tone="vault">
-      <LiveHero eyebrow="Collection Vault" title="Your Card Vault" description="Browse your cards like high-value assets. Build your lineup, protect tournament-only cards and list premium cards on the market.">
-        <LiveStatCard label="Total Cards" value={String(cards?.length || 0)} helper="Owned assets" />
-        <LiveStatCard label="Playable" value={String(eligibleCount)} helper="Not listed" />
-        <LiveStatCard label="Listed" value={String(listedCount)} helper="On market" />
-      </LiveHero>
-
-      <Card className="overflow-hidden border-white/10 bg-gradient-to-r from-slate-950 via-violet-950/70 to-slate-950 p-5 text-white shadow-2xl shadow-violet-950/30 backdrop-blur-xl">
-        <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] md:items-center">
+    <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-violet-200/70">Collection Value</p>
-            <div className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">{money(collectionValue)}</div>
-            <p className="mt-2 text-sm text-white/55">Estimated from rarity floors and active listing prices.</p>
+            <h1 className="text-2xl font-bold text-foreground">My Collection</h1>
+            <p className="text-muted-foreground text-sm">
+              {cards?.length || 0} cards in your collection
+            </p>
           </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-white/35">Rank</p><p className="mt-1 text-lg font-black">{namibiaRank}</p></div>
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-white/35">Momentum</p><p className="mt-1 text-lg font-black">+{momentum}</p></div>
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-white/35">Legendary</p><p className="mt-1 text-lg font-black">{counts.legendary || 0}</p></div>
+          <div className="flex items-center gap-2">
+            {editingLineup ? (
+              <>
+                <span className="text-sm text-muted-foreground">
+                  {selectedForLineup.size}/5 selected
+                </span>
+                <Button
+                  onClick={() =>
+                    saveLineupMutation.mutate(Array.from(selectedForLineup))
+                  }
+                  disabled={
+                    selectedForLineup.size !== 5 ||
+                    saveLineupMutation.isPending
+                  }
+                  data-testid="button-save-lineup"
+                >
+                  <Save className="w-4 h-4 mr-1" />
+                  {saveLineupMutation.isPending ? "Saving..." : "Save Lineup"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setEditingLineup(false)}
+                  data-testid="button-cancel-edit"
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={startEditLineup}
+                data-testid="button-edit-lineup"
+              >
+                Edit Lineup
+              </Button>
+            )}
           </div>
         </div>
-      </Card>
 
-      <section className="grid gap-4 lg:grid-cols-[0.78fr_1.22fr]">
-        <Card className="cinematic-glass border-white/10 bg-white/[0.06] p-5 text-white backdrop-blur-xl">
-          <div className="mb-4 flex items-center gap-2"><Vault className="h-5 w-5 text-violet-300" /><h2 className="font-black">Vault Progress</h2></div>
-          <div className="space-y-3">
-            {Object.entries(COLLECTION_TARGETS).map(([rarity, target]) => <ProgressRow key={rarity} label={rarity} value={counts[rarity] || 0} target={target} />)}
-          </div>
-          <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3 text-sm text-white/55">Strongest section: <span className="font-black capitalize text-white">{strongestRarity}</span></div>
-        </Card>
-
-        <Card className="overflow-hidden border-white/10 bg-slate-950/70 p-4 text-white backdrop-blur-xl">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div><h2 className="font-black">Featured Asset</h2><p className="text-sm text-white/50">Highest rarity card with market stats.</p></div>
-            <Badge variant="outline" className="border-white/20 text-white"><Trophy className="mr-1 h-3 w-3" /> Showcase</Badge>
-          </div>
-          {isLoading ? <div className="grid gap-3 md:grid-cols-2"><Skeleton className="h-64 rounded-2xl" /><Skeleton className="h-64 rounded-2xl" /></div> : featuredCard && featuredFantasyCard ? (
-            <div className="grid gap-3 md:grid-cols-[0.78fr_1fr] md:items-center">
-              <div className="relative flex min-h-[235px] items-start justify-center overflow-hidden rounded-3xl border border-white/10 bg-black/25 p-2 pt-3">
-                <div className="absolute bottom-7 h-12 w-44 rounded-full bg-black/60 blur-2xl" />
-                <div className="absolute bottom-5 h-7 w-40 rounded-full border border-white/10 bg-white/10" />
-                <div className="relative z-10 -mt-3 scale-[0.58] sm:scale-[0.72] md:scale-[0.78]">
-                  <CollectionPlayerCard player={featuredFantasyCard} size="lg" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">Top Asset</p>
-                  <h3 className="mt-1 text-xl font-black">{featuredCard.player?.name || "Featured Card"}</h3>
-                  <p className="text-sm capitalize text-white/55">{featuredCard.rarity} • {featuredCard.player?.position || "Player"}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <AssetStat label="Current Value" value={money(featuredValue)} />
-                  <AssetStat label="Last Sale" value={money(featuredLastSale)} />
-                  <AssetStat label="Growth" value={featuredValue ? "+6.4%" : "—"} />
-                  <AssetStat label="Serial" value={`#${featuredCard.serialNumber || 1}/${featuredCard.maxSupply || 100}`} />
-                </div>
-              </div>
-            </div>
-          ) : <p className="text-sm text-white/50">No cards yet. Open starter packs to begin your vault.</p>}
-        </Card>
-      </section>
-
-      <section className="sticky top-0 z-20 rounded-3xl border border-white/10 bg-black/35 p-3 backdrop-blur-2xl">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0"><Filter className="h-4 w-4 shrink-0 text-white/50" />{rarityFilters.map((f) => <Button key={f.value} variant={filter === f.value ? "default" : "outline"} size="sm" onClick={() => setFilter(f.value)} data-testid={`button-filter-${f.value}`} className="shrink-0 gap-1">{f.icon}{f.label}<span className="ml-1 text-xs opacity-70">{f.value === "all" ? cards?.length || 0 : counts[f.value] || 0}</span></Button>)}</div>
-          <div className="flex gap-2"><Button variant="outline" size="sm" onClick={startEditLineup}>Edit Lineup</Button>{editingLineup ? <Button size="sm" onClick={() => saveLineupMutation.mutate(Array.from(selectedForLineup))} disabled={saveLineupMutation.isPending || selectedForLineup.size !== 5}>Save ({selectedForLineup.size}/5)</Button> : null}</div>
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          <Filter className="w-4 h-4 text-muted-foreground" />
+          {rarityFilters.map((f) => (
+            <Button
+              key={f.value}
+              variant={filter === f.value ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilter(f.value)}
+              data-testid={`button-filter-${f.value}`}
+            >
+              {f.label}
+            </Button>
+          ))}
         </div>
-      </section>
 
-      {editingLineup && <Card className="border-emerald-400/20 bg-emerald-400/10 p-4 text-white backdrop-blur-xl"><p className="text-sm"><Lock className="mr-2 inline h-4 w-4 text-emerald-300" />Select exactly 5 available cards for your lineup. Listed cards should be removed from sale before tournament entry.</p></Card>}
-
-      {isLoading ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-[218px] rounded-[26px] sm:h-[232px]" />)}</div>
-      ) : filteredCards.length > 0 ? (
-        <div className="space-y-5">
-          <div className="grid grid-cols-2 justify-items-center gap-x-2 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {visibleCards.map((card) => {
-              const fantasyCard = toFantasyCardData(card, { imageWidth: 320 });
-              const isSelected = selectedForLineup.has(card.id);
-              const rarity = rarityOf(card);
+        {isLoading ? (
+          <div className="flex flex-wrap gap-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="w-48 h-72 rounded-md" />
+            ))}
+          </div>
+        ) : filteredCards && filteredCards.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+            {filteredCards.map((card) => {
+              const isInLineup = lineupData?.lineup?.cardIds?.includes(card.id);
               return (
-                <div key={card.id} className="flex flex-col items-center gap-2">
-                  <div className={`relative rounded-[28px] ${editingLineup && isSelected ? "ring-2 ring-emerald-400" : ""}`}>
-                    {card.forSale && <Badge className="absolute left-2 top-2 z-30 bg-amber-400 text-black">Listed</Badge>}
-                    <PlayerTile
-                      player={fantasyCard}
-                      selected={isSelected}
-                      onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined}
-                      showPrice={Boolean(card.forSale)}
-                      size={isMobile ? "sm" : "md"}
-                    />
-                  </div>
-                  <div className="z-30 flex min-h-8 gap-2">
-                    {card.forSale ? <Button size="sm" variant="destructive" onClick={() => cancelListingMutation.mutate(card.id)} disabled={cancelListingMutation.isPending} className="h-7 px-2 text-[11px]">Cancel {money(card.price)}</Button> : rarity === "common" ? <Button size="sm" variant="outline" disabled className="h-7 px-2 text-[11px]">Tournament Only</Button> : <Button size="sm" onClick={() => handleListCard(card)} className="h-7 bg-gradient-to-r from-emerald-400 to-lime-300 px-3 text-[11px] font-black text-black"><DollarSign className="mr-1 h-3 w-3" /> Sell</Button>}
-                  </div>
+                <div key={card.id} className="relative">
+                  <CollectionPlayerCard
+                    card={card}
+                    size="md"
+                    selected={
+                      editingLineup
+                        ? selectedForLineup.has(card.id)
+                        : !!isInLineup
+                    }
+                    selectable={editingLineup}
+                    showActions={!editingLineup}
+                    showBuy
+                    onClick={
+                      editingLineup
+                        ? () => toggleLineupCard(card.id)
+                        : undefined
+                    }
+                    onBuy={() => toast({ title: "Browse marketplace to buy cards" })}
+                    onSell={() => {
+                      toast({ title: "List for sale", description: "Opening marketplace…" });
+                    }}
+                    onLoan={() => toast({ title: "Loan offer", description: "Loan feature coming soon." })}
+                  />
+                  {isInLineup && !editingLineup && (
+                    <Badge className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 bg-primary text-primary-foreground text-[10px] no-default-hover-elevate no-default-active-elevate">
+                      In Lineup
+                    </Badge>
+                  )}
                 </div>
               );
             })}
           </div>
-          {filteredCards.length > visibleCount ? <div className="flex w-full justify-center"><Button variant="outline" onClick={() => setVisibleCount((prev) => prev + LOAD_MORE_CARDS)}>Load More ({Math.min(LOAD_MORE_CARDS, filteredCards.length - visibleCount)} more)</Button></div> : null}
-        </div>
-      ) : <Card className="border-white/10 bg-white/[0.06] p-8 text-center text-white"><p className="text-white/60">No cards found with this filter.</p></Card>}
-
-      <Dialog open={!!listCard} onOpenChange={() => setListCard(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>List Card for Sale</DialogTitle><DialogDescription>{listCard && BASE_PRICES[rarityOf(listCard)] ? `Minimum price for ${listCard.rarity} cards: N$${BASE_PRICES[rarityOf(listCard)]}` : "Set your listing price"}</DialogDescription></DialogHeader>
-          <div className="space-y-4 py-4"><div><p className="font-semibold">{listCard?.player?.name}</p><p className="text-sm text-muted-foreground capitalize">{listCard?.rarity} • {listCard?.player?.position}</p></div><div className="space-y-2"><label className="text-sm font-medium">Price (N$)</label><Input type="number" value={listPrice} onChange={(e) => setListPrice(e.target.value)} placeholder={listCard ? `Min: ${BASE_PRICES[rarityOf(listCard)] || 1}` : "Enter price"} min={listCard ? BASE_PRICES[rarityOf(listCard)] || 1 : 1} /></div></div>
-          <DialogFooter><Button variant="outline" onClick={() => setListCard(null)}>Cancel</Button><Button onClick={handleConfirmList} disabled={listForSaleMutation.isPending || !listPrice || parseFloat(listPrice) <= 0}>{listForSaleMutation.isPending ? "Listing..." : "List for Sale"}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </LivePageShell>
+        ) : (
+          <Card className="p-8 text-center">
+            <p className="text-muted-foreground">
+              No cards found with this filter.
+            </p>
+          </Card>
+        )}
+      </div>
+    </div>
   );
-}
-
-function AssetStat({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div className="rounded-2xl border border-white/10 bg-black/25 p-2.5"><p className="text-[9px] font-black uppercase tracking-widest text-white/35">{label}</p><p className="mt-1 text-base font-black text-white">{value}</p></div>;
-}
-
-function ProgressRow({ label, value, target }: { label: string; value: number; target: number }) {
-  const progress = pct(value, target);
-  return <div><div className="mb-1 flex items-center justify-between text-xs"><span className="font-bold capitalize text-white">{label}</span><span className="text-white/50">{value}/{target} • {progress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-violet-400 to-fuchsia-300" style={{ width: `${progress}%` }} /></div></div>;
 }
