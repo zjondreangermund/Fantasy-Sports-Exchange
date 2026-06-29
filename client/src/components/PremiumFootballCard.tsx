@@ -51,7 +51,8 @@ export default function PremiumFootballCard({
   const position = String(player.position ?? "—").toUpperCase();
   const serialNumber = (card as { serialNumber?: number }).serialNumber ?? (card as { serial_number?: number }).serial_number ?? 1;
   const maxSupply = (card as { maxSupply?: number }).maxSupply ?? (card as { max_supply?: number }).max_supply ?? 100;
-  const pts = points ?? (player.overall as number) ?? "—";
+  const decisive = (card as { decisiveScore?: number }).decisiveScore ?? (card as { decisive_score?: number }).decisive_score;
+  const pts = points ?? decisive ?? (player.overall as number) ?? "—";
 
   const totalW = s.w + s.edge;
   const totalH = s.h + s.edge;
@@ -65,33 +66,29 @@ export default function PremiumFootballCard({
         ["--glow-rgb" as string]: theme.glowRgb,
       }}
     >
-      {/* Ambient rarity glow */}
       <div className="premium-football-card__ambient" aria-hidden />
 
-      {/* 3D edge — right */}
       <div
         className="premium-football-card__edge premium-football-card__edge--right"
         style={{
           width: s.edge,
           height: s.h,
-          background: `linear-gradient(180deg, ${theme.edgeLight} 0%, ${theme.edgeMid} 35%, ${theme.edgeDark} 100%)`,
+          background: `linear-gradient(180deg, ${theme.edgeLight} 0%, ${theme.edgeMid} 32%, ${theme.edgeDark} 100%)`,
           borderRadius: `0 ${s.radius}px ${s.radius}px 0`,
           transform: `translateZ(-${s.edge}px)`,
         }}
       />
 
-      {/* 3D edge — bottom */}
       <div
         className="premium-football-card__edge premium-football-card__edge--bottom"
         style={{
           height: s.edge,
-          background: `linear-gradient(90deg, ${theme.edgeDark} 0%, ${theme.edgeMid} 40%, ${theme.edgeDark} 100%)`,
+          background: `linear-gradient(90deg, ${theme.edgeDark} 0%, ${theme.edgeLight} 35%, ${theme.edgeMid} 58%, ${theme.edgeDark} 100%)`,
           borderRadius: `0 0 ${s.radius}px ${s.radius}px`,
           transform: `translateZ(-${s.edge}px)`,
         }}
       />
 
-      {/* Main face */}
       <div
         className="premium-football-card__face"
         style={{
@@ -99,43 +96,45 @@ export default function PremiumFootballCard({
           height: s.h,
           borderRadius: s.radius,
           background: theme.face,
-          boxShadow: `${theme.glow}, inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -2px 0 rgba(0,0,0,0.35)`,
-          border: `1.5px solid ${theme.border}`,
+          boxShadow: `${theme.glow}, inset 0 1px 0 rgba(255,255,255,0.72), inset 0 -3px 0 rgba(0,0,0,0.42), inset 0 0 35px rgba(255,255,255,0.08)`,
+          border: `2px solid ${theme.border}`,
         }}
       >
-        {/* Metallic chrome frame inset */}
         <div
           className="premium-football-card__frame"
           style={{
-            inset: 5 * fs,
-            borderRadius: s.radius - 4,
+            inset: 4 * fs,
+            borderRadius: s.radius - 3,
             background: theme.frame,
-            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.5), inset 0 -1px 0 rgba(0,0,0,0.25)`,
+            opacity: 0.72,
+            boxShadow: `inset 0 1px 0 rgba(255,255,255,0.78), inset 0 -1px 0 rgba(0,0,0,0.28), 0 0 22px rgba(var(--glow-rgb),0.18)`,
           }}
         >
           <div className="premium-football-card__frame-highlight" style={{ background: theme.frameHighlight }} />
         </div>
 
-        {/* Holographic foil layer */}
-        <div className="premium-football-card__foil" style={{ background: theme.foil }} aria-hidden />
-        <div className="premium-football-card__holo" style={{ background: theme.holo }} aria-hidden />
-
-        {/* Chrome sweep animation */}
+        <div className="premium-football-card__foil" style={{ background: theme.foil, opacity: 0.68 }} aria-hidden />
+        <div className="premium-football-card__holo" style={{ background: theme.holo, opacity: 0.58 }} aria-hidden />
         <div className="premium-football-card__chrome-sweep" aria-hidden />
-
-        {/* Glass top highlight */}
         <div className="premium-football-card__glass" aria-hidden />
 
-        {/* Inner content area */}
         <div
           className="premium-football-card__inner"
           style={{
-            inset: `${10 * fs}px ${8 * fs}px ${8 * fs}px`,
+            inset: `${9 * fs}px ${7 * fs}px ${7 * fs}px`,
             borderRadius: s.radius - 6,
+            boxShadow: "inset 0 0 26px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.20)",
           }}
         >
-          {/* Stadium lights + photo window */}
-          <div className="premium-football-card__photo-window" style={{ borderColor: theme.windowBorder }}>
+          <div
+            className="premium-football-card__photo-window"
+            style={{
+              borderColor: theme.windowBorder,
+              background: theme.windowBg,
+              marginTop: 26 * fs,
+              boxShadow: `inset 0 0 28px rgba(0,0,0,0.72), inset 0 8px 22px rgba(255,255,255,0.05), 0 0 22px rgba(var(--glow-rgb),0.22)`,
+            }}
+          >
             <div className="premium-football-card__stadium-lights" style={{ background: theme.studioGlow }} />
             <div className="premium-football-card__turf" />
 
@@ -144,6 +143,14 @@ export default function PremiumFootballCard({
                 src={img}
                 alt={playerName}
                 className="premium-football-card__photo"
+                style={{
+                  objectFit: "contain",
+                  objectPosition: "bottom center",
+                  inset: "auto -8% 0 -8%",
+                  width: "116%",
+                  height: "116%",
+                  maxWidth: "none",
+                }}
                 loading="lazy"
                 draggable={false}
               />
@@ -157,7 +164,6 @@ export default function PremiumFootballCard({
             <div className="premium-football-card__photo-glass" />
           </div>
 
-          {/* Header row */}
           <div className="premium-football-card__header" style={{ fontSize: 7 * fs }}>
             <div className="premium-football-card__header-left">
               <span className="premium-football-card__season">{season}</span>
@@ -171,7 +177,6 @@ export default function PremiumFootballCard({
             </div>
           </div>
 
-          {/* Footer info */}
           <div className="premium-football-card__footer">
             <h3 className="premium-football-card__name" style={{ fontSize: 13 * fs }}>
               {playerName.toUpperCase()}
