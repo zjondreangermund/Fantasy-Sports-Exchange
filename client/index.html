@@ -16,6 +16,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Oxanium:wght@500;700;800&display=swap" rel="stylesheet" />
+    <style>
+      @media (min-width: 1024px) {
+        div:has(> [data-testid^="premium-football-card-"]) + div.mt-2 {
+          margin-top: -3.75rem !important;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
