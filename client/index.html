@@ -18,8 +18,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=Oxanium:wght@500;700;800&display=swap" rel="stylesheet" />
     <style>
       @media (min-width: 1024px) {
-        div:has(> [data-testid^="premium-football-card-"]) + div.mt-2 {
-          margin-top: -3.75rem !important;
+        div:has(> button[data-testid^="premium-football-card-"]) {
+          margin-bottom: -8.25rem !important;
+        }
+        div:has(> button[data-testid^="premium-football-card-"]) + div {
+          margin-top: 0 !important;
+        }
+        button[data-testid^="premium-football-card-"] img {
+          opacity: 1 !important;
+          filter: saturate(1.22) contrast(1.12) brightness(1.12) drop-shadow(0 22px 20px rgba(0,0,0,.56)) !important;
+        }
+        button[data-testid^="premium-football-card-"] > div > div[style*="linear-gradient(to bottom"] {
+          background: linear-gradient(to bottom, rgba(0,0,0,.02), rgba(0,0,0,.10)) !important;
         }
       }
     </style>
