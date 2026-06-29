@@ -10,6 +10,14 @@ import { type PlayerCardWithPlayer, type Lineup } from "../../../shared/schema";
 import { Filter, Save } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 
+type CardsResponse = PlayerCardWithPlayer[] | { cards?: PlayerCardWithPlayer[] };
+
+function normalizeCardsResponse(data: CardsResponse | undefined): PlayerCardWithPlayer[] {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.cards)) return data.cards;
+  return [];
+}
+
 export default function CollectionPage() {
   const { toast } = useToast();
   const [filter, setFilter] = useState<string>("all");
@@ -18,8 +26,13 @@ export default function CollectionPage() {
     new Set(),
   );
 
-  const { data: cards, isLoading } = useQuery<PlayerCardWithPlayer[]>({
-    queryKey: ["/api/cards"],
+  const { data: cards = [], isLoading } = useQuery<PlayerCardWithPlayer[]>({
+    queryKey: ["/api/cards/my"],
+    queryFn: async () => {
+      const res = await fetch("/api/cards/my", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch collection cards");
+      return normalizeCardsResponse(await res.json());
+    },
   });
 
   const { data: lineupData } = useQuery<{
@@ -44,9 +57,9 @@ export default function CollectionPage() {
     },
   });
 
-  const filteredCards = cards?.filter((c) => {
+  const filteredCards = cards.filter((c) => {
     if (filter === "all") return true;
-    return c.rarity === filter;
+    return String(c.rarity || "").toLowerCase() === filter;
   });
 
   const startEditLineup = () => {
@@ -73,17 +86,18 @@ export default function CollectionPage() {
     { value: "common", label: "Common" },
     { value: "rare", label: "Rare" },
     { value: "unique", label: "Unique" },
+    { value: "epic", label: "Epic" },
     { value: "legendary", label: "Legendary" },
   ];
 
   return (
-    <div className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8">
+    <div className="flex-1 overflow-auto p-3 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-foreground">My Collection</h1>
             <p className="text-muted-foreground text-sm">
-              {cards?.length || 0} cards in your collection
+              {cards.length} cards in your collection
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -140,17 +154,17 @@ export default function CollectionPage() {
         </div>
 
         {isLoading ? (
-          <div className="flex flex-wrap gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
             {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="w-48 h-72 rounded-md" />
+              <Skeleton key={i} className="w-full h-72 rounded-md" />
             ))}
           </div>
-        ) : filteredCards && filteredCards.length > 0 ? (
+        ) : filteredCards.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
             {filteredCards.map((card) => {
               const isInLineup = lineupData?.lineup?.cardIds?.includes(card.id);
               return (
-                <div key={card.id} className="relative">
+                <div key={card.id} className="relative min-w-0">
                   <CollectionPlayerCard
                     card={card}
                     size="md"
@@ -169,7 +183,7 @@ export default function CollectionPage() {
                     }
                     onBuy={() => toast({ title: "Browse marketplace to buy cards" })}
                     onSell={() => {
-                      toast({ title: "List for sale", description: "Opening marketplace…" });
+                      toast({ title: "List for sale", description: "Open Marketplace to set a sale price." });
                     }}
                     onLoan={() => toast({ title: "Loan offer", description: "Loan feature coming soon." })}
                   />
