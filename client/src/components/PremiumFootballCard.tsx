@@ -206,7 +206,7 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
 
         <div style={{ position: "absolute", top: 48, right: 34, zIndex: 37, width: 36, height: 36, borderRadius: "50%", display: "grid", placeItems: "center", background: "linear-gradient(145deg,rgba(255,255,255,.92),rgba(255,255,255,.30))", border: "2px solid rgba(0,0,0,.22)", boxShadow: "0 4px 10px rgba(0,0,0,.26), inset 0 1px 0 rgba(255,255,255,.80)", fontSize: 12, fontWeight: 950 }}>{clubCode(team).slice(0, 2)}</div>
 
-        <div style={{ position: "absolute", left: 10, right: 10, top: 55, bottom: 132, zIndex: 14, overflow: "visible", background: "linear-gradient(to bottom,rgba(0,0,0,.10),rgba(0,0,0,.28))" }}>
+        <div style={{ position: "absolute", left: 10, right: 10, top: 55, bottom: 132, zIndex: 14, overflow: "visible" }}>
           {showImg ? (
             <img
               src={img}
@@ -214,7 +214,7 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
               loading="lazy"
               decoding="async"
               onError={onImageError}
-              style={{ position: "absolute", left: "50%", bottom: 10, width: "160%", height: "145%", transform: "translateX(-50%)", objectFit: "contain", objectPosition: "bottom center", filter: `drop-shadow(0 24px 20px rgba(0,0,0,.58)) drop-shadow(0 0 18px ${theme.shadow})`, zIndex: 10, opacity: 0.78 }}
+              style={{ position: "absolute", left: "50%", bottom: 10, width: "185%", height: "165%", transform: "translateX(-50%)", objectFit: "contain", objectPosition: "bottom center", filter: `drop-shadow(0 24px 20px rgba(0,0,0,.58)) drop-shadow(0 0 18px ${theme.shadow})`, zIndex: 16 }}
               className="transition-transform duration-200 group-hover:scale-[1.04]"
             />
           ) : (
@@ -225,11 +225,11 @@ function PremiumFootballCardBase({ player, selected = false, onClick, showPrice 
         <div style={{ position: "absolute", left: 16, right: 16, bottom: 100, height: 64, zIndex: 20, clipPath: "polygon(0 44%,50% 0,100% 42%,100% 100%,0 100%)", background: theme.plate, borderTop: "2px solid rgba(255,255,255,.78)", boxShadow: "0 -14px 28px rgba(255,255,255,.28), inset 0 2px 0 rgba(255,255,255,.75), inset 0 -14px 24px rgba(0,0,0,.26)", backdropFilter: "blur(6px)" }} />
 
         {/* Foil sweep 1 — primary diagonal */}
-        <div style={{ position: "absolute", inset: 0, zIndex: 30, pointerEvents: "none", background: "linear-gradient(118deg,transparent 0%,transparent 25%,rgba(255,255,255,.90) 38%,rgba(255,255,255,.18) 47%,transparent 58%)", mixBlendMode: "screen", opacity: .35 }} />
+        <div style={{ position: "absolute", inset: 0, zIndex: 30, pointerEvents: "none", background: "linear-gradient(118deg,transparent 0%,transparent 25%,rgba(255,255,255,.90) 38%,rgba(255,255,255,.18) 47%,transparent 58%)", mixBlendMode: "screen", opacity: .78 }} />
         {/* Foil sweep 2 — wide bar */}
-        <div style={{ position: "absolute", left: -92, top: 4, zIndex: 31, width: 540, height: 96, transform: "rotate(-32deg)", pointerEvents: "none", background: "linear-gradient(90deg,transparent,rgba(255,255,255,.98),transparent)", filter: "blur(1px)", opacity: .28 }} />
+        <div style={{ position: "absolute", left: -92, top: 4, zIndex: 31, width: 540, height: 96, transform: "rotate(-32deg)", pointerEvents: "none", background: "linear-gradient(90deg,transparent,rgba(255,255,255,.98),transparent)", filter: "blur(1px)", opacity: .72 }} />
         {/* Foil sweep 3 — secondary narrow sweep at opposite angle */}
-        <div style={{ position: "absolute", inset: 0, zIndex: 31, pointerEvents: "none", background: "linear-gradient(52deg,transparent 0%,transparent 55%,rgba(255,255,255,.55) 66%,rgba(255,255,255,.10) 72%,transparent 80%)", mixBlendMode: "screen", opacity: .20 }} />
+        <div style={{ position: "absolute", inset: 0, zIndex: 31, pointerEvents: "none", background: "linear-gradient(52deg,transparent 0%,transparent 55%,rgba(255,255,255,.55) 66%,rgba(255,255,255,.10) 72%,transparent 80%)", mixBlendMode: "screen", opacity: .60 }} />
         <div style={{ position: "absolute", inset: 0, zIndex: 28, pointerEvents: "none", background: `radial-gradient(circle at 14% 18%,rgba(255,255,255,.86),transparent 7%), radial-gradient(circle at 86% 24%,rgba(255,255,255,.82),transparent 6%), radial-gradient(circle at 76% 56%,${theme.foil},transparent 5%), radial-gradient(circle at 21% 78%,rgba(255,255,255,.58),transparent 6%)`, mixBlendMode: "screen" }} />
         <Spark x={45} y={78} s={16} /><Spark x={278} y={96} s={19} /><Spark x={306} y={250} s={14} /><Spark x={74} y={348} s={13} />
 
