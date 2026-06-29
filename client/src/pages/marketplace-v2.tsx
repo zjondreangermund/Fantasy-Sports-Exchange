@@ -24,33 +24,24 @@ function initialMarketMode(): MarketMode {
   if (typeof window === "undefined") return "buy";
   return new URLSearchParams(window.location.search).get("mode") === "loan" ? "loan" : "buy";
 }
-
+function normalizeCards(value: unknown): PlayerCardWithPlayer[] {
+  const data: any = value;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.cards)) return data.cards;
+  if (Array.isArray(data?.listings)) return data.listings;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
+}
 function money(value: unknown) {
   const n = Number(value || 0);
   if (!Number.isFinite(n)) return "N$0.00";
   return `N$${n.toFixed(2)}`;
 }
-
-function rarityOf(card: PlayerCardWithPlayer) {
-  return String(card.rarity || "common").toLowerCase();
-}
-
-function cardId(card: PlayerCardWithPlayer) {
-  const id = Number((card as any).id ?? (card as any).cardId ?? 0);
-  return Number.isInteger(id) ? id : 0;
-}
-
-function cardPrice(card: PlayerCardWithPlayer) {
-  return Number((card as any).price || (card as any).listedPrice || 0);
-}
-
-function cardSerial(card: PlayerCardWithPlayer) {
-  return String((card as any).serialId || "");
-}
-
-function ownerName(card: PlayerCardWithPlayer) {
-  return String((card as any).ownerUsername || (card as any).ownerName || "Fantasy Arena");
-}
+function rarityOf(card: PlayerCardWithPlayer) { return String(card.rarity || "common").toLowerCase(); }
+function cardId(card: PlayerCardWithPlayer) { const id = Number((card as any).id ?? (card as any).cardId ?? 0); return Number.isInteger(id) ? id : 0; }
+function cardPrice(card: PlayerCardWithPlayer) { return Number((card as any).price || (card as any).listedPrice || 0); }
+function cardSerial(card: PlayerCardWithPlayer) { return String((card as any).serialId || ""); }
+function ownerName(card: PlayerCardWithPlayer) { return String((card as any).ownerUsername || (card as any).ownerName || "Fantasy Arena"); }
 
 export default function MarketplaceV2Page() {
   const { toast } = useToast();
@@ -66,38 +57,25 @@ export default function MarketplaceV2Page() {
 
   const setMode = (mode: MarketMode) => {
     setMarketMode(mode);
-    if (typeof window !== "undefined") {
-      const url = mode === "loan" ? "/marketplace?mode=loan" : "/marketplace";
-      window.history.replaceState(null, "", url);
-    }
+    if (typeof window !== "undefined") window.history.replaceState(null, "", mode === "loan" ? "/marketplace?mode=loan" : "/marketplace");
   };
 
-  const { data: listings, isLoading } = useQuery<PlayerCardWithPlayer[]>({
+  const { data: listings = [], isLoading } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/marketplace"],
     queryFn: async () => {
       const res = await fetch("/api/marketplace", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch marketplace");
-      return res.json();
+      return normalizeCards(await res.json());
     },
   });
 
   const { data: wallet } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
-    queryFn: async () => {
-      const res = await fetch("/api/wallet", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch wallet");
-      return res.json();
-    },
+    queryFn: async () => { const res = await fetch("/api/wallet", { credentials: "include" }); if (!res.ok) throw new Error("Failed to fetch wallet"); return res.json(); },
   });
-
-  const { data: myCards } = useQuery<PlayerCardWithPlayer[]>({
+  const { data: myCards = [] } = useQuery<PlayerCardWithPlayer[]>({
     queryKey: ["/api/user/cards"],
-    queryFn: async () => {
-      const res = await fetch("/api/user/cards", { credentials: "include" });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return Array.isArray(data) ? data : data.cards || [];
-    },
+    queryFn: async () => { const res = await fetch("/api/user/cards", { credentials: "include" }); if (!res.ok) return []; return normalizeCards(await res.json()); },
   });
 
   const buyMutation = useMutation({
@@ -116,7 +94,7 @@ export default function MarketplaceV2Page() {
   });
 
   const filtered = useMemo(() => {
-    const source = listings || [];
+    const source = normalizeCards(listings);
     return source.filter((card) => {
       const fantasy = toFantasyCardData(card, { imageWidth: 320 });
       const haystack = `${fantasy.name} ${fantasy.team || ""} ${fantasy.club || ""} ${fantasy.position || ""}`.toLowerCase();
@@ -131,7 +109,7 @@ export default function MarketplaceV2Page() {
 
   const avgPrice = filtered.length ? filtered.reduce((sum, card) => sum + cardPrice(card), 0) / filtered.length : 0;
   const premium = filtered.filter((card) => ["unique", "epic", "legendary"].includes(rarityOf(card))).length;
-  const myListed = (myCards || []).filter((card) => card.forSale).length;
+  const myListed = normalizeCards(myCards).filter((card) => card.forSale).length;
   const hotCards = filtered.slice(0, 3);
 
   const toggleWatch = (id: number) => {
@@ -153,49 +131,30 @@ export default function MarketplaceV2Page() {
       <section className="hidden gap-4 md:grid lg:grid-cols-[0.75fr_1.25fr]">
         <Card className="cinematic-glass border-cyan-300/15 bg-white/[0.06] p-5 text-white backdrop-blur-xl">
           <div className="mb-4 flex items-center gap-2"><TrendingUp className="h-5 w-5 text-cyan-300" /><h2 className="font-black">Market Pulse</h2></div>
-          <div className="grid grid-cols-2 gap-3">
-            <Pulse label="Watchlist" value={String(watchlist.length)} icon={<Heart className="h-4 w-4" />} />
-            <Pulse label="Premium" value={String(premium)} icon={<Gem className="h-4 w-4" />} />
-            <Pulse label="My Listings" value={String(myListed)} icon={<Tag className="h-4 w-4" />} />
-            <Pulse label="Wallet" value={money(wallet?.balance)} icon={<WalletCards className="h-4 w-4" />} />
-          </div>
+          <div className="grid grid-cols-2 gap-3"><Pulse label="Watchlist" value={String(watchlist.length)} icon={<Heart className="h-4 w-4" />} /><Pulse label="Premium" value={String(premium)} icon={<Gem className="h-4 w-4" />} /><Pulse label="My Listings" value={String(myListed)} icon={<Tag className="h-4 w-4" />} /><Pulse label="Wallet" value={money(wallet?.balance)} icon={<WalletCards className="h-4 w-4" />} /></div>
         </Card>
-
         <Card className="border-white/10 bg-slate-950/60 p-5 text-white backdrop-blur-xl">
           <div className="mb-4 flex items-center gap-2"><Zap className="h-5 w-5 text-emerald-300" /><h2 className="font-black">Hot Board</h2></div>
-          <div className="space-y-2">
-            {hotCards.length ? hotCards.map((card) => {
-              const fantasy = toFantasyCardData(card);
-              return <button key={cardId(card)} onClick={() => setSelected(card)} className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-black/25 p-3 text-left hover:bg-cyan-400/10"><div><p className="font-bold">{fantasy.name}</p><p className="text-xs text-white/45">{fantasy.team || fantasy.club} • {fantasy.position}</p></div><Badge className="bg-emerald-400 text-black">{money(cardPrice(card))}</Badge></button>;
-            }) : <p className="text-sm text-white/50">No live listings yet.</p>}
-          </div>
+          <div className="space-y-2">{hotCards.length ? hotCards.map((card) => { const fantasy = toFantasyCardData(card); return <button key={cardId(card)} onClick={() => setSelected(card)} className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-black/25 p-3 text-left hover:bg-cyan-400/10"><div><p className="font-bold">{fantasy.name}</p><p className="text-xs text-white/45">{fantasy.team || fantasy.club} • {fantasy.position}</p></div><Badge className="bg-emerald-400 text-black">{money(cardPrice(card))}</Badge></button>; }) : <p className="text-sm text-white/50">No live listings yet.</p>}</div>
         </Card>
       </section>
 
       <section className="rounded-3xl border border-white/10 bg-black/35 p-4 backdrop-blur-2xl">
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="flex rounded-2xl border border-white/10 bg-black/45 p-1">
-            <Button size="sm" variant={marketMode === "buy" ? "default" : "ghost"} onClick={() => setMode("buy")} className="gap-2"><ShoppingCart className="h-4 w-4" /> Buy</Button>
-            <Button size="sm" variant={marketMode === "loan" ? "default" : "ghost"} onClick={() => setMode("loan")} className="gap-2"><Handshake className="h-4 w-4" /> Loan</Button>
-          </div>
+          <div className="flex rounded-2xl border border-white/10 bg-black/45 p-1"><Button size="sm" variant={marketMode === "buy" ? "default" : "ghost"} onClick={() => setMode("buy")} className="gap-2"><ShoppingCart className="h-4 w-4" /> Buy</Button><Button size="sm" variant={marketMode === "loan" ? "default" : "ghost"} onClick={() => setMode("loan")} className="gap-2"><Handshake className="h-4 w-4" /> Loan</Button></div>
           <div className="relative min-w-[240px] flex-1 max-w-lg"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search players, team, position..." className="h-12 border-white/10 bg-black/45 pl-10 text-white" /></div>
           <select value={rarity} onChange={(e) => setRarity(e.target.value)} className="h-12 rounded-xl border border-white/10 bg-black/45 px-3 text-sm text-white outline-none"><option value="all">All Rarities</option><option value="common">Common</option><option value="rare">Rare</option><option value="unique">Unique</option><option value="epic">Epic</option><option value="legendary">Legendary</option></select>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortMode)} className="h-12 rounded-xl border border-white/10 bg-black/45 px-3 text-sm text-white outline-none"><option value="performance">Performance</option><option value="priceAsc">Price ↑</option><option value="priceDesc">Price ↓</option><option value="rarity">Rarity</option></select>
         </div>
 
-        {marketMode === "loan" ? (
-          <LoanMarketPanel myCards={myCards || []} walletBalance={Number(wallet?.balance || 0)} />
-        ) : (
-          <div className="overflow-hidden rounded-2xl border border-cyan-900/30 bg-slate-950/45">
-            {isLoading ? <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl bg-slate-800" />)}</div> : filtered.length ? filtered.map((card) => <MarketRow key={cardId(card)} card={card} watched={watchlist.includes(cardId(card))} onWatch={() => toggleWatch(cardId(card))} onBuy={() => setBuying(card)} onDetails={() => setSelected(card)} />) : <Card className="m-4 border-slate-800 bg-slate-950/60 p-12 text-center"><ShoppingCart className="mx-auto mb-4 h-12 w-12 text-slate-600" /><p className="text-lg text-slate-300">No cards match your search.</p></Card>}
-          </div>
+        {marketMode === "loan" ? <LoanMarketPanel myCards={normalizeCards(myCards)} walletBalance={Number(wallet?.balance || 0)} /> : (
+          <div className="overflow-hidden rounded-2xl border border-cyan-900/30 bg-slate-950/45">{isLoading ? <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl bg-slate-800" />)}</div> : filtered.length ? filtered.map((card) => <MarketRow key={cardId(card)} card={card} watched={watchlist.includes(cardId(card))} onWatch={() => toggleWatch(cardId(card))} onBuy={() => setBuying(card)} onDetails={() => setSelected(card)} />) : <Card className="m-4 border-slate-800 bg-slate-950/60 p-12 text-center"><ShoppingCart className="mx-auto mb-4 h-12 w-12 text-slate-600" /><p className="text-lg text-slate-300">No cards match your search.</p></Card>}</div>
         )}
       </section>
 
       <Dialog open={!!buying} onOpenChange={(open) => !open && setBuying(null)}>
         <DialogContent className="border-slate-800 bg-slate-950 text-white"><DialogHeader><DialogTitle>Confirm Purchase</DialogTitle></DialogHeader>{buying ? <div className="py-4"><div className="mb-4 flex justify-center"><CardShowcase card={buying} size="sm" /></div><p>Buy <strong>{buying.player?.name}</strong> for {money(cardPrice(buying))}?</p><p className="mt-1 text-sm text-slate-400">Seller: {ownerName(buying)}</p><p className="mt-2 text-sm text-slate-400">Your Balance: {money(wallet?.balance)}</p></div> : null}<DialogFooter><Button variant="outline" onClick={() => setBuying(null)}>Cancel</Button><Button disabled={!buying || buyMutation.isPending || Number(wallet?.balance || 0) < cardPrice(buying)} onClick={() => buying && buyMutation.mutate(buying)}>{buyMutation.isPending ? "Processing..." : "Confirm Purchase"}</Button></DialogFooter></DialogContent>
       </Dialog>
-
       <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
         <DialogContent className="max-w-4xl border-slate-800 bg-slate-950 text-white"><DialogHeader><DialogTitle>Market Details</DialogTitle></DialogHeader>{selected ? <div className="space-y-4"><MarketRow card={selected} watched={watchlist.includes(cardId(selected))} onWatch={() => toggleWatch(cardId(selected))} onBuy={() => setBuying(selected)} /><div className="rounded-xl border border-slate-800 bg-black/35 p-4 text-sm text-slate-300"><p>Seller: {ownerName(selected)}</p><p>Price: {money(cardPrice(selected))}</p><p>Rarity: <span className="capitalize">{rarityOf(selected)}</span></p></div></div> : null}</DialogContent>
       </Dialog>
@@ -203,20 +162,6 @@ export default function MarketplaceV2Page() {
   );
 }
 
-function Pulse({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-  return <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">{icon}</div><p className="text-[11px] uppercase tracking-[0.16em] text-white/45">{label}</p><p className="mt-1 text-xl font-black text-white">{value}</p></div>;
-}
-
-function RarityIcon({ rarity }: { rarity: string }) {
-  if (rarity === "legendary") return <Crown className="h-4 w-4 text-amber-300" />;
-  if (rarity === "unique" || rarity === "epic") return <Gem className="h-4 w-4 text-fuchsia-300" />;
-  if (rarity === "rare") return <Star className="h-4 w-4 text-blue-300" />;
-  return <Shield className="h-4 w-4 text-slate-300" />;
-}
-
-function MarketRow({ card, watched, onWatch, onBuy, onDetails }: { card: PlayerCardWithPlayer; watched: boolean; onWatch?: () => void; onBuy?: () => void; onDetails?: () => void }) {
-  const fantasy = toFantasyCardData(card, { imageWidth: 320 });
-  const price = cardPrice(card);
-  const rarity = rarityOf(card);
-  return <div className="grid gap-3 border-b border-cyan-900/30 bg-black/25 p-4 text-white hover:bg-cyan-400/5 lg:grid-cols-[1.6fr_0.7fr_0.7fr_0.7fr_0.8fr]"><button onClick={onDetails} className="flex items-center gap-3 text-left"><div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-xl font-black">{Number(fantasy.rating || 0).toFixed(0)}</div><div><p className="font-black">{fantasy.name}</p><p className="text-xs text-white/45">{fantasy.team || fantasy.club} • {fantasy.position}</p><p className="text-[11px] text-white/35">Seller: {ownerName(card)}</p></div></button><div className="flex items-center gap-2"><RarityIcon rarity={rarity} /><span className="capitalize">{rarity}</span></div><div><p className="text-xs text-white/40">Points</p><p className="font-black">{Number(fantasy.totalPoints || card.decisiveScore || 0).toFixed(0)}</p></div><div><p className="text-xs text-white/40">Price</p><p className="font-black text-emerald-300">{money(price)}</p></div><div className="flex items-center justify-end gap-2"><Button size="sm" onClick={onBuy} className="bg-cyan-400 font-black text-black hover:bg-cyan-300">Buy</Button><Button size="icon" variant="ghost" onClick={onWatch} className={watched ? "text-red-300" : "text-white/45"}><Heart className={watched ? "h-5 w-5 fill-current" : "h-5 w-5"} /></Button></div></div>;
-}
+function Pulse({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) { return <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">{icon}</div><p className="text-[11px] uppercase tracking-[0.16em] text-white/45">{label}</p><p className="mt-1 text-xl font-black text-white">{value}</p></div>; }
+function RarityIcon({ rarity }: { rarity: string }) { if (rarity === "legendary") return <Crown className="h-4 w-4 text-amber-300" />; if (rarity === "unique" || rarity === "epic") return <Gem className="h-4 w-4 text-fuchsia-300" />; if (rarity === "rare") return <Star className="h-4 w-4 text-blue-300" />; return <Shield className="h-4 w-4 text-slate-300" />; }
+function MarketRow({ card, watched, onWatch, onBuy, onDetails }: { card: PlayerCardWithPlayer; watched: boolean; onWatch?: () => void; onBuy?: () => void; onDetails?: () => void }) { const fantasy = toFantasyCardData(card, { imageWidth: 320 }); const price = cardPrice(card); const rarity = rarityOf(card); return <div className="grid gap-3 border-b border-cyan-900/30 bg-black/25 p-4 text-white hover:bg-cyan-400/5 lg:grid-cols-[1.6fr_0.7fr_0.7fr_0.7fr_0.8fr]"><button onClick={onDetails} className="flex items-center gap-3 text-left"><div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-xl font-black">{Number(fantasy.rating || 0).toFixed(0)}</div><div><p className="font-black">{fantasy.name}</p><p className="text-xs text-white/45">{fantasy.team || fantasy.club} • {fantasy.position}</p><p className="text-[11px] text-white/35">Seller: {ownerName(card)}</p></div></button><div className="flex items-center gap-2"><RarityIcon rarity={rarity} /><span className="capitalize">{rarity}</span></div><div><p className="text-xs text-white/40">Points</p><p className="font-black">{Number(fantasy.totalPoints || card.decisiveScore || 0).toFixed(0)}</p></div><div><p className="text-xs text-white/40">Price</p><p className="font-black text-emerald-300">{money(price)}</p></div><div className="flex items-center justify-end gap-2"><Button size="sm" onClick={onBuy} className="bg-cyan-400 font-black text-black hover:bg-cyan-300">Buy</Button><Button size="icon" variant="ghost" onClick={onWatch} className={watched ? "text-red-300" : "text-white/45"}><Heart className={watched ? "h-5 w-5 fill-current" : "h-5 w-5"} /></Button></div></div>; }
