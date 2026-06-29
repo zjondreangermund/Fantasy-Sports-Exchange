@@ -103,7 +103,11 @@ app.use(express.urlencoded({ extended: false }));
 async function ensurePlayerImageColumns() {
   if (!process.env.DATABASE_URL) return;
   const { pool } = await import("./db.js");
-  await pool.query(`CREATE SCHEMA IF NOT EXISTS app`);
+  const tableCheck = await pool.query(`select to_regclass('app.players') as table_name`);
+  if (!tableCheck.rows?.[0]?.table_name) {
+    console.warn("Skipping player image column migration: app.players table does not exist yet.");
+    return;
+  }
   await pool.query(`ALTER TABLE app.players ADD COLUMN IF NOT EXISTS official_portrait_url text`);
   await pool.query(`ALTER TABLE app.players ADD COLUMN IF NOT EXISTS headshot_url text`);
   await pool.query(`ALTER TABLE app.players ADD COLUMN IF NOT EXISTS cutout_url text`);
@@ -299,7 +303,11 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  await ensurePlayerImageColumns();
+  try {
+    await ensurePlayerImageColumns();
+  } catch (error) {
+    console.warn("Could not ensure player image columns:", error);
+  }
   try {
     await seedDatabase();
   } catch (error) {
