@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
-import PremiumFootballCard from "../components/PremiumFootballCard";
+import CollectionPlayerCard from "../components/CollectionPlayerCard";
+import PlayerTile from "../components/PlayerTile";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
@@ -9,7 +10,7 @@ import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog";
 import { type PlayerCardWithPlayer, type Lineup } from "../../../shared/schema";
-import { Archive, Crown, DollarSign, Filter, Gem, Handshake, Lock, ShieldCheck, Sparkles, Trophy, Vault, X } from "lucide-react";
+import { Archive, Crown, DollarSign, Filter, Gem, Lock, ShieldCheck, Sparkles, Trophy, Vault } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { useIsMobile } from "../hooks/use-mobile";
@@ -17,7 +18,7 @@ import { LiveHero, LivePageShell, LiveStatCard } from "../components/layout/Live
 
 type RarityKey = "all" | "common" | "rare" | "unique" | "legendary";
 
-const BASE_PRICES: Record<string, number> = { common: 0, rare: 100, unique: 250, epic: 250, legendary: 500 };
+const BASE_PRICES: Record<string, number> = { common: 0, rare: 20, unique: 50, epic: 50, legendary: 100 };
 const COLLECTION_TARGETS: Record<string, number> = { common: 120, rare: 120, unique: 120, legendary: 120 };
 const INITIAL_VISIBLE_CARDS = 24;
 const LOAD_MORE_CARDS = 24;
@@ -167,15 +168,6 @@ export default function CollectionPage() {
     setListPrice(String(BASE_PRICES[rarity] || 1));
   };
 
-  const handleLoanCard = (card: PlayerCardWithPlayer) => {
-    const rarity = rarityOf(card);
-    if (rarity === "common") {
-      toast({ title: "Cannot loan common cards", description: "Only rare, unique, epic and legendary cards can be loaned.", variant: "destructive" });
-      return;
-    }
-    window.location.assign("/marketplace?mode=loan");
-  };
-
   const handleConfirmList = () => {
     if (!listCard) return;
     const price = parseFloat(listPrice);
@@ -186,7 +178,7 @@ export default function CollectionPage() {
     listForSaleMutation.mutate({ cardId: listCard.id, price });
   };
 
-  const rarityFilters: Array<{ value: RarityKey; label: string; icon: ReactNode }> = [
+  const rarityFilters: Array<{ value: RarityKey; label: string; icon: React.ReactNode }> = [
     { value: "all", label: "All", icon: <Archive className="h-4 w-4" /> },
     { value: "common", label: "Common", icon: <ShieldCheck className="h-4 w-4" /> },
     { value: "rare", label: "Rare", icon: <Sparkles className="h-4 w-4" /> },
@@ -196,7 +188,7 @@ export default function CollectionPage() {
 
   return (
     <LivePageShell tone="vault">
-      <LiveHero eyebrow="Collection Vault" title="Your Card Vault" description="Browse your cards like high-value assets. Build your lineup, sell premium cards or loan them through the Transfer Marketplace.">
+      <LiveHero eyebrow="Collection Vault" title="Your Card Vault" description="Browse your cards like high-value assets. Build your lineup, protect tournament-only cards and list premium cards on the market.">
         <LiveStatCard label="Total Cards" value={String(cards?.length || 0)} helper="Owned assets" />
         <LiveStatCard label="Playable" value={String(eligibleCount)} helper="Not listed" />
         <LiveStatCard label="Listed" value={String(listedCount)} helper="On market" />
@@ -204,38 +196,113 @@ export default function CollectionPage() {
 
       <Card className="overflow-hidden border-white/10 bg-gradient-to-r from-slate-950 via-violet-950/70 to-slate-950 p-5 text-white shadow-2xl shadow-violet-950/30 backdrop-blur-xl">
         <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr] md:items-center">
-          <div><p className="text-xs font-black uppercase tracking-[0.28em] text-violet-200/70">Collection Value</p><div className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">{money(collectionValue)}</div><p className="mt-2 text-sm text-white/55">Estimated from rarity floors and active listing prices.</p></div>
-          <div className="grid grid-cols-3 gap-2"><AssetStat label="Rank" value={namibiaRank} /><AssetStat label="Momentum" value={`+${momentum}`} /><AssetStat label="Legendary" value={counts.legendary || 0} /></div>
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-violet-200/70">Collection Value</p>
+            <div className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">{money(collectionValue)}</div>
+            <p className="mt-2 text-sm text-white/55">Estimated from rarity floors and active listing prices.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-white/35">Rank</p><p className="mt-1 text-lg font-black">{namibiaRank}</p></div>
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-white/35">Momentum</p><p className="mt-1 text-lg font-black">+{momentum}</p></div>
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><p className="text-[10px] font-black uppercase tracking-widest text-white/35">Legendary</p><p className="mt-1 text-lg font-black">{counts.legendary || 0}</p></div>
+          </div>
         </div>
       </Card>
 
       <section className="grid gap-4 lg:grid-cols-[0.78fr_1.22fr]">
-        <Card className="cinematic-glass border-white/10 bg-white/[0.06] p-5 text-white backdrop-blur-xl"><div className="mb-4 flex items-center gap-2"><Vault className="h-5 w-5 text-violet-300" /><h2 className="font-black">Vault Progress</h2></div><div className="space-y-3">{Object.entries(COLLECTION_TARGETS).map(([rarity, target]) => <ProgressRow key={rarity} label={rarity} value={counts[rarity] || 0} target={target} />)}</div><div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3 text-sm text-white/55">Strongest section: <span className="font-black capitalize text-white">{strongestRarity}</span></div></Card>
-        <Card className="overflow-hidden border-white/10 bg-slate-950/70 p-4 text-white backdrop-blur-xl"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-black">Featured Asset</h2><p className="text-sm text-white/50">Highest rarity card with market stats.</p></div><Badge variant="outline" className="border-white/20 text-white"><Trophy className="mr-1 h-3 w-3" /> Showcase</Badge></div>{isLoading ? <div className="grid gap-3 md:grid-cols-2"><Skeleton className="h-64 rounded-2xl" /><Skeleton className="h-64 rounded-2xl" /></div> : featuredCard && featuredFantasyCard ? <div className="grid gap-3 md:grid-cols-[0.78fr_1fr] md:items-center"><div className="relative flex min-h-[235px] items-start justify-center overflow-hidden rounded-3xl border border-white/10 bg-black/25 p-2 pt-3"><div className="absolute bottom-7 h-12 w-44 rounded-full bg-black/60 blur-2xl" /><div className="absolute bottom-5 h-7 w-40 rounded-full border border-white/10 bg-white/10" /><div className="relative z-10 -mt-3 scale-[0.78] sm:scale-[0.86] md:scale-[0.92]"><PremiumFootballCard player={featuredFantasyCard} size="lg" /></div></div><div className="space-y-2"><div className="rounded-3xl border border-white/10 bg-white/[0.06] p-3"><p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">Top Asset</p><h3 className="mt-1 text-xl font-black">{featuredCard.player?.name || "Featured Card"}</h3><p className="text-sm capitalize text-white/55">{featuredCard.rarity} • {featuredCard.player?.position || "Player"}</p></div><div className="grid grid-cols-2 gap-2"><AssetStat label="Current Value" value={money(featuredValue)} /><AssetStat label="Last Sale" value={money(featuredLastSale)} /><AssetStat label="Growth" value={featuredValue ? "+6.4%" : "—"} /><AssetStat label="Serial" value={`#${featuredCard.serialNumber || 1}/${featuredCard.maxSupply || 100}`} /></div></div></div> : <p className="text-sm text-white/50">No cards yet. Open starter packs to begin your vault.</p>}</Card>
+        <Card className="cinematic-glass border-white/10 bg-white/[0.06] p-5 text-white backdrop-blur-xl">
+          <div className="mb-4 flex items-center gap-2"><Vault className="h-5 w-5 text-violet-300" /><h2 className="font-black">Vault Progress</h2></div>
+          <div className="space-y-3">
+            {Object.entries(COLLECTION_TARGETS).map(([rarity, target]) => <ProgressRow key={rarity} label={rarity} value={counts[rarity] || 0} target={target} />)}
+          </div>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3 text-sm text-white/55">Strongest section: <span className="font-black capitalize text-white">{strongestRarity}</span></div>
+        </Card>
+
+        <Card className="overflow-hidden border-white/10 bg-slate-950/70 p-4 text-white backdrop-blur-xl">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div><h2 className="font-black">Featured Asset</h2><p className="text-sm text-white/50">Highest rarity card with market stats.</p></div>
+            <Badge variant="outline" className="border-white/20 text-white"><Trophy className="mr-1 h-3 w-3" /> Showcase</Badge>
+          </div>
+          {isLoading ? <div className="grid gap-3 md:grid-cols-2"><Skeleton className="h-64 rounded-2xl" /><Skeleton className="h-64 rounded-2xl" /></div> : featuredCard && featuredFantasyCard ? (
+            <div className="grid gap-3 md:grid-cols-[0.78fr_1fr] md:items-center">
+              <div className="relative flex min-h-[235px] items-start justify-center overflow-hidden rounded-3xl border border-white/10 bg-black/25 p-2 pt-3">
+                <div className="absolute bottom-7 h-12 w-44 rounded-full bg-black/60 blur-2xl" />
+                <div className="absolute bottom-5 h-7 w-40 rounded-full border border-white/10 bg-white/10" />
+                <div className="relative z-10 -mt-3 scale-[0.58] sm:scale-[0.72] md:scale-[0.78]">
+                  <CollectionPlayerCard player={featuredFantasyCard} size="lg" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">Top Asset</p>
+                  <h3 className="mt-1 text-xl font-black">{featuredCard.player?.name || "Featured Card"}</h3>
+                  <p className="text-sm capitalize text-white/55">{featuredCard.rarity} • {featuredCard.player?.position || "Player"}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <AssetStat label="Current Value" value={money(featuredValue)} />
+                  <AssetStat label="Last Sale" value={money(featuredLastSale)} />
+                  <AssetStat label="Growth" value={featuredValue ? "+6.4%" : "—"} />
+                  <AssetStat label="Serial" value={`#${featuredCard.serialNumber || 1}/${featuredCard.maxSupply || 100}`} />
+                </div>
+              </div>
+            </div>
+          ) : <p className="text-sm text-white/50">No cards yet. Open starter packs to begin your vault.</p>}
+        </Card>
       </section>
 
-      <section className="sticky top-0 z-20 rounded-3xl border border-white/10 bg-black/35 p-3 backdrop-blur-2xl"><div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0"><Filter className="h-4 w-4 shrink-0 text-white/50" />{rarityFilters.map((f) => <Button key={f.value} variant={filter === f.value ? "default" : "outline"} size="sm" onClick={() => setFilter(f.value)} data-testid={`button-filter-${f.value}`} className="shrink-0 gap-1">{f.icon}{f.label}<span className="ml-1 text-xs opacity-70">{f.value === "all" ? cards?.length || 0 : counts[f.value] || 0}</span></Button>)}</div><div className="flex gap-2"><Button variant="outline" size="sm" onClick={startEditLineup}>Edit Lineup</Button>{editingLineup ? <Button size="sm" onClick={() => saveLineupMutation.mutate(Array.from(selectedForLineup))} disabled={saveLineupMutation.isPending || selectedForLineup.size !== 5}>Save ({selectedForLineup.size}/5)</Button> : null}</div></div></section>
+      <section className="sticky top-0 z-20 rounded-3xl border border-white/10 bg-black/35 p-3 backdrop-blur-2xl">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0"><Filter className="h-4 w-4 shrink-0 text-white/50" />{rarityFilters.map((f) => <Button key={f.value} variant={filter === f.value ? "default" : "outline"} size="sm" onClick={() => setFilter(f.value)} data-testid={`button-filter-${f.value}`} className="shrink-0 gap-1">{f.icon}{f.label}<span className="ml-1 text-xs opacity-70">{f.value === "all" ? cards?.length || 0 : counts[f.value] || 0}</span></Button>)}</div>
+          <div className="flex gap-2"><Button variant="outline" size="sm" onClick={startEditLineup}>Edit Lineup</Button>{editingLineup ? <Button size="sm" onClick={() => saveLineupMutation.mutate(Array.from(selectedForLineup))} disabled={saveLineupMutation.isPending || selectedForLineup.size !== 5}>Save ({selectedForLineup.size}/5)</Button> : null}</div>
+        </div>
+      </section>
 
       {editingLineup && <Card className="border-emerald-400/20 bg-emerald-400/10 p-4 text-white backdrop-blur-xl"><p className="text-sm"><Lock className="mr-2 inline h-4 w-4 text-emerald-300" />Select exactly 5 available cards for your lineup. Listed cards should be removed from sale before tournament entry.</p></Card>}
 
-      {isLoading ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-[256px] rounded-[26px] sm:h-[270px]" />)}</div> : filteredCards.length > 0 ? <div className="space-y-5"><div className="grid grid-cols-2 justify-items-center gap-x-3 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">{visibleCards.map((card) => { const fantasyCard = toFantasyCardData(card, { imageWidth: 320 }); const isSelected = selectedForLineup.has(card.id); const rarity = rarityOf(card); return <div key={card.id} className="flex w-full max-w-[220px] flex-col items-center"><div className={`relative rounded-[28px] ${editingLineup && isSelected ? "ring-2 ring-emerald-400" : ""}`}>{card.forSale && <Badge className="absolute left-3 top-3 z-30 border border-amber-200/40 bg-amber-300 text-[10px] font-black text-black shadow-lg">LISTED</Badge>}<PremiumFootballCard player={fantasyCard} selected={isSelected} onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined} showPrice={Boolean(card.forSale)} size={isMobile ? "sm" : "md"} /></div><CollectionCardActions card={card} rarity={rarity} onSell={() => handleListCard(card)} onLoan={() => handleLoanCard(card)} onCancel={() => cancelListingMutation.mutate(card.id)} cancelling={cancelListingMutation.isPending} /></div>; })}</div>{filteredCards.length > visibleCount ? <div className="flex w-full justify-center"><Button variant="outline" onClick={() => setVisibleCount((prev) => prev + LOAD_MORE_CARDS)}>Load More ({Math.min(LOAD_MORE_CARDS, filteredCards.length - visibleCount)} more)</Button></div> : null}</div> : <Card className="border-white/10 bg-white/[0.06] p-8 text-center text-white"><p className="text-white/60">No cards found with this filter.</p></Card>}
+      {isLoading ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-[218px] rounded-[26px] sm:h-[232px]" />)}</div>
+      ) : filteredCards.length > 0 ? (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 justify-items-center gap-x-2 gap-y-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {visibleCards.map((card) => {
+              const fantasyCard = toFantasyCardData(card, { imageWidth: 320 });
+              const isSelected = selectedForLineup.has(card.id);
+              const rarity = rarityOf(card);
+              return (
+                <div key={card.id} className="flex flex-col items-center gap-2">
+                  <div className={`relative rounded-[28px] ${editingLineup && isSelected ? "ring-2 ring-emerald-400" : ""}`}>
+                    {card.forSale && <Badge className="absolute left-2 top-2 z-30 bg-amber-400 text-black">Listed</Badge>}
+                    <PlayerTile
+                      player={fantasyCard}
+                      selected={isSelected}
+                      onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined}
+                      showPrice={Boolean(card.forSale)}
+                      size={isMobile ? "sm" : "md"}
+                    />
+                  </div>
+                  <div className="z-30 flex min-h-8 gap-2">
+                    {card.forSale ? <Button size="sm" variant="destructive" onClick={() => cancelListingMutation.mutate(card.id)} disabled={cancelListingMutation.isPending} className="h-7 px-2 text-[11px]">Cancel {money(card.price)}</Button> : rarity === "common" ? <Button size="sm" variant="outline" disabled className="h-7 px-2 text-[11px]">Tournament Only</Button> : <Button size="sm" onClick={() => handleListCard(card)} className="h-7 bg-gradient-to-r from-emerald-400 to-lime-300 px-3 text-[11px] font-black text-black"><DollarSign className="mr-1 h-3 w-3" /> Sell</Button>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {filteredCards.length > visibleCount ? <div className="flex w-full justify-center"><Button variant="outline" onClick={() => setVisibleCount((prev) => prev + LOAD_MORE_CARDS)}>Load More ({Math.min(LOAD_MORE_CARDS, filteredCards.length - visibleCount)} more)</Button></div> : null}
+        </div>
+      ) : <Card className="border-white/10 bg-white/[0.06] p-8 text-center text-white"><p className="text-white/60">No cards found with this filter.</p></Card>}
 
-      <Dialog open={!!listCard} onOpenChange={() => setListCard(null)}><DialogContent><DialogHeader><DialogTitle>List Card for Sale</DialogTitle><DialogDescription>{listCard && BASE_PRICES[rarityOf(listCard)] ? `Minimum price for ${listCard.rarity} cards: N$${BASE_PRICES[rarityOf(listCard)]}` : "Set your listing price"}</DialogDescription></DialogHeader><div className="space-y-4 py-4"><div><p className="font-semibold">{listCard?.player?.name}</p><p className="text-sm text-muted-foreground capitalize">{listCard?.rarity} • {listCard?.player?.position}</p></div><div className="space-y-2"><label className="text-sm font-medium">Price (N$)</label><Input type="number" value={listPrice} onChange={(e) => setListPrice(e.target.value)} placeholder={listCard ? `Min: ${BASE_PRICES[rarityOf(listCard)] || 1}` : "Enter price"} min={listCard ? BASE_PRICES[rarityOf(listCard)] || 1 : 1} /></div></div><DialogFooter><Button variant="outline" onClick={() => setListCard(null)}>Cancel</Button><Button onClick={handleConfirmList} disabled={listForSaleMutation.isPending || !listPrice || parseFloat(listPrice) <= 0}>{listForSaleMutation.isPending ? "Listing..." : "List for Sale"}</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={!!listCard} onOpenChange={() => setListCard(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>List Card for Sale</DialogTitle><DialogDescription>{listCard && BASE_PRICES[rarityOf(listCard)] ? `Minimum price for ${listCard.rarity} cards: N$${BASE_PRICES[rarityOf(listCard)]}` : "Set your listing price"}</DialogDescription></DialogHeader>
+          <div className="space-y-4 py-4"><div><p className="font-semibold">{listCard?.player?.name}</p><p className="text-sm text-muted-foreground capitalize">{listCard?.rarity} • {listCard?.player?.position}</p></div><div className="space-y-2"><label className="text-sm font-medium">Price (N$)</label><Input type="number" value={listPrice} onChange={(e) => setListPrice(e.target.value)} placeholder={listCard ? `Min: ${BASE_PRICES[rarityOf(listCard)] || 1}` : "Enter price"} min={listCard ? BASE_PRICES[rarityOf(listCard)] || 1 : 1} /></div></div>
+          <DialogFooter><Button variant="outline" onClick={() => setListCard(null)}>Cancel</Button><Button onClick={handleConfirmList} disabled={listForSaleMutation.isPending || !listPrice || parseFloat(listPrice) <= 0}>{listForSaleMutation.isPending ? "Listing..." : "List for Sale"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </LivePageShell>
   );
 }
 
-function CollectionCardActions({ card, rarity, onSell, onLoan, onCancel, cancelling }: { card: PlayerCardWithPlayer; rarity: string; onSell: () => void; onLoan: () => void; onCancel: () => void; cancelling: boolean }) {
-  if (card.forSale) {
-    return <div className="mt-2 flex w-full max-w-[190px] items-center justify-center rounded-2xl border border-red-300/20 bg-red-500/10 p-1 shadow-[0_10px_28px_rgba(0,0,0,.28)] backdrop-blur-xl"><Button size="sm" variant="ghost" onClick={onCancel} disabled={cancelling} className="h-9 w-full rounded-xl bg-red-500/90 px-2 text-[11px] font-black text-white hover:bg-red-400"><X className="mr-1 h-3.5 w-3.5" />Cancel {money(card.price)}</Button></div>;
-  }
-  if (rarity === "common") {
-    return <div className="mt-2 flex w-full max-w-[190px] justify-center rounded-2xl border border-white/10 bg-white/[0.05] p-1 backdrop-blur-xl"><span className="rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/45">Tournament Only</span></div>;
-  }
-  return <div className="mt-2 grid w-full max-w-[190px] grid-cols-2 gap-1 rounded-2xl border border-white/10 bg-slate-950/75 p-1 shadow-[0_10px_28px_rgba(0,0,0,.30)] backdrop-blur-xl"><Button size="sm" onClick={onSell} className="h-9 rounded-xl bg-gradient-to-r from-emerald-400 to-lime-300 px-2 text-[11px] font-black text-black hover:from-emerald-300 hover:to-lime-200"><DollarSign className="mr-1 h-3.5 w-3.5" />Sell</Button><Button size="sm" onClick={onLoan} className="h-9 rounded-xl bg-gradient-to-r from-cyan-300 to-blue-400 px-2 text-[11px] font-black text-slate-950 hover:from-cyan-200 hover:to-blue-300"><Handshake className="mr-1 h-3.5 w-3.5" />Loan</Button></div>;
-}
-
-function AssetStat({ label, value }: { label: string; value: ReactNode }) {
+function AssetStat({ label, value }: { label: string; value: React.ReactNode }) {
   return <div className="rounded-2xl border border-white/10 bg-black/25 p-2.5"><p className="text-[9px] font-black uppercase tracking-widest text-white/35">{label}</p><p className="mt-1 text-base font-black text-white">{value}</p></div>;
 }
 

@@ -109,7 +109,7 @@ function SlotCard({
       ) : null}
       {card ? (
         <>
-          <PlayerTile player={toFantasyCardData(card, { imageWidth: 640 })} className="!h-[235px] !w-[172px]" onClick={() => onInspect?.(card)} />
+          <PlayerTile player={toFantasyCardData(card, { imageWidth: 640 })} size="sm" onClick={() => onInspect?.(card)} />
           <div className="mt-3 grid w-full grid-cols-4 gap-2 text-center">
             <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-2 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-slate-500">Team</p>
@@ -155,7 +155,7 @@ function PlayerDetailDialog({ card, events, onOpenChange }: { card: PlayerCardWi
           <DialogTitle>Player Live Detail</DialogTitle>
         </DialogHeader>
         <div className="grid gap-5 md:grid-cols-[220px_1fr]">
-          <PlayerTile player={fantasy} className="!h-[300px] !w-[220px]" />
+          <PlayerTile player={fantasy} size="md" />
           <div className="space-y-4">
             <div>
               <h2 className="text-2xl font-black">{fantasy.name}</h2>
