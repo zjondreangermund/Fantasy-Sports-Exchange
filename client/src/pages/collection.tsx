@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { PremiumFootballCard } from "../components/cards";
@@ -177,7 +177,7 @@ export default function CollectionPage() {
     listForSaleMutation.mutate({ cardId: listCard.id, price });
   };
 
-  const rarityFilters: Array<{ value: RarityKey; label: string; icon: React.ReactNode }> = [
+  const rarityFilters: Array<{ value: RarityKey; label: string; icon: ReactNode }> = [
     { value: "all", label: "All", icon: <Archive className="h-4 w-4" /> },
     { value: "common", label: "Common", icon: <ShieldCheck className="h-4 w-4" /> },
     { value: "rare", label: "Rare", icon: <Sparkles className="h-4 w-4" /> },
@@ -302,7 +302,7 @@ export default function CollectionPage() {
   );
 }
 
-function AssetStat({ label, value }: { label: string; value: React.ReactNode }) {
+function AssetStat({ label, value }: { label: string; value: ReactNode }) {
   return <div className="rounded-2xl border border-white/10 bg-black/25 p-2.5"><p className="text-[9px] font-black uppercase tracking-widest text-white/35">{label}</p><p className="mt-1 text-base font-black text-white">{value}</p></div>;
 }
 
