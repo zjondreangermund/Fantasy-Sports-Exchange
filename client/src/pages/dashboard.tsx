@@ -8,8 +8,8 @@ import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
 import Metal3DCard from "../components/Metal3DCard";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
-import { LivePageShell } from "../components/layout/LivePageShell";
 import MatchdayCenter from "../components/dashboard/MatchdayCenter";
+import { PremiumHero, PremiumPage, PremiumPanel, PremiumStat } from "../components/premium";
 import { type Competition, type CompetitionEntry, type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
 
 type CompetitionWithEntries = Competition & { entryCount?: number; max_entries?: number | null; maxEntries?: number | null; prize_pool_total?: number; platform_fee_total?: number; };
@@ -57,11 +57,19 @@ export default function DashboardPage() {
   }, [cards?.length, lineupCards.length, activeTournaments.length, walletBalance, retentionSummary?.nextBestAction]);
 
   return (
-    <LivePageShell tone="stadium">
+    <PremiumPage>
       <MatchdayCenter />
 
+      <PremiumHero eyebrow="Club Command Centre" title="Fantasy Arena" subtitle="Your squad, wallet, tournaments and trading floor in one premium matchday control room.">
+        <div className="grid min-w-[310px] grid-cols-3 gap-2">
+          <PremiumStat label="Wallet" value={walletLoading ? "..." : money(walletBalance)} />
+          <PremiumStat label="Cards" value={cardsLoading ? "..." : String(cards?.length || 0)} />
+          <PremiumStat label="Lineup" value={`${lineupCards.length}/5`} />
+        </div>
+      </PremiumHero>
+
       <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <Card className="overflow-hidden border-cyan-300/20 bg-black/35 p-5 shadow-2xl shadow-black/20 backdrop-blur-xl sm:p-6">
+        <PremiumPanel>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -71,13 +79,13 @@ export default function DashboardPage() {
               <h2 className="text-xl font-black text-white sm:text-2xl">{nextAction.title}</h2>
               <p className="mt-1 text-sm text-white/55">Your next best action based on squad readiness, wallet and tournament activity.</p>
             </div>
-            <Link href={nextAction.href}><Button className="w-full sm:w-auto">{nextAction.cta}<ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
+            <Link href={nextAction.href}><Button className="fa-premium-button w-full sm:w-auto">{nextAction.cta}<ArrowRight className="ml-2 h-4 w-4" /></Button></Link>
           </div>
-        </Card>
-        <Card className="border-white/10 bg-white/[0.06] p-5 backdrop-blur-xl">
+        </PremiumPanel>
+        <PremiumPanel>
           <div className="mb-3 flex items-center gap-2"><BellRing className="h-5 w-5 text-cyan-300" /><h2 className="font-bold text-white">Matchday Alerts</h2></div>
           {notifications?.notifications?.length ? <div className="space-y-2">{notifications.notifications.slice(0, 3).map((note) => <CompactRow key={note.id} title={note.title} meta={note.message} badge={note.read ? "Read" : "New"} />)}</div> : <p className="text-sm text-white/50">No important notifications.</p>}
-        </Card>
+        </PremiumPanel>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -88,37 +96,37 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card className="border-white/10 bg-slate-950/55 p-5 backdrop-blur-xl">
+        <PremiumPanel>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div><h2 className="text-lg font-bold text-white">Current Lineup</h2><p className="text-sm text-white/50">Your active 5-card squad under the floodlights.</p></div>
             <Link href="/select-squad"><Button size="sm" variant="outline">Select Squad</Button></Link>
           </div>
           {lineupLoading ? <div className="flex gap-3 overflow-x-auto pb-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-64 w-44 shrink-0 rounded-xl" />)}</div> : lineupCards.length ? <div className="flex gap-3 overflow-x-auto pb-2">{lineupCards.map((card) => <Metal3DCard key={card.id} player={toFantasyCardData(card)} className="!w-[180px] shrink-0" />)}</div> : <EmptyState title="No lineup set" body="Select 5 eligible cards from your squad selector before entering tournaments." action="Select Squad" href="/select-squad" />}
-        </Card>
+        </PremiumPanel>
         <div className="space-y-4">
-          <Card className="border-yellow-400/20 bg-yellow-400/10 p-5 backdrop-blur-xl"><div className="mb-4 flex items-center gap-2"><Trophy className="h-5 w-5 text-yellow-300" /><h2 className="font-bold text-white">Active Tournaments</h2></div>{activeTournaments.length ? <div className="space-y-2">{activeTournaments.slice(0, 4).map((comp) => <CompactRow key={comp.id} title={comp.name} meta={`${String(comp.tier || "common").toUpperCase()} • ${money(comp.entryFee)}`} badge={comp.status} />)}</div> : <EmptyState title="No active entries" body="Join a public tournament or enter a private PIN cup." action="Find Tournaments" href="/competitions" compact />}</Card>
-          <Card className="border-white/10 bg-white/[0.06] p-5 backdrop-blur-xl"><div className="mb-4 flex items-center gap-2"><LayoutGrid className="h-5 w-5 text-cyan-300" /><h2 className="font-bold text-white">Collection Snapshot</h2></div><div className="grid grid-cols-2 gap-2"><RarityPill label="Common" value={counts.common || 0} /><RarityPill label="Rare" value={counts.rare || 0} /><RarityPill label="Unique" value={counts.unique || 0} /><RarityPill label="Legendary" value={counts.legendary || 0} /></div></Card>
+          <PremiumPanel><div className="mb-4 flex items-center gap-2"><Trophy className="h-5 w-5 text-yellow-300" /><h2 className="font-bold text-white">Active Tournaments</h2></div>{activeTournaments.length ? <div className="space-y-2">{activeTournaments.slice(0, 4).map((comp) => <CompactRow key={comp.id} title={comp.name} meta={`${String(comp.tier || "common").toUpperCase()} • ${money(comp.entryFee)}`} badge={comp.status} />)}</div> : <EmptyState title="No active entries" body="Join a public tournament or enter a private PIN cup." action="Find Tournaments" href="/competitions" compact />}</PremiumPanel>
+          <PremiumPanel><div className="mb-4 flex items-center gap-2"><LayoutGrid className="h-5 w-5 text-cyan-300" /><h2 className="font-bold text-white">Collection Snapshot</h2></div><div className="grid grid-cols-2 gap-2"><RarityPill label="Common" value={counts.common || 0} /><RarityPill label="Rare" value={counts.rare || 0} /><RarityPill label="Unique" value={counts.unique || 0} /><RarityPill label="Legendary" value={counts.legendary || 0} /></div></PremiumPanel>
         </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
         <ActionCard icon={<Users className="h-5 w-5" />} title="Squad Selection" body="Choose the exact five cards that represent your club on matchday." href="/select-squad" cta="Select Squad" />
-        <ActionCard icon={<ShoppingBag className="h-5 w-5" />} title="Trading Floor" body="Buy cards and manage listings. Market movers will return later after the core experience is clean." href="/marketplace" cta="Open Market" />
+        <ActionCard icon={<ShoppingBag className="h-5 w-5" />} title="Trading Floor" body="Buy cards and manage listings in the upgraded market experience." href="/marketplace" cta="Open Market" />
       </section>
-    </LivePageShell>
+    </PremiumPage>
   );
 }
 
 function MetricCard({ icon, label, value, helper, href }: { icon: ReactNode; label: string; value: string | null; helper: string; href: string }) {
-  return <Link href={href}><Card className="group cursor-pointer border-white/10 bg-white/[0.065] p-4 text-white backdrop-blur-xl transition hover:border-cyan-300/45 hover:bg-cyan-300/10"><div className="flex items-center justify-between gap-3"><div className="rounded-2xl bg-cyan-300/10 p-3 text-cyan-300">{icon}</div><ArrowRight className="h-4 w-4 text-white/45 opacity-0 transition group-hover:opacity-100" /></div><p className="mt-4 text-xs uppercase tracking-[0.2em] text-white/45">{label}</p>{value === null ? <Skeleton className="mt-2 h-7 w-20" /> : <p className="mt-1 text-2xl font-black">{value}</p>}<p className="mt-1 text-xs text-white/45">{helper}</p></Card></Link>;
+  return <Link href={href}><Card className="fa-premium-panel group cursor-pointer p-4 text-white transition hover:border-cyan-300/45 hover:bg-cyan-300/10"><div className="flex items-center justify-between gap-3"><div className="rounded-2xl bg-cyan-300/10 p-3 text-cyan-300">{icon}</div><ArrowRight className="h-4 w-4 text-white/45 opacity-0 transition group-hover:opacity-100" /></div><p className="mt-4 text-xs uppercase tracking-[0.2em] text-white/45">{label}</p>{value === null ? <Skeleton className="mt-2 h-7 w-20" /> : <p className="mt-1 text-2xl font-black">{value}</p>}<p className="mt-1 text-xs text-white/45">{helper}</p></Card></Link>;
 }
 
 function ActionCard({ icon, title, body, href, cta }: { icon: ReactNode; title: string; body: string; href: string; cta: string }) {
-  return <Card className="border-white/10 bg-white/[0.06] p-5 text-white backdrop-blur-xl"><div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-300">{icon}</div><h3 className="font-bold">{title}</h3><p className="mt-1 min-h-10 text-sm text-white/52">{body}</p><Link href={href}><Button className="mt-4 w-full" variant="outline">{cta}<ArrowRight className="ml-2 h-4 w-4" /></Button></Link></Card>;
+  return <PremiumPanel><div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-300">{icon}</div><h3 className="font-bold">{title}</h3><p className="mt-1 min-h-10 text-sm text-white/52">{body}</p><Link href={href}><Button className="fa-premium-button mt-4 w-full" variant="outline">{cta}<ArrowRight className="ml-2 h-4 w-4" /></Button></Link></PremiumPanel>;
 }
 
 function CompactRow({ title, meta, badge }: { title: string; meta: string; badge: string }) {
-  return <div className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-black/25 p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{title}</p><p className="line-clamp-2 text-xs text-white/50">{meta}</p></div><Badge variant="outline" className="shrink-0 capitalize border-white/20 text-white">{badge}</Badge></div>;
+  return <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/22 p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{title}</p><p className="truncate text-xs text-white/45">{meta}</p></div><Badge variant="outline" className="shrink-0 border-white/15 text-white/65">{badge}</Badge></div>;
 }
 
 function RarityPill({ label, value }: { label: string; value: number }) {
