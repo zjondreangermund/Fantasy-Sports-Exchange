@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import "./premium-shell.css";
 import "./mobile-polish.css";
 import "./mobile-action-slabs.css";
 import { patchFetchForApiBase } from "./lib/api-base";
