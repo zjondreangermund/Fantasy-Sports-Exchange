@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
-import CollectionPlayerCard from "../components/CollectionPlayerCard";
-import PlayerTile from "../components/PlayerTile";
+import { PremiumFootballCard } from "../components/cards";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
@@ -16,10 +15,10 @@ import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { useIsMobile } from "../hooks/use-mobile";
 import { LiveHero, LivePageShell, LiveStatCard } from "../components/layout/LivePageShell";
 
-type RarityKey = "all" | "common" | "rare" | "unique" | "legendary";
+type RarityKey = "all" | "common" | "rare" | "epic" | "unique" | "legendary";
 
 const BASE_PRICES: Record<string, number> = { common: 0, rare: 20, unique: 50, epic: 50, legendary: 100 };
-const COLLECTION_TARGETS: Record<string, number> = { common: 120, rare: 120, unique: 120, legendary: 120 };
+const COLLECTION_TARGETS: Record<string, number> = { common: 120, rare: 120, epic: 80, unique: 120, legendary: 120 };
 const INITIAL_VISIBLE_CARDS = 24;
 const LOAD_MORE_CARDS = 24;
 
@@ -116,7 +115,7 @@ export default function CollectionPage() {
   });
 
   const counts = useMemo(() => {
-    const base: Record<string, number> = { common: 0, rare: 0, unique: 0, legendary: 0 };
+    const base: Record<string, number> = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const card of cards || []) {
       const rarity = rarityOf(card);
       if (base[rarity] !== undefined) base[rarity] += 1;
@@ -128,7 +127,7 @@ export default function CollectionPage() {
   const eligibleCount = (cards || []).filter((card) => !card.forSale).length;
   const strongestRarity = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "common";
   const collectionValue = useMemo(() => (cards || []).reduce((sum, card) => sum + cardValue(card), 0), [cards]);
-  const momentum = Math.max(0, counts.legendary * 9 + counts.unique * 5 + counts.rare * 2 - listedCount);
+  const momentum = Math.max(0, counts.legendary * 9 + counts.unique * 5 + counts.epic * 4 + counts.rare * 2 - listedCount);
   const namibiaRank = collectionValue > 0 ? `#${Math.max(1, 250 - Math.min(220, Math.floor(collectionValue / 25)))}` : "—";
 
   const filteredCards = useMemo(() => (cards || []).filter((c) => filter === "all" || rarityOf(c) === filter), [cards, filter]);
@@ -182,6 +181,7 @@ export default function CollectionPage() {
     { value: "all", label: "All", icon: <Archive className="h-4 w-4" /> },
     { value: "common", label: "Common", icon: <ShieldCheck className="h-4 w-4" /> },
     { value: "rare", label: "Rare", icon: <Sparkles className="h-4 w-4" /> },
+    { value: "epic", label: "Epic", icon: <Sparkles className="h-4 w-4" /> },
     { value: "unique", label: "Unique", icon: <Gem className="h-4 w-4" /> },
     { value: "legendary", label: "Legendary", icon: <Crown className="h-4 w-4" /> },
   ];
@@ -229,7 +229,7 @@ export default function CollectionPage() {
                 <div className="absolute bottom-7 h-12 w-44 rounded-full bg-black/60 blur-2xl" />
                 <div className="absolute bottom-5 h-7 w-40 rounded-full border border-white/10 bg-white/10" />
                 <div className="relative z-10 -mt-3 scale-[0.58] sm:scale-[0.72] md:scale-[0.78]">
-                  <CollectionPlayerCard player={featuredFantasyCard} size="lg" />
+                  <PremiumFootballCard player={featuredFantasyCard} size="lg" />
                 </div>
               </div>
               <div className="space-y-2">
@@ -272,7 +272,7 @@ export default function CollectionPage() {
                 <div key={card.id} className="flex flex-col items-center gap-2">
                   <div className={`relative rounded-[28px] ${editingLineup && isSelected ? "ring-2 ring-emerald-400" : ""}`}>
                     {card.forSale && <Badge className="absolute left-2 top-2 z-30 bg-amber-400 text-black">Listed</Badge>}
-                    <PlayerTile
+                    <PremiumFootballCard
                       player={fantasyCard}
                       selected={isSelected}
                       onClick={editingLineup ? () => toggleLineupCard(card.id) : undefined}
