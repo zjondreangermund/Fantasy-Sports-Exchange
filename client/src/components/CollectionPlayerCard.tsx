@@ -1,4 +1,4 @@
-import PremiumFootballCard from "./PremiumFootballCard";
+import { PremiumFootballCard } from "./cards";
 import { type PlayerCardData } from "./cards/types";
 
 type CollectionPlayerCardProps = {
