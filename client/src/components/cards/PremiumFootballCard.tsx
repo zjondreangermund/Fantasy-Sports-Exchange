@@ -40,14 +40,8 @@ function playerPoints(player: PlayerCardData) {
   return Math.max(0, Math.round(Number(player.totalPoints || total || player.form || player.rating || 0)));
 }
 
-function Spark({ style }: { style: CSSProperties }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="pointer-events-none absolute z-[55] block rounded-full bg-white shadow-[0_0_10px_white,0_0_22px_rgba(255,255,255,.8)]"
-      style={style}
-    />
-  );
+function fs(scale: number, value: number) {
+  return Math.max(7, Math.round(value * scale));
 }
 
 function PremiumFootballCardBase({
@@ -62,6 +56,7 @@ function PremiumFootballCardBase({
   const rarity = normalizeRarity(player.rarity);
   const theme = CARD_THEMES[rarity];
   const dim = CARD_SIZE[size] || CARD_SIZE.md;
+  const scale = dim.width / CARD_SIZE.md.width;
   const candidates = useMemo(() => imageCandidates(player), [player]);
   const imageKey = candidates.join("|");
   const [imageIndex, setImageIndex] = useState(0);
@@ -87,143 +82,246 @@ function PremiumFootballCardBase({
     else setImageFailed(true);
   };
 
+  const styles: Record<string, CSSProperties> = {
+    card: {
+      position: "relative",
+      isolation: "isolate",
+      overflow: "hidden",
+      width: dim.width,
+      height: dim.height,
+      borderRadius: dim.radius,
+      background: theme.chrome,
+      border: `2px solid ${theme.border}`,
+      boxShadow: `${theme.glow}, inset 0 1px 0 rgba(255,255,255,.72), inset 0 -3px 0 rgba(0,0,0,.45)`,
+      color: theme.text,
+      fontFamily: "Inter, system-ui, sans-serif",
+      transform: "translateZ(0)",
+      ["--glow-rgb" as string]: theme.glowRgb,
+    },
+    base: { position: "absolute", inset: 0, zIndex: 0, background: theme.background },
+    frame: {
+      position: "absolute",
+      inset: Math.max(4, dim.width * 0.022),
+      zIndex: 10,
+      borderRadius: Math.max(14, dim.radius - 4),
+      background: theme.frame,
+      opacity: 0.96,
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,.70), inset 0 -18px 28px rgba(0,0,0,.38)",
+    },
+    inner: {
+      position: "absolute",
+      left: "6%",
+      right: "6%",
+      top: "6%",
+      bottom: "6%",
+      zIndex: 20,
+      borderRadius: Math.max(12, dim.radius - 10),
+      border: "1px solid rgba(255,255,255,.28)",
+      background: "rgba(0,0,0,.10)",
+      boxShadow: "inset 0 0 24px rgba(0,0,0,.36)",
+    },
+    artStage: {
+      position: "absolute",
+      left: "5%",
+      right: "5%",
+      top: "13%",
+      bottom: "18%",
+      zIndex: 30,
+      overflow: "hidden",
+      borderRadius: Math.max(12, dim.radius - 8),
+      background: `radial-gradient(circle at 50% 14%, rgba(${theme.glowRgb},.55), transparent 56%), linear-gradient(180deg, transparent, ${theme.dark})`,
+    },
+    pitch: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: "34%",
+      background: "linear-gradient(to top, rgba(0,0,0,.78), rgba(16,80,50,.32), transparent)",
+    },
+    image: {
+      position: "absolute",
+      left: "50%",
+      bottom: "-1%",
+      zIndex: 34,
+      width: "108%",
+      height: "96%",
+      maxWidth: "none",
+      objectFit: "contain",
+      objectPosition: "center bottom",
+      transform: "translateX(-50%)",
+      filter: "drop-shadow(0 22px 18px rgba(0,0,0,.78))",
+    },
+    fallback: {
+      position: "absolute",
+      inset: 0,
+      zIndex: 34,
+      display: "grid",
+      placeItems: "center",
+      fontSize: fs(scale, 54),
+      fontWeight: 900,
+      color: "rgba(255,255,255,.22)",
+    },
+    foil: {
+      position: "absolute",
+      inset: 0,
+      zIndex: 45,
+      pointerEvents: "none",
+      background: theme.foil,
+      backgroundSize: "220% 220%",
+      mixBlendMode: "color-dodge",
+      opacity: 0.76,
+    },
+    holo: {
+      position: "absolute",
+      inset: 0,
+      zIndex: 46,
+      pointerEvents: "none",
+      background: theme.holo,
+      backgroundPosition: "var(--mx) var(--my)",
+      mixBlendMode: "overlay",
+      opacity: 0.6,
+    },
+    light: {
+      position: "absolute",
+      inset: 0,
+      zIndex: 47,
+      pointerEvents: "none",
+      background: "radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,.58), rgba(255,255,255,.13) 18%, transparent 42%)",
+      mixBlendMode: "screen",
+      opacity: "calc(.20 + (var(--shine) * .58))" as any,
+    },
+    glass: { position: "absolute", inset: 0, zIndex: 48, pointerEvents: "none", background: theme.glass },
+    top: {
+      position: "absolute",
+      left: "8%",
+      right: "8%",
+      top: "7%",
+      zIndex: 60,
+      display: "flex",
+      justifyContent: "space-between",
+      fontSize: fs(scale, 10),
+      fontWeight: 900,
+      letterSpacing: ".10em",
+      color: "white",
+      textShadow: "0 2px 4px rgba(0,0,0,.75)",
+    },
+    nameplate: {
+      position: "absolute",
+      left: "7%",
+      right: "7%",
+      bottom: "7%",
+      zIndex: 70,
+      borderRadius: Math.max(12, dim.radius * 0.48),
+      border: "1px solid rgba(255,255,255,.25)",
+      padding: `${Math.max(6, dim.height * 0.022)}px ${Math.max(8, dim.width * 0.045)}px`,
+      textAlign: "center",
+      background: theme.nameplate,
+      boxShadow: "0 10px 24px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.28)",
+    },
+    name: {
+      margin: 0,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontSize: fs(scale, 14),
+      lineHeight: 1.05,
+      fontWeight: 900,
+      letterSpacing: ".05em",
+      color: "white",
+      textShadow: "0 2px 3px rgba(0,0,0,.82)",
+    },
+    meta: {
+      marginTop: Math.max(3, dim.height * 0.01),
+      display: "flex",
+      justifyContent: "center",
+      gap: Math.max(5, dim.width * 0.025),
+      fontSize: fs(scale, 9),
+      fontWeight: 900,
+      letterSpacing: ".10em",
+      color: theme.mutedText,
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+    },
+    sideBadgeLeft: {
+      position: "absolute",
+      left: "7%",
+      top: "50%",
+      zIndex: 75,
+      width: Math.max(24, dim.width * 0.15),
+      height: Math.max(24, dim.width * 0.15),
+      transform: "translateY(-50%)",
+      display: "grid",
+      placeItems: "center",
+      borderRadius: 999,
+      border: "1px solid rgba(255,255,255,.30)",
+      background: "rgba(0,0,0,.45)",
+      fontSize: fs(scale, 10),
+      fontWeight: 900,
+      boxShadow: "0 0 18px rgba(var(--glow-rgb),.42)",
+    },
+    sideBadgeRight: {
+      position: "absolute",
+      right: "7%",
+      top: "50%",
+      zIndex: 75,
+      width: Math.max(24, dim.width * 0.15),
+      height: Math.max(24, dim.width * 0.15),
+      transform: "translateY(-50%)",
+      display: "grid",
+      placeItems: "center",
+      borderRadius: 999,
+      border: "1px solid rgba(255,255,255,.30)",
+      background: "rgba(0,0,0,.45)",
+      fontSize: fs(scale, 10),
+      fontWeight: 900,
+      boxShadow: "0 0 18px rgba(var(--glow-rgb),.42)",
+    },
+    label: {
+      position: "absolute",
+      left: "50%",
+      bottom: "2.5%",
+      zIndex: 80,
+      transform: "translateX(-50%)",
+      borderRadius: 999,
+      border: "1px solid rgba(255,255,255,.25)",
+      background: "rgba(0,0,0,.42)",
+      padding: `${Math.max(2, dim.height * 0.006)}px ${Math.max(8, dim.width * 0.045)}px`,
+      fontSize: fs(scale, 8),
+      fontWeight: 900,
+      letterSpacing: ".16em",
+      color: "rgba(255,255,255,.82)",
+      whiteSpace: "nowrap",
+    },
+  };
+
   return (
-    <Card3D
-      onClick={onClick}
-      disabled={!interactive}
-      className={`${selected ? "ring-2 ring-emerald-300 ring-offset-2 ring-offset-slate-950 rounded-[28px]" : ""} ${className}`}
-    >
-      <article
-        className="premium-football-card relative isolate overflow-hidden text-white"
-        data-rarity={rarity}
-        data-testid={`premium-football-card-${player.id}`}
-        style={{
-          width: dim.width,
-          height: dim.height,
-          borderRadius: dim.radius,
-          background: theme.chrome,
-          border: `2px solid ${theme.border}`,
-          boxShadow: `${theme.glow}, inset 0 1px 0 rgba(255,255,255,.72), inset 0 -3px 0 rgba(0,0,0,.45)`,
-          color: theme.text,
-          ["--glow-rgb" as string]: theme.glowRgb,
-          ["--card-accent" as string]: theme.accent,
-        }}
-      >
-        <div
-          className="absolute inset-0 z-0"
-          style={{
-            background: theme.background,
-          }}
-        />
-
-        <div
-          className="absolute inset-[4px] z-10 rounded-[inherit] opacity-90"
-          style={{
-            background: theme.frame,
-            clipPath: "polygon(0 0,100% 0,95% 100%,5% 100%)",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,.70), inset 0 -18px 28px rgba(0,0,0,.38)",
-          }}
-        />
-
-        <div className="absolute inset-[11px] z-20 rounded-[calc(1rem+4px)] border border-white/35 bg-black/25 shadow-[inset_0_0_22px_rgba(0,0,0,.48)]" />
-
-        <div
-          className="absolute inset-0 z-30 opacity-70 mix-blend-color-dodge transition-opacity duration-300 group-hover:opacity-95"
-          style={{
-            background: theme.foil,
-            backgroundSize: "220% 220%",
-            transform: "translateZ(18px)",
-          }}
-        />
-        <div
-          className="absolute inset-0 z-30 opacity-55 mix-blend-overlay transition-opacity duration-300 group-hover:opacity-80"
-          style={{
-            background: theme.holo,
-            backgroundPosition: "var(--mx) var(--my)",
-            transform: "translateZ(20px)",
-          }}
-        />
-        <div
-          className="absolute inset-0 z-40 opacity-70 mix-blend-screen transition-opacity duration-300"
-          style={{
-            background: `radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,.62), rgba(255,255,255,.16) 18%, transparent 42%)`,
-            opacity: "calc(.18 + (var(--shine) * .62))",
-          }}
-        />
-        <div
-          className="absolute inset-0 z-50 pointer-events-none"
-          style={{
-            background: theme.glass,
-          }}
-        />
-
-        <div className="absolute left-[7%] right-[7%] top-[8%] z-[60] flex items-start justify-between text-[10px] font-black uppercase tracking-[.12em] text-white drop-shadow-[0_2px_4px_rgba(0,0,0,.75)]">
-          <div>
-            <div>{player.season || "2026-27"}</div>
-            <div style={{ color: theme.mutedText }}>{serial}</div>
-          </div>
-          <div className="text-right">
-            <div>{teamCode(team)}</div>
-            <div style={{ color: theme.mutedText }}>{cardNumber(player.id)}</div>
-          </div>
+    <Card3D onClick={onClick} disabled={!interactive} className={`${selected ? "ring-2 ring-emerald-300 ring-offset-2 ring-offset-slate-950 rounded-[28px]" : ""} ${className}`}>
+      <article className="premium-football-card" data-rarity={rarity} data-testid={`premium-football-card-${player.id}`} style={styles.card}>
+        <div style={styles.base} />
+        <div style={styles.frame} />
+        <div style={styles.inner} />
+        <div style={styles.artStage}>
+          <div style={styles.pitch} />
+          {hasImage ? <img src={image} alt={player.name} onError={onImageError} draggable={false} loading="lazy" style={styles.image} /> : <div style={styles.fallback}>{displayName(player.name).slice(0, 2)}</div>}
         </div>
-
-        <div className="absolute left-[10%] right-[10%] top-[16%] bottom-[23%] z-[45] overflow-visible rounded-[18px] border border-white/20 bg-black/25 shadow-[inset_0_0_28px_rgba(0,0,0,.74),0_0_28px_rgba(var(--glow-rgb),.20)]">
-          <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 50% 12%, rgba(var(--glow-rgb),.44), transparent 56%), linear-gradient(180deg, transparent, ${theme.dark})` }} />
-          <div className="absolute inset-x-0 bottom-0 h-[28%] bg-gradient-to-t from-emerald-950/85 via-emerald-900/35 to-transparent" />
-          {hasImage ? (
-            <img
-              src={image}
-              alt={player.name}
-              onError={onImageError}
-              draggable={false}
-              loading="lazy"
-              className="absolute bottom-[-2%] left-1/2 z-20 h-[112%] w-[126%] max-w-none -translate-x-1/2 object-contain object-bottom drop-shadow-[0_20px_18px_rgba(0,0,0,.74)] transition-transform duration-300 group-hover:scale-[1.035]"
-            />
-          ) : (
-            <div className="absolute inset-0 z-20 grid place-items-center text-5xl font-black text-white/20">
-              {displayName(player.name).slice(0, 2)}
-            </div>
-          )}
-          <div className="absolute inset-0 z-30 bg-gradient-to-b from-white/10 via-transparent to-black/70" />
+        <div style={styles.foil} />
+        <div style={styles.holo} />
+        <div style={styles.light} />
+        <div style={styles.glass} />
+        <div style={styles.top}>
+          <div><div>{player.season || "2026-27"}</div><div style={{ color: theme.mutedText }}>{serial}</div></div>
+          <div style={{ textAlign: "right" }}><div>{teamCode(team)}</div><div style={{ color: theme.mutedText }}>{cardNumber(player.id)}</div></div>
         </div>
-
-        <div
-          className="absolute left-[7%] right-[7%] bottom-[7%] z-[70] rounded-2xl border border-white/24 px-3 py-2 text-center shadow-[0_10px_24px_rgba(0,0,0,.48),inset_0_1px_0_rgba(255,255,255,.28)]"
-          style={{ background: theme.nameplate }}
-        >
-          <h3 className="truncate text-sm font-black leading-tight tracking-[.10em] text-white drop-shadow-[0_2px_3px_rgba(0,0,0,.8)]">
-            {displayName(player.name)}
-          </h3>
-          <div className="mt-1 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-[.14em]" style={{ color: theme.mutedText }}>
-            <span>{player.position || "N/A"}</span>
-            <span>•</span>
-            <span>{team}</span>
-          </div>
-          <div className="mt-1 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-[.12em]">
-            <span style={{ color: theme.accent }}>OVR {rating || "—"}</span>
-            <span className="text-white/45">•</span>
-            <span style={{ color: theme.accent }}>PTS {playerPoints(player)}</span>
-          </div>
-          {showPrice && price > 0 ? (
-            <div className="mt-1 text-[10px] font-black text-emerald-200">N${price.toFixed(2)}</div>
-          ) : null}
+        <div style={styles.nameplate}>
+          <h3 style={styles.name}>{displayName(player.name)}</h3>
+          <div style={styles.meta}><span>{player.position || "N/A"}</span><span>•</span><span>{team}</span></div>
+          <div style={styles.meta}><span style={{ color: theme.accent }}>OVR {rating || "—"}</span><span>•</span><span style={{ color: theme.accent }}>PTS {playerPoints(player)}</span></div>
+          {showPrice && price > 0 ? <div style={{ ...styles.meta, color: "#bbf7d0" }}>N${price.toFixed(2)}</div> : null}
         </div>
-
-        <div className="absolute left-[7%] top-[50%] z-[75] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/45 text-[10px] font-black text-white shadow-[0_0_18px_rgba(var(--glow-rgb),.42)]">
-          {theme.label.split(" ")[0].slice(0, 2)}
-        </div>
-        <div className="absolute right-[7%] top-[50%] z-[75] flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/45 text-[10px] font-black text-white shadow-[0_0_18px_rgba(var(--glow-rgb),.42)]">
-          FA
-        </div>
-
-        <div className="absolute bottom-[2.6%] left-1/2 z-[80] -translate-x-1/2 rounded-full border border-white/25 bg-black/40 px-3 py-1 text-[8px] font-black uppercase tracking-[.18em] text-white/80">
-          {theme.label}
-        </div>
-
-        <Spark style={{ left: "14%", top: "13%", width: 3, height: 22, transform: "rotate(35deg)" }} />
-        <Spark style={{ right: "13%", top: "18%", width: 2, height: 18, transform: "rotate(-28deg)", opacity: 0.82 }} />
-        <Spark style={{ left: "18%", bottom: "22%", width: 2, height: 16, transform: "rotate(18deg)", opacity: 0.72 }} />
+        <div style={styles.sideBadgeLeft}>{theme.label.split(" ")[0].slice(0, 2)}</div>
+        <div style={styles.sideBadgeRight}>FA</div>
+        <div style={styles.label}>{theme.label}</div>
       </article>
     </Card3D>
   );
