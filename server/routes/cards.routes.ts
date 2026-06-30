@@ -5,6 +5,7 @@ import {
   calculatePlayerScore,
   mapFplStatsToPlayerStats,
 } from "../services/scoring.js";
+import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../shared/card-economy.js";
 
 interface RegisterCardsRoutesDeps {
   requireAuth: any;
@@ -18,6 +19,12 @@ function normalizeLookupText(value: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function toMoney(amount: unknown): number {
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value * 100) / 100;
 }
 
 export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps) {
@@ -213,4 +220,40 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
 
   app.get("/api/cards/my", requireAuth, sendUserCards);
   app.get("/api/user/cards", requireAuth, sendUserCards);
+
+  app.post("/api/marketplace/list", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const cardId = Number(req.body?.cardId);
+      const price = toMoney(req.body?.price);
+      if (!Number.isInteger(cardId) || cardId <= 0) return res.status(400).json({ message: "Valid cardId required" });
+      const card = await storage.getPlayerCard(cardId);
+      if (!card) return res.status(404).json({ message: "Card not found" });
+      if (String(card.ownerId || "") !== userId) return res.status(403).json({ message: "You do not own this card" });
+      if (!isMarketplaceTradableRarity(String(card.rarity))) return res.status(400).json({ message: "Common cards cannot be sold" });
+      const floor = getMarketplaceFloorPrice(String(card.rarity));
+      if (floor > 0 && price < floor) return res.status(400).json({ message: `Minimum price for ${card.rarity} cards is N$${floor}` });
+      await storage.updatePlayerCard(cardId, { forSale: true, price } as any);
+      return res.json({ success: true, cardId, price });
+    } catch (error: any) {
+      console.error("Failed to list marketplace card:", error);
+      return res.status(500).json({ message: error?.message || "Failed to list card" });
+    }
+  });
+
+  app.post("/api/marketplace/cancel/:cardId", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const cardId = Number(req.params.cardId);
+      if (!Number.isInteger(cardId) || cardId <= 0) return res.status(400).json({ message: "Valid cardId required" });
+      const card = await storage.getPlayerCard(cardId);
+      if (!card) return res.status(404).json({ message: "Card not found" });
+      if (String(card.ownerId || "") !== userId) return res.status(403).json({ message: "You do not own this card" });
+      await storage.updatePlayerCard(cardId, { forSale: false, price: 0 } as any);
+      return res.json({ success: true, cardId });
+    } catch (error: any) {
+      console.error("Failed to cancel marketplace listing:", error);
+      return res.status(500).json({ message: error?.message || "Failed to cancel listing" });
+    }
+  });
 }
