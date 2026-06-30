@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
-import UnifiedPlayerCard from "./cards/UnifiedPlayerCard";
+import { PremiumFootballCard } from "./cards";
 
 type CardThumbnailProps = {
   card: PlayerCardWithPlayer;
@@ -25,20 +25,14 @@ function CardThumbnailBase({
 
   return (
     <div className="relative inline-flex flex-col items-center">
-      <button
-        type="button"
+      <PremiumFootballCard
+        player={fantasyCard}
+        size={size}
+        selected={selected}
         onClick={onClick}
-        className={`${selectable ? "cursor-pointer" : "cursor-default"}`}
-        data-testid={`card-thumbnail-${card.id}`}
-      >
-        <UnifiedPlayerCard
-          player={fantasyCard}
-          size={size}
-          variant={size === "sm" ? "compact" : "default"}
-          selected={selected}
-          interactive={selectable}
-        />
-      </button>
+        interactive={selectable || Boolean(onClick)}
+        showPrice={showPrice}
+      />
 
       {showPrice && Number(card.price || 0) > 0 ? (
         <p className="mt-2 text-center text-[11px] font-bold text-emerald-300">N${Number(card.price || 0).toFixed(2)}</p>

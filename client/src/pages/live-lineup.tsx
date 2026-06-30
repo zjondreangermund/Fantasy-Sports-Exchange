@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
-import PlayerTile from "../components/PlayerTile";
+import { PremiumFootballCard } from "../components/cards";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type Lineup, type PlayerCardWithPlayer } from "../../../shared/schema";
 import { Link } from "wouter";
@@ -109,7 +109,7 @@ function SlotCard({
       ) : null}
       {card ? (
         <>
-          <PlayerTile player={toFantasyCardData(card, { imageWidth: 640 })} size="sm" onClick={() => onInspect?.(card)} />
+          <PremiumFootballCard player={toFantasyCardData(card, { imageWidth: 640 })} size="sm" onClick={() => onInspect?.(card)} />
           <div className="mt-3 grid w-full grid-cols-4 gap-2 text-center">
             <div className="rounded-xl border border-slate-800 bg-slate-950/70 px-2 py-2">
               <p className="text-[9px] font-black uppercase tracking-wide text-slate-500">Team</p>
@@ -155,7 +155,7 @@ function PlayerDetailDialog({ card, events, onOpenChange }: { card: PlayerCardWi
           <DialogTitle>Player Live Detail</DialogTitle>
         </DialogHeader>
         <div className="grid gap-5 md:grid-cols-[220px_1fr]">
-          <PlayerTile player={fantasy} size="md" />
+          <PremiumFootballCard player={fantasy} size="md" />
           <div className="space-y-4">
             <div>
               <h2 className="text-2xl font-black">{fantasy.name}</h2>

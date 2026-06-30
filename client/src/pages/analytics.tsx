@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Activity, BarChart3, ShieldCheck, Star, TrendingUp, Trophy } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
-import PlayerTile from "../components/PlayerTile";
+import { PremiumFootballCard } from "../components/cards";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type Lineup, type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
 
@@ -176,9 +176,9 @@ export default function AnalyticsPage() {
             <Activity className="h-5 w-5 text-emerald-300" />
           </div>
           {analytics.topCards.length ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid justify-items-center gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {analytics.topCards.map((card) => (
-                <PlayerTile key={card.id} player={toFantasyCardData(card, { imageWidth: 640 })} />
+                <PremiumFootballCard key={card.id} player={toFantasyCardData(card, { imageWidth: 640 })} size="sm" />
               ))}
             </div>
           ) : (

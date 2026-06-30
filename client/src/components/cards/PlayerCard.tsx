@@ -1,4 +1,4 @@
-import UnifiedPlayerCard from "./UnifiedPlayerCard";
+import { PremiumFootballCard } from ".";
 import { toFantasyCardData } from "../../lib/fantasy-card-adapter";
 import { type PlayerCardWithPlayer } from "../../../../shared/schema";
 
@@ -32,7 +32,7 @@ export function MarketplaceCard({ player, onCardClick, onDetails, onToggleWatchl
   return (
     <div className="group flex flex-col items-center gap-2 rounded-[24px] border border-white/10 bg-black/20 p-2.5 shadow-[0_18px_48px_rgba(0,0,0,0.34)] backdrop-blur-sm transition hover:border-emerald-300/35 hover:bg-black/30">
       <button type="button" onClick={onCardClick} className="text-left transition group-hover:scale-[1.012]">
-        <UnifiedPlayerCard player={player} />
+        <PremiumFootballCard player={player} showPrice />
       </button>
 
       <div className="-mt-1 w-full rounded-[18px] border border-white/10 bg-gradient-to-b from-white/10 to-white/[0.03] px-3 py-2 text-center">

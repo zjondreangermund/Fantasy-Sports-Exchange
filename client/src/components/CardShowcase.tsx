@@ -1,5 +1,5 @@
 import { memo } from "react";
-import PremiumFootballCard from "./PremiumFootballCard";
+import { PremiumFootballCard } from "./cards";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
