@@ -1,0 +1,97 @@
+:root {
+  --fa-glass: rgba(8, 12, 30, 0.72);
+  --fa-line: rgba(255, 255, 255, 0.13);
+  --fa-glow-violet: rgba(139, 92, 246, 0.42);
+  --fa-glow-cyan: rgba(34, 211, 238, 0.28);
+  --fa-gold: rgba(251, 191, 36, 0.52);
+}
+
+body {
+  background: #020617;
+}
+
+.fa-premium-panel,
+.cinematic-glass {
+  border: 1px solid var(--fa-line) !important;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(139, 92, 246, 0.14), transparent 34%),
+    radial-gradient(circle at 90% 10%, rgba(34, 211, 238, 0.10), transparent 35%),
+    linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.035)) !important;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
+  backdrop-filter: blur(22px) saturate(1.18) !important;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled),
+a {
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease, opacity .2s ease;
+}
+
+button:not(:disabled):active,
+a:active {
+  transform: scale(.975);
+}
+
+.fa-premium-button {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.28);
+  background: linear-gradient(135deg, rgba(255,255,255,.22), rgba(255,255,255,.05));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 10px 26px rgba(0,0,0,.34);
+}
+
+.fa-premium-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 0%, rgba(255,255,255,.34) 18%, transparent 38%);
+  transform: translateX(-120%);
+  transition: transform .7s ease;
+}
+
+.fa-premium-button:hover::before {
+  transform: translateX(120%);
+}
+
+.fa-card-lift {
+  transform-style: preserve-3d;
+}
+
+.fa-card-lift:hover {
+  transform: translateY(-6px) scale(1.015);
+}
+
+.fa-page-title {
+  letter-spacing: -0.045em;
+  text-shadow: 0 12px 36px rgba(0,0,0,.45);
+}
+
+.fa-subtle-grid {
+  background-image:
+    linear-gradient(rgba(255,255,255,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+.fa-chrome-text {
+  background: linear-gradient(100deg, #ffffff 0%, #bdeaff 22%, #ffffff 42%, #f8d16a 58%, #ffffff 80%, #b9c4ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@media (max-width: 767px) {
+  .fa-card-lift:hover {
+    transform: none;
+  }
+
+  .fa-page-title {
+    letter-spacing: -0.035em;
+  }
+}
