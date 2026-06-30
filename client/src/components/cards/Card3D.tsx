@@ -1,4 +1,4 @@
-import { useCallback, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 
 export type Card3DProps = {
   children: ReactNode;
@@ -24,7 +24,7 @@ export default function Card3D({
   });
 
   const handleMove = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
+    (event: MouseEvent<HTMLButtonElement>) => {
       if (disabled) return;
       const rect = event.currentTarget.getBoundingClientRect();
       const x = (event.clientX - rect.left) / rect.width;
