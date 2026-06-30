@@ -30,7 +30,7 @@ const DashboardPage = React.lazy(() => import("./pages/dashboard"));
 const AnalyticsPage = React.lazy(() => import("./pages/analytics"));
 const LiveLineupPage = React.lazy(() => import("./pages/live-lineup"));
 const SelectSquadPage = React.lazy(() => import("./pages/select-squad"));
-const CollectionPage = React.lazy(() => import("./pages/collection"));
+const CollectionPage = React.lazy(() => import("./pages/collection-clean"));
 const MarketplacePage = React.lazy(() => import("./pages/marketplace-v2"));
 const AuctionsPage = React.lazy(() => import("./pages/auctions"));
 const WalletPage = React.lazy(() => import("./pages/wallet"));
@@ -120,54 +120,40 @@ function AuthenticatedApp() {
             </PageScene>
           </main>
           <MatchdayQuickDock />
-          <MobileNavDock />
           <FloatingEventNotifications />
           <FloatingSupportWidget />
+          <MobileNavDock />
         </div>
       </div>
     </SidebarProvider>
   );
 }
 
-function AppContent() {
-  const { user, isLoading } = useAuth();
-
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const ref = String(params.get("ref") || "").trim();
-    if (ref) localStorage.setItem("fantasy_referral_code", ref);
-  }, []);
-
-  React.useEffect(() => {
-    if (!user) return;
-    const code = localStorage.getItem("fantasy_referral_code");
-    if (!code) return;
-    fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) })
-      .then(() => localStorage.removeItem("fantasy_referral_code"))
-      .catch(() => {});
-  }, [user]);
-
-  if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Skeleton className="w-12 h-12 rounded-md" /><Skeleton className="w-32 h-4" /></div></div>;
+function Router() {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Skeleton className="w-32 h-8" /></div>;
+  if (!isAuthenticated) {
+    return (
+      <React.Suspense fallback={<RouteFallback />}>
+        <Switch>
+          <Route path="/" component={LandingPage} />
+          <Route component={LandingPage} />
+        </Switch>
+      </React.Suspense>
+    );
   }
-
-  if (!user) {
-    const pathname = window.location.pathname || "/";
-    return <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen"><React.Suspense fallback={<RouteFallback />}><LandingPage /></React.Suspense></PageScene>;
-  }
-
   return <AuthenticatedApp />;
 }
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
         <TooltipProvider>
-          <AppContent />
           <Toaster />
+          <Router />
         </TooltipProvider>
-      </QueryClientProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
