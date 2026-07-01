@@ -1,29 +1,40 @@
-/* Mobile polish layer: fixes overflow, cramped tabs, heavy lights and bottom dock overlap */
+/* Mobile polish layer: safe viewport, scroll and dock spacing fixes */
 @media (max-width: 767px) {
   html,
   body,
   #root {
     width: 100%;
     max-width: 100%;
+    min-height: 100%;
     overflow-x: hidden;
+  }
+
+  body {
+    overscroll-behavior-y: none;
   }
 
   * {
     min-width: 0;
   }
 
-  main {
+  [data-app-scroll-root] {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-y !important;
     overscroll-behavior-y: contain;
   }
 
-  main [aria-hidden="true"] {
-    opacity: 0.62;
+  main {
+    touch-action: pan-y !important;
+    overscroll-behavior-y: contain;
   }
 
   main > div,
   main section,
   main [class*="LivePageShell"],
-  .cinematic-glass {
+  .cinematic-glass,
+  .fa-premium-panel {
     max-width: 100%;
   }
 
@@ -57,6 +68,7 @@
     padding-bottom: 0.35rem !important;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    touch-action: pan-x;
   }
 
   [role="tablist"]::-webkit-scrollbar,
@@ -72,7 +84,8 @@
     font-size: 0.9rem;
   }
 
-  [data-radix-tabs-content] .cinematic-glass {
+  [data-radix-tabs-content] .cinematic-glass,
+  [data-radix-tabs-content] .fa-premium-panel {
     border-radius: 1.35rem !important;
     padding: 1rem !important;
   }
@@ -90,161 +103,14 @@
     overflow-wrap: anywhere;
   }
 
-  [data-radix-tabs-content] .grid.grid-cols-2,
-  [data-radix-tabs-content] .grid.sm\:grid-cols-3,
-  [data-radix-tabs-content] .grid.md\:grid-cols-2 {
-    grid-template-columns: minmax(0, 1fr) !important;
+  .collection-card-grid,
+  main .grid.justify-items-center {
+    touch-action: pan-y !important;
   }
 
-  [data-radix-tabs-content] .grid.grid-cols-2:has(button),
-  [data-radix-tabs-content] .grid.sm\:grid-cols-2:has(button) {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-
-  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    column-gap: 0.45rem !important;
-    row-gap: 1rem !important;
-    justify-items: center !important;
-    align-items: start !important;
-  }
-
-  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div {
-    width: 100% !important;
-    max-width: 11.2rem !important;
-    min-height: 0 !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-    display: flex !important;
-  }
-
-  main:has([data-testid="button-filter-all"]) [data-testid^="premium-football-card-"] {
-    width: 100% !important;
-    max-width: 10.6rem !important;
-    height: auto !important;
-    aspect-ratio: 178 / 252 !important;
-    margin: 0 auto !important;
-    overflow: hidden !important;
-  }
-
-  main:has([data-testid="button-filter-all"]) [data-testid^="premium-football-card-"] > div,
-  main:has([data-testid="button-filter-all"]) [style*="preserve-3d"] {
-    transform: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div > div.relative {
-    line-height: normal !important;
-    height: auto !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-  }
-
-  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div > div:not(.relative) {
-    margin-top: 0.3rem !important;
-    max-width: 10.65rem !important;
-    border-radius: 0.9rem !important;
-    padding: 0.22rem !important;
-    border: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    backdrop-filter: none !important;
-  }
-
-  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div > div:not(.relative) button {
-    position: relative !important;
-    height: 2.05rem !important;
-    border-radius: 0.5rem !important;
-    overflow: hidden !important;
-    border: 1px solid rgba(255,255,255,.88) !important;
-    background: linear-gradient(180deg,#f4f4f2 0%,#d6d7d4 42%,#aeb0ad 100%) !important;
-    color: #101827 !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.95), inset 0 -2px 5px rgba(0,0,0,.28), 0 5px 12px rgba(0,0,0,.38) !important;
-    text-shadow: 0 1px 0 rgba(255,255,255,.55) !important;
-    font-size: 0.64rem !important;
-    font-weight: 950 !important;
-    letter-spacing: 0.08em !important;
-    text-transform: uppercase !important;
-  }
-
-  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div > div:not(.relative) button::before,
-  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div > div:not(.relative) button::after {
-    content: "";
-    position: absolute;
-    top: 0.28rem;
-    width: 0.26rem;
-    height: 0.26rem;
-    border-radius: 999px;
-    background: radial-gradient(circle at 35% 30%,#ffffff 0%,#c6c8c4 32%,#5d626a 100%);
-    box-shadow: inset 0 1px 1px rgba(255,255,255,.85), inset 0 -1px 1px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.22);
-    pointer-events: none;
-  }
-
-  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div > div:not(.relative) button::before {
-    left: 0.38rem;
-  }
-
-  main:has([data-testid="button-filter-all"]) .grid.grid-cols-2.justify-items-center > div > div:not(.relative) button::after {
-    right: 0.38rem;
-  }
-
-  .collection-showcase-carousel {
-    display: grid !important;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(10.5rem, 72vw);
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .collection-showcase-carousel::-webkit-scrollbar {
-    display: none;
-  }
-
-  .collection-showcase-carousel > * {
-    scroll-snap-align: center;
-  }
-
-  main:has([data-testid="button-filter-all"]) .bg-gradient-to-r.from-slate-950,
-  main:has([data-testid="button-filter-all"]) section.grid.gap-4:not(.sticky) {
-    display: none !important;
-  }
-
-  main:has(a[href="/wallet"]) section.grid.gap-4.xl\:grid-cols-\[1\.2fr_0\.8fr\],
-  main:has(a[href="/wallet"]) section.grid.gap-4.lg\:grid-cols-3,
-  main:has(a[href="/wallet"]) section.grid.gap-4.lg\:grid-cols-\[0\.8fr_1\.2fr\] {
-    display: none !important;
-  }
-
-  main:has(a[href="/wallet"]) section.grid.gap-4.lg\:grid-cols-\[1\.2fr_0\.8fr\] {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  main:has(a[href="/wallet"]) section.grid.gap-4.lg\:grid-cols-\[1\.2fr_0\.8fr\] > :nth-child(2) {
-    display: none !important;
-  }
-
-  main:has(a[href="/wallet"]) section.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-4 {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 0.65rem !important;
-  }
-
-  main:has(a[href="/wallet"]) section.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-4 .p-4 {
-    padding: 0.8rem !important;
-  }
-
-  main:has(a[href="/wallet"]) section.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-4 p[class*="tracking"] {
-    letter-spacing: 0.08em !important;
-    font-size: 0.62rem !important;
-  }
-
-  main:has(a[href="/wallet"]) section.grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-4 p.text-2xl {
-    font-size: 1.18rem !important;
-    line-height: 1.45rem !important;
+  .collection-card-grid button,
+  main .grid.justify-items-center button {
+    touch-action: manipulation;
   }
 
   [role="dialog"] {
@@ -259,14 +125,9 @@
     max-height: 58vh !important;
   }
 
-  [role="dialog"] .card-3d-container,
-  [role="dialog"] [style*="preserve-3d"] {
-    transform: scale(0.92);
-    transform-origin: top center;
-  }
-
   .card-shell:hover,
-  .realistic-hover-lift:hover {
+  .realistic-hover-lift:hover,
+  .fa-card-lift:hover {
     transform: none !important;
   }
 
@@ -307,6 +168,6 @@
 
   button,
   a[role="button"] {
-    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 }
