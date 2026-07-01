@@ -102,6 +102,18 @@ function AuthenticatedApp() {
   const { data: user } = useQuery<{ managerTeamName?: string }>({ queryKey: ["/api/user"] });
   const teamName = user?.managerTeamName || "Your Stadium";
 
+  React.useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/audit/client-event", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event: "route_view", path: location, title: document.title, ts: new Date().toISOString() }),
+      signal: controller.signal,
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [location]);
+
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full bg-black overflow-hidden">
@@ -114,10 +126,10 @@ function AuthenticatedApp() {
             <ThemeToggle />
           </header>
           <LivePulseDock />
-          <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative z-10 pb-24 md:pb-0">
-            <PageScene variant={routeToPageSceneVariant(location, true)} className="flex-1">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative z-10 pb-24 md:pb-0" data-app-scroll-root>
+            <div className="flex-1">
               <AuthenticatedRouter />
-            </PageScene>
+            </div>
           </main>
           <MatchdayQuickDock />
           <MobileNavDock />
