@@ -9,6 +9,7 @@ const CACHE_TTL = {
   bootstrap: 12 * 60 * 60 * 1000, // 12 hours
   fixtures: 4 * 60 * 60 * 1000,   // 4 hours
   fixturesLive: 60 * 1000,        // 1 minute (for live scores/minutes)
+  playerSummary: 15 * 60 * 1000,  // 15 minutes for player game history
 };
 
 type CacheEntry<T> = { ts: number; data: T };
@@ -73,6 +74,17 @@ export const fplApi = {
   async bootstrap() {
     return cached("bootstrap", CACHE_TTL.bootstrap, () =>
       fetchJson<any>("/bootstrap-static/")
+    );
+  },
+
+  /**
+   * FPL element summary: historical fixture-by-fixture points and upcoming fixtures.
+   */
+  async playerSummary(elementId: number) {
+    const id = Number(elementId);
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Valid FPL element id required");
+    return cached(`player_summary_${id}`, CACHE_TTL.playerSummary, () =>
+      fetchJson<any>(`/element-summary/${id}/`)
     );
   },
 
@@ -287,8 +299,7 @@ export const fplApi = {
             },
             awayTeam: {
               id: fixture.team_a,
-              name: awayTeam?.name || `Team ${fixture.team_a}`,
-              shortName: awayTeam?.short_name || `T${fixture.team_a}`,
+              name: awayTeam?.name || `T${fixture.team_a}`,
               strength: awayTeam?.strength || 3,
             },
             difficulty: {
