@@ -161,6 +161,36 @@ function bestSportsDbPlayerImage(players: any[], requestedTeam: string) {
   return scored[0]?.image || null;
 }
 
+async function resolveFplPlayerImage(name: string, team: string) {
+  const { fplApi } = await import("./services/fplApi.js");
+  const bootstrap = await fplApi.bootstrap();
+  const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+  const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
+  const normalizedName = normalizeSearch(name);
+  const normalizedTeam = normalizeSearch(team);
+  const teamNameById = new Map<number, string>();
+  for (const item of teams) {
+    teamNameById.set(Number(item.id), normalizeSearch(String(item.name || item.short_name || "")));
+  }
+  const matches = elements
+    .map((element: any) => {
+      const fullName = normalizeSearch(`${String(element.first_name || "")} ${String(element.second_name || "")}`.trim());
+      const webName = normalizeSearch(String(element.web_name || ""));
+      const elementTeam = teamNameById.get(Number(element.team)) || "";
+      let score = 0;
+      if (fullName === normalizedName || webName === normalizedName) score += 40;
+      if (fullName.includes(normalizedName) || normalizedName.includes(fullName) || webName.includes(normalizedName) || normalizedName.includes(webName)) score += 20;
+      if (normalizedTeam && elementTeam && (elementTeam.includes(normalizedTeam) || normalizedTeam.includes(elementTeam))) score += 18;
+      if (element.code || element.photo) score += 5;
+      return { element, score };
+    })
+    .filter((item: any) => item.score >= 20)
+    .sort((a: any, b: any) => b.score - a.score);
+  const best = matches[0]?.element;
+  if (!best) return null;
+  return fplApi.playerPhotoUrl(best, 250);
+}
+
 app.get("/api/matchday/epl", async (_req, res) => {
   const result: any = {
     updatedAt: new Date().toISOString(),
@@ -216,6 +246,18 @@ app.get("/api/player-image/resolve", async (req, res) => {
   if (cached && cached.expiresAt > Date.now()) {
     if (cached.url) return res.redirect(302, cached.url);
     return res.status(404).json({ message: "No image found" });
+  }
+
+  try {
+    const fplImage = await resolveFplPlayerImage(name, team);
+    if (fplImage) {
+      const proxied = `/api/image-proxy?url=${encodeURIComponent(fplImage)}`;
+      playerImageCache.set(cacheKey, { expiresAt: Date.now() + 12 * 60 * 60 * 1000, url: proxied });
+      res.setHeader("Cache-Control", "public, max-age=43200");
+      return res.redirect(302, proxied);
+    }
+  } catch (error) {
+    console.warn("FPL player image resolve failed:", error);
   }
 
   try {
