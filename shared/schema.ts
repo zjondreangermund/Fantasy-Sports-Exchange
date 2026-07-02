@@ -56,6 +56,17 @@ export const players = appSchema.table("players", {
   age: integer("age").notNull(),
   overall: integer("overall").notNull(),
   imageUrl: text("image_url"),
+  fplId: integer("fpl_id"),
+  code: integer("code"),
+  photo: text("photo"),
+  webName: text("web_name"),
+  status: text("status"),
+  news: text("news"),
+  nowCost: real("now_cost"),
+  selectedByPercent: real("selected_by_percent"),
+  totalPoints: integer("total_points"),
+  form: real("form"),
+  syncedAt: timestamp("synced_at"),
 });
 
 export const playerCards = appSchema.table("player_cards", {
