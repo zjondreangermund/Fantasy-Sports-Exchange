@@ -2,6 +2,8 @@ import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
 export const CARD_IMAGE_FALLBACK = "/players/fallback.svg";
 
+const LOCAL_PLACEHOLDER_PATTERN = /\/(images\/player-\d+|players\/fallback)\.(png|jpg|jpeg|svg|webp)$/i;
+
 type CardLike = Partial<PlayerCardWithPlayer> & {
   player?: {
     id?: number | string | null;
@@ -66,6 +68,7 @@ function playerResolverUrl(player: CardLike["player"]): string | null {
   const params = new URLSearchParams({ name });
   const team = String(player?.team || player?.club || "").trim();
   if (team) params.set("team", team);
+  params.set("source", "fpl");
   return `/api/player-image/resolve?${params.toString()}`;
 }
 
@@ -86,6 +89,14 @@ export function buildCardImageCandidates(
 
   const candidates: string[] = [];
 
+  for (const codeLike of [player?.code, player?.fplId, player?.photo]) {
+    const plPhoto = premierLeaguePhotoFromCode(codeLike);
+    if (plPhoto) candidates.push(toSafeImageUrl(plPhoto));
+  }
+
+  const resolver = playerResolverUrl(player);
+  if (resolver) candidates.push(resolver);
+
   const rawValues = uniqueStrings([
     player?.officialPortraitUrl,
     player?.cutoutUrl,
@@ -93,7 +104,6 @@ export function buildCardImageCandidates(
     player?.imageUrl,
     player?.image_url,
     player?.image,
-    player?.photo,
     player?.photoUrl,
     player?.fallbackImageUrl,
     ...(Array.isArray(player?.imageCandidates) ? player?.imageCandidates || [] : []),
@@ -101,7 +111,7 @@ export function buildCardImageCandidates(
 
   for (const raw of rawValues) {
     const normalized = normalizeImageUrl(raw);
-    if (!normalized) continue;
+    if (!normalized || LOCAL_PLACEHOLDER_PATTERN.test(normalized)) continue;
 
     const directFpl = premierLeaguePhotoFromCode(raw);
     if (directFpl) candidates.push(toSafeImageUrl(directFpl));
@@ -110,18 +120,10 @@ export function buildCardImageCandidates(
     if (!normalized.startsWith("data:")) candidates.push(toSafeImageUrl(lowercaseFilenamePath(normalized)));
   }
 
-  for (const codeLike of [player?.code, player?.fplId, player?.photo]) {
-    const plPhoto = premierLeaguePhotoFromCode(codeLike);
-    if (plPhoto) candidates.push(toSafeImageUrl(plPhoto));
-  }
-
   if (playerId > 0) {
     candidates.push(`/api/players/${playerId}/photo?${params.toString()}`);
     candidates.push(`/api/players/${playerId}/photo`);
   }
-
-  const resolver = playerResolverUrl(player);
-  if (resolver) candidates.push(resolver);
 
   candidates.push(CARD_IMAGE_FALLBACK);
   return Array.from(new Set(candidates.filter(Boolean)));
