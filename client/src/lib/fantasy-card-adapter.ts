@@ -45,15 +45,19 @@ function uniqueStrings(values: Array<string | undefined | null>): string[] {
   return Array.from(new Set(values.filter(Boolean) as string[]));
 }
 
-function preferRealImage(candidates: string[]): string {
-  const real = candidates.find(
-    (src) =>
-      src &&
-      src !== CARD_IMAGE_FALLBACK &&
-      !src.includes("/players/fallback") &&
-      !src.includes("/images/player-1") &&
-      !src.includes("fallback"),
+function isLowQualityFallback(src: string) {
+  return (
+    !src ||
+    src === CARD_IMAGE_FALLBACK ||
+    src.includes("/players/fallback") ||
+    src.includes("/images/player-") ||
+    src.includes("fallback") ||
+    src.includes("images.unsplash.com")
   );
+}
+
+function preferRealImage(candidates: string[]): string {
+  const real = candidates.find((src) => src && !isLowQualityFallback(src));
   return real || candidates[0] || CARD_IMAGE_FALLBACK;
 }
 
@@ -77,11 +81,11 @@ export function toFantasyCardData(
     safeUrl(player?.imageUrl),
     safeUrl(player?.photoUrl),
     safeUrl(player?.image_url),
-  ]);
+  ]).filter((src) => !isLowQualityFallback(src));
 
   const candidates = uniqueStrings([
-    ...directCandidates,
     ...generatedCandidates,
+    ...directCandidates,
     CARD_IMAGE_FALLBACK,
   ]);
 
