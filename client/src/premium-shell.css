@@ -59,6 +59,19 @@ a:active {
   transform: translateX(120%);
 }
 
+@keyframes faCardShineLoop {
+  0% { transform: translateX(-72%) rotate(7deg); opacity: .22; }
+  18% { opacity: .82; }
+  48% { transform: translateX(54%) rotate(7deg); opacity: .95; }
+  58% { opacity: .18; }
+  100% { transform: translateX(78%) rotate(7deg); opacity: .14; }
+}
+
+@keyframes faCardBreathingGlow {
+  0%, 100% { filter: brightness(1) saturate(1); }
+  50% { filter: brightness(1.08) saturate(1.18); }
+}
+
 .fa-card-lift {
   transform-style: preserve-3d;
   will-change: transform;
@@ -68,21 +81,33 @@ a:active {
   transform: translateY(-8px) scale(1.025);
 }
 
+.fa-card-lift article {
+  animation: faCardBreathingGlow 4.2s ease-in-out infinite;
+}
+
 .fa-card-lift article::after {
   content: "";
   position: absolute;
-  inset: -35% -80%;
+  inset: -38% -86%;
   pointer-events: none;
-  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.32) 44%, rgba(255,255,255,.08) 51%, transparent 62%);
-  transform: translateX(-38%) rotate(6deg);
-  opacity: .55;
+  z-index: 80;
+  background:
+    linear-gradient(105deg,
+      transparent 35%,
+      rgba(255,255,255,.16) 41%,
+      rgba(255,255,255,.68) 47%,
+      rgba(255,255,255,.18) 53%,
+      transparent 63%);
+  transform: translateX(-72%) rotate(7deg);
+  opacity: .7;
   mix-blend-mode: screen;
-  transition: transform .85s ease, opacity .35s ease;
+  animation: faCardShineLoop 3.1s ease-in-out infinite;
+  transition: opacity .35s ease;
 }
 
 .fa-card-lift:hover article::after {
-  transform: translateX(38%) rotate(6deg);
-  opacity: .9;
+  opacity: 1;
+  animation-duration: 1.55s;
 }
 
 .fa-card-lift article::before {
@@ -91,11 +116,12 @@ a:active {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 24% 18%, rgba(255,255,255,.25), transparent 18%),
-    radial-gradient(circle at 78% 70%, rgba(255,255,255,.13), transparent 20%);
-  opacity: .45;
+    radial-gradient(circle at 24% 18%, rgba(255,255,255,.32), transparent 18%),
+    radial-gradient(circle at 78% 70%, rgba(255,255,255,.16), transparent 20%),
+    linear-gradient(135deg, transparent 0%, rgba(255,255,255,.10) 40%, transparent 62%);
+  opacity: .55;
   mix-blend-mode: screen;
-  z-index: 2;
+  z-index: 79;
 }
 
 .fa-page-title {
@@ -123,8 +149,8 @@ a:active {
   }
 
   .fa-card-lift article::after {
-    opacity: .38;
-    transform: translateX(-25%) rotate(6deg);
+    opacity: .82;
+    animation-duration: 2.55s;
   }
 
   .fa-page-title {
