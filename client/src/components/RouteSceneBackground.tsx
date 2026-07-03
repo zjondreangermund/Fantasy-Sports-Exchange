@@ -22,160 +22,148 @@ type SceneConfig = {
   primary: string;
   secondary: string;
   accent: string;
-  grid: string;
   overlay: string;
   label: string;
 };
 
+const footballStadiumImage = "url(https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?q=80&w=2400&auto=format&fit=crop)";
+
 const scenes: Record<SceneKey, SceneConfig> = {
   dashboard: {
     base: "from-[#020617] via-[#061526] to-[#02040a]",
-    image: "url(https://images.unsplash.com/photo-1522778119026-d647f0596c20?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.30]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.34]",
     primary: "rgba(34,211,238,.34)",
     secondary: "rgba(59,130,246,.28)",
     accent: "rgba(16,185,129,.20)",
-    grid: "opacity-[.23]",
-    overlay: "from-cyan-950/25 via-transparent to-black/80",
+    overlay: "from-cyan-950/20 via-transparent to-black/82",
     label: "CONTROL ROOM",
   },
   lineup: {
     base: "from-[#02120d] via-[#06251a] to-[#020409]",
-    image: "url(https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.32]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.38]",
     primary: "rgba(34,197,94,.38)",
     secondary: "rgba(16,185,129,.24)",
     accent: "rgba(59,130,246,.22)",
-    grid: "opacity-[.30]",
-    overlay: "from-emerald-950/30 via-transparent to-black/82",
+    overlay: "from-emerald-950/24 via-transparent to-black/84",
     label: "MATCHDAY LIVE",
   },
   market: {
     base: "from-[#090711] via-[#101827] to-[#03040a]",
-    image: "url(https://images.unsplash.com/photo-1640340434855-6084b1f4901c?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.24]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.30]",
     primary: "rgba(251,191,36,.30)",
     secondary: "rgba(168,85,247,.28)",
     accent: "rgba(59,130,246,.26)",
-    grid: "opacity-[.22]",
-    overlay: "from-amber-950/30 via-transparent to-black/84",
+    overlay: "from-amber-950/24 via-transparent to-black/86",
     label: "TRADING FLOOR",
   },
   auction: {
     base: "from-[#130706] via-[#1f1012] to-[#050304]",
-    image: "url(https://images.unsplash.com/photo-1511886929837-354d827aae26?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.30]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.32]",
     primary: "rgba(251,113,133,.34)",
     secondary: "rgba(249,115,22,.28)",
     accent: "rgba(168,85,247,.20)",
-    grid: "opacity-[.24]",
-    overlay: "from-orange-950/28 via-transparent to-black/86",
+    overlay: "from-orange-950/22 via-transparent to-black/86",
     label: "AUCTION HOUSE",
   },
   analytics: {
     base: "from-[#020817] via-[#061523] to-[#02050b]",
-    image: "url(https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.20]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.28]",
     primary: "rgba(56,189,248,.32)",
     secondary: "rgba(20,184,166,.25)",
     accent: "rgba(99,102,241,.24)",
-    grid: "opacity-[.35]",
-    overlay: "from-cyan-950/22 via-transparent to-black/86",
+    overlay: "from-cyan-950/18 via-transparent to-black/86",
     label: "DATA LAB",
   },
   competitions: {
     base: "from-[#0b0611] via-[#141827] to-[#03040a]",
-    image: "url(https://images.unsplash.com/photo-1518604666860-9ed391f76460?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.32]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.38]",
     primary: "rgba(251,191,36,.34)",
     secondary: "rgba(37,99,235,.28)",
     accent: "rgba(236,72,153,.22)",
-    grid: "opacity-[.22]",
-    overlay: "from-yellow-950/30 via-transparent to-black/86",
+    overlay: "from-yellow-950/22 via-transparent to-black/86",
     label: "TOURNAMENT NIGHT",
   },
   collection: {
     base: "from-[#04040b] via-[#09111f] to-[#02040a]",
-    image: "url(https://images.unsplash.com/photo-1518005020951-eccb494ad742?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.28]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.32]",
     primary: "rgba(148,163,184,.26)",
     secondary: "rgba(168,85,247,.30)",
     accent: "rgba(34,211,238,.22)",
-    grid: "opacity-[.20]",
-    overlay: "from-slate-950/30 via-transparent to-black/84",
+    overlay: "from-slate-950/22 via-transparent to-black/86",
     label: "CARD VAULT",
   },
   wallet: {
     base: "from-[#02110e] via-[#06131e] to-[#02040a]",
-    image: "url(https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.22]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.28]",
     primary: "rgba(52,211,153,.34)",
     secondary: "rgba(14,165,233,.24)",
     accent: "rgba(250,204,21,.16)",
-    grid: "opacity-[.22]",
-    overlay: "from-emerald-950/28 via-transparent to-black/84",
+    overlay: "from-emerald-950/22 via-transparent to-black/84",
     label: "FINANCE HUB",
   },
   account: {
     base: "from-[#050816] via-[#10162a] to-[#03040a]",
-    image: "url(https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.18]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.24]",
     primary: "rgba(129,140,248,.30)",
     secondary: "rgba(45,212,191,.18)",
     accent: "rgba(244,114,182,.14)",
-    grid: "opacity-[.22]",
-    overlay: "from-indigo-950/26 via-transparent to-black/84",
+    overlay: "from-indigo-950/20 via-transparent to-black/84",
     label: "CLUB OFFICE",
   },
   league: {
     base: "from-[#020617] via-[#071a32] to-[#02040a]",
-    image: "url(https://images.unsplash.com/photo-1556056504-5c7696c4c28d?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.28]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.32]",
     primary: "rgba(59,130,246,.35)",
     secondary: "rgba(34,211,238,.24)",
     accent: "rgba(16,185,129,.18)",
-    grid: "opacity-[.24]",
-    overlay: "from-blue-950/26 via-transparent to-black/82",
+    overlay: "from-blue-950/22 via-transparent to-black/82",
     label: "LIVE LEAGUES",
   },
   lab: {
     base: "from-[#090611] via-[#111827] to-[#03040a]",
-    image: "url(https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.24]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.28]",
     primary: "rgba(168,85,247,.34)",
     secondary: "rgba(34,211,238,.22)",
     accent: "rgba(250,204,21,.14)",
-    grid: "opacity-[.28]",
-    overlay: "from-purple-950/28 via-transparent to-black/86",
+    overlay: "from-purple-950/22 via-transparent to-black/86",
     label: "CARD LAB",
   },
   admin: {
     base: "from-[#090611] via-[#111827] to-[#03040a]",
-    image: "url(https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.20]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.24]",
     primary: "rgba(244,63,94,.28)",
     secondary: "rgba(99,102,241,.24)",
     accent: "rgba(34,211,238,.16)",
-    grid: "opacity-[.24]",
-    overlay: "from-rose-950/24 via-transparent to-black/86",
+    overlay: "from-rose-950/20 via-transparent to-black/86",
     label: "ADMIN OPS",
   },
   default: {
     base: "from-[#050812] via-[#07111f] to-[#02040a]",
-    image: "url(https://images.unsplash.com/photo-1522778119026-d647f0596c20?q=80&w=2400&auto=format&fit=crop)",
-    imageOpacity: "opacity-[.20]",
+    image: footballStadiumImage,
+    imageOpacity: "opacity-[.30]",
     primary: "rgba(37,99,235,.24)",
     secondary: "rgba(34,211,238,.18)",
     accent: "rgba(148,163,184,.14)",
-    grid: "opacity-[.18]",
-    overlay: "from-black/20 via-transparent to-black/82",
+    overlay: "from-black/16 via-transparent to-black/84",
     label: "FANTASY ARENA",
   },
 };
 
 function sceneFromPath(pathname: string): SceneKey {
   if (pathname === "/" || pathname === "/dashboard") return "dashboard";
-  if (pathname.startsWith("/live-lineup")) return "lineup";
+  if (pathname.startsWith("/live-lineup") || pathname.startsWith("/select-squad")) return "lineup";
   if (pathname.startsWith("/marketplace")) return "market";
   if (pathname.startsWith("/auctions")) return "auction";
   if (pathname.startsWith("/analytics")) return "analytics";
@@ -195,12 +183,13 @@ export default function RouteSceneBackground({ pathname }: { pathname: string })
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-[#050812]">
       <div className={`absolute inset-0 bg-gradient-to-br ${scene.base}`} />
-
       <div
         className={`absolute inset-0 ${scene.imageOpacity} mix-blend-screen`}
-        style={{ backgroundImage: scene.image, backgroundSize: "cover", backgroundPosition: "center", filter: "contrast(1.08) saturate(1.1)" }}
+        style={{ backgroundImage: scene.image, backgroundSize: "cover", backgroundPosition: "center", filter: "contrast(1.12) saturate(1.18) brightness(.95)" }}
       />
-      <div className="absolute inset-0 bg-black/45" />
+      <div className="absolute inset-0 bg-black/42" />
+      <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-black/55 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-72 bg-gradient-to-t from-black/86 to-transparent" />
 
       <div
         className="absolute -left-[15%] -top-[20%] h-[58rem] w-[58rem] rounded-full blur-3xl"
@@ -215,16 +204,12 @@ export default function RouteSceneBackground({ pathname }: { pathname: string })
         style={{ background: `radial-gradient(circle, ${scene.accent} 0%, transparent 60%)` }}
       />
 
-      <div className={`absolute inset-0 ${scene.grid} bg-[linear-gradient(90deg,rgba(255,255,255,.10)_1px,transparent_1px),linear-gradient(0deg,rgba(255,255,255,.08)_1px,transparent_1px)] bg-[size:54px_54px]`} />
-      <div className="absolute inset-0 opacity-[.20] bg-[radial-gradient(circle_at_50%_120%,rgba(255,255,255,.22),transparent_36%)]" />
-
-      <div className="absolute left-10 top-16 hidden text-[12vw] font-black uppercase leading-none tracking-[.08em] text-white/[.035] lg:block">
+      <div className="absolute inset-0 opacity-[.16] bg-[radial-gradient(circle_at_50%_120%,rgba(255,255,255,.20),transparent_36%)]" />
+      <div className="absolute left-10 top-16 hidden text-[12vw] font-black uppercase leading-none tracking-[.08em] text-white/[.025] lg:block">
         {scene.label}
       </div>
-
-      <div className="absolute inset-x-[-18%] top-[-15%] h-72 rotate-[-8deg] bg-gradient-to-r from-transparent via-white/14 to-transparent blur-xl opacity-70" />
-      <div className="absolute inset-x-[-20%] top-[30%] h-52 rotate-[7deg] bg-gradient-to-r from-transparent via-cyan-200/12 to-transparent blur-2xl opacity-55" />
-      <div className="absolute inset-x-0 bottom-0 h-52 bg-gradient-to-t from-black/80 to-transparent" />
+      <div className="absolute inset-x-[-18%] top-[-15%] h-72 rotate-[-8deg] bg-gradient-to-r from-transparent via-white/12 to-transparent blur-xl opacity-55" />
+      <div className="absolute inset-x-[-20%] top-[30%] h-52 rotate-[7deg] bg-gradient-to-r from-transparent via-cyan-200/10 to-transparent blur-2xl opacity-45" />
       <div className={`absolute inset-0 bg-gradient-to-b ${scene.overlay}`} />
     </div>
   );
