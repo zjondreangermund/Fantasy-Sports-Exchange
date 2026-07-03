@@ -1,0 +1,84 @@
+/* Global scroll stability fixes for mobile browsers and card-heavy pages */
+html,
+body,
+#root {
+  height: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  overscroll-behavior-y: none;
+}
+
+.app-shell {
+  height: 100vh;
+  height: 100svh;
+  height: 100dvh;
+}
+
+.app-scroll-root,
+[data-app-scroll-root] {
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
+}
+
+[data-app-scroll-root] > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+main,
+section,
+article,
+.card,
+.fa-premium-panel,
+.cinematic-glass {
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  * {
+    min-width: 0;
+  }
+
+  .app-scroll-root,
+  [data-app-scroll-root] {
+    padding-bottom: calc(8.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  main {
+    padding-bottom: calc(8.5rem + env(safe-area-inset-bottom, 0px)) !important;
+    touch-action: pan-y;
+  }
+
+  [role="tablist"],
+  .arena-filter-chips,
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  [role="tablist"]::-webkit-scrollbar,
+  .arena-filter-chips::-webkit-scrollbar,
+  .overflow-x-auto::-webkit-scrollbar {
+    display: none;
+  }
+
+  [role="dialog"] {
+    max-height: calc(100dvh - 1rem) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .card-shell:hover,
+  .realistic-hover-lift:hover,
+  .fa-card-lift:hover {
+    transform: none !important;
+  }
+}

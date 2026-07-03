@@ -89,7 +89,9 @@ export function buildCardImageCandidates(
 
   const candidates: string[] = [];
 
-  for (const codeLike of [player?.code, player?.fplId, player?.photo]) {
+  // IMPORTANT: FPL element id is not the same as Premier League photo code.
+  // Only use player.code or player.photo to build official PL image URLs.
+  for (const codeLike of [player?.code, player?.photo]) {
     const plPhoto = premierLeaguePhotoFromCode(codeLike);
     if (plPhoto) candidates.push(toSafeImageUrl(plPhoto));
   }
