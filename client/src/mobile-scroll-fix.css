@@ -42,6 +42,17 @@ article,
   max-width: 100%;
 }
 
+/* Remove the square/block overlays that were covering the football/stadium backgrounds. */
+.collection-page > .pointer-events-none.absolute.inset-0.opacity-\[\.16\] {
+  display: none !important;
+}
+
+.fa-subtle-grid,
+[class*="background-size:72px_72px"],
+[class*="bg-\[linear-gradient"] {
+  background-image: none !important;
+}
+
 .collection-page {
   min-height: 100%;
   overflow-x: hidden !important;
