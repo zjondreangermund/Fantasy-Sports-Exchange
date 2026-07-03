@@ -9,20 +9,40 @@
     overflow-x: hidden;
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
   body {
     overscroll-behavior-y: none;
+    touch-action: pan-y;
   }
 
   * {
     min-width: 0;
   }
 
-  [data-app-scroll-root] {
+  .app-shell {
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+  }
+
+  [data-app-scroll-root],
+  .app-scroll-root {
+    min-height: 0 !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
     touch-action: pan-y !important;
     overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .app-scroll-root > div {
+    min-height: 100%;
   }
 
   main {
@@ -116,13 +136,15 @@
   [role="dialog"] {
     width: calc(100vw - 1rem) !important;
     max-width: calc(100vw - 1rem) !important;
-    max-height: calc(100vh - 1rem) !important;
+    max-height: calc(100dvh - 1rem) !important;
     border-radius: 1rem !important;
   }
 
   [role="dialog"] [class*="max-h-96"],
-  [role="dialog"] .overflow-auto {
-    max-height: 58vh !important;
+  [role="dialog"] .overflow-auto,
+  [role="dialog"] .overflow-y-auto {
+    max-height: 58dvh !important;
+    -webkit-overflow-scrolling: touch;
   }
 
   .card-shell:hover,
@@ -154,7 +176,9 @@
 
   .fixed.bottom-20.right-3 > div,
   .fixed.bottom-20.right-3 [role="tabpanel"] {
-    max-height: 54vh !important;
+    max-height: 54dvh !important;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   [data-sonner-toaster],
