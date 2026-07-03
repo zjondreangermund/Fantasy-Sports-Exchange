@@ -15,6 +15,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import pgSession from "connect-pg-simple";
 import { ensureFplPlayerColumns, syncFplPremierLeaguePlayers } from "./services/fplPlayerSync.js";
 import { buildRealFplPointFeed } from "./services/liveFplFeed.js";
+import { buildRealCardProfile } from "./services/realCardProfile.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -106,6 +107,19 @@ app.get("/api/live/point-feed", async (req, res) => {
   } catch (error: any) {
     console.error("Real FPL point feed failed:", error);
     return res.json([]);
+  }
+});
+
+app.get("/api/cards/:cardId/profile", async (req, res) => {
+  try {
+    const cardId = Number(req.params.cardId);
+    if (!Number.isInteger(cardId) || cardId <= 0) return res.status(400).json({ message: "Valid cardId required" });
+    const profile = await buildRealCardProfile(cardId);
+    if (!profile) return res.status(404).json({ message: "Card not found" });
+    return res.json(profile);
+  } catch (error: any) {
+    console.error("Real card profile failed:", error);
+    return res.status(500).json({ message: error?.message || "Failed to fetch card profile" });
   }
 });
 
