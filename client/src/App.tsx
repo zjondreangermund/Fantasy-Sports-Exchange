@@ -116,18 +116,18 @@ function AuthenticatedApp() {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full bg-black overflow-hidden">
+      <div className="app-shell flex h-[100dvh] min-h-[100svh] w-full overflow-hidden bg-black">
         <AppSidebar />
-        <div className="flex flex-col flex-1 min-w-0 relative isolate">
+        <div className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <RouteSceneBackground pathname={location} />
           <StadiumAmbientLayer teamName={teamName} />
-          <header className="flex items-center justify-between gap-2 p-2 border-b border-white/10 sticky top-0 z-50 bg-black/25 backdrop-blur-2xl">
+          <header className="sticky top-0 z-50 flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/25 p-2 backdrop-blur-2xl">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <ThemeToggle />
           </header>
           <LivePulseDock />
-          <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col relative z-10 pb-24 md:pb-0" data-app-scroll-root>
-            <div className="flex-1">
+          <main className="app-scroll-root relative z-10 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0" data-app-scroll-root>
+            <div className="min-h-full flex-1">
               <AuthenticatedRouter />
             </div>
           </main>
