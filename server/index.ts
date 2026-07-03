@@ -14,6 +14,7 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import pgSession from "connect-pg-simple";
 import { ensureFplPlayerColumns, syncFplPremierLeaguePlayers } from "./services/fplPlayerSync.js";
+import { buildRealFplPointFeed } from "./services/liveFplFeed.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -96,6 +97,16 @@ app.get("/api/matchday/epl", async (_req, res) => {
   try { const newsRes = await fetch("https://www.theguardian.com/football/premierleague/rss", { headers: { Accept: "application/rss+xml,text/xml", "User-Agent": "FantasyArena/1.0" } }); if (newsRes.ok) { const xml = await newsRes.text(); result.news = [...xml.matchAll(/<item>[\s\S]*?<\/item>/g)].slice(0, 6).map((match) => { const item = match[0]; return { title: stripXml(item.match(/<title>([\s\S]*?)<\/title>/)?.[1] || ""), url: stripXml(item.match(/<link>([\s\S]*?)<\/link>/)?.[1] || ""), publishedAt: stripXml(item.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || ""), source: "The Guardian" }; }).filter((item) => item.title); } } catch (error) { console.warn("Matchday news unavailable:", error); }
   res.setHeader("Cache-Control", "public, max-age=300");
   return res.json(result);
+});
+
+app.get("/api/live/point-feed", async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(50, Number(req.query.limit || 20) || 20));
+    return res.json(await buildRealFplPointFeed(limit));
+  } catch (error: any) {
+    console.error("Real FPL point feed failed:", error);
+    return res.json([]);
+  }
 });
 
 app.post("/api/admin/sync-fpl-players", async (_req, res) => {
