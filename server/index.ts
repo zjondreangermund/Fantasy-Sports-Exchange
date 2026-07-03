@@ -114,10 +114,49 @@ app.get("/api/player-image/resolve", async (req, res) => {
 });
 
 app.get("/api/image-proxy", async (req, res) => {
-  const raw = String(req.query.url || ""); if (!raw) return res.status(400).json({ message: "Image URL is required" });
-  let target: URL; try { target = new URL(raw); } catch { return res.status(400).json({ message: "Invalid URL" }); }
+  const raw = String(req.query.url || "");
+  if (!raw) return res.redirect(302, "/players/fallback.svg");
+  let target: URL;
+  try { target = new URL(raw); } catch { return res.redirect(302, "/players/fallback.svg"); }
   if (target.hostname !== "resources.premierleague.com") return res.status(403).json({ message: "Host not allowed" });
-  try { const r = await fetch(target.toString(), { method: "GET", redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36", Referer: "https://www.premierleague.com/", Origin: "https://www.premierleague.com", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" } }); const ct = String(r.headers.get("content-type") || ""); if (!r.ok || !ct.startsWith("image/")) return res.status(502).json({ message: "Upstream image fetch failed" }); res.setHeader("Content-Type", ct); res.setHeader("Cache-Control", "public, max-age=86400"); res.setHeader("Cross-Origin-Resource-Policy", "cross-origin"); return res.send(Buffer.from(await r.arrayBuffer())); } catch (e: any) { console.error("image-proxy error", e?.message); return res.status(502).json({ message: "Upstream image fetch failed" }); }
+
+  const urlsToTry = [target.toString()];
+  const codeMatch = target.pathname.match(/\/players\/(?:\d+x\d+)\/p(\d+)\.(?:png|jpg|jpeg|webp)$/i);
+  if (codeMatch?.[1]) {
+    const code = codeMatch[1];
+    for (const size of ["500x500", "250x250", "110x110", "40x40"]) {
+      urlsToTry.push(`https://resources.premierleague.com/premierleague/photos/players/${size}/p${code}.png`);
+    }
+  }
+
+  for (const url of Array.from(new Set(urlsToTry))) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7000);
+      const r = await fetch(url, {
+        method: "GET",
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
+          Referer: "https://www.premierleague.com/",
+          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        },
+      }).finally(() => clearTimeout(timeout));
+      const ct = String(r.headers.get("content-type") || "");
+      if (r.ok && ct.startsWith("image/")) {
+        res.setHeader("Content-Type", ct);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        return res.send(Buffer.from(await r.arrayBuffer()));
+      }
+    } catch (e: any) {
+      console.warn("image-proxy candidate failed", url, e?.message || e);
+    }
+  }
+
+  res.setHeader("Cache-Control", "public, max-age=300");
+  return res.redirect(302, "/players/fallback.svg");
 });
 
 export function log(message: string, source = "express") { const formattedTime = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "numeric", hour12: true }); console.log(`${formattedTime} [${source}] ${message}`); }
