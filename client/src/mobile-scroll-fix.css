@@ -42,6 +42,24 @@ article,
   max-width: 100%;
 }
 
+.collection-page {
+  min-height: 100%;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  touch-action: pan-y !important;
+}
+
+.collection-card-grid {
+  min-height: max-content;
+  touch-action: pan-y !important;
+  overscroll-behavior-y: auto;
+}
+
+.collection-card-grid button,
+.collection-card-grid .fa-card-lift {
+  touch-action: pan-y !important;
+}
+
 @media (max-width: 767px) {
   * {
     min-width: 0;
@@ -55,6 +73,15 @@ article,
   main {
     padding-bottom: calc(8.5rem + env(safe-area-inset-bottom, 0px)) !important;
     touch-action: pan-y;
+  }
+
+  .collection-page {
+    min-height: auto !important;
+    padding-bottom: calc(12rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .collection-card-grid {
+    padding-bottom: calc(14rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   [role="tablist"],
