@@ -61,10 +61,41 @@ a:active {
 
 .fa-card-lift {
   transform-style: preserve-3d;
+  will-change: transform;
 }
 
 .fa-card-lift:hover {
-  transform: translateY(-6px) scale(1.015);
+  transform: translateY(-8px) scale(1.025);
+}
+
+.fa-card-lift article::after {
+  content: "";
+  position: absolute;
+  inset: -35% -80%;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.32) 44%, rgba(255,255,255,.08) 51%, transparent 62%);
+  transform: translateX(-38%) rotate(6deg);
+  opacity: .55;
+  mix-blend-mode: screen;
+  transition: transform .85s ease, opacity .35s ease;
+}
+
+.fa-card-lift:hover article::after {
+  transform: translateX(38%) rotate(6deg);
+  opacity: .9;
+}
+
+.fa-card-lift article::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 24% 18%, rgba(255,255,255,.25), transparent 18%),
+    radial-gradient(circle at 78% 70%, rgba(255,255,255,.13), transparent 20%);
+  opacity: .45;
+  mix-blend-mode: screen;
+  z-index: 2;
 }
 
 .fa-page-title {
@@ -89,6 +120,11 @@ a:active {
 @media (max-width: 767px) {
   .fa-card-lift:hover {
     transform: none;
+  }
+
+  .fa-card-lift article::after {
+    opacity: .38;
+    transform: translateX(-25%) rotate(6deg);
   }
 
   .fa-page-title {
