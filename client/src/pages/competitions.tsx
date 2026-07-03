@@ -55,18 +55,14 @@ function getInviteLink(pin: string) {
 function tournamentCountdown(comp: CompetitionWithEntries) {
   const raw = comp.submissionClosesAt || (comp as any).endsAt || (comp as any).endDate || (comp as any).startsAt;
   if (!raw) return comp.status === "open" ? "Open now" : String(comp.status || "Arena ready");
-
   const target = new Date(raw).getTime();
   if (!Number.isFinite(target)) return comp.status === "open" ? "Open now" : String(comp.status || "Arena ready");
-
   const diff = target - Date.now();
   if (diff <= 0) return comp.entryOpen === false ? "Locked" : "Final moments";
-
   const totalMinutes = Math.ceil(diff / 60000);
   const days = Math.floor(totalMinutes / 1440);
   const hours = Math.floor((totalMinutes % 1440) / 60);
   const minutes = totalMinutes % 60;
-
   if (days > 0) return `${days}d ${hours}h`;
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
@@ -195,11 +191,13 @@ export default function CompetitionsPage() {
   const joinMutation = useMutation({
     mutationFn: async () => {
       if (!selectedComp || !captainId) throw new Error("Select a tournament and captain");
-      if (entryMode === "pin") {
-        const res = await apiRequest("POST", "/api/user-tournaments/join-pin", { pin: selectedComp.join_pin || selectedComp.joinPin || pinCode, cardIds: selectedCards, captainId });
-        return res.json();
-      }
-      const res = await apiRequest("POST", "/api/competitions/join", { competitionId: selectedComp.id, cardIds: selectedCards, captainId });
+      const pin = selectedComp.join_pin || selectedComp.joinPin || pinCode;
+      const res = await apiRequest("POST", "/api/competitions/join", {
+        competitionId: selectedComp.id,
+        pin: entryMode === "pin" ? pin : undefined,
+        cardIds: selectedCards,
+        captainId,
+      });
       return res.json();
     },
     onSuccess: () => {
