@@ -7,8 +7,15 @@ body,
   overflow-x: hidden;
 }
 
+html {
+  height: 100%;
+  scroll-behavior: smooth;
+}
+
 body {
+  min-height: 100%;
   overscroll-behavior-y: auto;
+  touch-action: pan-y;
 }
 
 .app-shell {
@@ -16,19 +23,30 @@ body {
   min-height: 100svh;
   min-height: 100dvh;
   height: auto !important;
-  overflow-x: hidden;
-  overflow-y: visible;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+}
+
+.app-content {
+  min-height: 100vh;
+  min-height: 100dvh;
+  max-height: none !important;
+  overflow-x: hidden !important;
 }
 
 .app-scroll-root,
 [data-app-scroll-root] {
-  min-height: 100%;
+  min-height: 0;
+  height: auto;
+  max-height: none;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   -webkit-overflow-scrolling: touch !important;
   overscroll-behavior-y: auto;
-  touch-action: auto;
+  touch-action: pan-y;
   scrollbar-gutter: stable;
+  scroll-behavior: smooth;
 }
 
 [data-app-scroll-root] > * {
@@ -86,22 +104,23 @@ article,
 .premium-page,
 .admin-page,
 .collection-page,
+.marketplace-page,
 .mobile-page-safe {
   min-height: 100%;
   overflow-x: hidden !important;
   overflow-y: visible !important;
-  touch-action: auto !important;
+  touch-action: pan-y !important;
 }
 
 .collection-card-grid {
   min-height: max-content;
-  touch-action: auto !important;
+  touch-action: pan-y !important;
   overscroll-behavior-y: auto;
 }
 
 .collection-card-grid button,
 .collection-card-grid .fa-card-lift {
-  touch-action: auto !important;
+  touch-action: manipulation !important;
 }
 
 .mobile-x-scroll,
@@ -116,7 +135,7 @@ article,
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
-  touch-action: pan-x;
+  touch-action: pan-x pan-y;
   scrollbar-width: thin;
 }
 
@@ -132,6 +151,46 @@ table {
   max-width: none;
 }
 
+/* Tabs must not trap vertical wheel/touch scrolling. Horizontal swipes still work. */
+[role="tablist"],
+.arena-filter-chips,
+.overflow-x-auto {
+  touch-action: pan-x pan-y !important;
+  overscroll-behavior-x: contain;
+}
+
+[role="tabpanel"],
+[data-radix-tabs-content],
+.tabs-content,
+.tab-content {
+  min-height: auto !important;
+  max-height: none !important;
+  overflow-y: visible !important;
+  touch-action: pan-y !important;
+}
+
+@media (min-width: 768px) {
+  .app-shell,
+  .app-content {
+    height: 100dvh;
+  }
+
+  [data-app-scroll-root] {
+    height: calc(100dvh - 49px) !important;
+    max-height: calc(100dvh - 49px) !important;
+    overflow-y: auto !important;
+  }
+
+  .admin-wide-scroll,
+  .mobile-x-scroll,
+  .stat-x-scroll,
+  .player-stats-scroll,
+  .overflow-x-auto {
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain;
+  }
+}
+
 @media (max-width: 767px) {
   * {
     min-width: 0;
@@ -144,9 +203,20 @@ table {
     min-height: 100% !important;
     overflow-x: hidden !important;
     overflow-y: auto !important;
+    touch-action: pan-y !important;
   }
 
   .app-shell {
+    display: block !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+  }
+
+  .app-content {
+    display: block !important;
     height: auto !important;
     min-height: 100dvh !important;
     max-height: none !important;
@@ -156,6 +226,7 @@ table {
 
   .app-scroll-root,
   [data-app-scroll-root] {
+    display: block !important;
     height: auto !important;
     min-height: 100dvh !important;
     max-height: none !important;
@@ -163,7 +234,7 @@ table {
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
     overscroll-behavior-y: auto !important;
-    touch-action: auto !important;
+    touch-action: pan-y !important;
     padding-bottom: 0 !important;
   }
 
@@ -171,6 +242,7 @@ table {
   .premium-page,
   .admin-page,
   .collection-page,
+  .marketplace-page,
   .mobile-page-safe,
   .flex-1.overflow-auto,
   .flex-1.overflow-y-auto {
@@ -181,13 +253,14 @@ table {
     overflow-y: visible !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
-    touch-action: auto !important;
+    touch-action: pan-y !important;
     padding-bottom: calc(12rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   .premium-page > .relative.mx-auto,
   .admin-page > .relative.mx-auto,
   .collection-page > .relative.mx-auto,
+  .marketplace-page > .relative.mx-auto,
   .mobile-page-safe > .relative,
   .mobile-page-safe > .mx-auto {
     min-height: max-content !important;
@@ -197,14 +270,14 @@ table {
   .collection-card-grid {
     min-height: max-content !important;
     padding-bottom: calc(14rem + env(safe-area-inset-bottom, 0px)) !important;
-    touch-action: auto !important;
+    touch-action: pan-y !important;
   }
 
   .collection-card-grid button,
   .collection-card-grid .fa-card-lift,
   .collection-card-grid article,
   .collection-card-grid img {
-    touch-action: auto !important;
+    touch-action: manipulation !important;
   }
 
   [role="tablist"],
@@ -217,6 +290,7 @@ table {
   [data-mobile-x-scroll="true"] {
     -webkit-overflow-scrolling: touch !important;
     scrollbar-width: none;
+    touch-action: pan-x pan-y !important;
   }
 
   [role="tablist"] {
@@ -224,7 +298,6 @@ table {
     overflow-y: hidden !important;
     flex-wrap: nowrap !important;
     justify-content: flex-start !important;
-    touch-action: pan-x !important;
   }
 
   [role="tablist"] > * {
@@ -249,13 +322,15 @@ table {
 
   .admin-page .grid,
   .premium-page .grid,
-  .collection-page .grid {
+  .collection-page .grid,
+  .marketplace-page .grid {
     min-width: 0;
   }
 
   .admin-page table,
   .premium-page table,
   .collection-page table,
+  .marketplace-page table,
   table {
     min-width: 680px;
   }
