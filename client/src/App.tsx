@@ -116,9 +116,9 @@ function AuthenticatedApp() {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="app-shell flex h-[100dvh] min-h-[100svh] w-full overflow-hidden bg-black">
+      <div className="app-shell flex min-h-[100dvh] w-full overflow-x-hidden bg-black">
         <AppSidebar />
-        <div className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="app-content relative isolate flex min-h-[100dvh] min-w-0 flex-1 flex-col overflow-x-hidden">
           <RouteSceneBackground pathname={location} />
           <StadiumAmbientLayer teamName={teamName} />
           <header className="sticky top-0 z-50 flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/25 p-2 backdrop-blur-2xl">
@@ -126,8 +126,8 @@ function AuthenticatedApp() {
             <ThemeToggle />
           </header>
           <LivePulseDock />
-          <main className="app-scroll-root relative z-10 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0" data-app-scroll-root>
-            <div className="min-h-full flex-1">
+          <main className="app-scroll-root relative z-10 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-auto pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0" data-app-scroll-root>
+            <div className="min-h-full flex-1 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0">
               <AuthenticatedRouter />
             </div>
           </main>
