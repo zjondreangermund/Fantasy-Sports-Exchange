@@ -44,7 +44,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       requireTeamName: true,
       teamNameMinLength: 3,
       onboardingEntryPath: "/onboarding",
-      starterChecklistLabel: "Open starter packs",
+      starterChecklistLabel: "Choose starter players",
       packLabels: ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"],
     };
 
@@ -61,11 +61,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
     const now = new Date();
     const sameUtcDay = (dateStr: string) => {
       const d = new Date(dateStr);
-      return (
-        d.getUTCFullYear() === now.getUTCFullYear() &&
-        d.getUTCMonth() === now.getUTCMonth() &&
-        d.getUTCDate() === now.getUTCDate()
-      );
+      return d.getUTCFullYear() === now.getUTCFullYear() && d.getUTCMonth() === now.getUTCMonth() && d.getUTCDate() === now.getUTCDate();
     };
 
     const todayTeamIds = new Set<number>();
@@ -75,49 +71,36 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       todayTeamIds.add(Number(fixture.team_a));
     });
 
-    const positionMap: Record<number, "GK" | "DEF" | "MID" | "FWD"> = {
-      1: "GK",
-      2: "DEF",
-      3: "MID",
-      4: "FWD",
-    };
-
+    const positionMap: Record<number, "GK" | "DEF" | "MID" | "FWD"> = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
     const allFplPlayers = Array.isArray(fplPlayers) ? fplPlayers : [];
     const todayCandidates = allFplPlayers.filter((p: any) => todayTeamIds.has(Number(p.team)));
     const sourcePool = todayCandidates.length >= 15 ? todayCandidates : allFplPlayers;
 
-    const candidates = sourcePool
-      .sort((a: any, b: any) => {
-        const sa = Number(a.starts || 0);
-        const sb = Number(b.starts || 0);
-        if (sb !== sa) return sb - sa;
-        const ma = Number(a.minutes || 0);
-        const mb = Number(b.minutes || 0);
-        if (mb !== ma) return mb - ma;
-        return Number(b.form || 0) - Number(a.form || 0);
-      });
+    const candidates = sourcePool.sort((a: any, b: any) => {
+      const sa = Number(a.starts || 0);
+      const sb = Number(b.starts || 0);
+      if (sb !== sa) return sb - sa;
+      const ma = Number(a.minutes || 0);
+      const mb = Number(b.minutes || 0);
+      if (mb !== ma) return mb - ma;
+      return Number(b.form || 0) - Number(a.form || 0);
+    });
 
     const existingPlayers = await storage.getPlayers();
-    const mapKey = (name: string, team: string, pos: string) =>
-      `${name.toLowerCase()}::${team.toLowerCase()}::${pos}`;
+    const mapKey = (name: string, team: string, pos: string) => `${name.toLowerCase()}::${team.toLowerCase()}::${pos}`;
     const existingMap = new Map<string, any>();
-    existingPlayers.forEach((p: any) => {
-      existingMap.set(mapKey(String(p.name), String(p.team), String(p.position)), p);
-    });
+    existingPlayers.forEach((p: any) => existingMap.set(mapKey(String(p.name), String(p.team), String(p.position)), p));
 
     const ensurePlayer = async (fplPlayer: any) => {
       const teamName = String(teamMap.get(Number(fplPlayer.team))?.name || "Unknown");
       const position = positionMap[Number(fplPlayer.element_type)] || "MID";
-      const fullName =
-        `${String(fplPlayer.first_name || "").trim()} ${String(fplPlayer.second_name || "").trim()}`.trim() ||
-        String(fplPlayer.web_name || "Unknown");
+      const fullName = `${String(fplPlayer.first_name || "").trim()} ${String(fplPlayer.second_name || "").trim()}`.trim() || String(fplPlayer.web_name || "Unknown");
       const key = mapKey(fullName, teamName, position);
       const existing = existingMap.get(key);
       if (existing) return existing;
 
       const photoUrl = fplApi.playerPhotoUrl(fplPlayer, 250);
       const overall = Math.max(55, Math.min(95, Math.round(Number(fplPlayer.now_cost || 50) + 30)));
-
       const created = await storage.createPlayer({
         name: fullName,
         team: teamName,
@@ -128,16 +111,12 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
         overall,
         imageUrl: photoUrl,
       } as any);
-
       existingMap.set(key, created);
       return created;
     };
 
     const result: any[] = [];
-    for (const player of candidates.slice(0, 120)) {
-      result.push(await ensurePlayer(player));
-    }
-
+    for (const player of candidates.slice(0, 120)) result.push(await ensurePlayer(player));
     return result;
   };
 
@@ -146,38 +125,65 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
     const defPool = shuffle(playersPool.filter((p: any) => normalizePackPosition(p.position) === "DEF"));
     const midPool = shuffle(playersPool.filter((p: any) => normalizePackPosition(p.position) === "MID"));
     const fwdPool = shuffle(playersPool.filter((p: any) => normalizePackPosition(p.position) === "FWD"));
-
     const gk = gkPool.slice(0, 3);
     const def = defPool.slice(0, 3);
     const mid = midPool.slice(0, 3);
     const fwd = fwdPool.slice(0, 3);
-
     const used = new Set<number>([...gk, ...def, ...mid, ...fwd].map((p: any) => Number(p.id)));
     const wildcard = shuffle(playersPool.filter((p: any) => !used.has(Number(p.id)))).slice(0, 3);
-
-    if (gk.length < 3 || def.length < 3 || mid.length < 3 || fwd.length < 3 || wildcard.length < 3) {
-      return null;
-    }
-
-    return [
-      gk.map((p: any) => p.id),
-      def.map((p: any) => p.id),
-      mid.map((p: any) => p.id),
-      fwd.map((p: any) => p.id),
-      wildcard.map((p: any) => p.id),
-    ];
+    if (gk.length < 3 || def.length < 3 || mid.length < 3 || fwd.length < 3 || wildcard.length < 3) return null;
+    return [gk.map((p: any) => p.id), def.map((p: any) => p.id), mid.map((p: any) => p.id), fwd.map((p: any) => p.id), wildcard.map((p: any) => p.id)];
   };
 
-  app.get("/api/onboarding/config", requireAuth, async (_req: any, res) => {
-    return res.json(getOnboardingConfig());
-  });
+  const ensureStarterCards = async (userId: string, selectedPlayerIds: number[]) => {
+    const existingCards = await storage.getUserCards(userId);
+    const existingCommonByPlayerId = new Set(
+      (Array.isArray(existingCards) ? existingCards : [])
+        .filter((card: any) => String(card.rarity || "common").toLowerCase() === "common")
+        .map((card: any) => Number(card.playerId)),
+    );
+
+    const granted: number[] = [];
+    const skipped: number[] = [];
+
+    for (const playerId of selectedPlayerIds) {
+      if (existingCommonByPlayerId.has(Number(playerId))) {
+        skipped.push(Number(playerId));
+        continue;
+      }
+
+      try {
+        await storage.createPlayerCard({
+          playerId,
+          ownerId: userId,
+          rarity: "common",
+          level: 1,
+          xp: 0,
+          decisiveScore: 35,
+          forSale: false,
+          price: 0,
+        } as any);
+        existingCommonByPlayerId.add(Number(playerId));
+        granted.push(Number(playerId));
+      } catch (error: any) {
+        const msg = String(error?.message || "").toLowerCase();
+        if (msg.includes("duplicate")) {
+          skipped.push(Number(playerId));
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return { granted, skipped, kept: selectedPlayerIds.length };
+  };
+
+  app.get("/api/onboarding/config", requireAuth, async (_req: any, res) => res.json(getOnboardingConfig()));
 
   app.get("/api/onboarding/status", requireAuth, async (req: any, res) => {
     try {
       const config = getOnboardingConfig();
-      if (!config.signupPacksEnabled) {
-        return res.json({ completed: true });
-      }
+      if (!config.signupPacksEnabled) return res.json({ completed: true });
       const userId = req.authUserId;
       const ob = await storage.getOnboarding(userId);
       res.json({ completed: ob?.completed ?? false });
@@ -190,48 +196,21 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
   app.post("/api/onboarding/create-offer", requireAuth, async (req: any, res) => {
     try {
       const config = getOnboardingConfig();
-      if (!config.signupPacksEnabled) {
-        return res.status(403).json({ message: "Signup starter packs are currently disabled by admin" });
-      }
-
+      if (!config.signupPacksEnabled) return res.status(403).json({ message: "Signup starter packs are currently disabled by admin" });
       const userId = req.authUserId;
       const ob = await storage.getOnboarding(userId);
-
-      if (ob?.completed) {
-        return res.status(400).json({ message: "Onboarding already completed" });
-      }
-
-      if (ob?.packCards?.length === 5 && ob.packCards.flat().length === 15) {
-        return res.json({ packCards: ob.packCards });
-      }
+      if (ob?.completed) return res.status(400).json({ message: "Onboarding already completed" });
+      if (ob?.packCards?.length === 5 && ob.packCards.flat().length === 15) return res.json({ packCards: ob.packCards });
 
       const allPlayers = await getOnboardingPlayerPool();
-
       if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
-        return res.status(400).json({
-          message: "Not enough players in database. Seeding may have failed or player table is still empty.",
-          count: allPlayers?.length ?? 0,
-        });
+        return res.status(400).json({ message: "Not enough players in database. Seeding may have failed or player table is still empty.", count: allPlayers?.length ?? 0 });
       }
-
       const packCards = buildPackCards(allPlayers);
-      if (!packCards) {
-        return res.status(400).json({
-          message: "Not enough players per position",
-        });
-      }
+      if (!packCards) return res.status(400).json({ message: "Not enough players per position" });
 
-      if (!ob) {
-        await storage.createOnboarding({
-          userId,
-          completed: false,
-          packCards,
-          selectedCards: [],
-        } as any);
-      } else {
-        await storage.updateOnboarding(userId, { packCards, selectedCards: [] } as any);
-      }
-
+      if (!ob) await storage.createOnboarding({ userId, completed: false, packCards, selectedCards: [] } as any);
+      else await storage.updateOnboarding(userId, { packCards, selectedCards: [] } as any);
       return res.json({ packCards });
     } catch (error: any) {
       console.error("Onboarding/create-offer failed:", error);
@@ -242,58 +221,24 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
   app.get("/api/onboarding/offers", requireAuth, async (req: any, res) => {
     try {
       const config = getOnboardingConfig();
-      if (!config.signupPacksEnabled) {
-        return res.status(403).json({
-          message: "Signup starter packs are currently disabled by admin",
-          config,
-        });
-      }
-
+      if (!config.signupPacksEnabled) return res.status(403).json({ message: "Signup starter packs are currently disabled by admin", config });
       const userId = req.authUserId;
       let ob = await storage.getOnboarding(userId);
 
       if (!ob?.packCards?.length) {
         const allPlayers = await getOnboardingPlayerPool();
-
-        if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
-          return res.status(404).json({ message: "No offer found. Create offer first." });
-        }
-
+        if (!Array.isArray(allPlayers) || allPlayers.length < 15) return res.status(404).json({ message: "No offer found. Create offer first." });
         const packCards = buildPackCards(allPlayers);
-        if (!packCards) {
-          return res.status(404).json({ message: "No offer found. Create offer first." });
-        }
-
-        if (!ob) {
-          await storage.createOnboarding({
-            userId,
-            completed: false,
-            packCards,
-            selectedCards: [],
-          } as any);
-        } else {
-          await storage.updateOnboarding(userId, { packCards, selectedCards: [] } as any);
-        }
-
+        if (!packCards) return res.status(404).json({ message: "No offer found. Create offer first." });
+        if (!ob) await storage.createOnboarding({ userId, completed: false, packCards, selectedCards: [] } as any);
+        else await storage.updateOnboarding(userId, { packCards, selectedCards: [] } as any);
         ob = await storage.getOnboarding(userId);
       }
 
       const offeredPlayerIds = ob?.packCards?.flat() || [];
-      const offeredPlayers = await Promise.all(
-        offeredPlayerIds.map((id: number | null) =>
-          id ? storage.getPlayer(id) : Promise.resolve(undefined),
-        ),
-      );
+      const offeredPlayers = await Promise.all(offeredPlayerIds.map((id: number | null) => (id ? storage.getPlayer(id) : Promise.resolve(undefined))));
       const players = offeredPlayers.filter(Boolean);
-
-      res.json({
-        packCards: ob?.packCards || [],
-        offeredPlayerIds,
-        players,
-        selectedCards: ob?.selectedCards ?? [],
-        completed: ob?.completed ?? false,
-        config,
-      });
+      res.json({ packCards: ob?.packCards || [], offeredPlayerIds, players, selectedCards: ob?.selectedCards ?? [], completed: ob?.completed ?? false, config });
     } catch (error: any) {
       console.error("Fetch offers failed:", error);
       res.status(500).json({ message: "Failed to fetch offers" });
@@ -303,61 +248,28 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
   app.post("/api/onboarding/choose", requireAuth, async (req: any, res) => {
     try {
       const config = getOnboardingConfig();
-      if (!config.signupPacksEnabled) {
-        return res.status(403).json({ message: "Signup starter packs are currently disabled by admin" });
-      }
-
+      if (!config.signupPacksEnabled) return res.status(403).json({ message: "Signup starter packs are currently disabled by admin" });
       const userId = req.authUserId;
       const selected: number[] = req.body?.selectedPlayerIds ?? [];
 
-      if (!Array.isArray(selected) || selected.length !== 5) {
-        return res.status(400).json({ message: "Select exactly 5 cards" });
-      }
-      if (new Set(selected).size !== 5) {
-        return res.status(400).json({ message: "Duplicate selections not allowed" });
-      }
+      if (!Array.isArray(selected) || selected.length !== 5) return res.status(400).json({ message: "Select exactly 5 cards" });
+      if (new Set(selected).size !== 5) return res.status(400).json({ message: "Duplicate selections not allowed" });
 
       const ob = await storage.getOnboarding(userId);
-      if (!ob?.packCards?.length) {
-        return res.status(400).json({ message: "No offer exists. Create offer first." });
-      }
-      if (ob.completed) {
-        return res.status(400).json({ message: "Onboarding already completed" });
-      }
+      if (!ob?.packCards?.length) return res.status(400).json({ message: "No offer exists. Create offer first." });
+      if (ob.completed) return res.json({ success: true, kept: 5, alreadyCompleted: true });
 
       const offeredSet = new Set(ob.packCards.flat());
-      for (const id of selected) {
-        if (!offeredSet.has(id)) {
-          return res.status(400).json({ message: "Selection includes an invalid card" });
-        }
-      }
+      for (const id of selected) if (!offeredSet.has(id)) return res.status(400).json({ message: "Selection includes an invalid card" });
 
       for (const pack of ob.packCards) {
         const selectedInPack = selected.filter((id) => pack.includes(id));
-        if (selectedInPack.length !== 1) {
-          return res.status(400).json({ message: "Select exactly 1 player from each pack" });
-        }
+        if (selectedInPack.length !== 1) return res.status(400).json({ message: "Select exactly 1 player from each pack" });
       }
 
-      for (const playerId of selected) {
-        await storage.createPlayerCard({
-          playerId,
-          ownerId: userId,
-          rarity: "common",
-          level: 1,
-          xp: 0,
-          decisiveScore: 35,
-          forSale: false,
-          price: 0,
-        } as any);
-      }
-
-      await storage.updateOnboarding(userId, {
-        selectedCards: selected,
-        completed: true,
-      } as any);
-
-      res.json({ success: true, kept: 5 });
+      const grantResult = await ensureStarterCards(userId, selected);
+      await storage.updateOnboarding(userId, { selectedCards: selected, completed: true } as any);
+      res.json({ success: true, kept: 5, ...grantResult });
     } catch (error: any) {
       console.error("Choose cards failed:", error);
       res.status(500).json({ message: "Failed to complete onboarding" });
