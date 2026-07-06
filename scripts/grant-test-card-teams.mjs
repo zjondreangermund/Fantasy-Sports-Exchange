@@ -10,6 +10,11 @@ const DEMO_ACCOUNTS = [
 
 const RARITIES = ["common", "rare", "epic", "unique", "legendary"];
 const POSITION_ORDER = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
+const LINEUP_SHAPE = { GK: 1, DEF: 2, MID: 1, FWD: 1 };
+
+function quoteLiteral(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
 
 function serialId(email, rarity, playerId, clubIndex, playerIndex) {
   return `demo-${email.split("@")[0]}-${clubIndex}-${playerIndex}-${rarity}-${playerId}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
@@ -25,6 +30,47 @@ function maxSupplyFor(rarity) {
 
 function rarityFor(accountIndex, clubIndex, playerIndex) {
   return RARITIES[(accountIndex + clubIndex + playerIndex) % RARITIES.length];
+}
+
+function normalizePosition(position) {
+  const value = String(position || "").toUpperCase();
+  if (value.includes("GOAL") || value === "GKP") return "GK";
+  if (value.includes("DEF")) return "DEF";
+  if (value.includes("MID")) return "MID";
+  if (value.includes("FWD") || value.includes("FOR") || value.includes("ATT") || value === "ST") return "FWD";
+  return value || "MID";
+}
+
+function buildValidLineup(cards) {
+  const byPosition = new Map();
+  for (const card of cards) {
+    const position = normalizePosition(card.position);
+    if (!byPosition.has(position)) byPosition.set(position, []);
+    byPosition.get(position).push(card);
+  }
+
+  const lineup = [];
+  const used = new Set();
+  for (const [position, required] of Object.entries(LINEUP_SHAPE)) {
+    const options = byPosition.get(position) || [];
+    for (const card of options) {
+      if (lineup.filter((item) => normalizePosition(item.position) === position).length >= required) break;
+      if (!used.has(card.id)) {
+        lineup.push(card);
+        used.add(card.id);
+      }
+    }
+  }
+
+  for (const card of cards) {
+    if (lineup.length >= 5) break;
+    if (!used.has(card.id)) {
+      lineup.push(card);
+      used.add(card.id);
+    }
+  }
+
+  return lineup.slice(0, 5);
 }
 
 async function getPremierLeagueClubs(client) {
@@ -48,8 +94,8 @@ async function getPlayersForClub(client, club) {
     [club],
   );
   return rows.sort((a, b) => {
-    const posA = POSITION_ORDER[String(a.position || "").toUpperCase()] ?? 99;
-    const posB = POSITION_ORDER[String(b.position || "").toUpperCase()] ?? 99;
+    const posA = POSITION_ORDER[normalizePosition(a.position)] ?? 99;
+    const posB = POSITION_ORDER[normalizePosition(b.position)] ?? 99;
     if (posA !== posB) return posA - posB;
     return Number(b.score || 0) - Number(a.score || 0);
   });
@@ -83,7 +129,9 @@ async function main() {
       let user = await client.query(`select id, email, name from app.users where lower(email) = lower($1) limit 1`, [email]);
       if (user.rowCount === 0) {
         await client.query(
-          `insert into app.users (id, email, name, manager_team_name) values ($1, $1, $2, $3) on conflict (id) do nothing`,
+          `insert into app.users (id, email, name, manager_team_name)
+           values ($1, $1, $2, $3)
+           on conflict (id) do nothing`,
           [email, email.split("@")[0], `Demo All Clubs ${accountIndex + 1}`],
         );
         user = await client.query(`select id, email, name from app.users where lower(email) = lower($1) or id = $1 limit 1`, [email]);
@@ -99,7 +147,7 @@ async function main() {
         [userId],
       );
 
-      const accountCardIds = [];
+      const accountCards = [];
       const clubSummaries = [];
 
       for (let clubIndex = 0; clubIndex < clubsWithPlayers.length; clubIndex++) {
@@ -111,28 +159,40 @@ async function main() {
           const rarity = rarityFor(accountIndex, clubIndex, playerIndex);
           const stableSerialId = serialId(email, rarity, player.id, clubIndex, playerIndex + 1);
           const existing = await client.query(`select id from app.player_cards where serial_id = $1 limit 1`, [stableSerialId]);
+          let cardId;
+
           if (existing.rowCount > 0) {
-            clubCardIds.push(existing.rows[0].id);
-            accountCardIds.push(existing.rows[0].id);
-            continue;
+            cardId = existing.rows[0].id;
+            await client.query(
+              `update app.player_cards
+               set owner_id = $1, for_sale = false, price = 0
+               where id = $2`,
+              [userId, cardId],
+            );
+          } else {
+            // Do not cast rarity to app.rarity or any schema-specific enum name.
+            // A quoted SQL literal is type "unknown" and Postgres coerces it to the real column type,
+            // whether the column is text, varchar, or an enum with any name/schema.
+            const inserted = await client.query(
+              `insert into app.player_cards
+                 (player_id, owner_id, rarity, serial_id, serial_number, max_supply, level, xp, decisive_score, last_5_scores, for_sale, price)
+               values ($1, $2, ${quoteLiteral(rarity)}, $3, $4, $5, 1, 0, $6, '[0,0,0,0,0]'::jsonb, false, 0)
+               returning id`,
+              [player.id, userId, stableSerialId, playerIndex + 1, maxSupplyFor(rarity), Number(player.score || 35)],
+            );
+            cardId = inserted.rows[0].id;
           }
 
-          const inserted = await client.query(
-            `insert into app.player_cards
-               (player_id, owner_id, rarity, serial_id, serial_number, max_supply, level, xp, decisive_score, last_5_scores, for_sale, price)
-             values ($1, $2, $3, $4, $5, $6, 1, 0, $7, '[0,0,0,0,0]'::jsonb, false, 0)
-             returning id`,
-            [player.id, userId, rarity, stableSerialId, playerIndex + 1, maxSupplyFor(rarity), Number(player.score || 35)],
-          );
-          clubCardIds.push(inserted.rows[0].id);
-          accountCardIds.push(inserted.rows[0].id);
+          clubCardIds.push(cardId);
+          accountCards.push({ id: cardId, position: player.position, score: Number(player.score || 0) });
         }
 
         clubSummaries.push({ club, playersGranted: clubCardIds.length });
       }
 
-      const lineupIds = accountCardIds.slice(0, 5);
-      if (lineupIds.length) {
+      const lineup = buildValidLineup(accountCards.sort((a, b) => Number(b.score || 0) - Number(a.score || 0)));
+      if (lineup.length) {
+        const lineupIds = lineup.map((card) => card.id);
         await client.query(
           `insert into app.lineups (user_id, card_ids, captain_id)
            values ($1, $2::jsonb, $3)
@@ -141,7 +201,7 @@ async function main() {
         );
       }
 
-      results.push({ email, userId, clubs: clubSummaries.length, cardsReady: accountCardIds.length, clubSummaries });
+      results.push({ email, userId, clubs: clubSummaries.length, cardsReady: accountCards.length, lineupCards: lineup.length, clubSummaries });
     }
 
     const totals = await client.query(`select count(*)::int as total_cards from app.player_cards`);
@@ -149,7 +209,8 @@ async function main() {
 
     console.log(JSON.stringify({
       success: true,
-      mode: "all-club-players-per-demo-account",
+      mode: "all-premier-league-players-per-demo-account",
+      enumCastSafe: true,
       clubs: clubsWithPlayers.map((club) => ({ club: club.club, players: club.players.length })),
       totalCardsAfterGrant: Number(totals.rows[0]?.total_cards || 0),
       accounts: results,
