@@ -120,7 +120,7 @@ async function main() {
           const inserted = await client.query(
             `insert into app.player_cards
                (player_id, owner_id, rarity, serial_id, serial_number, max_supply, level, xp, decisive_score, last_5_scores, for_sale, price)
-             values ($1, $2, $3::app.rarity, $4, $5, $6, 1, 0, $7, '[0,0,0,0,0]'::jsonb, false, 0)
+             values ($1, $2, $3, $4, $5, $6, 1, 0, $7, '[0,0,0,0,0]'::jsonb, false, 0)
              returning id`,
             [player.id, userId, rarity, stableSerialId, playerIndex + 1, maxSupplyFor(rarity), Number(player.score || 35)],
           );
