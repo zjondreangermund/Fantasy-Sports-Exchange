@@ -1,0 +1,165 @@
+/* FINAL SCROLL OVERRIDE
+   Keeps exactly one vertical scroll container alive on every route.
+   This fixes pages/tabs that accidentally block wheel or touch scrolling. */
+
+html,
+body,
+#root {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  overscroll-behavior-y: none !important;
+}
+
+body {
+  position: relative !important;
+  touch-action: auto !important;
+}
+
+.app-shell,
+.app-content {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100vh !important;
+  height: 100svh !important;
+  height: 100dvh !important;
+  min-height: 100vh !important;
+  min-height: 100svh !important;
+  min-height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+}
+
+.app-content {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+[data-app-scroll-root],
+.app-scroll-root {
+  position: relative !important;
+  display: block !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: contain !important;
+  touch-action: pan-y !important;
+  scrollbar-gutter: stable !important;
+  padding-bottom: calc(8rem + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+[data-app-scroll-root] > div,
+[data-app-scroll-root] > *,
+.app-scroll-root > div,
+.app-scroll-root > * {
+  display: block !important;
+  min-height: max-content !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+/* Route pages must not become competing vertical scroll containers. */
+.collection-page,
+.marketplace-page,
+.admin-page,
+.premium-page,
+.mobile-page-safe,
+main.collection-page,
+main.marketplace-page,
+main.admin-page,
+main.premium-page {
+  display: block !important;
+  height: auto !important;
+  min-height: max-content !important;
+  max-height: none !important;
+  overflow-y: visible !important;
+  overflow-x: hidden !important;
+  touch-action: pan-y !important;
+  padding-bottom: calc(12rem + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+.collection-card-grid,
+.marketplace-page .grid,
+.admin-page .grid,
+.premium-page .grid {
+  height: auto !important;
+  min-height: max-content !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* Tabs and horizontal chips may scroll sideways, but vertical wheel/touch goes to the page. */
+[role="tablist"],
+.arena-filter-chips,
+.overflow-x-auto,
+.mobile-x-scroll,
+.stat-x-scroll,
+.player-stats-scroll,
+.admin-wide-scroll,
+[data-mobile-x-scroll="true"] {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-x: contain !important;
+  overscroll-behavior-y: auto !important;
+  touch-action: pan-x pan-y !important;
+}
+
+[role="tabpanel"],
+[data-radix-tabs-content],
+.tabs-content,
+.tab-content {
+  display: block !important;
+  height: auto !important;
+  min-height: max-content !important;
+  max-height: none !important;
+  overflow-y: visible !important;
+  overflow-x: hidden !important;
+  touch-action: pan-y !important;
+}
+
+/* Desktop tables still move sideways without killing vertical page scroll. */
+table {
+  max-width: none !important;
+}
+
+.admin-wide-scroll table,
+.mobile-x-scroll table,
+.stat-x-scroll table,
+.player-stats-scroll table,
+[data-mobile-x-scroll="true"] table {
+  min-width: 720px !important;
+}
+
+@media (max-width: 767px) {
+  [data-app-scroll-root],
+  .app-scroll-root {
+    padding-bottom: calc(11rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .collection-page,
+  .marketplace-page,
+  .admin-page,
+  .premium-page,
+  .mobile-page-safe,
+  main.collection-page,
+  main.marketplace-page,
+  main.admin-page,
+  main.premium-page {
+    padding-bottom: calc(15rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .collection-card-grid {
+    padding-bottom: calc(16rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
