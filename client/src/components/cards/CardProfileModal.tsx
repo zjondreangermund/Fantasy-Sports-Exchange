@@ -107,25 +107,25 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
   const serial = (card as any).serialNumber || (card as any).serial || (card as any).serialId || "Minted";
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/82 p-3 backdrop-blur-xl sm:p-6" role="dialog" aria-modal="true">
-      <div className="mx-auto min-h-full max-w-6xl py-4 sm:py-8">
+    <div className="player-profile-modal fixed inset-0 z-[100] overflow-y-auto overflow-x-hidden bg-black/82 p-3 backdrop-blur-xl sm:p-6" role="dialog" aria-modal="true">
+      <div className="mx-auto min-h-full w-full max-w-6xl py-4 sm:py-8">
         <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#080d1f]/95 shadow-[0_30px_100px_rgba(0,0,0,.72)]">
           <div className="relative flex items-center justify-between overflow-hidden border-b border-white/10 px-4 py-3 sm:px-5">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,.20),transparent_32%),radial-gradient(circle_at_80%_0%,rgba(168,85,247,.18),transparent_30%)]" />
-            <div className="relative">
+            <div className="relative min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[.2em] text-cyan-200">Live Card Profile</p>
-              <h2 className="text-xl font-black text-white sm:text-2xl">{displayName}</h2>
+              <h2 className="truncate text-xl font-black text-white sm:text-2xl">{displayName}</h2>
             </div>
-            <button onClick={onClose} className="relative grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[.06] text-white hover:bg-white/10"><X className="h-5 w-5" /></button>
+            <button onClick={onClose} className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[.06] text-white hover:bg-white/10"><X className="h-5 w-5" /></button>
           </div>
 
-          <div className="grid gap-4 p-4 lg:grid-cols-[320px_1fr] lg:p-5">
-            <aside className="space-y-4">
+          <div className="grid min-w-0 gap-4 p-4 lg:grid-cols-[320px_1fr] lg:p-5">
+            <aside className="min-w-0 space-y-4">
               <div className="flex justify-center rounded-[1.6rem] border border-white/10 bg-white/[.04] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.08)]">
                 <CollectionStableCard player={fantasyCard} size="md" showPrice={Boolean(card.forSale)} />
               </div>
               <div className="rounded-[1.4rem] border border-white/10 bg-black/25 p-4">
-                <h3 className="text-2xl font-black text-white">{displayName}</h3>
+                <h3 className="truncate text-2xl font-black text-white">{displayName}</h3>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-white/80">
                   <span className="rounded-xl bg-white/[.08] px-3 py-2">{position}</span>
                   <span className="rounded-xl bg-white/[.08] px-3 py-2">{team}</span>
@@ -142,7 +142,7 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
               </div>
             </aside>
 
-            <section className="space-y-4">
+            <section className="min-w-0 space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <HeroStat icon={<Star className="h-4 w-4" />} label="Total Points" value={data.stats.totalPoints} />
                 <HeroStat icon={<TrendingUp className="h-4 w-4" />} label="Ownership" value={data.stats.selectedBy ? `${data.stats.selectedBy}%` : "—"} />
@@ -152,14 +152,14 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
 
               <div className="rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                  <div><h3 className="flex items-center gap-2 text-lg font-black text-white"><BarChart3 className="h-5 w-5 text-cyan-200" /> Last 10 Match Output</h3><p className="text-sm text-white/45">Points by gameweek with opponent, minutes, goals, assists and discipline.</p></div>
+                  <div><h3 className="flex items-center gap-2 text-lg font-black text-white"><BarChart3 className="h-5 w-5 text-cyan-200" /> Last 10 Match Output</h3><p className="text-sm text-white/45">Swipe left/right to view all 10 games.</p></div>
                   {isLoading ? <span className="text-xs text-white/45">Updating live FPL...</span> : null}
                 </div>
-                <div className="flex h-56 items-end gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-black/24 px-3 pb-4 pt-6">
+                <div className="player-stats-scroll flex h-56 items-end gap-2 rounded-2xl border border-white/10 bg-black/24 px-3 pb-4 pt-6" data-mobile-x-scroll="true">
                   {history.map((item, index) => {
                     const height = Math.max(8, Math.round((Number(item.points || 0) / peak) * 150));
                     return (
-                      <div key={`${item.gameweek}-${index}`} className="flex min-w-[46px] flex-col items-center justify-end gap-2">
+                      <div key={`${item.gameweek}-${index}`} className="flex min-w-[50px] flex-col items-center justify-end gap-2">
                         <div className="rounded-full border border-white/10 bg-white/[.08] px-2 py-1 text-[10px] font-black text-white">{item.points}</div>
                         <div className="w-9 rounded-t-xl bg-gradient-to-t from-blue-600 via-cyan-400 to-emerald-300 shadow-[0_0_18px_rgba(34,211,238,.35)]" style={{ height }} />
                         <div className="text-center leading-tight"><p className="text-[10px] font-black text-white/75">{item.opponent}</p><p className="text-[9px] text-white/35">GW{item.gameweek || index + 1}</p></div>
@@ -169,11 +169,11 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
                 </div>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-[1fr_310px]">
-                <div className="rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
+              <div className="grid min-w-0 gap-4 xl:grid-cols-[1fr_310px]">
+                <div className="min-w-0 rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
                   <h3 className="mb-4 flex items-center gap-2 text-lg font-black text-white"><Clock className="h-5 w-5 text-cyan-200" /> Match Log</h3>
-                  <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/20">
-                    <table className="w-full min-w-[680px] text-left text-xs">
+                  <div className="player-stats-scroll rounded-2xl border border-white/10 bg-black/20" data-mobile-x-scroll="true">
+                    <table className="min-w-[760px] text-left text-xs">
                       <thead className="bg-white/[.06] text-[10px] uppercase tracking-[.16em] text-white/45">
                         <tr>
                           <th className="px-3 py-3">GW</th>
