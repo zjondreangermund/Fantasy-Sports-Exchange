@@ -2,7 +2,7 @@
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
   max-width: 100%;
   overflow-x: hidden;
 }
@@ -12,14 +12,17 @@ body {
 }
 
 .app-shell {
-  height: 100vh;
-  height: 100svh;
-  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+  height: auto !important;
+  overflow: hidden;
 }
 
 .app-scroll-root,
 [data-app-scroll-root] {
   min-height: 0;
+  height: 100%;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   -webkit-overflow-scrolling: touch !important;
@@ -54,14 +57,9 @@ article,
 }
 
 .premium-page,
+.admin-page,
+.collection-page,
 .mobile-page-safe {
-  min-height: 100%;
-  overflow-x: hidden !important;
-  overflow-y: visible !important;
-  touch-action: pan-y !important;
-}
-
-.collection-page {
   min-height: 100%;
   overflow-x: hidden !important;
   overflow-y: visible !important;
@@ -79,61 +77,88 @@ article,
   touch-action: pan-y !important;
 }
 
+/* Reusable horizontal scroll helpers for wide stats/tables on phones. */
+.mobile-x-scroll,
+.stat-x-scroll,
+.player-stats-scroll,
+.admin-wide-scroll,
+[data-mobile-x-scroll="true"] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto !important;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
+  scrollbar-width: thin;
+}
+
+.mobile-x-scroll > *,
+.stat-x-scroll > *,
+.player-stats-scroll > *,
+.admin-wide-scroll > *,
+[data-mobile-x-scroll="true"] > * {
+  min-width: max-content;
+}
+
+table {
+  max-width: none;
+}
+
 @media (max-width: 767px) {
   * {
     min-width: 0;
   }
 
-  .app-scroll-root,
-  [data-app-scroll-root] {
-    padding-bottom: 0 !important;
-  }
-
-  .app-scroll-root:not(:has(.collection-page)),
-  [data-app-scroll-root]:not(:has(.collection-page)) {
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch !important;
-    touch-action: pan-y !important;
-  }
-
-  .app-scroll-root:has(.collection-page),
-  [data-app-scroll-root]:has(.collection-page) {
+  html,
+  body,
+  #root {
+    height: 100%;
     overflow: hidden !important;
   }
 
-  main {
-    touch-action: pan-y;
+  .app-shell {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
   }
 
+  .app-scroll-root,
+  [data-app-scroll-root] {
+    height: 100% !important;
+    max-height: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: contain !important;
+    touch-action: pan-y !important;
+    padding-bottom: 0 !important;
+  }
+
+  main,
   .premium-page,
-  .mobile-page-safe {
-    min-height: auto !important;
+  .admin-page,
+  .collection-page,
+  .mobile-page-safe,
+  .flex-1.overflow-auto,
+  .flex-1.overflow-y-auto {
+    display: block !important;
+    height: auto !important;
+    min-height: 100% !important;
+    max-height: none !important;
     overflow-y: visible !important;
     overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    touch-action: pan-y !important;
     padding-bottom: calc(12rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   .premium-page > .relative.mx-auto,
+  .admin-page > .relative.mx-auto,
+  .collection-page > .relative.mx-auto,
   .mobile-page-safe > .relative,
   .mobile-page-safe > .mx-auto {
-    padding-bottom: calc(8rem + env(safe-area-inset-bottom, 0px)) !important;
-  }
-
-  .collection-page {
-    display: block !important;
-    height: calc(100dvh - 3.75rem) !important;
-    max-height: calc(100dvh - 3.75rem) !important;
-    min-height: 0 !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    overscroll-behavior-y: contain !important;
-    -webkit-overflow-scrolling: touch !important;
-    touch-action: pan-y !important;
-    padding-bottom: calc(12rem + env(safe-area-inset-bottom, 0px)) !important;
-  }
-
-  .collection-page > .relative.mx-auto {
     min-height: max-content !important;
     padding-bottom: calc(8rem + env(safe-area-inset-bottom, 0px)) !important;
   }
@@ -153,15 +178,55 @@ article,
 
   [role="tablist"],
   .arena-filter-chips,
-  .overflow-x-auto {
-    -webkit-overflow-scrolling: touch;
+  .overflow-x-auto,
+  .mobile-x-scroll,
+  .stat-x-scroll,
+  .player-stats-scroll,
+  .admin-wide-scroll,
+  [data-mobile-x-scroll="true"] {
+    -webkit-overflow-scrolling: touch !important;
     scrollbar-width: none;
+  }
+
+  [role="tablist"] {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    flex-wrap: nowrap !important;
+    justify-content: flex-start !important;
+    touch-action: pan-x !important;
+  }
+
+  [role="tablist"] > * {
+    flex: 0 0 auto !important;
   }
 
   [role="tablist"]::-webkit-scrollbar,
   .arena-filter-chips::-webkit-scrollbar,
-  .overflow-x-auto::-webkit-scrollbar {
+  .overflow-x-auto::-webkit-scrollbar,
+  .mobile-x-scroll::-webkit-scrollbar,
+  .stat-x-scroll::-webkit-scrollbar,
+  .player-stats-scroll::-webkit-scrollbar,
+  .admin-wide-scroll::-webkit-scrollbar,
+  [data-mobile-x-scroll="true"]::-webkit-scrollbar {
     display: none;
+  }
+
+  .grid[class*="grid-cols-"],
+  .flex {
+    max-width: 100%;
+  }
+
+  .admin-page .grid,
+  .premium-page .grid,
+  .collection-page .grid {
+    min-width: 0;
+  }
+
+  .admin-page table,
+  .premium-page table,
+  .collection-page table,
+  table {
+    min-width: 680px;
   }
 
   [role="dialog"] {
