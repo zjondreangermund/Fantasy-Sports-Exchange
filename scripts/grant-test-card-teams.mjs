@@ -89,7 +89,7 @@ async function getPlayersForClub(client, club) {
   const { rows } = await client.query(
     `select id, name, team, position, coalesce(total_points, overall, 0) as score
      from app.players
-     where lower(team) = lower($1)
+     where lower(team::text) = lower($1::text)
      order by coalesce(total_points, overall, 0) desc, id asc`,
     [club],
   );
@@ -126,15 +126,28 @@ async function main() {
 
     for (let accountIndex = 0; accountIndex < DEMO_ACCOUNTS.length; accountIndex++) {
       const email = DEMO_ACCOUNTS[accountIndex];
-      let user = await client.query(`select id, email, name from app.users where lower(email) = lower($1) limit 1`, [email]);
+      let user = await client.query(
+        `select id, email, name
+         from app.users
+         where lower(email::text) = lower($1::text)
+         limit 1`,
+        [email],
+      );
+
       if (user.rowCount === 0) {
         await client.query(
           `insert into app.users (id, email, name, manager_team_name)
-           values ($1, $1, $2, $3)
+           values ($1, $2, $3, $4)
            on conflict (id) do nothing`,
-          [email, email.split("@")[0], `Demo All Clubs ${accountIndex + 1}`],
+          [email, email, email.split("@")[0], `Demo All Clubs ${accountIndex + 1}`],
         );
-        user = await client.query(`select id, email, name from app.users where lower(email) = lower($1) or id = $1 limit 1`, [email]);
+        user = await client.query(
+          `select id, email, name
+           from app.users
+           where lower(email::text) = lower($1::text) or id::text = $2::text
+           limit 1`,
+          [email, email],
+        );
       }
 
       const userId = user.rows[0]?.id;
@@ -158,7 +171,7 @@ async function main() {
           const player = players[playerIndex];
           const rarity = rarityFor(accountIndex, clubIndex, playerIndex);
           const stableSerialId = serialId(email, rarity, player.id, clubIndex, playerIndex + 1);
-          const existing = await client.query(`select id from app.player_cards where serial_id = $1 limit 1`, [stableSerialId]);
+          const existing = await client.query(`select id from app.player_cards where serial_id::text = $1::text limit 1`, [stableSerialId]);
           let cardId;
 
           if (existing.rowCount > 0) {
@@ -170,9 +183,6 @@ async function main() {
               [userId, cardId],
             );
           } else {
-            // Do not cast rarity to app.rarity or any schema-specific enum name.
-            // A quoted SQL literal is type "unknown" and Postgres coerces it to the real column type,
-            // whether the column is text, varchar, or an enum with any name/schema.
             const inserted = await client.query(
               `insert into app.player_cards
                  (player_id, owner_id, rarity, serial_id, serial_number, max_supply, level, xp, decisive_score, last_5_scores, for_sale, price)
