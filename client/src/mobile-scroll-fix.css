@@ -1,4 +1,4 @@
-/* Global scroll stability fixes for mobile browsers and card-heavy pages */
+/* Mobile-safe scrolling and overflow fixes */
 html,
 body,
 #root {
@@ -8,7 +8,7 @@ body,
 }
 
 body {
-  overscroll-behavior-y: none;
+  overscroll-behavior-y: auto;
 }
 
 .app-shell {
@@ -16,18 +16,18 @@ body {
   min-height: 100svh;
   min-height: 100dvh;
   height: auto !important;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .app-scroll-root,
 [data-app-scroll-root] {
-  min-height: 0;
-  height: 100%;
+  min-height: 100%;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   -webkit-overflow-scrolling: touch !important;
-  overscroll-behavior-y: contain;
-  touch-action: pan-y;
+  overscroll-behavior-y: auto;
+  touch-action: auto;
   scrollbar-gutter: stable;
 }
 
@@ -56,6 +56,33 @@ article,
   background-image: none !important;
 }
 
+/* Stop decoded player/card/image layers from bleeding outside market panels. */
+.marketplace-page,
+.marketplace-page section,
+.marketplace-page article,
+.marketplace-page .cinematic-glass,
+.marketplace-page button,
+.marketplace-page img,
+[data-marketplace-safe="true"] {
+  max-width: 100%;
+}
+
+.marketplace-page .cinematic-glass,
+.marketplace-page article,
+.marketplace-page button,
+[data-marketplace-safe="true"] {
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.marketplace-page img,
+[data-marketplace-safe="true"] img {
+  display: block;
+  overflow: hidden;
+  background: rgba(2, 6, 23, 0.72);
+  transform: translateZ(0);
+}
+
 .premium-page,
 .admin-page,
 .collection-page,
@@ -63,21 +90,20 @@ article,
   min-height: 100%;
   overflow-x: hidden !important;
   overflow-y: visible !important;
-  touch-action: pan-y !important;
+  touch-action: auto !important;
 }
 
 .collection-card-grid {
   min-height: max-content;
-  touch-action: pan-y !important;
+  touch-action: auto !important;
   overscroll-behavior-y: auto;
 }
 
 .collection-card-grid button,
 .collection-card-grid .fa-card-lift {
-  touch-action: pan-y !important;
+  touch-action: auto !important;
 }
 
-/* Reusable horizontal scroll helpers for wide stats/tables on phones. */
 .mobile-x-scroll,
 .stat-x-scroll,
 .player-stats-scroll,
@@ -90,7 +116,7 @@ article,
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
-  touch-action: pan-x pan-y;
+  touch-action: pan-x;
   scrollbar-width: thin;
 }
 
@@ -114,25 +140,30 @@ table {
   html,
   body,
   #root {
-    height: 100%;
-    overflow: hidden !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
   }
 
   .app-shell {
-    height: 100dvh !important;
-    max-height: 100dvh !important;
-    overflow: hidden !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
   }
 
   .app-scroll-root,
   [data-app-scroll-root] {
-    height: 100% !important;
-    max-height: 100% !important;
-    overflow-y: auto !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow-y: visible !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
-    overscroll-behavior-y: contain !important;
-    touch-action: pan-y !important;
+    overscroll-behavior-y: auto !important;
+    touch-action: auto !important;
     padding-bottom: 0 !important;
   }
 
@@ -145,12 +176,12 @@ table {
   .flex-1.overflow-y-auto {
     display: block !important;
     height: auto !important;
-    min-height: 100% !important;
+    min-height: auto !important;
     max-height: none !important;
     overflow-y: visible !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
-    touch-action: pan-y !important;
+    touch-action: auto !important;
     padding-bottom: calc(12rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
@@ -166,14 +197,14 @@ table {
   .collection-card-grid {
     min-height: max-content !important;
     padding-bottom: calc(14rem + env(safe-area-inset-bottom, 0px)) !important;
-    touch-action: pan-y !important;
+    touch-action: auto !important;
   }
 
   .collection-card-grid button,
   .collection-card-grid .fa-card-lift,
   .collection-card-grid article,
   .collection-card-grid img {
-    touch-action: pan-y !important;
+    touch-action: auto !important;
   }
 
   [role="tablist"],
