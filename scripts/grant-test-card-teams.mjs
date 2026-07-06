@@ -44,12 +44,12 @@ async function getPlayersForClub(client, club) {
     `select id, name, team, position, coalesce(total_points, overall, 0) as score
      from app.players
      where lower(team) = lower($1)
-     order by coalesce(array_position(array['GK','DEF','MID','FWD'], position), 99), coalesce(total_points, overall, 0) desc, id asc`,
+     order by coalesce(total_points, overall, 0) desc, id asc`,
     [club],
   );
   return rows.sort((a, b) => {
-    const posA = POSITION_ORDER[a.position] ?? 99;
-    const posB = POSITION_ORDER[b.position] ?? 99;
+    const posA = POSITION_ORDER[String(a.position || "").toUpperCase()] ?? 99;
+    const posB = POSITION_ORDER[String(b.position || "").toUpperCase()] ?? 99;
     if (posA !== posB) return posA - posB;
     return Number(b.score || 0) - Number(a.score || 0);
   });
