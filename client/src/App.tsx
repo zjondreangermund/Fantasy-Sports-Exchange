@@ -17,6 +17,7 @@ import MatchdayQuickDock from "./components/MatchdayQuickDock";
 import MobileNavDock from "./components/MobileNavDock";
 import PageScene, { routeToPageSceneVariant } from "./components/PageScene";
 import { useAuth } from "./hooks/use-auth";
+import { useScrollRepair } from "./hooks/use-scroll-repair";
 import { Skeleton } from "./components/ui/skeleton";
 
 import NotFound from "./pages/not-found";
@@ -101,6 +102,7 @@ function AuthenticatedApp() {
   const style = { "--sidebar-width": "16rem", "--sidebar-width-icon": "3rem" };
   const { data: user } = useQuery<{ managerTeamName?: string }>({ queryKey: ["/api/user"] });
   const teamName = user?.managerTeamName || "Your Stadium";
+  useScrollRepair(location);
 
   React.useEffect(() => {
     const controller = new AbortController();
