@@ -12,7 +12,7 @@ body,
   overflow-x: hidden !important;
   overflow-y: auto !important;
   overscroll-behavior-y: auto !important;
-  touch-action: auto !important;
+  touch-action: pan-y !important;
 }
 
 body {
@@ -48,7 +48,7 @@ body {
   overflow-y: visible !important;
   -webkit-overflow-scrolling: touch !important;
   overscroll-behavior-y: auto !important;
-  touch-action: auto !important;
+  touch-action: pan-y !important;
   padding-bottom: calc(8rem + env(safe-area-inset-bottom, 0px)) !important;
 }
 
@@ -84,16 +84,32 @@ main.premium-page {
   padding-bottom: calc(12rem + env(safe-area-inset-bottom, 0px)) !important;
 }
 
+/* Home and Collection contain many full-card links/buttons. Force vertical pans to bubble as page scrolls. */
 .collection-page *,
-.premium-page * {
+.premium-page *,
+.collection-page button,
+.premium-page button,
+.collection-page a,
+.premium-page a,
+.collection-card-grid,
+.collection-card-grid *,
+.fa-card-lift,
+.fa-card-lift *,
+[data-card-engine],
+[data-card-engine] * {
   touch-action: pan-y !important;
 }
 
-.collection-page button,
-.premium-page button,
-.collection-card-grid button,
-.fa-card-lift {
-  touch-action: pan-y !important;
+/* Decorative absolute layers must never become the touch target. */
+.collection-page [aria-hidden="true"],
+.premium-page [aria-hidden="true"],
+.collection-page .pointer-events-none,
+.premium-page .pointer-events-none,
+[data-card-engine] [aria-hidden="true"],
+.fa-card-lift [aria-hidden="true"],
+.player-profile-modal [aria-hidden="true"],
+.marketplace-page [aria-hidden="true"] {
+  pointer-events: none !important;
 }
 
 .collection-card-grid,
@@ -140,7 +156,7 @@ main.premium-page {
   max-height: none !important;
   overflow-y: visible !important;
   overflow-x: hidden !important;
-  touch-action: auto !important;
+  touch-action: pan-y !important;
 }
 
 table {
