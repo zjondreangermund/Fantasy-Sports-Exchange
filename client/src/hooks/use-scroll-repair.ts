@@ -47,6 +47,7 @@ function repairRootGeometry(root: HTMLElement) {
   root.style.overflowX = "hidden";
   root.style.webkitOverflowScrolling = "touch";
   root.style.touchAction = "pan-y";
+  root.style.overscrollBehaviorY = "contain";
 
   document.documentElement.style.overflow = "hidden";
   document.body.style.overflow = "hidden";
@@ -55,7 +56,6 @@ function repairRootGeometry(root: HTMLElement) {
 
 export function useScrollRepair(routeKey?: string) {
   useEffect(() => {
-    let touchY = 0;
     let raf = 0;
 
     const scheduleRepair = () => {
@@ -77,24 +77,6 @@ export function useScrollRepair(routeKey?: string) {
       root.scrollTop += event.deltaY;
     };
 
-    const onTouchStart = (event: TouchEvent) => {
-      touchY = event.touches[0]?.clientY || 0;
-    };
-
-    const onTouchMove = (event: TouchEvent) => {
-      const root = getRoot();
-      if (!root || isInsideModal(event.target)) return;
-      const currentY = event.touches[0]?.clientY || touchY;
-      const deltaY = touchY - currentY;
-      if (Math.abs(deltaY) < 2) return;
-      if (nearestScrollableY(event.target, root, deltaY)) return;
-      if (root.scrollHeight <= root.clientHeight + 1) return;
-
-      event.preventDefault();
-      root.scrollTop += deltaY;
-      touchY = currentY;
-    };
-
     scheduleRepair();
     const timeouts = [80, 250, 700, 1400].map((ms) => window.setTimeout(scheduleRepair, ms));
 
@@ -102,8 +84,6 @@ export function useScrollRepair(routeKey?: string) {
     window.visualViewport?.addEventListener("resize", scheduleRepair);
     window.addEventListener("orientationchange", scheduleRepair);
     document.addEventListener("wheel", onWheel, { capture: true, passive: false });
-    document.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
-    document.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
 
     return () => {
       cancelAnimationFrame(raf);
@@ -112,8 +92,6 @@ export function useScrollRepair(routeKey?: string) {
       window.visualViewport?.removeEventListener("resize", scheduleRepair);
       window.removeEventListener("orientationchange", scheduleRepair);
       document.removeEventListener("wheel", onWheel, true);
-      document.removeEventListener("touchstart", onTouchStart, true);
-      document.removeEventListener("touchmove", onTouchMove, true);
     };
   }, [routeKey]);
 }
