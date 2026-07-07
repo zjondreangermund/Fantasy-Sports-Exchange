@@ -1,6 +1,5 @@
 /* Native scrolling reset.
-   The previous hard scroll override locked html/body and forced JS scrolling.
-   This file is imported last, so it restores smooth browser-native scrolling. */
+   Imported last to keep scrolling browser-native and prevent Android visual glitches. */
 
 html,
 body,
@@ -81,8 +80,20 @@ main.premium-page {
   max-height: none !important;
   overflow-y: visible !important;
   overflow-x: hidden !important;
-  touch-action: auto !important;
+  touch-action: pan-y !important;
   padding-bottom: calc(12rem + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+.collection-page *,
+.premium-page * {
+  touch-action: pan-y !important;
+}
+
+.collection-page button,
+.premium-page button,
+.collection-card-grid button,
+.fa-card-lift {
+  touch-action: pan-y !important;
 }
 
 .collection-card-grid,
@@ -111,6 +122,14 @@ main.premium-page {
   touch-action: pan-x pan-y !important;
 }
 
+.mobile-x-scroll > table,
+.stat-x-scroll > table,
+.player-stats-scroll > table,
+.admin-wide-scroll > table,
+[data-mobile-x-scroll="true"] > table {
+  min-width: 720px !important;
+}
+
 [role="tabpanel"],
 [data-radix-tabs-content],
 .tabs-content,
@@ -128,12 +147,40 @@ table {
   max-width: none !important;
 }
 
-.admin-wide-scroll table,
-.mobile-x-scroll table,
-.stat-x-scroll table,
-.player-stats-scroll table,
-[data-mobile-x-scroll="true"] table {
-  min-width: 720px !important;
+.player-profile-modal {
+  background: rgba(2, 6, 23, .94) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  touch-action: pan-y !important;
+}
+
+.player-profile-modal [class*="backdrop-blur"],
+.marketplace-page [class*="backdrop-blur"],
+.cinematic-glass {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.player-profile-modal .rounded-\[1\.25rem\],
+.player-profile-modal .rounded-\[1\.5rem\],
+.player-profile-modal .rounded-xl,
+.marketplace-page article,
+.marketplace-page .cinematic-glass,
+.marketplace-page button,
+.marketplace-page img {
+  contain: paint !important;
+  isolation: isolate !important;
+  overflow: hidden !important;
+  transform: translateZ(0) !important;
+  backface-visibility: hidden !important;
+}
+
+.player-profile-modal .player-stats-scroll,
+.marketplace-page .player-stats-scroll,
+.marketplace-page [data-marketplace-safe="true"] {
+  background: rgba(2, 6, 23, .72) !important;
+  contain: paint !important;
+  isolation: isolate !important;
 }
 
 @media (min-width: 768px) {
@@ -162,6 +209,24 @@ table {
 }
 
 @media (max-width: 767px) {
+  html,
+  body,
+  #root,
+  .app-shell,
+  .app-content,
+  [data-app-scroll-root],
+  .app-scroll-root {
+    height: auto !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+  }
+
+  html,
+  body,
+  #root {
+    overflow-y: auto !important;
+  }
+
   [data-app-scroll-root],
   .app-scroll-root {
     padding-bottom: calc(11rem + env(safe-area-inset-bottom, 0px)) !important;
