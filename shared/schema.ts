@@ -134,6 +134,8 @@ export const competitions = appSchema.table("competitions", {
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
   prizeCardRarity: rarityEnum("prize_card_rarity"),
+  prizeType: text("prize_type").default("cash_pool"),
+  prizeDescription: text("prize_description"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -147,6 +149,7 @@ export const competitionEntries = appSchema.table("competition_entries", {
   rank: integer("rank"),
   prizeAmount: real("prize_amount").default(0),
   prizeCardId: integer("prize_card_id").references(() => playerCards.id),
+  tiebreakMeta: jsonb("tiebreak_meta").$type<Record<string, any>>().default({}),
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
@@ -257,24 +260,14 @@ export const DECISIVE_LEVELS: { level: number; points: number }[] = [{ level: 0,
 export function calculateDecisiveLevel(stats: { goals?: number; assists?: number; cleanSheets?: number; penaltySaves?: number; redCards?: number; ownGoals?: number; errorsLeadingToGoal?: number; }): { level: number; points: number } {
   const positives = (stats.goals ?? 0) + (stats.assists ?? 0) + (stats.cleanSheets ?? 0) + (stats.penaltySaves ?? 0);
   const negatives = (stats.redCards ?? 0) + (stats.ownGoals ?? 0) + (stats.errorsLeadingToGoal ?? 0);
-  const rawLevel = Math.max(0, Math.min(5, positives - negatives));
-  return DECISIVE_LEVELS[rawLevel];
+  const score = positives - negatives;
+  if (score >= 5) return DECISIVE_LEVELS[5];
+  if (score >= 4) return DECISIVE_LEVELS[4];
+  if (score >= 3) return DECISIVE_LEVELS[3];
+  if (score >= 2) return DECISIVE_LEVELS[2];
+  if (score >= 1) return DECISIVE_LEVELS[1];
+  return DECISIVE_LEVELS[0];
 }
-
-export const SITE_FEE_RATE = 0.08;
-
-export const playersRelations = relations(players, ({ many }) => ({ cards: many(playerCards) }));
-export const playerCardsRelations = relations(playerCards, ({ one }) => ({ player: one(players, { fields: [playerCards.playerId], references: [players.id] }), owner: one(users, { fields: [playerCards.ownerId], references: [users.id] }) }));
-export const walletsRelations = relations(wallets, ({ one }) => ({ user: one(users, { fields: [wallets.userId], references: [users.id] }) }));
-export const transactionsRelations = relations(transactions, ({ one }) => ({ user: one(users, { fields: [transactions.userId], references: [users.id] }) }));
-export const lineupsRelations = relations(lineups, ({ one }) => ({ user: one(users, { fields: [lineups.userId], references: [users.id] }) }));
-export const userOnboardingRelations = relations(userOnboarding, ({ one }) => ({ user: one(users, { fields: [userOnboarding.userId], references: [users.id] }) }));
-export const competitionsRelations = relations(competitions, ({ many }) => ({ entries: many(competitionEntries) }));
-export const competitionEntriesRelations = relations(competitionEntries, ({ one }) => ({ competition: one(competitions, { fields: [competitionEntries.competitionId], references: [competitions.id] }), user: one(users, { fields: [competitionEntries.userId], references: [users.id] }) }));
-export const auctionsRelations = relations(auctions, ({ one, many }) => ({ card: one(playerCards, { fields: [auctions.cardId], references: [playerCards.id] }), seller: one(users, { fields: [auctions.sellerUserId], references: [users.id] }), bids: many(auctionBids) }));
-export const auctionBidsRelations = relations(auctionBids, ({ one }) => ({ auction: one(auctions, { fields: [auctionBids.auctionId], references: [auctions.id] }), bidder: one(users, { fields: [auctionBids.bidderUserId], references: [users.id] }) }));
-export const cardLocksRelations = relations(cardLocks, ({ one }) => ({ card: one(playerCards, { fields: [cardLocks.cardId], references: [playerCards.id] }), user: one(users, { fields: [cardLocks.userId], references: [users.id] }) }));
-export const notificationsRelations = relations(notifications, ({ one }) => ({ user: one(users, { fields: [notifications.userId], references: [users.id] }) }));
 
 export const insertUserSchema = createInsertSchema(users);
 export const insertPlayerSchema = createInsertSchema(players);
@@ -285,51 +278,33 @@ export const insertLineupSchema = createInsertSchema(lineups);
 export const insertOnboardingSchema = createInsertSchema(userOnboarding);
 export const insertCompetitionSchema = createInsertSchema(competitions);
 export const insertCompetitionEntrySchema = createInsertSchema(competitionEntries);
-export const insertAuctionSchema = createInsertSchema(auctions);
-export const insertAuctionBidSchema = createInsertSchema(auctionBids);
-export const insertCardLockSchema = createInsertSchema(cardLocks);
-export const insertPlayerValueSchema = createInsertSchema(playerValues);
-export const insertAuditLogSchema = createInsertSchema(auditLogs);
-export const insertIdempotencySchema = createInsertSchema(idempotencyKeys);
-export const insertNotificationSchema = createInsertSchema(notifications);
+export const insertSwapOfferSchema = createInsertSchema(swapOffers);
+export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalRequests);
 
-export type InsertUserInput = z.infer<typeof insertUserSchema>;
-export type Player = typeof players.$inferSelect;
-export type InsertPlayerInput = z.infer<typeof insertPlayerSchema>;
-export type PlayerCard = typeof playerCards.$inferSelect;
-export type InsertPlayerCardInput = z.infer<typeof insertPlayerCardSchema>;
-export type Wallet = typeof wallets.$inferSelect;
-export type Transaction = typeof transactions.$inferSelect;
-export type Lineup = typeof lineups.$inferSelect;
-export type UserOnboarding = typeof userOnboarding.$inferSelect;
-export type Competition = typeof competitions.$inferSelect;
-export type CompetitionEntry = typeof competitionEntries.$inferSelect;
-export type Auction = typeof auctions.$inferSelect;
-export type AuctionBid = typeof auctionBids.$inferSelect;
-export type CardLock = typeof cardLocks.$inferSelect;
-export type PlayerValue = typeof playerValues.$inferSelect;
-export type AuditLog = typeof auditLogs.$inferSelect;
-export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
-export type Notification = typeof notifications.$inferSelect;
 export type User = typeof users.$inferSelect;
-
-export type PlayerCardWithPlayer = PlayerCard & { player: Player; ownerUsername?: string; ownerName?: string };
-export type CompetitionWithEntries = Competition & { entries: CompetitionEntry[]; entryCount: number };
-
-export type InsertUser = typeof users.$inferInsert;
-export type InsertPlayer = typeof players.$inferInsert;
-export type InsertPlayerCard = typeof playerCards.$inferInsert;
-export type InsertWallet = typeof wallets.$inferInsert & { balance?: number; lockedBalance?: number };
-export type InsertTransaction = typeof transactions.$inferInsert & { description?: string; paymentMethod?: string; externalTransactionId?: string };
-export type InsertLineup = typeof lineups.$inferInsert;
-export type InsertOnboarding = typeof userOnboarding.$inferInsert;
-export type InsertCompetition = typeof competitions.$inferInsert;
-export type InsertCompetitionEntry = typeof competitionEntries.$inferInsert & { lineupCardIds?: number[]; captainId?: number; totalScore?: number };
-export type InsertSwapOffer = typeof swapOffers.$inferInsert;
-export type InsertNotification = typeof notifications.$inferInsert;
-export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert & { fee?: number; destinationKey?: string; destinationVerified?: boolean; verificationToken?: string | null; releaseAfter?: Date; status?: "pending" | "processing" | "completed" | "rejected"; bankName?: string; accountHolder?: string; accountNumber?: string; iban?: string; swiftCode?: string; ewalletProvider?: string; ewalletId?: string };
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Player = typeof players.$inferSelect;
+export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
+export type PlayerCard = typeof playerCards.$inferSelect;
+export type InsertPlayerCard = z.infer<typeof insertPlayerCardSchema>;
+export type Wallet = typeof wallets.$inferSelect;
+export type InsertWallet = z.infer<typeof insertWalletSchema>;
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type Lineup = typeof lineups.$inferSelect;
+export type InsertLineup = z.infer<typeof insertLineupSchema>;
+export type UserOnboarding = typeof userOnboarding.$inferSelect;
+export type InsertOnboarding = z.infer<typeof insertOnboardingSchema>;
+export type Competition = typeof competitions.$inferSelect;
+export type InsertCompetition = z.infer<typeof insertCompetitionSchema>;
+export type CompetitionEntry = typeof competitionEntries.$inferSelect;
+export type InsertCompetitionEntry = z.infer<typeof insertCompetitionEntrySchema>;
 export type SwapOffer = typeof swapOffers.$inferSelect;
+export type InsertSwapOffer = z.infer<typeof insertSwapOfferSchema>;
 export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
+export type InsertWithdrawalRequest = z.infer<typeof insertWithdrawalRequestSchema>;
+export type PlayerCardWithPlayer = PlayerCard & { player: Player; ownerName?: string | null; ownerUsername?: string | null; };
 
-export type EplPlayer = { id: number; name: string; rating?: number | string; goals?: number; assists?: number; appearances?: number; minutes?: number; position?: string; club?: string; team?: string; photo?: string; photoUrl?: string; imageUrl?: string; image_url?: string; clubLogo?: string; teamLogo?: string; club_logo?: string; team_logo?: string; firstname?: string; lastname?: string; firstName?: string; lastName?: string; age?: number; nationality?: string; stats?: any };
-export type EplFixture = { id: number; gameweek?: number; round?: number; homeTeam: string; awayTeam: string; homeTeamId?: number; awayTeamId?: number; status: string; kickoffTime?: string; matchDate?: string; homeTeamLogoUrl?: string; homeTeamLogo?: string; awayTeamLogoUrl?: string; awayTeamLogo?: string; homeGoals?: number; awayGoals?: number; elapsed?: number };
+export const playerRelations = relations(players, ({ many }) => ({ cards: many(playerCards) }));
+export const playerCardRelations = relations(playerCards, ({ one }) => ({ player: one(players, { fields: [playerCards.playerId], references: [players.id] }), owner: one(users, { fields: [playerCards.ownerId], references: [users.id] }) }));
+export const userRelations = relations(users, ({ many, one }) => ({ cards: many(playerCards), wallet: one(wallets), lineup: one(lineups), onboarding: one(userOnboarding) }));
