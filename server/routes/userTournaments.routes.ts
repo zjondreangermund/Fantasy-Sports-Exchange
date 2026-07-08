@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { ARENA_TOURNAMENT_PRICE_PRESETS } from "../services/tournamentRules.js";
 
 interface RegisterUserTournamentRoutesDeps {
   requireAuth: any;
@@ -9,11 +10,16 @@ interface RegisterUserTournamentRoutesDeps {
 const TOURNAMENT_FEE_RATE = 0.2;
 const PIN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const ALLOWED_RARITIES = new Set(["common", "rare", "unique", "epic", "legendary"]);
+const ALLOWED_PRIZE_TYPES = new Set(["cash_pool", "goods", "goods_plus_cash", "packs", "sponsor_prize"]);
 
 function money(value: unknown) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
   return Math.round(n * 100) / 100;
+}
+
+function allowedPricesForTier(tier: string) {
+  return (ARENA_TOURNAMENT_PRICE_PRESETS as any)[tier] || [0, 20, 50, 100];
 }
 
 function randomPin(length = 6) {
@@ -48,13 +54,20 @@ export function registerUserTournamentRoutes(app: Express, deps: RegisterUserTou
       const maxEntriesRaw = Number(req.body?.maxEntries || 0);
       const maxEntries = Number.isInteger(maxEntriesRaw) && maxEntriesRaw > 1 ? Math.min(maxEntriesRaw, 500) : null;
       const visibility = String(req.body?.visibility || "private").toLowerCase() === "public" ? "public" : "private";
+      const prizeType = String(req.body?.prizeType || "cash_pool").toLowerCase().trim();
+      const prizeDescription = String(req.body?.prizeDescription || "").trim().slice(0, 240) || null;
       const gameWeek = Number.isInteger(Number(req.body?.gameWeek)) && Number(req.body?.gameWeek) > 0 ? Number(req.body?.gameWeek) : 1;
       const startDate = req.body?.startDate ? new Date(String(req.body.startDate)) : new Date();
       const endDate = req.body?.endDate ? new Date(String(req.body.endDate)) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       if (!name) return res.status(400).json({ message: "Tournament name required" });
       if (!ALLOWED_RARITIES.has(tier)) return res.status(400).json({ message: "Invalid rarity tier" });
+      if (!ALLOWED_PRIZE_TYPES.has(prizeType)) return res.status(400).json({ message: "Invalid prize type" });
       if (entryFee < 0) return res.status(400).json({ message: "Entry fee cannot be negative" });
+      const allowedPrices = allowedPricesForTier(tier);
+      if (!allowedPrices.includes(entryFee)) {
+        return res.status(400).json({ message: `Choose an approved ${tier} entry price`, allowedPrices });
+      }
       if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()) || endDate <= startDate) {
         return res.status(400).json({ message: "Valid start and end dates required" });
       }
@@ -65,10 +78,12 @@ export function registerUserTournamentRoutes(app: Express, deps: RegisterUserTou
       const result = await db.execute(sql`
         insert into app.competitions (
           name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity,
-          created_by_user_id, join_pin, visibility, max_entries, platform_fee_rate, platform_fee_total, prize_pool_total
+          created_by_user_id, join_pin, visibility, max_entries, platform_fee_rate, platform_fee_total, prize_pool_total,
+          prize_type, prize_description
         ) values (
           ${name}, ${tier}, ${entryFee}, 'open', ${gameWeek}, ${startDate}, ${endDate}, ${prizeRarity},
-          ${userId}, ${pin}, ${visibility}, ${maxEntries}, ${TOURNAMENT_FEE_RATE}, 0, 0
+          ${userId}, ${pin}, ${visibility}, ${maxEntries}, ${TOURNAMENT_FEE_RATE}, 0, 0,
+          ${prizeType}, ${prizeDescription}
         ) returning *
       `);
 
