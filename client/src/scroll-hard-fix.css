@@ -84,13 +84,22 @@ main.premium-page {
   padding-bottom: calc(12rem + env(safe-area-inset-bottom, 0px)) !important;
 }
 
-/* Home and Collection contain many full-card links/buttons. Force vertical pans to bubble as page scrolls. */
+/* Home, collection and tournament cards contain many buttons/links. Vertical swipes must scroll, not get swallowed by the card. */
 .collection-page *,
+.marketplace-page *,
+.admin-page *,
 .premium-page *,
+.mobile-page-safe *,
 .collection-page button,
+.marketplace-page button,
+.admin-page button,
 .premium-page button,
+.mobile-page-safe button,
 .collection-page a,
+.marketplace-page a,
+.admin-page a,
 .premium-page a,
+.mobile-page-safe a,
 .collection-card-grid,
 .collection-card-grid *,
 .fa-card-lift,
@@ -100,7 +109,9 @@ main.premium-page {
   touch-action: pan-y !important;
 }
 
-/* Decorative absolute layers must never become the touch target. */
+/* Decorative absolute/fixed layers must never become the touch target. */
+[aria-hidden="true"],
+.pointer-events-none,
 .collection-page [aria-hidden="true"],
 .premium-page [aria-hidden="true"],
 .collection-page .pointer-events-none,
@@ -227,25 +238,42 @@ table {
 @media (max-width: 767px) {
   html,
   body,
-  #root,
+  #root {
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    overflow: hidden !important;
+    overscroll-behavior-y: none !important;
+  }
+
   .app-shell,
-  .app-content,
+  .app-content {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
   [data-app-scroll-root],
   .app-scroll-root {
+    display: block !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
     height: auto !important;
     max-height: none !important;
-    overflow-y: visible !important;
-  }
-
-  html,
-  body,
-  #root {
     overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: contain !important;
+    touch-action: pan-y !important;
+    padding-bottom: calc(9rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
-  [data-app-scroll-root],
-  .app-scroll-root {
-    padding-bottom: calc(11rem + env(safe-area-inset-bottom, 0px)) !important;
+  [data-app-scroll-root] > div,
+  .app-scroll-root > div {
+    min-height: max-content !important;
+    padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   .collection-page,
@@ -262,5 +290,20 @@ table {
 
   .collection-card-grid {
     padding-bottom: calc(16rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .collection-card-grid button,
+  .collection-card-grid .fa-card-lift,
+  .collection-card-grid article,
+  .collection-card-grid img,
+  .marketplace-page button,
+  .premium-page button,
+  .admin-page button {
+    touch-action: pan-y !important;
+  }
+
+  .mobile-nav-dock,
+  nav[aria-label="Mobile primary navigation"] {
+    touch-action: manipulation !important;
   }
 }
