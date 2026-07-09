@@ -36,24 +36,19 @@ const AuctionsPage = React.lazy(() => import("./pages/auctions"));
 const WalletPage = React.lazy(() => import("./pages/wallet"));
 const AccountPage = React.lazy(() => import("./pages/account"));
 const CompetitionsPage = React.lazy(() => import("./pages/competitions"));
+const PrizeVaultPage = React.lazy(() => import("./pages/prize-vault"));
 const PremierLeaguePage = React.lazy(() => import("./pages/premier-league"));
 const AdminPage = React.lazy(() => import("./pages/admin"));
 const CardLabPage = React.lazy(() => import("./pages/card-lab"));
 
 function RouteFallback() {
-  return (
-    <div className="flex-1 flex items-center justify-center">
-      <Skeleton className="w-32 h-8" />
-    </div>
-  );
+  return <div className="flex-1 flex items-center justify-center"><Skeleton className="w-32 h-8" /></div>;
 }
 
 function AuthenticatedRouter() {
   const { data: onboarding, isLoading } = useQuery<{ completed: boolean }>({ queryKey: ["/api/onboarding/status"] });
 
-  if (isLoading) {
-    return <div className="flex-1 flex items-center justify-center"><Skeleton className="w-32 h-8" /></div>;
-  }
+  if (isLoading) return <div className="flex-1 flex items-center justify-center"><Skeleton className="w-32 h-8" /></div>;
 
   if (onboarding && !onboarding.completed) {
     return (
@@ -82,6 +77,7 @@ function AuthenticatedRouter() {
         <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
         <Route path="/card-reveal" component={CardRevealPage} />
         <Route path="/competitions" component={CompetitionsPage} />
+        <Route path="/prize-vault" component={PrizeVaultPage} />
         <Route path="/premier-league" component={PremierLeaguePage} />
         <Route path="/card-lab" component={CardLabPage} />
         <Route path="/collection" component={CollectionPage} />
@@ -104,13 +100,7 @@ function AuthenticatedApp() {
 
   React.useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/audit/client-event", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event: "route_view", path: location, title: document.title, ts: new Date().toISOString() }),
-      signal: controller.signal,
-    }).catch(() => {});
+    fetch("/api/audit/client-event", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event: "route_view", path: location, title: document.title, ts: new Date().toISOString() }), signal: controller.signal }).catch(() => {});
     return () => controller.abort();
   }, [location]);
 
@@ -121,15 +111,10 @@ function AuthenticatedApp() {
         <div className="app-content relative isolate flex min-h-[100dvh] min-w-0 flex-1 flex-col overflow-x-hidden">
           <RouteSceneBackground pathname={location} />
           <StadiumAmbientLayer teamName={teamName} />
-          <header className="sticky top-0 z-50 flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/25 p-2 backdrop-blur-2xl">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <ThemeToggle />
-          </header>
+          <header className="sticky top-0 z-50 flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/25 p-2 backdrop-blur-2xl"><SidebarTrigger data-testid="button-sidebar-toggle" /><ThemeToggle /></header>
           <LivePulseDock />
           <main className="app-scroll-root relative z-10 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-auto pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0" data-app-scroll-root>
-            <div className="min-h-full flex-1 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0">
-              <AuthenticatedRouter />
-            </div>
+            <div className="min-h-full flex-1 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0"><AuthenticatedRouter /></div>
           </main>
           <MatchdayQuickDock />
           <MobileNavDock />
@@ -143,43 +128,13 @@ function AuthenticatedApp() {
 
 function AppContent() {
   const { user, isLoading } = useAuth();
-
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const ref = String(params.get("ref") || "").trim();
-    if (ref) localStorage.setItem("fantasy_referral_code", ref);
-  }, []);
-
-  React.useEffect(() => {
-    if (!user) return;
-    const code = localStorage.getItem("fantasy_referral_code");
-    if (!code) return;
-    fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) })
-      .then(() => localStorage.removeItem("fantasy_referral_code"))
-      .catch(() => {});
-  }, [user]);
-
-  if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Skeleton className="w-12 h-12 rounded-md" /><Skeleton className="w-32 h-4" /></div></div>;
-  }
-
-  if (!user) {
-    const pathname = window.location.pathname || "/";
-    return <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen"><React.Suspense fallback={<RouteFallback />}><LandingPage /></React.Suspense></PageScene>;
-  }
-
+  React.useEffect(() => { const params = new URLSearchParams(window.location.search); const ref = String(params.get("ref") || "").trim(); if (ref) localStorage.setItem("fantasy_referral_code", ref); }, []);
+  React.useEffect(() => { if (!user) return; const code = localStorage.getItem("fantasy_referral_code"); if (!code) return; fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) }).then(() => localStorage.removeItem("fantasy_referral_code")).catch(() => {}); }, [user]);
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Skeleton className="w-12 h-12 rounded-md" /><Skeleton className="w-32 h-4" /></div></div>;
+  if (!user) { const pathname = window.location.pathname || "/"; return <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen"><React.Suspense fallback={<RouteFallback />}><LandingPage /></React.Suspense></PageScene>; }
   return <AuthenticatedApp />;
 }
 
 export default function App() {
-  return (
-    <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <AppContent />
-          <Toaster />
-        </TooltipProvider>
-      </QueryClientProvider>
-    </ThemeProvider>
-  );
+  return <ThemeProvider><QueryClientProvider client={queryClient}><TooltipProvider><AppContent /><Toaster /></TooltipProvider></QueryClientProvider></ThemeProvider>;
 }
