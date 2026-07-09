@@ -55,20 +55,21 @@ const common = [
   makePrize("common-airtime-100", "N$100 Airtime", 100, "Voucher", "common"),
   makePrize("common-food-250", "N$250 Food Voucher", 250, "Voucher", "common"),
   makePrize("common-gift-500", "N$500 Shopping Voucher", 500, "Voucher", "common"),
-  makePrize("common-football", "Premium Football", 750, "Football", "common"),
   makePrize("common-cap", "Fantasy Arena Team Cap", 650, "Merch", "common"),
+  makePrize("common-football", "Premium Football", 750, "Football", "common"),
   makePrize("common-headset", "Gaming Headset", 900, "Gaming", "common"),
   makePrize("common-jersey", "Club Jersey", 1500, "Merch", "common"),
   makePrize("common-controller", "PS5 Controller", 1800, "Gaming", "common"),
 ];
 
 const rare = [
+  makePrize("rare-airtime-500", "N$500 Airtime / Data", 500, "Voucher", "rare"),
   makePrize("rare-voucher-1000", "N$1,000 Shopping Voucher", 1000, "Voucher", "rare"),
+  makePrize("rare-headset-pro", "Gaming Headset Pro", 2500, "Gaming", "rare"),
+  makePrize("rare-jbl", "JBL Speaker", 3000, "Electronics", "rare"),
+  makePrize("rare-game-bundle", "PS5 Game Bundle", 3000, "Gaming", "rare"),
   makePrize("rare-watch", "Smart Watch", 2800, "Electronics", "rare"),
   makePrize("rare-tablet", "Tablet", 4500, "Electronics", "rare"),
-  makePrize("rare-jbl", "JBL Speaker", 3000, "Electronics", "rare"),
-  makePrize("rare-headset-pro", "Gaming Headset Pro", 2500, "Gaming", "rare"),
-  makePrize("rare-game-bundle", "PS5 Game Bundle", 3000, "Gaming", "rare"),
   makePrize("rare-monitor", "Gaming Monitor", 5500, "Computers", "rare"),
   makePrize("rare-tv-55", "55 inch Smart TV", 8500, "Electronics", "rare"),
   makePrize("rare-ps5", "PlayStation 5 Console", 13999, "Gaming", "rare"),
@@ -78,46 +79,58 @@ const rare = [
 ];
 
 const unique = [
-  makePrize("unique-iphone", "iPhone / Equivalent Premium Phone", 22000, "Electronics", "unique"),
-  makePrize("unique-samsung-ultra", "Samsung Galaxy Ultra", 24000, "Electronics", "unique"),
-  makePrize("unique-macbook-air", "MacBook Air", 23000, "Computers", "unique"),
+  makePrize("unique-voucher-1000", "N$1,000 Premium Voucher", 1000, "Voucher", "unique"),
+  makePrize("unique-gadget-2500", "N$2,500 Gadget Voucher", 2500, "Electronics", "unique"),
+  makePrize("unique-tech-5000", "N$5,000 Tech Voucher", 5000, "Electronics", "unique"),
+  makePrize("unique-weekend-mini", "Weekend Away Voucher", 7500, "Travel", "unique"),
+  makePrize("unique-drone-mini", "Mini DJI Drone / Equivalent", 10000, "Electronics", "unique"),
   makePrize("unique-drone", "DJI Drone", 18000, "Electronics", "unique"),
-  makePrize("unique-gaming-pc", "Premium Gaming PC", 30000, "Gaming", "unique"),
-  makePrize("unique-home-theatre", "Home Theatre Package", 28000, "Electronics", "unique"),
   makePrize("unique-weekend", "Weekend Holiday for Two", 20000, "Travel", "unique"),
+  makePrize("unique-iphone", "iPhone / Equivalent Premium Phone", 22000, "Electronics", "unique"),
+  makePrize("unique-macbook-air", "MacBook Air", 23000, "Computers", "unique"),
+  makePrize("unique-samsung-ultra", "Samsung Galaxy Ultra", 24000, "Electronics", "unique"),
+  makePrize("unique-home-theatre", "Home Theatre Package", 28000, "Electronics", "unique"),
+  makePrize("unique-gaming-pc", "Premium Gaming PC", 30000, "Gaming", "unique"),
   makePrize("unique-quad", "Quad Bike", 45000, "Adventure", "unique"),
+  makePrize("unique-travel-50000", "N$50,000 Travel Voucher", 50000, "Travel", "unique"),
   makePrize("unique-jetski-voucher", "Jet Ski Voucher", 55000, "Adventure", "unique"),
   makePrize("unique-motorcycle", "Motorcycle", 65000, "Vehicle", "unique"),
-  makePrize("unique-travel-50000", "N$50,000 Travel Voucher", 50000, "Travel", "unique"),
 ];
 
 const epic = [
+  makePrize("epic-tech-5000", "N$5,000 Tech Voucher", 5000, "Electronics", "epic"),
+  makePrize("epic-travel-10000", "N$10,000 Travel Voucher", 10000, "Travel", "epic"),
+  makePrize("epic-phone-lite", "Premium Phone Voucher", 15000, "Electronics", "epic"),
+  makePrize("epic-console", "Console Bundle", 20000, "Gaming", "epic"),
+  makePrize("epic-premium-phone", "Premium Phone", 30000, "Electronics", "epic"),
   makePrize("epic-rtx-pc", "RTX Gaming PC", 45000, "Gaming", "epic"),
   makePrize("epic-macbook-pro", "MacBook Pro", 45000, "Computers", "epic"),
-  makePrize("epic-premium-phone", "Premium Phone", 30000, "Electronics", "epic"),
   makePrize("epic-safari", "Africa Safari Holiday", 60000, "Travel", "epic"),
-  makePrize("epic-europe", "Europe Holiday", 90000, "Travel", "epic"),
   makePrize("epic-motorcycle", "Motorcycle", 85000, "Vehicle", "epic"),
+  makePrize("epic-europe", "Europe Holiday", 90000, "Travel", "epic"),
+  makePrize("epic-investment-100k", "N$100,000 Investment Voucher", 100000, "Investment", "epic"),
   makePrize("epic-small-boat", "Small Boat", 120000, "Adventure", "epic"),
   makePrize("epic-camper", "Camper Trailer", 150000, "Adventure", "epic"),
-  makePrize("epic-investment-100k", "N$100,000 Investment Voucher", 100000, "Investment", "epic"),
   makePrize("epic-car-deposit", "Car Deposit Voucher", 150000, "Vehicle", "epic"),
 ];
 
 const legendary = [
+  makePrize("legendary-tech-10000", "N$10,000 Luxury Tech Voucher", 10000, "Electronics", "legendary"),
+  makePrize("legendary-travel-25000", "N$25,000 Luxury Travel Voucher", 25000, "Travel", "legendary"),
+  makePrize("legendary-watch-50000", "Luxury Watch / Equivalent", 50000, "Luxury", "legendary"),
+  makePrize("legendary-ucl-final", "UEFA Champions League Final Package", 180000, "Travel", "legendary"),
+  makePrize("legendary-world-cup", "FIFA World Cup VIP Trip", 250000, "Travel", "legendary"),
+  makePrize("legendary-fishing-boat", "Fishing Boat", 250000, "Adventure", "legendary"),
+  makePrize("legendary-world-holiday", "Around-the-World Holiday", 300000, "Travel", "legendary"),
+  makePrize("legendary-tiny-home", "Tiny Home / Equivalent Value", 350000, "Property", "legendary"),
+  makePrize("legendary-caravan", "Luxury Caravan", 350000, "Adventure", "legendary"),
   makePrize("legendary-hilux-d4d", "Toyota Hilux D4D / Equivalent Value", 450000, "Vehicle", "legendary"),
   makePrize("legendary-ford-ranger", "Ford Ranger / Equivalent Value", 500000, "Vehicle", "legendary"),
+  makePrize("legendary-house-deposit", "House Deposit / Equivalent Value", 500000, "Property", "legendary"),
   makePrize("legendary-amarok", "VW Amarok / Equivalent Value", 600000, "Vehicle", "legendary"),
   makePrize("legendary-fortuner", "Toyota Fortuner / Equivalent Value", 650000, "Vehicle", "legendary"),
-  makePrize("legendary-nissan-patrol", "Nissan Patrol / Equivalent Value", 900000, "Vehicle", "legendary"),
-  makePrize("legendary-house-deposit", "House Deposit / Equivalent Value", 500000, "Property", "legendary"),
-  makePrize("legendary-tiny-home", "Tiny Home / Equivalent Value", 350000, "Property", "legendary"),
   makePrize("legendary-apartment-deposit", "Apartment Deposit / Equivalent Value", 750000, "Property", "legendary"),
-  makePrize("legendary-world-holiday", "Around-the-World Holiday", 300000, "Travel", "legendary"),
-  makePrize("legendary-world-cup", "FIFA World Cup VIP Trip", 250000, "Travel", "legendary"),
-  makePrize("legendary-ucl-final", "UEFA Champions League Final Package", 180000, "Travel", "legendary"),
-  makePrize("legendary-fishing-boat", "Fishing Boat", 250000, "Adventure", "legendary"),
-  makePrize("legendary-caravan", "Luxury Caravan", 350000, "Adventure", "legendary"),
+  makePrize("legendary-nissan-patrol", "Nissan Patrol / Equivalent Value", 900000, "Vehicle", "legendary"),
   makePrize("legendary-dream-home", "Dream Home / Equivalent Value", 1500000, "Property", "legendary"),
 ];
 
@@ -129,22 +142,9 @@ for (const rarity of RARITIES) {
 }
 
 export const PRIZE_CATALOG: PrizeTier[] = RARITIES.flatMap((rarity) => PRIZE_LADDERS[rarity]);
-
-export function getEntryFeeForRarity(rarity: unknown): number {
-  const key = String(rarity || "common").toLowerCase() as Rarity;
-  return RARITY_ENTRY_FEES[key] || COMMUNITY_ENTRY_FEE;
-}
-
-export function getMarginForRarity(rarity: unknown): number {
-  const key = String(rarity || "rare").toLowerCase() as Rarity;
-  return RARITY_MARGIN_MULTIPLIERS[key] || PRIZE_MARGIN_MULTIPLIER;
-}
-
-export function getPrizeLadder(rarity: unknown): PrizeTier[] {
-  const key = String(rarity || "common").toLowerCase() as Rarity;
-  return PRIZE_LADDERS[key] || PRIZE_LADDERS.common;
-}
-
+export function getEntryFeeForRarity(rarity: unknown): number { const key = String(rarity || "common").toLowerCase() as Rarity; return RARITY_ENTRY_FEES[key] || COMMUNITY_ENTRY_FEE; }
+export function getMarginForRarity(rarity: unknown): number { const key = String(rarity || "rare").toLowerCase() as Rarity; return RARITY_MARGIN_MULTIPLIERS[key] || PRIZE_MARGIN_MULTIPLIER; }
+export function getPrizeLadder(rarity: unknown): PrizeTier[] { const key = String(rarity || "common").toLowerCase() as Rarity; return PRIZE_LADDERS[key] || PRIZE_LADDERS.common; }
 export function getActivePrizeForEntries(rarity: unknown, entryCount: unknown) {
   const count = Math.max(0, Number(entryCount || 0));
   const ladder = getPrizeLadder(rarity);
