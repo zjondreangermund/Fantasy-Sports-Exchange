@@ -47,12 +47,12 @@ function pct(item: VaultItem) {
 }
 
 const rarityOrder = ["common", "rare", "unique", "epic", "legendary"];
-const rarityTheme: Record<string, { card: string; badge: string; bar: string; glow: string }> = {
-  common: { card: "border-slate-300/20 bg-slate-300/10", badge: "bg-slate-200 text-slate-950", bar: "bg-slate-200", glow: "rgba(226,232,240,.20)" },
-  rare: { card: "border-sky-300/25 bg-sky-400/10", badge: "bg-sky-300 text-slate-950", bar: "bg-sky-300", glow: "rgba(56,189,248,.20)" },
-  unique: { card: "border-purple-300/30 bg-purple-500/10", badge: "bg-purple-300 text-slate-950", bar: "bg-purple-300", glow: "rgba(168,85,247,.25)" },
-  epic: { card: "border-pink-300/30 bg-pink-500/10", badge: "bg-pink-300 text-slate-950", bar: "bg-pink-300", glow: "rgba(236,72,153,.24)" },
-  legendary: { card: "border-yellow-300/30 bg-yellow-400/10", badge: "bg-yellow-300 text-slate-950", bar: "bg-yellow-300", glow: "rgba(250,204,21,.28)" },
+const rarityTheme: Record<string, { card: string; locked: string; replaced: string; badge: string; bar: string; glow: string }> = {
+  common: { card: "border-slate-300/25 bg-slate-300/14", locked: "border-slate-300/15 bg-slate-300/[0.045]", replaced: "border-slate-300/10 bg-slate-300/[0.025] opacity-55", badge: "bg-slate-200 text-slate-950", bar: "bg-slate-200", glow: "rgba(226,232,240,.20)" },
+  rare: { card: "border-sky-300/30 bg-sky-400/14", locked: "border-sky-300/15 bg-sky-400/[0.055]", replaced: "border-sky-300/10 bg-sky-400/[0.03] opacity-55", badge: "bg-sky-300 text-slate-950", bar: "bg-sky-300", glow: "rgba(56,189,248,.20)" },
+  unique: { card: "border-purple-300/35 bg-purple-500/14", locked: "border-purple-300/15 bg-purple-500/[0.055]", replaced: "border-purple-300/10 bg-purple-500/[0.03] opacity-55", badge: "bg-purple-300 text-slate-950", bar: "bg-purple-300", glow: "rgba(168,85,247,.25)" },
+  epic: { card: "border-pink-300/35 bg-pink-500/14", locked: "border-pink-300/15 bg-pink-500/[0.055]", replaced: "border-pink-300/10 bg-pink-500/[0.03] opacity-55", badge: "bg-pink-300 text-slate-950", bar: "bg-pink-300", glow: "rgba(236,72,153,.24)" },
+  legendary: { card: "border-yellow-300/35 bg-yellow-400/14", locked: "border-yellow-300/15 bg-yellow-400/[0.055]", replaced: "border-yellow-300/10 bg-yellow-400/[0.03] opacity-55", badge: "bg-yellow-300 text-slate-950", bar: "bg-yellow-300", glow: "rgba(250,204,21,.28)" },
 };
 
 export default function PrizeVaultPage() {
@@ -151,9 +151,10 @@ function FeaturedVaultCard({ item }: { item: VaultItem }) {
 function VaultTile({ item }: { item: VaultItem }) {
   const progress = pct(item);
   const theme = rarityTheme[item.rarity] || rarityTheme.common;
+  const stateClass = item.currentPrize ? `${theme.card} ring-1 ring-white/20 shadow-[0_0_34px_rgba(255,255,255,.08)]` : item.replaced ? theme.replaced : item.active ? theme.card : theme.locked;
   return (
-    <Card className={`border p-4 text-white ${item.currentPrize ? `${theme.card} ring-1 ring-white/20` : item.replaced ? "border-white/10 bg-white/[0.03] opacity-60" : item.active ? theme.card : "border-white/10 bg-white/[0.05]"}`}>
-      <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[.18em] text-white/40">needs {item.targetEntries} entries</div><div className="mt-1 font-black">{item.title}</div></div>{item.currentPrize ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-300" /> : item.replaced ? <ArrowUpRight className="h-5 w-5 shrink-0 text-white/35" /> : item.active ? <Zap className="h-5 w-5 shrink-0 text-white/75" /> : <Lock className="h-5 w-5 shrink-0 text-white/25" />}</div>
+    <Card className={`border p-4 text-white transition ${stateClass}`}>
+      <div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[.18em] text-white/40">needs {item.targetEntries} entries</div><div className="mt-1 font-black">{item.title}</div></div>{item.currentPrize ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-300" /> : item.replaced ? <ArrowUpRight className="h-5 w-5 shrink-0 text-white/35" /> : item.active ? <Zap className="h-5 w-5 shrink-0 text-white/75" /> : <Lock className="h-5 w-5 shrink-0 text-white/35" />}</div>
       <div className="mt-3 text-xs text-white/50">{money(item.value)} • target {item.targetEntries} entrants</div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"><div className={`h-full rounded-full ${item.currentPrize ? "bg-emerald-300" : theme.bar}`} style={{ width: `${progress}%` }} /></div>
       <div className="mt-2 flex justify-between text-[11px] text-white/45"><span>{item.currentEntries}/{item.targetEntries}</span><span>{item.currentPrize ? "Current" : item.replaced ? "Replaced" : item.active ? "Next" : "Locked"}</span></div>
