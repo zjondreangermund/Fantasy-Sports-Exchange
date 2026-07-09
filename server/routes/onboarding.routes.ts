@@ -178,6 +178,28 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
     return { granted, skipped, kept: selectedPlayerIds.length };
   };
 
+  app.patch("/api/user/profile", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const managerTeamName = String(req.body?.managerTeamName || "").trim().slice(0, 30);
+      if (managerTeamName.length < getOnboardingConfig().teamNameMinLength) return res.status(400).json({ message: "Team name is too short" });
+      let user = await storage.getUser(userId);
+      if (!user) {
+        user = await storage.createUser({
+          id: userId,
+          email: req.user?.email || req.user?.claims?.email || "",
+          name: req.user?.name || req.user?.claims?.name || "",
+          avatarUrl: req.user?.avatarUrl || req.user?.photo || req.user?.claims?.picture || "",
+        } as any);
+      }
+      const updated = await storage.updateUser(userId, { managerTeamName } as any);
+      return res.json(updated || { ...user, managerTeamName });
+    } catch (error: any) {
+      console.error("Profile update failed:", error);
+      return res.status(500).json({ message: error?.message || "Failed to update profile" });
+    }
+  });
+
   app.get("/api/onboarding/config", requireAuth, async (_req: any, res) => res.json(getOnboardingConfig()));
 
   app.get("/api/onboarding/status", requireAuth, async (req: any, res) => {
@@ -199,7 +221,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       if (!config.signupPacksEnabled) return res.status(403).json({ message: "Signup starter packs are currently disabled by admin" });
       const userId = req.authUserId;
       const ob = await storage.getOnboarding(userId);
-      if (ob?.completed) return res.status(400).json({ message: "Onboarding already completed" });
+      if (ob?.completed) return res.json({ packCards: ob.packCards || [], completed: true });
       if (ob?.packCards?.length === 5 && ob.packCards.flat().length === 15) return res.json({ packCards: ob.packCards });
 
       const allPlayers = await getOnboardingPlayerPool();
