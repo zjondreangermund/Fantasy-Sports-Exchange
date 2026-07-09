@@ -12,9 +12,9 @@ export const RARITY_ENTRY_FEES: Record<Rarity, number> = {
 };
 
 export const RARITY_MARGIN_MULTIPLIERS: Record<Rarity, number> = {
-  common: 1.8,
-  rare: 1.7,
-  unique: 1.6,
+  common: 2.0,
+  rare: 1.8,
+  unique: 1.7,
   epic: 1.6,
   legendary: 1.5,
 };
@@ -52,63 +52,73 @@ function makePrize(key: string, title: string, value: number, category: string, 
 }
 
 const common = [
+  makePrize("common-airtime-100", "N$100 Airtime", 100, "Voucher", "common"),
   makePrize("common-food-250", "N$250 Food Voucher", 250, "Voucher", "common"),
-  makePrize("common-gift-500", "N$500 Gift Voucher", 500, "Voucher", "common"),
+  makePrize("common-gift-500", "N$500 Shopping Voucher", 500, "Voucher", "common"),
   makePrize("common-football", "Premium Football", 750, "Football", "common"),
+  makePrize("common-cap", "Fantasy Arena Team Cap", 650, "Merch", "common"),
   makePrize("common-headset", "Gaming Headset", 900, "Gaming", "common"),
   makePrize("common-jersey", "Club Jersey", 1500, "Merch", "common"),
   makePrize("common-controller", "PS5 Controller", 1800, "Gaming", "common"),
 ];
 
 const rare = [
-  makePrize("rare-food-250", "N$250 Food Voucher", 250, "Voucher", "rare"),
-  makePrize("rare-gift-500", "N$500 Gift Voucher", 500, "Voucher", "rare"),
-  makePrize("rare-headset", "Gaming Headset", 900, "Gaming", "rare"),
-  makePrize("rare-jersey", "Premier League Jersey", 1500, "Merch", "rare"),
-  makePrize("rare-controller", "PS5 Controller", 1800, "Gaming", "rare"),
-  makePrize("rare-game", "PS5 Game of Choice", 2500, "Gaming", "rare"),
-  makePrize("rare-smartwatch", "Smart Watch", 2800, "Electronics", "rare"),
+  makePrize("rare-voucher-1000", "N$1,000 Shopping Voucher", 1000, "Voucher", "rare"),
+  makePrize("rare-watch", "Smart Watch", 2800, "Electronics", "rare"),
   makePrize("rare-tablet", "Tablet", 4500, "Electronics", "rare"),
+  makePrize("rare-jbl", "JBL Speaker", 3000, "Electronics", "rare"),
+  makePrize("rare-headset-pro", "Gaming Headset Pro", 2500, "Gaming", "rare"),
+  makePrize("rare-game-bundle", "PS5 Game Bundle", 3000, "Gaming", "rare"),
   makePrize("rare-monitor", "Gaming Monitor", 5500, "Computers", "rare"),
-  makePrize("rare-tv", "55 inch Smart TV", 8500, "Electronics", "rare"),
+  makePrize("rare-tv-55", "55 inch Smart TV", 8500, "Electronics", "rare"),
   makePrize("rare-ps5", "PlayStation 5 Console", 13999, "Gaming", "rare"),
-  makePrize("rare-phone", "Premium Smartphone", 16000, "Electronics", "rare"),
-  makePrize("rare-laptop", "Gaming Laptop", 18000, "Computers", "rare"),
-  makePrize("rare-pc", "Gaming PC", 25000, "Gaming", "rare"),
-  makePrize("rare-holiday", "Holiday Voucher", 25000, "Travel", "rare"),
-];
-
-const epic = [
-  makePrize("epic-jersey", "Premier League Jersey", 1500, "Merch", "epic"),
-  makePrize("epic-controller", "PS5 Controller", 1800, "Gaming", "epic"),
-  makePrize("epic-game", "PS5 Game Bundle", 3000, "Gaming", "epic"),
-  makePrize("epic-monitor", "Gaming Monitor", 5500, "Computers", "epic"),
-  makePrize("epic-tv", "55 inch Smart TV", 8500, "Electronics", "epic"),
-  makePrize("epic-ps5", "PlayStation 5 Console", 13999, "Gaming", "epic"),
-  makePrize("epic-phone", "Premium Smartphone", 16000, "Electronics", "epic"),
-  makePrize("epic-laptop", "Gaming Laptop", 18000, "Computers", "epic"),
-  makePrize("epic-pc", "Gaming PC", 25000, "Gaming", "epic"),
+  makePrize("rare-xbox", "Xbox Series X", 13999, "Gaming", "rare"),
+  makePrize("rare-gaming-laptop", "Gaming Laptop", 18000, "Computers", "rare"),
+  makePrize("rare-gaming-pc", "Gaming PC", 25000, "Gaming", "rare"),
 ];
 
 const unique = [
-  makePrize("unique-monitor", "Gaming Monitor", 5500, "Computers", "unique"),
-  makePrize("unique-tv", "55 inch Smart TV", 8500, "Electronics", "unique"),
-  makePrize("unique-ps5", "PlayStation 5 Console", 13999, "Gaming", "unique"),
-  makePrize("unique-phone", "Premium Smartphone", 16000, "Electronics", "unique"),
-  makePrize("unique-laptop", "Gaming Laptop", 18000, "Computers", "unique"),
-  makePrize("unique-pc", "Gaming PC", 25000, "Gaming", "unique"),
-  makePrize("unique-holiday", "Holiday Voucher", 25000, "Travel", "unique"),
+  makePrize("unique-iphone", "iPhone / Equivalent Premium Phone", 22000, "Electronics", "unique"),
+  makePrize("unique-samsung-ultra", "Samsung Galaxy Ultra", 24000, "Electronics", "unique"),
+  makePrize("unique-macbook-air", "MacBook Air", 23000, "Computers", "unique"),
+  makePrize("unique-drone", "DJI Drone", 18000, "Electronics", "unique"),
+  makePrize("unique-gaming-pc", "Premium Gaming PC", 30000, "Gaming", "unique"),
+  makePrize("unique-home-theatre", "Home Theatre Package", 28000, "Electronics", "unique"),
+  makePrize("unique-weekend", "Weekend Holiday for Two", 20000, "Travel", "unique"),
+  makePrize("unique-quad", "Quad Bike", 45000, "Adventure", "unique"),
+  makePrize("unique-jetski-voucher", "Jet Ski Voucher", 55000, "Adventure", "unique"),
+  makePrize("unique-motorcycle", "Motorcycle", 65000, "Vehicle", "unique"),
+  makePrize("unique-travel-50000", "N$50,000 Travel Voucher", 50000, "Travel", "unique"),
+];
+
+const epic = [
+  makePrize("epic-rtx-pc", "RTX Gaming PC", 45000, "Gaming", "epic"),
+  makePrize("epic-macbook-pro", "MacBook Pro", 45000, "Computers", "epic"),
+  makePrize("epic-premium-phone", "Premium Phone", 30000, "Electronics", "epic"),
+  makePrize("epic-safari", "Africa Safari Holiday", 60000, "Travel", "epic"),
+  makePrize("epic-europe", "Europe Holiday", 90000, "Travel", "epic"),
+  makePrize("epic-motorcycle", "Motorcycle", 85000, "Vehicle", "epic"),
+  makePrize("epic-small-boat", "Small Boat", 120000, "Adventure", "epic"),
+  makePrize("epic-camper", "Camper Trailer", 150000, "Adventure", "epic"),
+  makePrize("epic-investment-100k", "N$100,000 Investment Voucher", 100000, "Investment", "epic"),
+  makePrize("epic-car-deposit", "Car Deposit Voucher", 150000, "Vehicle", "epic"),
 ];
 
 const legendary = [
-  makePrize("legendary-ps5", "PlayStation 5 Console", 13999, "Gaming", "legendary"),
-  makePrize("legendary-phone", "Premium Smartphone", 16000, "Electronics", "legendary"),
-  makePrize("legendary-laptop", "Gaming Laptop", 18000, "Computers", "legendary"),
-  makePrize("legendary-pc", "Gaming PC", 25000, "Gaming", "legendary"),
-  makePrize("legendary-holiday", "Holiday Voucher", 25000, "Travel", "legendary"),
-  makePrize("legendary-mega", "Mega Electronics Bundle", 35000, "Electronics", "legendary"),
-  makePrize("legendary-d4d", "Toyota Hilux D4D / Equivalent Value", 450000, "Vehicle", "legendary"),
+  makePrize("legendary-hilux-d4d", "Toyota Hilux D4D / Equivalent Value", 450000, "Vehicle", "legendary"),
+  makePrize("legendary-ford-ranger", "Ford Ranger / Equivalent Value", 500000, "Vehicle", "legendary"),
+  makePrize("legendary-amarok", "VW Amarok / Equivalent Value", 600000, "Vehicle", "legendary"),
+  makePrize("legendary-fortuner", "Toyota Fortuner / Equivalent Value", 650000, "Vehicle", "legendary"),
+  makePrize("legendary-nissan-patrol", "Nissan Patrol / Equivalent Value", 900000, "Vehicle", "legendary"),
   makePrize("legendary-house-deposit", "House Deposit / Equivalent Value", 500000, "Property", "legendary"),
+  makePrize("legendary-tiny-home", "Tiny Home / Equivalent Value", 350000, "Property", "legendary"),
+  makePrize("legendary-apartment-deposit", "Apartment Deposit / Equivalent Value", 750000, "Property", "legendary"),
+  makePrize("legendary-world-holiday", "Around-the-World Holiday", 300000, "Travel", "legendary"),
+  makePrize("legendary-world-cup", "FIFA World Cup VIP Trip", 250000, "Travel", "legendary"),
+  makePrize("legendary-ucl-final", "UEFA Champions League Final Package", 180000, "Travel", "legendary"),
+  makePrize("legendary-fishing-boat", "Fishing Boat", 250000, "Adventure", "legendary"),
+  makePrize("legendary-caravan", "Luxury Caravan", 350000, "Adventure", "legendary"),
+  makePrize("legendary-dream-home", "Dream Home / Equivalent Value", 1500000, "Property", "legendary"),
 ];
 
 export const PRIZE_LADDERS: Record<Rarity, PrizeTier[]> = { common, rare, epic, unique, legendary };
