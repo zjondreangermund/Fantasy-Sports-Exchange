@@ -5,7 +5,6 @@ import "./premium-shell.css";
 import "./mobile-polish.css";
 import "./mobile-action-slabs.css";
 import "./mobile-scroll-fix.css";
-import "./scroll-hard-fix.css";
 import { patchFetchForApiBase } from "./lib/api-base";
 
 patchFetchForApiBase();
