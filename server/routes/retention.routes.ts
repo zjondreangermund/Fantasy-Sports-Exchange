@@ -5,6 +5,7 @@ import type { IStorage } from "../storage.js";
 import { auditLogs, playerCards, transactions, wallets, withdrawalRequests } from "../../shared/schema.js";
 import { registerEplRoutes } from "./epl.routes.js";
 import { registerPrizeVaultRoutes } from "./prizeVault.routes.js";
+import { registerReferralRoutes } from "./referrals.routes.js";
 import { COMMUNITY_ENTRY_FEE, PRIZE_CATALOG, PRIZE_MARGIN_MULTIPLIER, getActivePrizeForEntries } from "../services/prizeEngine.js";
 
 const COMMON_BURN_COUNT = 5;
@@ -46,6 +47,7 @@ export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; 
 
   registerEplRoutes(app, { requireAuth });
   registerPrizeVaultRoutes(app);
+  registerReferralRoutes(app, { requireAuth, storage });
 
   app.get("/api/admin/prizes", requireAuth, async (_req: any, res) => {
     return res.json({ prizes: PRIZE_CATALOG, communityEntryFee: COMMUNITY_ENTRY_FEE, marginMultiplier: PRIZE_MARGIN_MULTIPLIER, mode: "highest_unlocked_per_gameweek" });
@@ -80,21 +82,12 @@ export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; 
         order by c.game_week asc, c.id asc
       `);
       let competitions = rowsOf(result).map(normalizeCompetitionWithPrize);
-      if (status) competitions = competitions.filter((c: any) => c.status === status);
-      if (tier) competitions = competitions.filter((c: any) => c.tier === tier);
-      const rows = await Promise.all(competitions.map(async (comp: any) => {
-        const entriesRaw = await storage.getCompetitionEntries(Number(comp.id));
-        const entries = await Promise.all(entriesRaw.map(async (entry: any) => {
-          const user = await storage.getUser(String(entry.userId || ""));
-          return { ...entry, userName: user?.managerTeamName || user?.name || user?.email || "Manager" };
-        }));
-        const cutoff = comp.startDate || comp.endDate || null;
-        return { ...comp, entries, entryCount: entries.length, currentEntrantRevenue: toMoney(entries.length * Number(comp.entryFee || 0)), ...normalizeCompetitionWithPrize({ ...comp, entryCount: entries.length }), submissionClosesAt: cutoff, entryOpen: comp.status === "open" };
-      }));
-      return res.json(rows);
+      if (status) competitions = competitions.filter((c: any) => String(c.status) === status);
+      if (tier) competitions = competitions.filter((c: any) => String(c.tier) === tier);
+      return res.json(competitions);
     } catch (error: any) {
-      console.error("Prize ladder competitions override failed", error);
-      return res.status(500).json({ message: error?.message || "Failed to fetch tournaments" });
+      console.error("Failed to fetch competitions override", error);
+      return res.status(500).json({ message: "Failed to fetch tournaments" });
     }
   });
 
@@ -105,8 +98,12 @@ export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; 
       const withdrawals = await db.select().from(withdrawalRequests).where(eq(withdrawalRequests.userId, userId));
       const pending = withdrawals.filter((w: any) => String(w.status) === "pending").reduce((sum: number, w: any) => sum + toMoney(w.amount || 0), 0);
       const balance = toMoney(wallet?.balance || 0);
-      return res.json({ balance, currency: "NAD", pendingWithdrawals: toMoney(pending), availableBalance: toMoney(balance - pending) });
-    } catch (err) { console.error("Wallet override failed", err); return res.status(500).json({ message: "Failed to load wallet" }); }
+      const availableBalance = toMoney(balance - pending);
+      return res.json({ balance, currency: "NAD", pendingWithdrawals: toMoney(pending), availableBalance });
+    } catch (err) {
+      console.error("Wallet override failed", err);
+      return res.status(500).json({ message: "Failed to load wallet" });
+    }
   });
 
   app.get("/api/forge/options", requireAuth, async (req: any, res) => {
@@ -115,7 +112,8 @@ export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; 
       const cards = await storage.getUserCards(userId);
       const grouped = new Map<string, any[]>();
       for (const card of cards) {
-        if (String(card.rarity || "") !== "common" || card.forSale) continue;
+        if (String(card.rarity || "") !== "common") continue;
+        if (card.forSale) continue;
         const key = `${card.playerId}`;
         const list = grouped.get(key) || [];
         list.push(card);
@@ -124,10 +122,23 @@ export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; 
       const options = Array.from(grouped.values()).filter((list) => list.length >= COMMON_BURN_COUNT).map((list) => {
         const sorted = [...list].sort((a, b) => Number(a.id) - Number(b.id));
         const sample = sorted[0];
-        return { playerId: sample.playerId, playerName: sample.player?.name || "Unknown", team: sample.player?.team || "", duplicatesOwned: sorted.length, required: COMMON_BURN_COUNT, fee: COMMON_TO_RARE_BURN_FEE, cardIds: sorted.slice(0, COMMON_BURN_COUNT).map((card) => card.id), player: sample.player, targetRarity: "rare" };
+        return {
+          playerId: sample.playerId,
+          playerName: sample.player?.name || "Unknown",
+          team: sample.player?.team || "",
+          duplicatesOwned: sorted.length,
+          required: COMMON_BURN_COUNT,
+          fee: COMMON_TO_RARE_BURN_FEE,
+          cardIds: sorted.slice(0, COMMON_BURN_COUNT).map((card) => card.id),
+          player: sample.player,
+          targetRarity: "rare",
+        };
       }).sort((a, b) => b.duplicatesOwned - a.duplicatesOwned);
       return res.json({ options, rules: { samePlayerRequired: true, burnCount: COMMON_BURN_COUNT, fee: COMMON_TO_RARE_BURN_FEE, fromRarity: "common", toRarity: "rare" } });
-    } catch (error: any) { console.error("Failed to load forge options", error); return res.status(500).json({ message: "Failed to load forge options" }); }
+    } catch (error: any) {
+      console.error("Failed to load forge options", error);
+      return res.status(500).json({ message: "Failed to load forge options" });
+    }
   });
 
   app.post("/api/forge/burn-same-player", requireAuth, async (req: any, res) => {
@@ -140,10 +151,14 @@ export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; 
         const ownedCards = await tx.select().from(playerCards).where(sql`${playerCards.id} = ANY(${cardIds})` as any);
         if (ownedCards.length !== COMMON_BURN_COUNT) throw new Error("Some cards were not found");
         const first = ownedCards[0];
-        if (!ownedCards.every((card: any) => String(card.ownerId || "") === userId)) throw new Error("You can only burn cards you own");
-        if (!ownedCards.every((card: any) => String(card.rarity || "") === "common")) throw new Error("Only common cards can be burned for this forge step");
-        if (!ownedCards.every((card: any) => Number(card.playerId) === Number(first.playerId))) throw new Error("All 5 cards must be the same player");
-        if (ownedCards.some((card: any) => Boolean(card.forSale))) throw new Error("Remove listed cards from the marketplace before burning them");
+        const samePlayer = ownedCards.every((card: any) => Number(card.playerId) === Number(first.playerId));
+        const sameOwner = ownedCards.every((card: any) => String(card.ownerId || "") === userId);
+        const sameRarity = ownedCards.every((card: any) => String(card.rarity || "") === "common");
+        const listed = ownedCards.some((card: any) => Boolean(card.forSale));
+        if (!sameOwner) throw new Error("You can only burn cards you own");
+        if (!sameRarity) throw new Error("Only common cards can be burned for this forge step");
+        if (!samePlayer) throw new Error("All 5 cards must be the same player");
+        if (listed) throw new Error("Remove listed cards from the marketplace before burning them");
         const [wallet] = await tx.select().from(wallets).where(eq(wallets.userId, userId));
         if (!wallet || toMoney(wallet.balance || 0) < COMMON_TO_RARE_BURN_FEE) throw new Error(`N$${COMMON_TO_RARE_BURN_FEE.toFixed(2)} is required to forge a rare card`);
         const [existingRare] = await tx.select().from(playerCards).where(and(eq(playerCards.ownerId, userId), eq(playerCards.playerId, Number(first.playerId)), eq(playerCards.rarity, "rare" as any)));
@@ -156,15 +171,25 @@ export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; 
         return { mintedCardId: minted.id, playerId: first.playerId };
       });
       return res.json({ success: true, mintedRarity: "rare", fee: COMMON_TO_RARE_BURN_FEE, ...result });
-    } catch (error: any) { console.error("Forge burn failed", error); return res.status(400).json({ message: String(error?.message || "Failed to forge rare card") }); }
+    } catch (error: any) {
+      console.error("Forge burn failed", error);
+      return res.status(400).json({ message: String(error?.message || "Failed to forge rare card") });
+    }
   });
 
   app.get("/api/retention/summary", requireAuth, async (req: any, res) => {
     const userId = String(req.authUserId || "");
-    const [wallet, cards, lineup, competitions, marketplace] = await Promise.all([storage.getWallet(userId), storage.getUserCards(userId), storage.getLineup(userId), storage.getCompetitions(), storage.getMarketplaceListings()]);
+    const [wallet, cards, lineup, competitions, marketplace] = await Promise.all([
+      storage.getWallet(userId), storage.getUserCards(userId), storage.getLineup(userId), storage.getCompetitions(), storage.getMarketplaceListings(),
+    ]);
     const lineupCount = Array.isArray(lineup?.cardIds) ? lineup!.cardIds.length : 0;
     const listedCount = cards.filter((card) => card.forSale).length;
-    const duplicateCommonGroups = cards.reduce((acc: Record<string, number>, card: any) => { if (String(card.rarity || "") !== "common") return acc; const key = String(card.playerId || ""); acc[key] = (acc[key] || 0) + 1; return acc; }, {});
+    const duplicateCommonGroups = cards.reduce((acc: Record<string, number>, card: any) => {
+      if (String(card.rarity || "") !== "common") return acc;
+      const key = String(card.playerId || "");
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
     const forgeReadyCount = Object.values(duplicateCommonGroups).filter((count) => Number(count) >= COMMON_BURN_COUNT).length;
     const nextCompetition = competitions.filter((c: any) => String(c.status) === "open").sort((a: any, b: any) => new Date(a.startDate as any).getTime() - new Date(b.startDate as any).getTime())[0];
     const missions = [
