@@ -57,7 +57,7 @@ passport.use(new GoogleStrategy({ clientID: process.env.GOOGLE_CLIENT_ID || "", 
     let user = await storage.getUser(userId);
     if (!user) { await storage.createUser({ id: userId, email, name, avatarUrl: profile.photos?.[0]?.value }); user = await storage.getUser(userId); }
     const wallet = await storage.getWallet(userId);
-    if (!wallet) await storage.createWallet({ userId, balance: 0, lockedBalance: 0 });
+    if (!wallet) await storage.createWallet({ userId, balance: 0, lockedBalance: 0 } as any);
     return done(null, { id: userId, name, email, photo: profile.photos?.[0]?.value });
   } catch (error) { console.error("Auth error:", error); return done(error as Error); }
 }));
@@ -124,25 +124,14 @@ app.get("/api/image-proxy", async (req, res) => {
   const codeMatch = target.pathname.match(/\/players\/(?:\d+x\d+)\/p(\d+)\.(?:png|jpg|jpeg|webp)$/i);
   if (codeMatch?.[1]) {
     const code = codeMatch[1];
-    for (const size of ["500x500", "250x250", "110x110", "40x40"]) {
-      urlsToTry.push(`https://resources.premierleague.com/premierleague/photos/players/${size}/p${code}.png`);
-    }
+    for (const size of ["500x500", "250x250", "110x110", "40x40"]) urlsToTry.push(`https://resources.premierleague.com/premierleague/photos/players/${size}/p${code}.png`);
   }
 
   for (const url of Array.from(new Set(urlsToTry))) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 7000);
-      const r = await fetch(url, {
-        method: "GET",
-        redirect: "follow",
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36",
-          Referer: "https://www.premierleague.com/",
-          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-        },
-      }).finally(() => clearTimeout(timeout));
+      const r = await fetch(url, { method: "GET", redirect: "follow", signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36", Referer: "https://www.premierleague.com/", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" } }).finally(() => clearTimeout(timeout));
       const ct = String(r.headers.get("content-type") || "");
       if (r.ok && ct.startsWith("image/")) {
         res.setHeader("Content-Type", ct);
@@ -150,9 +139,7 @@ app.get("/api/image-proxy", async (req, res) => {
         res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
         return res.send(Buffer.from(await r.arrayBuffer()));
       }
-    } catch (e: any) {
-      console.warn("image-proxy candidate failed", url, e?.message || e);
-    }
+    } catch (e: any) { console.warn("image-proxy candidate failed", url, e?.message || e); }
   }
 
   res.setHeader("Cache-Control", "public, max-age=300");
@@ -161,7 +148,7 @@ app.get("/api/image-proxy", async (req, res) => {
 
 export function log(message: string, source = "express") { const formattedTime = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "numeric", hour12: true }); console.log(`${formattedTime} [${source}] ${message}`); }
 
-app.use((req, res, next) => { const start = Date.now(); const path = req.path; let capturedJsonResponse: Record<string, any> | undefined = undefined; const originalResJson = res.json; res.json = function (bodyJson, ...args) { capturedJsonResponse = bodyJson; return originalResJson.apply(res, [bodyJson, ...args]); }; res.on("finish", () => { const duration = Date.now() - start; if (path.startsWith("/api")) { let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`; if (capturedJsonResponse) logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`; log(logLine); } }); next(); });
+app.use((req, res, next) => { const start = Date.now(); const requestPath = req.path; let capturedJsonResponse: Record<string, any> | undefined = undefined; const originalResJson = res.json; res.json = function (bodyJson, ...args) { capturedJsonResponse = bodyJson; return originalResJson.apply(res, [bodyJson, ...args]); }; res.on("finish", () => { const duration = Date.now() - start; if (requestPath.startsWith("/api")) { let logLine = `${req.method} ${requestPath} ${res.statusCode} in ${duration}ms`; if (capturedJsonResponse) logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`; log(logLine); } }); next(); });
 
 (async () => {
   try { await ensurePlayerImageColumns(); await ensureFplPlayerColumns(); } catch (error) { console.warn("Could not ensure player columns:", error); }
