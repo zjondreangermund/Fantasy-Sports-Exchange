@@ -5,7 +5,8 @@ import "./premium-shell.css";
 import "./mobile-polish.css";
 import "./mobile-action-slabs.css";
 import "./mobile-scroll-fix.css";
-import "./scroll-hard-fix.css";
+// scroll-hard-fix.css removed: its @media (max-width: 767px) block set overflow: hidden
+// on html/body/#root, locking the viewport and causing jerky scroll trapping on mobile.
 import { patchFetchForApiBase } from "./lib/api-base";
 
 patchFetchForApiBase();
