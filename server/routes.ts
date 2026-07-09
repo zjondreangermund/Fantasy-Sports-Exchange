@@ -27,22 +27,34 @@ const scoreUpdater = new ScoreUpdateService(storage as any);
 const SEASON_KEY = "2026-27";
 const SEASON_START = Date.UTC(2026, 6, 1);
 const SEASON_END = Date.UTC(2027, 6, 1);
+const COMMUNITY_ENTRY_FEE = 30;
+const PRIZE_MARGIN_MULTIPLIER = 1.5;
+
+function prize(key: string, title: string, value: number, category: string, type = "goods") {
+  const unlockTarget = Math.ceil(value * PRIZE_MARGIN_MULTIPLIER);
+  const requiredEntrants = Math.max(1, Math.ceil(unlockTarget / COMMUNITY_ENTRY_FEE));
+  return { key, title, type, value, category, unlockTarget, requiredEntrants, entryFee: COMMUNITY_ENTRY_FEE, marginMultiplier: PRIZE_MARGIN_MULTIPLIER };
+}
 
 const PRIZE_CATALOG = [
-  { key: "ps5", title: "PlayStation 5 Console", type: "goods", value: 13999, category: "Gaming" },
-  { key: "ps5-game", title: "PS5 Game of Choice", type: "goods", value: 1499, category: "Gaming" },
-  { key: "gaming-pc", title: "Gaming PC", type: "goods", value: 25000, category: "Gaming" },
-  { key: "gaming-laptop", title: "Gaming Laptop", type: "goods", value: 18000, category: "Computers" },
-  { key: "monitor", title: "Gaming Monitor", type: "goods", value: 5500, category: "Computers" },
-  { key: "tv-55", title: "55 inch Smart TV", type: "goods", value: 8500, category: "Electronics" },
-  { key: "tv-75", title: "75 inch Smart TV", type: "goods", value: 22000, category: "Electronics" },
-  { key: "phone", title: "Premium Smartphone", type: "goods", value: 16000, category: "Electronics" },
-  { key: "headset", title: "Gaming Headset", type: "goods", value: 1800, category: "Gaming" },
-  { key: "controller", title: "PS5 Controller", type: "goods", value: 1800, category: "Gaming" },
-  { key: "jersey", title: "Premier League Jersey", type: "goods", value: 1500, category: "Merch" },
-  { key: "holiday", title: "Holiday Voucher", type: "goods_plus_cash", value: 25000, category: "Travel" },
-  { key: "cash-5000", title: "N$5,000 Cash Bonus", type: "cash_pool", value: 5000, category: "Cash" },
-  { key: "custom", title: "Custom Prize", type: "goods", value: 0, category: "Manual" },
+  prize("cap", "Fantasy Arena Cap", 250, "Starter"),
+  prize("meal-voucher", "N$300 Food Voucher", 300, "Starter"),
+  prize("football", "Premium Football", 450, "Starter"),
+  prize("gift-500", "N$500 Gift Voucher", 500, "Starter"),
+  prize("headset", "Gaming Headset", 900, "Gaming"),
+  prize("ps5-controller", "PS5 Controller", 1800, "Gaming"),
+  prize("jersey", "Premier League Jersey", 1500, "Merch"),
+  prize("ps5-game", "PS5 Game of Choice", 1499, "Gaming"),
+  prize("monitor", "Gaming Monitor", 5500, "Computers"),
+  prize("tv-55", "55 inch Smart TV", 8500, "Electronics"),
+  prize("ps5", "PlayStation 5 Console", 13999, "Gaming"),
+  prize("phone", "Premium Smartphone", 16000, "Electronics"),
+  prize("gaming-laptop", "Gaming Laptop", 18000, "Computers"),
+  prize("tv-75", "75 inch Smart TV", 22000, "Electronics"),
+  prize("gaming-pc", "Gaming PC", 25000, "Gaming"),
+  prize("holiday", "Holiday Voucher", 25000, "Travel", "goods_plus_cash"),
+  prize("cash-5000", "N$5,000 Cash Bonus", 5000, "Cash", "cash_pool"),
+  prize("custom", "Custom Prize", 0, "Manual"),
 ];
 
 type CompetitionRow = any;
@@ -95,7 +107,6 @@ async function getCompetitionSubmissionCloseAt(comp: CompetitionRow) {
   const gw = Number(comp?.gameWeek ?? comp?.game_week ?? 1) || 1;
   const fplKickoff = await firstFixtureKickoffForGameweek(gw);
   if (fplKickoff) return fplKickoff;
-
   const manual = new Date(String(comp?.startDate || comp?.start_date || ""));
   if (inSeason(manual)) return manual;
   return fallbackGameweekKickoff(gw);
@@ -106,12 +117,7 @@ async function getUserEmailForAdmin(req: any): Promise<string> {
   if (requestEmail) return requestEmail;
   const userId = String(req.authUserId || req.user?.claims?.sub || req.user?.id || "");
   if (!userId) return "";
-  try {
-    const userRecord = await storage.getUser(userId);
-    return normalizeEmail(userRecord?.email);
-  } catch {
-    return "";
-  }
+  try { return normalizeEmail((await storage.getUser(userId))?.email); } catch { return ""; }
 }
 
 async function isAdminRequest(req: any): Promise<boolean> {
@@ -148,18 +154,28 @@ export async function isAdmin(req: any, res: any, next: any) {
 
 function normalizeCompetitionRow(row: any) {
   if (!row) return row;
+  const prizeKey = row.prizeKey ?? row.prize_key ?? null;
+  const selectedPrize = PRIZE_CATALOG.find((p) => p.key === prizeKey);
+  const entryFee = Number(row.entryFee ?? row.entry_fee ?? 0);
+  const entryCount = Number(row.entryCount ?? row.entry_count ?? 0);
+  const unlockTarget = Number(selectedPrize?.unlockTarget || 0);
   return {
     ...row,
-    entryFee: Number(row.entryFee ?? row.entry_fee ?? 0),
-    entryCount: Number(row.entryCount ?? row.entry_count ?? 0),
+    entryFee,
+    entryCount,
     maxEntries: row.maxEntries ?? row.max_entries ?? null,
     joinPin: row.joinPin ?? row.join_pin ?? null,
     prizePoolTotal: Number(row.prizePoolTotal ?? row.prize_pool_total ?? 0),
     platformFeeTotal: Number(row.platformFeeTotal ?? row.platform_fee_total ?? 0),
     prizeType: row.prizeType ?? row.prize_type ?? "cash_pool",
-    prizeDescription: row.prizeDescription ?? row.prize_description ?? null,
-    prizeKey: row.prizeKey ?? row.prize_key ?? null,
-    season: row.season ?? SEASON_KEY,
+    prizeDescription: row.prizeDescription ?? row.prize_description ?? selectedPrize?.title ?? null,
+    prizeKey,
+    prizeValue: selectedPrize?.value || 0,
+    prizeUnlockTarget: unlockTarget,
+    requiredEntrants: selectedPrize?.requiredEntrants || 0,
+    currentEntrantRevenue: toMoney(entryCount * entryFee),
+    prizeUnlocked: unlockTarget > 0 ? entryCount * entryFee >= unlockTarget : true,
+    season: SEASON_KEY,
   };
 }
 
@@ -176,8 +192,7 @@ async function loadCompetitions(): Promise<any[]> {
       coalesce(c.prize_pool_total, 0)::float as "prizePoolTotal",
       coalesce(c.prize_type, 'cash_pool') as "prizeType",
       c.prize_description as "prizeDescription",
-      c.prize_key as "prizeKey",
-      coalesce(c.season, ${SEASON_KEY}) as season
+      c.prize_key as "prizeKey"
     from app.competitions c
     order by c.game_week asc, c.id asc
   `);
@@ -188,12 +203,10 @@ function allowedTier(raw: unknown) {
   const tier = String(raw || "common").toLowerCase();
   return ["common", "rare", "epic", "unique", "legendary"].includes(tier) ? tier : "common";
 }
-
 function allowedStatus(raw: unknown) {
   const status = String(raw || "open").toLowerCase();
   return ["open", "upcoming", "active", "completed"].includes(status) ? status : "open";
 }
-
 function allowedPrizeType(raw: unknown) {
   const type = String(raw || "goods").toLowerCase();
   return ["cash_pool", "goods", "goods_plus_cash", "packs", "sponsor_prize"].includes(type) ? type : "goods";
@@ -201,7 +214,6 @@ function allowedPrizeType(raw: unknown) {
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   try { await seedCompetitions(); } catch (error) { console.warn("Could not auto-seed tournaments:", error); }
-
   await registerAuthModeRoutes(app, { isReplit, useMockAuth, setupAuth, registerReplitAuthRoutes: registerAuthRoutes, passport });
   registerCardsRoutes(app, { requireAuth, storage });
   registerOnboardingRoutes(app, { requireAuth, storage, fplApi });
@@ -225,16 +237,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS prize_type text DEFAULT 'cash_pool'`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS prize_description text`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS prize_key text`);
-      await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS season text DEFAULT ${SEASON_KEY}`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.competition_entries ADD COLUMN IF NOT EXISTS tiebreak_meta jsonb DEFAULT '{}'::jsonb`);
-    } catch (error) {
-      console.warn("Runtime schema ensure failed:", error);
-    }
+    } catch (error) { console.warn("Runtime schema ensure failed:", error); }
   };
   await ensureRuntimeSchema();
 
   app.get("/api/economy/config", (_req, res) => res.json({ ...economyConfigPayload(), season: SEASON_KEY }));
-  app.get("/api/admin/prizes", requireAuth, isAdmin, (_req, res) => res.json({ prizes: PRIZE_CATALOG }));
+  app.get("/api/admin/prizes", requireAuth, isAdmin, (_req, res) => res.json({ prizes: PRIZE_CATALOG, communityEntryFee: COMMUNITY_ENTRY_FEE, marginMultiplier: PRIZE_MARGIN_MULTIPLIER }));
 
   app.post("/api/admin/competitions", requireAuth, isAdmin, async (req: any, res) => {
     try {
@@ -244,25 +253,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!name) return res.status(400).json({ message: "Tournament name required" });
       const tier = allowedTier(req.body?.tier);
       const status = allowedStatus(req.body?.status);
-      const entryFee = toMoney(req.body?.entryFee);
+      const entryFee = toMoney(req.body?.entryFee || COMMUNITY_ENTRY_FEE);
       const maxEntries = Number(req.body?.maxEntries || 0) > 1 ? Number(req.body.maxEntries) : null;
       const visibility = String(req.body?.visibility || "public") === "private" ? "private" : "public";
-      const prizeType = allowedPrizeType(req.body?.prizeType);
       const prizeKey = String(req.body?.prizeKey || "custom").trim();
-      const prizeDescription = String(req.body?.prizeDescription || "").trim() || PRIZE_CATALOG.find((p) => p.key === prizeKey)?.title || "Custom prize";
+      const selectedPrize = PRIZE_CATALOG.find((p) => p.key === prizeKey);
+      const prizeType = allowedPrizeType(req.body?.prizeType || selectedPrize?.type);
+      const prizeDescription = String(req.body?.prizeDescription || "").trim() || selectedPrize?.title || "Custom prize";
       const startDate = req.body?.startDate ? new Date(String(req.body.startDate)) : fallbackGameweekKickoff(gameWeek);
       const endDate = req.body?.endDate ? new Date(String(req.body.endDate)) : new Date(startDate.getTime() + 3 * 86400000);
       const pin = visibility === "private" ? normalizePin(Math.random().toString(36).slice(2, 8).toUpperCase()) : null;
       const result = await db.execute(sql`
-        insert into app.competitions (name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity, created_by_user_id, join_pin, visibility, max_entries, platform_fee_rate, platform_fee_total, prize_pool_total, prize_type, prize_description, prize_key, season)
-        values (${name}, ${tier}, ${entryFee}, ${status}, ${gameWeek}, ${startDate}, ${endDate}, ${tier === "common" ? "rare" : tier}, ${req.authUserId}, ${pin}, ${visibility}, ${maxEntries}, 0.2, 0, 0, ${prizeType}, ${prizeDescription}, ${prizeKey}, ${SEASON_KEY})
+        insert into app.competitions (name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity, created_by_user_id, join_pin, visibility, max_entries, platform_fee_rate, platform_fee_total, prize_pool_total, prize_type, prize_description, prize_key)
+        values (${name}, ${tier}, ${entryFee}, ${status}, ${gameWeek}, ${startDate}, ${endDate}, ${tier === "common" ? "rare" : tier}, ${req.authUserId}, ${pin}, ${visibility}, ${maxEntries}, 0.2, 0, 0, ${prizeType}, ${prizeDescription}, ${prizeKey})
         returning *
       `);
       return res.json({ success: true, tournament: rowsOf(result)[0] || null });
-    } catch (error: any) {
-      console.error("Failed to create admin tournament:", error);
-      return res.status(500).json({ message: error?.message || "Failed to create tournament" });
-    }
+    } catch (error: any) { console.error("Failed to create admin tournament:", error); return res.status(500).json({ message: error?.message || "Failed to create tournament" }); }
   });
 
   app.patch("/api/admin/competitions/:id", requireAuth, isAdmin, async (req: any, res) => {
@@ -275,25 +282,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!name) return res.status(400).json({ message: "Tournament name required" });
       const tier = allowedTier(req.body?.tier);
       const status = allowedStatus(req.body?.status);
-      const entryFee = toMoney(req.body?.entryFee);
+      const entryFee = toMoney(req.body?.entryFee || COMMUNITY_ENTRY_FEE);
       const maxEntries = Number(req.body?.maxEntries || 0) > 1 ? Number(req.body.maxEntries) : null;
       const visibility = String(req.body?.visibility || "public") === "private" ? "private" : "public";
-      const prizeType = allowedPrizeType(req.body?.prizeType);
       const prizeKey = String(req.body?.prizeKey || "custom").trim();
-      const prizeDescription = String(req.body?.prizeDescription || "").trim() || PRIZE_CATALOG.find((p) => p.key === prizeKey)?.title || "Custom prize";
+      const selectedPrize = PRIZE_CATALOG.find((p) => p.key === prizeKey);
+      const prizeType = allowedPrizeType(req.body?.prizeType || selectedPrize?.type);
+      const prizeDescription = String(req.body?.prizeDescription || "").trim() || selectedPrize?.title || "Custom prize";
       const startDate = req.body?.startDate ? new Date(String(req.body.startDate)) : fallbackGameweekKickoff(gameWeek);
       const endDate = req.body?.endDate ? new Date(String(req.body.endDate)) : new Date(startDate.getTime() + 3 * 86400000);
       const result = await db.execute(sql`
         update app.competitions
-        set name=${name}, tier=${tier}, entry_fee=${entryFee}, status=${status}, game_week=${gameWeek}, start_date=${startDate}, end_date=${endDate}, prize_card_rarity=${tier === "common" ? "rare" : tier}, visibility=${visibility}, max_entries=${maxEntries}, prize_type=${prizeType}, prize_description=${prizeDescription}, prize_key=${prizeKey}, season=${SEASON_KEY}
+        set name=${name}, tier=${tier}, entry_fee=${entryFee}, status=${status}, game_week=${gameWeek}, start_date=${startDate}, end_date=${endDate}, prize_card_rarity=${tier === "common" ? "rare" : tier}, visibility=${visibility}, max_entries=${maxEntries}, prize_type=${prizeType}, prize_description=${prizeDescription}, prize_key=${prizeKey}
         where id=${id}
         returning *
       `);
       return res.json({ success: true, tournament: rowsOf(result)[0] || null });
-    } catch (error: any) {
-      console.error("Failed to update admin tournament:", error);
-      return res.status(500).json({ message: error?.message || "Failed to update tournament" });
-    }
+    } catch (error: any) { console.error("Failed to update admin tournament:", error); return res.status(500).json({ message: error?.message || "Failed to update tournament" }); }
   });
 
   app.get("/api/user", requireAuth, async (req: any, res) => {
@@ -301,25 +306,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!user) return res.status(404).json({ message: "User not found" });
     return res.json(user);
   });
-
   app.get("/api/wallet", requireAuth, async (req: any, res) => {
     let wallet = await storage.getWallet(req.authUserId);
     if (!wallet) wallet = await storage.createWallet({ userId: req.authUserId, balance: 0, lockedBalance: 0 } as any);
     return res.json(wallet);
   });
-
   app.get("/api/lineup", requireAuth, async (req: any, res) => {
     const lineup = await storage.getLineup(req.authUserId);
     const cards = await Promise.all((Array.isArray(lineup?.cardIds) ? lineup!.cardIds : []).map((id: number) => storage.getPlayerCardWithPlayer(Number(id), req.authUserId)));
     return res.json({ lineup: lineup || { cardIds: [] }, cards: cards.filter(Boolean) });
   });
-
   app.post("/api/lineup", requireAuth, async (req: any, res) => {
     const ids = Array.isArray(req.body?.cardIds) ? req.body.cardIds.map(Number).filter((id: number) => Number.isFinite(id)) : [];
     if (ids.length !== 5) return res.status(400).json({ message: "Exactly 5 cards required" });
     const captainId = Number(req.body?.captainId || ids[0]);
-    const lineup = await storage.createOrUpdateLineup(req.authUserId, ids, captainId);
-    return res.json(lineup);
+    return res.json(await storage.createOrUpdateLineup(req.authUserId, ids, captainId));
   });
 
   app.get("/api/competitions", async (req, res) => {
@@ -332,19 +333,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const rows = await Promise.all(competitions.map(async (comp: any) => {
         const rawEntries = await storage.getCompetitionEntries(comp.id);
         const ranked = await rankCompetitionEntries(storage, rawEntries);
-        const entries = await Promise.all(ranked.map(async (entry: any) => {
-          const user = await storage.getUser(entry.userId);
-          return { ...entry, userName: user?.managerTeamName || user?.name || user?.email || "Manager", userImage: user?.avatarUrl || null };
-        }));
+        const entries = await Promise.all(ranked.map(async (entry: any) => ({ ...entry, userName: (await storage.getUser(entry.userId))?.managerTeamName || (await storage.getUser(entry.userId))?.name || (await storage.getUser(entry.userId))?.email || "Manager" })));
         const submissionClosesAt = await getCompetitionSubmissionCloseAt(comp);
-        const normalized = normalizeCompetitionRow(comp);
+        const normalized = normalizeCompetitionRow({ ...comp, entryCount: entries.length });
         return { ...normalized, submissionClosesAt, entryOpen: comp.status === "open" && Date.now() < new Date(submissionClosesAt).getTime(), entries, entryCount: entries.length, winner: comp.status === "completed" && entries[0] ? { userId: entries[0].userId, userName: entries[0].userName, totalScore: Number(entries[0].totalScore || 0), prizeAmount: Number(entries[0].prizeAmount || 0), prizeCardId: entries[0].prizeCardId || null, tiebreak: entries[0].tiebreak || null } : null };
       }));
       return res.json(rows);
-    } catch (error: any) {
-      console.error("Failed to fetch competitions:", error);
-      return res.status(500).json({ message: "Failed to fetch tournaments" });
-    }
+    } catch (error: any) { console.error("Failed to fetch competitions:", error); return res.status(500).json({ message: "Failed to fetch tournaments" }); }
   });
 
   app.get("/api/competitions/my-entries", requireAuth, async (req: any, res) => res.json(await storage.getUserCompetitions(req.authUserId)));
@@ -361,8 +356,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (competition.status !== "open") return res.status(400).json({ message: "Tournament is not open for entries" });
       const cutoff = await getCompetitionSubmissionCloseAt(competition);
       if (Date.now() >= cutoff.getTime()) return res.status(400).json({ message: "Gameweek entries are closed. Cutoff is the first Premier League kickoff of this 26/27 gameweek." });
-      const existing = await storage.getCompetitionEntry(competitionId, userId);
-      if (existing) return res.status(400).json({ message: "Already entered this tournament" });
+      if (await storage.getCompetitionEntry(competitionId, userId)) return res.status(400).json({ message: "Already entered this tournament" });
       const cards = await Promise.all(cardIds.map((id: number) => storage.getPlayerCardWithPlayer(id, userId)));
       if (cards.some((card: any) => !card || card.ownerId !== userId)) return res.status(403).json({ message: "You don't own all selected cards" });
       const expectedRarity = String(competition.tier || "common").toLowerCase();
@@ -381,10 +375,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const entry = await storage.createCompetitionEntry({ competitionId, userId, lineupCardIds: cardIds, captainId, totalScore: 0 } as any);
       return res.json({ success: true, message: "Successfully joined tournament", entryId: entry.id, cutoff });
-    } catch (error: any) {
-      console.error("Failed to join competition:", error);
-      return res.status(500).json({ message: error?.message || "Failed to join tournament" });
-    }
+    } catch (error: any) { console.error("Failed to join competition:", error); return res.status(500).json({ message: error?.message || "Failed to join tournament" }); }
   });
 
   app.post("/api/admin/competitions/settle/:id", requireAuth, isAdmin, async (req: any, res) => {
@@ -398,15 +389,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const totalPrizePool = toMoney(entries.length * Number(competition.entryFee || 0));
       const payoutPercentages = [0.6, 0.3, 0.1];
       for (let i = 0; i < ranked.length; i += 1) {
-        const entry = ranked[i];
-        await storage.updateCompetitionEntry(entry.id, { rank: i + 1, prizeAmount: toMoney(totalPrizePool * (payoutPercentages[i] || 0)), tiebreakMeta: entry.tiebreak || {} } as any);
+        await storage.updateCompetitionEntry(ranked[i].id, { rank: i + 1, prizeAmount: toMoney(totalPrizePool * (payoutPercentages[i] || 0)), tiebreakMeta: ranked[i].tiebreak || {} } as any);
       }
       await storage.updateCompetition(competitionId, { status: "completed" } as any);
       return res.json({ success: true, message: "Tournament settled with Arena v2 tiebreak rules", winner: ranked[0] || null, winnersCount: Math.min(3, ranked.length) });
-    } catch (error: any) {
-      console.error("Failed to settle competition:", error);
-      return res.status(500).json({ message: error?.message || "Failed to settle tournament" });
-    }
+    } catch (error: any) { console.error("Failed to settle competition:", error); return res.status(500).json({ message: error?.message || "Failed to settle tournament" }); }
   });
 
   console.log("🚀 Starting automatic score update service...");
