@@ -1,18 +1,26 @@
 export const SEASON_KEY = "2026-27";
-export const PRIZE_MARGIN_MULTIPLIER = 1.7;
 export const RARITIES = ["common", "rare", "epic", "unique", "legendary"] as const;
 
 type Rarity = (typeof RARITIES)[number];
 
 export const RARITY_ENTRY_FEES: Record<Rarity, number> = {
-  common: 30,
-  rare: 75,
-  epic: 150,
-  unique: 300,
+  common: 10,
+  rare: 50,
+  unique: 100,
+  epic: 250,
   legendary: 500,
 };
 
+export const RARITY_MARGIN_MULTIPLIERS: Record<Rarity, number> = {
+  common: 1.8,
+  rare: 1.7,
+  unique: 1.6,
+  epic: 1.6,
+  legendary: 1.5,
+};
+
 export const COMMUNITY_ENTRY_FEE = RARITY_ENTRY_FEES.common;
+export const PRIZE_MARGIN_MULTIPLIER = RARITY_MARGIN_MULTIPLIERS.rare;
 
 export type PrizeTier = {
   key: string;
@@ -24,17 +32,23 @@ export type PrizeTier = {
   unlockTarget: number;
   tierIndex: number;
   entryFee: number;
+  marginMultiplier: number;
 };
 
 function entryFeeFor(rarity: Rarity) {
   return RARITY_ENTRY_FEES[rarity] || COMMUNITY_ENTRY_FEE;
 }
 
+function marginFor(rarity: Rarity) {
+  return RARITY_MARGIN_MULTIPLIERS[rarity] || PRIZE_MARGIN_MULTIPLIER;
+}
+
 function makePrize(key: string, title: string, value: number, category: string, rarity: Rarity): PrizeTier {
   const entryFee = entryFeeFor(rarity);
-  const unlockTarget = Math.ceil(value * PRIZE_MARGIN_MULTIPLIER);
+  const marginMultiplier = marginFor(rarity);
+  const unlockTarget = Math.ceil(value * marginMultiplier);
   const requiredEntrants = Math.max(1, Math.ceil(unlockTarget / entryFee));
-  return { key, title, value, category, rarity, requiredEntrants, unlockTarget, tierIndex: 0, entryFee };
+  return { key, title, value, category, rarity, requiredEntrants, unlockTarget, tierIndex: 0, entryFee, marginMultiplier };
 }
 
 const common = [
@@ -93,6 +107,8 @@ const legendary = [
   makePrize("legendary-pc", "Gaming PC", 25000, "Gaming", "legendary"),
   makePrize("legendary-holiday", "Holiday Voucher", 25000, "Travel", "legendary"),
   makePrize("legendary-mega", "Mega Electronics Bundle", 35000, "Electronics", "legendary"),
+  makePrize("legendary-d4d", "Toyota Hilux D4D / Equivalent Value", 450000, "Vehicle", "legendary"),
+  makePrize("legendary-house-deposit", "House Deposit / Equivalent Value", 500000, "Property", "legendary"),
 ];
 
 export const PRIZE_LADDERS: Record<Rarity, PrizeTier[]> = { common, rare, epic, unique, legendary };
@@ -107,6 +123,11 @@ export const PRIZE_CATALOG: PrizeTier[] = RARITIES.flatMap((rarity) => PRIZE_LAD
 export function getEntryFeeForRarity(rarity: unknown): number {
   const key = String(rarity || "common").toLowerCase() as Rarity;
   return RARITY_ENTRY_FEES[key] || COMMUNITY_ENTRY_FEE;
+}
+
+export function getMarginForRarity(rarity: unknown): number {
+  const key = String(rarity || "rare").toLowerCase() as Rarity;
+  return RARITY_MARGIN_MULTIPLIERS[key] || PRIZE_MARGIN_MULTIPLIER;
 }
 
 export function getPrizeLadder(rarity: unknown): PrizeTier[] {
