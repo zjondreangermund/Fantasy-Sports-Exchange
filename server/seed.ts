@@ -180,8 +180,8 @@ export async function seedDemoUsers() {
 
     let wallet = await storage.getWallet(userData.id);
     if (!wallet) {
-      wallet = await storage.createWallet({ userId: userData.id, balance: 1000, lockedBalance: 0 });
-      await storage.createTransaction({ userId: userData.id, type: "deposit", amount: 1000, description: "Initial demo wallet balance" });
+      wallet = await storage.createWallet({ userId: userData.id, balance: 1000, lockedBalance: 0 } as any);
+      await storage.createTransaction({ userId: userData.id, type: "deposit", amount: 1000, description: "Initial demo wallet balance" } as any);
       console.log(`Created wallet for ${userData.name} with $1000`);
     }
   }
