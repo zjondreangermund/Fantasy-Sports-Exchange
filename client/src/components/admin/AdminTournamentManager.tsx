@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { apiRequest, queryClient } from "../../lib/queryClient";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { useToast } from "../../hooks/use-toast";
-import { Plus, Save, Trophy } from "lucide-react";
+import { Gift, Plus, Save, Trophy } from "lucide-react";
 
 const rarityOptions = ["common", "rare", "epic", "unique", "legendary"];
 const statusOptions = ["open", "upcoming", "active", "completed"];
@@ -51,12 +52,12 @@ function buildEmptyForm() {
     tier: "common",
     status: "open",
     gameWeek: "1",
-    entryFee: "0",
-    maxEntries: "100",
+    entryFee: "30",
+    maxEntries: "5000",
     visibility: "public",
     prizeType: "goods",
-    prizeKey: "ps5",
-    prizeDescription: "PlayStation 5 Console",
+    prizeKey: "gift-500",
+    prizeDescription: "N$500 Gift Voucher",
     startDate: defaultStartForGw(1),
     endDate: defaultEndForGw(1),
   };
@@ -69,9 +70,12 @@ export default function AdminTournamentManager() {
   const { data: competitions } = useQuery<any[]>({ queryKey: ["/api/competitions"] });
   const { data: prizePayload } = useQuery<any>({ queryKey: ["/api/admin/prizes"] });
   const prizes = Array.isArray(prizePayload?.prizes) ? prizePayload.prizes : [];
+  const entryFee = Number(form.entryFee || prizePayload?.communityEntryFee || 30);
   const sortedCompetitions = useMemo(() => [...(Array.isArray(competitions) ? competitions : [])].sort((a, b) => Number(a.gameWeek || 0) - Number(b.gameWeek || 0) || Number(a.id || 0) - Number(b.id || 0)), [competitions]);
-
+  const communityPrizeLadder = useMemo(() => [...prizes].filter((p: any) => Number(p.value || 0) > 0).sort((a: any, b: any) => Number(a.requiredEntrants || 0) - Number(b.requiredEntrants || 0)), [prizes]);
   const selectedPrize = prizes.find((p: any) => p.key === form.prizeKey);
+  const selectedRequiredEntrants = selectedPrize?.requiredEntrants || Math.ceil((Number(selectedPrize?.value || 0) * 1.5) / Math.max(1, entryFee));
+  const selectedUnlockTarget = selectedPrize?.unlockTarget || Number(selectedPrize?.value || 0) * 1.5;
 
   const setField = (key: string, value: string) => {
     setForm((prev) => {
@@ -80,6 +84,7 @@ export default function AdminTournamentManager() {
         const gw = Number(value || 1);
         next.startDate = defaultStartForGw(gw);
         next.endDate = defaultEndForGw(gw);
+        if (!String(next.name || "").trim() || /^GW\d+\s/i.test(String(next.name))) next.name = `GW${gw} Community Cup`;
       }
       if (key === "prizeKey") {
         const prize = prizes.find((p: any) => p.key === value);
@@ -115,7 +120,7 @@ export default function AdminTournamentManager() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
-      toast({ title: form.id ? "Tournament updated" : "Tournament created", description: "26/27 gameweek cutoff is linked to first kickoff." });
+      toast({ title: form.id ? "Tournament updated" : "Tournament created", description: "Prize unlocks and 26/27 gameweek cutoff saved." });
       if (!form.id) setForm(buildEmptyForm());
     },
     onError: (error: any) => toast({ title: "Tournament save failed", description: error.message, variant: "destructive" }),
@@ -128,7 +133,7 @@ export default function AdminTournamentManager() {
       tier: String(comp.tier || "common"),
       status: String(comp.status || "open"),
       gameWeek: String(comp.gameWeek || comp.game_week || 1),
-      entryFee: String(comp.entryFee ?? comp.entry_fee ?? 0),
+      entryFee: String(comp.entryFee ?? comp.entry_fee ?? 30),
       maxEntries: String(comp.maxEntries ?? comp.max_entries ?? ""),
       visibility: String(comp.visibility || "public"),
       prizeType: String(comp.prizeType || comp.prize_type || "goods"),
@@ -144,9 +149,12 @@ export default function AdminTournamentManager() {
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="flex items-center gap-2 text-lg font-black"><Trophy className="h-5 w-5 text-yellow-300" /> Official Tournament Builder</div>
-          <p className="mt-1 text-sm text-white/45">Create/edit 2026/27 tournaments, select goods prizes, and keep entries open until the first real fixture of that gameweek kicks off.</p>
+          <p className="mt-1 text-sm text-white/45">Community Cup entry is N$30 by default. A prize unlocks only when that gameweek's entries reach 150% of the prize value.</p>
         </div>
-        <Button onClick={() => setForm(buildEmptyForm())} className="rounded-xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><Plus className="mr-2 h-4 w-4" />New</Button>
+        <div className="flex gap-2">
+          <Link href="/prize-vault"><Button variant="outline" className="rounded-xl border-emerald-300/30 bg-emerald-300/10 text-emerald-100"><Gift className="mr-2 h-4 w-4" />Prize Vault</Button></Link>
+          <Button onClick={() => setForm(buildEmptyForm())} className="rounded-xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><Plus className="mr-2 h-4 w-4" />New</Button>
+        </div>
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[.9fr_1.1fr]">
@@ -160,24 +168,40 @@ export default function AdminTournamentManager() {
             <label className="space-y-1 text-sm"><span className="text-white/55">Status</span><select value={form.status} onChange={(e) => setField("status", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 capitalize text-white">{statusOptions.map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
             <label className="space-y-1 text-sm"><span className="text-white/55">Visibility</span><select value={form.visibility} onChange={(e) => setField("visibility", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-white"><option value="public">Public</option><option value="private">Private PIN</option></select></label>
             <label className="space-y-1 text-sm"><span className="text-white/55">Prize type</span><select value={form.prizeType} onChange={(e) => setField("prizeType", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-white">{prizeTypeOptions.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}</select></label>
-            <label className="space-y-1 text-sm"><span className="text-white/55">Goods prize</span><select value={form.prizeKey} onChange={(e) => setField("prizeKey", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-white"><option value="custom">Custom / manual</option>{prizes.map((p: any) => <option key={p.key} value={p.key}>{p.title} — {money(p.value)}</option>)}</select></label>
+            <label className="space-y-1 text-sm"><span className="text-white/55">Goods prize</span><select value={form.prizeKey} onChange={(e) => setField("prizeKey", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-white"><option value="custom">Custom / manual</option>{prizes.map((p: any) => <option key={p.key} value={p.key}>{p.title} — {money(p.value)} unlock {p.requiredEntrants || 0} entrants</option>)}</select></label>
             <label className="space-y-1 text-sm md:col-span-2"><span className="text-white/55">Prize description</span><Input value={form.prizeDescription} onChange={(e) => setField("prizeDescription", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
             <label className="space-y-1 text-sm"><span className="text-white/55">Manual fallback start</span><Input type="datetime-local" value={form.startDate} onChange={(e) => setField("startDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
             <label className="space-y-1 text-sm"><span className="text-white/55">End date</span><Input type="datetime-local" value={form.endDate} onChange={(e) => setField("endDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
           </div>
-          {selectedPrize && <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-100">Selected goods: <b>{selectedPrize.title}</b> worth approx {money(selectedPrize.value)}.</div>}
+          {selectedPrize && <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-100">Selected goods: <b>{selectedPrize.title}</b> worth {money(selectedPrize.value)}. Unlock target: <b>{money(selectedUnlockTarget)}</b> = <b>{selectedRequiredEntrants}</b> entrants at {money(entryFee)}.</div>}
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full rounded-xl bg-yellow-300 font-black text-slate-950 hover:bg-yellow-200"><Save className="mr-2 h-4 w-4" />{saveMutation.isPending ? "Saving..." : form.id ? "Save Changes" : "Create Official Tournament"}</Button>
         </div>
 
-        <div className="max-h-[48rem] space-y-2 overflow-y-auto pr-1">
-          {sortedCompetitions.map((comp) => (
-            <button key={comp.id} onClick={() => loadCompetition(comp)} className={`w-full rounded-xl border p-3 text-left text-sm transition ${String(form.id) === String(comp.id) ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25 hover:bg-white/10"}`}>
-              <div className="flex items-center justify-between gap-3"><span className="font-bold">{comp.name}</span><Badge className="capitalize">{comp.status}</Badge></div>
-              <div className="mt-1 text-white/50">GW {comp.gameWeek} • {comp.tier} • Entry {money(comp.entryFee)} • {comp.prizeDescription || comp.prizeCardRarity || "No prize"}</div>
-              <div className="mt-1 text-xs text-cyan-100/60">Cutoff: {comp.submissionClosesAt ? new Date(comp.submissionClosesAt).toLocaleString() : "first fixture fallback"}</div>
-            </button>
-          ))}
-          {sortedCompetitions.length === 0 && <div className="rounded-xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">No tournaments found.</div>}
+        <div className="space-y-3">
+          <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2"><h3 className="text-sm font-black uppercase tracking-[.14em] text-white/70">Community Cup unlock ladder</h3><Badge className="bg-emerald-300/15 text-emerald-100">N$30 entry</Badge></div>
+            <div className="grid gap-2 md:grid-cols-2">
+              {communityPrizeLadder.slice(0, 10).map((p: any) => (
+                <div key={p.key} className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-xs">
+                  <div className="font-bold text-white">{p.title}</div>
+                  <div className="text-white/50">Value {money(p.value)} • unlock {money(p.unlockTarget)}+</div>
+                  <div className="mt-1 font-black text-cyan-100">{p.requiredEntrants} entrants required</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="max-h-[34rem] space-y-2 overflow-y-auto pr-1">
+            {sortedCompetitions.map((comp) => (
+              <button key={comp.id} onClick={() => loadCompetition(comp)} className={`w-full rounded-xl border p-3 text-left text-sm transition ${String(form.id) === String(comp.id) ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25 hover:bg-white/10"}`}>
+                <div className="flex items-center justify-between gap-3"><span className="font-bold">{comp.name}</span><Badge className="capitalize">{comp.status}</Badge></div>
+                <div className="mt-1 text-white/50">GW {comp.gameWeek} • {comp.tier} • Entry {money(comp.entryFee)} • {comp.prizeDescription || comp.prizeCardRarity || "No prize"}</div>
+                <div className="mt-1 text-xs text-cyan-100/60">Unlock: {comp.requiredEntrants || 0} entrants • Current: {comp.entryCount || 0} • {comp.prizeUnlocked ? "Prize unlocked" : "Prize locked"}</div>
+                <div className="mt-1 text-xs text-cyan-100/60">Cutoff: {comp.submissionClosesAt ? new Date(comp.submissionClosesAt).toLocaleString() : "first fixture fallback"}</div>
+              </button>
+            ))}
+            {sortedCompetitions.length === 0 && <div className="rounded-xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">No tournaments found.</div>}
+          </div>
         </div>
       </div>
     </Card>
