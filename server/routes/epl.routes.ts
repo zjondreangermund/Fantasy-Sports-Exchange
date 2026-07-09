@@ -1,9 +1,9 @@
 import type { Express } from "express";
 import { fplApi } from "../services/fplApi.js";
 
-function teamLookup(bootstrap: any) {
-  const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
-  return new Map(teams.map((team: any) => [Number(team.id), team]));
+function teamLookup(bootstrap: any): Map<number, any> {
+  const teams: any[] = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+  return new Map<number, any>(teams.map((team: any) => [Number(team.id), team]));
 }
 
 function normalizeFixture(fixture: any, teams: Map<number, any>) {
