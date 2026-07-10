@@ -1,0 +1,26 @@
+/* Rarity-coloured marketplace rows, using the icon colours already rendered in each row. */
+article:has(.text-slate-300) {
+  background: linear-gradient(100deg, rgba(148,163,184,.16), rgba(15,23,42,.72) 48%, rgba(148,163,184,.08)) !important;
+  border-color: rgba(203,213,225,.28) !important;
+}
+article:has(.text-blue-300) {
+  background: linear-gradient(100deg, rgba(37,99,235,.24), rgba(6,18,40,.78) 48%, rgba(14,165,233,.12)) !important;
+  border-color: rgba(96,165,250,.42) !important;
+}
+article:has(.text-fuchsia-300) {
+  background: linear-gradient(100deg, rgba(147,51,234,.25), rgba(31,7,50,.8) 48%, rgba(236,72,153,.14)) !important;
+  border-color: rgba(216,180,254,.42) !important;
+}
+article:has(.text-amber-300) {
+  background: linear-gradient(100deg, rgba(217,119,6,.24), rgba(35,22,3,.82) 48%, rgba(250,204,21,.12)) !important;
+  border-color: rgba(253,230,138,.45) !important;
+}
+
+/* Make the Buy / Loan selector unmistakable on desktop and mobile. */
+section .grid.grid-cols-2.gap-1 > button:nth-child(2) {
+  border: 1px solid rgba(34,211,238,.35);
+}
+section .grid.grid-cols-2.gap-1 > button:nth-child(2):not([data-state="active"]) {
+  background: rgba(8,145,178,.12);
+  color: rgb(207 250 254);
+}
