@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - verify/rare-prize-artwork
+  pull_request:
+    branches:
+      - main
 
 jobs:
   verify:
