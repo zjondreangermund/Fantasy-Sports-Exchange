@@ -20,10 +20,19 @@ type VaultItem = {
   currentPrize?: boolean;
 };
 
+type VaultSummary = {
+  currentEntries: number;
+  entryFee: number;
+  marginMultiplier: number;
+  unlocked?: number;
+  total?: number;
+  targetEntries?: number;
+};
+
 type VaultPayload = {
   items: VaultItem[];
   ladders?: Record<string, { items: VaultItem[] }>;
-  summary: Record<string, { currentEntries: number; entryFee: number; marginMultiplier: number }>;
+  summary: Record<string, VaultSummary>;
 };
 
 const rarities = ["common", "rare", "unique", "epic", "legendary"];
@@ -81,8 +90,11 @@ export default function PrizeVaultPage() {
   const all = Array.isArray(data?.items) ? data.items : [];
   const cards = data?.ladders?.[rarity]?.items || all.filter((item) => item.rarity === rarity);
   const selected = useMemo(() => cards.find((item) => item.id === selectedId) || cards.find((item) => item.currentPrize) || cards[0], [cards, selectedId]);
-  const entries = rarities.reduce((sum, key) => sum + Number(data?.summary?.[key]?.currentEntries || 0), 0);
-  const unlocked = all.filter((item) => item.currentPrize || item.unlocked).length;
+  const activeSummary = data?.summary?.[rarity];
+  const entries = Number(activeSummary?.currentEntries ?? cards[0]?.currentEntries ?? 0);
+  const unlocked = Number(activeSummary?.unlocked ?? cards.filter((item) => item.currentPrize || item.unlocked).length);
+  const activePrize = cards.filter((item) => item.currentPrize || item.unlocked).sort((a, b) => b.tierIndex - a.tierIndex)[0];
+  const activeValue = Number(activePrize?.value || 0);
   const scroll = (dir: number) => rail.current?.scrollBy({ left: dir * 900, behavior: "smooth" });
 
   return (
@@ -96,9 +108,9 @@ export default function PrizeVaultPage() {
               <p className="mt-2 max-w-2xl text-sm text-white/55">Premium real-world rewards. Every ladder resets each gameweek, while the prize list remains available for the full season.</p>
             </div>
             <div className="grid grid-cols-3 gap-2">
-              <TopStat icon={Users} label="Entries" value={String(entries)} />
-              <TopStat icon={Gift} label="Unlocked" value={String(unlocked)} />
-              <TopStat icon={Clock3} label="Season" value="26/27" />
+              <TopStat icon={Users} label={`${rarity} entries`} value={String(entries)} />
+              <TopStat icon={Gift} label={`${rarity} unlocked`} value={String(unlocked)} />
+              <TopStat icon={Trophy} label="Current value" value={money(activeValue)} />
             </div>
           </div>
           <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:overflow-x-auto">
@@ -112,8 +124,8 @@ export default function PrizeVaultPage() {
 
         <section className="px-3 py-5 sm:px-7 sm:py-7">
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div><div className="text-xs font-black uppercase tracking-[.22em]" style={{ color: theme[rarity].accent }}>{rarity} prize ladder</div><h2 className="mt-1 text-2xl font-black sm:text-3xl">One chain of prizes. One winner prize.</h2><p className="mt-1 text-xs text-white/45">The highest funded reward becomes this gameweek’s winner prize.</p></div>
-            <Link href="/competitions"><Button className="w-full rounded-xl bg-purple-500 font-black sm:w-auto"><Trophy className="mr-2 h-4 w-4" />Enter tournament</Button></Link>
+            <div><div className="text-xs font-black uppercase tracking-[.22em]" style={{ color: theme[rarity].accent }}>{rarity} prize ladder</div><h2 className="mt-1 text-2xl font-black sm:text-3xl">One chain of prizes. One winner prize.</h2><p className="mt-1 text-xs text-white/45">Showing only the {rarity} ladder: {entries} current-gameweek entries and {unlocked} unlocked reward{unlocked === 1 ? "" : "s"}.</p></div>
+            <Link href="/competitions"><Button className="w-full rounded-xl bg-purple-500 font-black sm:w-auto"><Trophy className="mr-2 h-4 w-4" />Enter {rarity} tournament</Button></Link>
           </div>
           <div className="relative rounded-[1.8rem] border border-white/10 bg-[radial-gradient(circle_at_50%_100%,rgba(91,33,182,.3),transparent_55%),rgba(0,0,0,.28)] p-3 sm:p-5">
             <button onClick={() => scroll(-1)} className="absolute left-3 top-1/2 z-30 hidden -translate-y-1/2 rounded-full border border-white/15 bg-black/80 p-3 xl:block"><ArrowLeft className="h-5 w-5" /></button>
@@ -165,31 +177,9 @@ function PrizeSlab({ item, index, selected, onSelect }: { item: VaultItem; index
 
 function PrizeArt({ item }: { item: VaultItem }) {
   const kind = typeOf(item);
-  const art = artwork(kind);
-  return <div className="absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_50%_32%,rgba(255,255,255,.24),transparent_30%),linear-gradient(155deg,#14162a,#050710)]"><div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,.22)_18%,transparent_36%,transparent_70%,rgba(255,255,255,.08)_86%,transparent_100%)]" /><div className="absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl" style={{ background: theme[item.rarity]?.glow }} /><svg viewBox="0 0 320 240" className="relative z-10 h-full w-full drop-shadow-[0_30px_28px_rgba(0,0,0,.75)]"><defs><linearGradient id={`metal-${item.id}`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#fff"/><stop offset=".35" stopColor={theme[item.rarity]?.accent || "#7dd3fc"}/><stop offset="1" stopColor="#111827"/></linearGradient><linearGradient id={`screen-${item.id}`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#22d3ee"/><stop offset=".5" stopColor="#a855f7"/><stop offset="1" stopColor="#020617"/></linearGradient></defs>{art(item.id)}</svg></div>;
-}
-
-function artwork(kind: string) {
-  return (id: string) => {
-    const metal = `url(#metal-${id})`;
-    const screen = `url(#screen-${id})`;
-    if (kind === "vehicle") return <><ellipse cx="160" cy="202" rx="120" ry="18" fill="#000" opacity=".45"/><path d="M48 150h224l-22-54c-7-17-22-27-41-27H104c-18 0-34 10-43 27l-13 54Z" fill={metal}/><rect x="28" y="140" width="264" height="52" rx="19" fill="#111827" stroke="#fff" strokeOpacity=".45"/><path d="M106 83h101l23 53H78l28-53Z" fill={screen}/><circle cx="83" cy="190" r="25" fill="#020617" stroke="#cbd5e1" strokeWidth="7"/><circle cx="239" cy="190" r="25" fill="#020617" stroke="#cbd5e1" strokeWidth="7"/></>;
-    if (kind === "home") return <><path d="M38 112 160 28l122 84v94H38v-94Z" fill={metal} stroke="#fff" strokeOpacity=".55" strokeWidth="4"/><rect x="128" y="133" width="64" height="73" rx="5" fill="#07101f"/><rect x="61" y="130" width="45" height="42" rx="5" fill={screen}/><rect x="214" y="130" width="45" height="42" rx="5" fill={screen}/></>;
-    if (kind === "travel") return <><circle cx="160" cy="113" r="78" fill={screen} opacity=".68"/><path d="m48 164 104-49 31-69 19 8-14 72 69 38-8 17-84-23-58 33-13-8 36-40-83 31Z" fill="#fff"/><path d="M48 207h224" stroke="#fff" strokeWidth="9" strokeLinecap="round"/></>;
-    if (kind === "pc") return <><rect x="36" y="42" width="178" height="122" rx="13" fill="#050914" stroke="#fff" strokeOpacity=".5" strokeWidth="5"/><rect x="50" y="56" width="150" height="90" rx="7" fill={screen}/><rect x="230" y="50" width="54" height="142" rx="12" fill="#0b1220" stroke="#fff" strokeOpacity=".45" strokeWidth="5"/><circle cx="257" cy="91" r="17" fill="none" stroke={metal} strokeWidth="6"/><circle cx="257" cy="144" r="17" fill="none" stroke={metal} strokeWidth="6"/><path d="M125 166v27m-42 7h84" stroke="#fff" strokeWidth="7" strokeLinecap="round"/></>;
-    if (kind === "laptop") return <><rect x="54" y="35" width="212" height="139" rx="14" fill="#070b13" stroke="#fff" strokeOpacity=".55" strokeWidth="6"/><rect x="69" y="50" width="182" height="108" rx="7" fill={screen}/><path d="M30 181h260l-22 33H52l-22-33Z" fill={metal} stroke="#fff" strokeOpacity=".45" strokeWidth="5"/></>;
-    if (kind === "console") return <><path d="M117 34h86l19 159H98l19-159Z" fill={metal} stroke="#fff" strokeOpacity=".5" strokeWidth="5"/><path d="M132 65h56m-49 28h42" stroke="#07101f" strokeWidth="8" strokeLinecap="round"/><path d="M29 158c0-30 23-48 52-38l29 10h100l29-10c29-10 52 8 52 38 0 29-22 48-47 35l-34-18H110l-34 18c-25 13-47-6-47-35Z" fill="#101827" stroke="#fff" strokeOpacity=".55" strokeWidth="5"/><circle cx="77" cy="155" r="10" fill="#fff"/><path d="M223 143h28m-14-14v28" stroke="#fff" strokeWidth="7" strokeLinecap="round"/></>;
-    if (kind === "audio") return <><path d="M71 141V99c0-49 39-79 89-79s89 30 89 79v42" fill="none" stroke="#fff" strokeWidth="19" strokeLinecap="round"/><rect x="48" y="117" width="58" height="88" rx="24" fill={metal} stroke="#fff" strokeOpacity=".45" strokeWidth="5"/><rect x="214" y="117" width="58" height="88" rx="24" fill={metal} stroke="#fff" strokeOpacity=".45" strokeWidth="5"/><path d="M241 199c0 22-18 31-48 31" fill="none" stroke="#fff" strokeWidth="8" strokeLinecap="round"/></>;
-    if (kind === "phone") return <><rect x="105" y="23" width="110" height="196" rx="27" fill="#07101f" stroke="#fff" strokeOpacity=".55" strokeWidth="7"/><rect x="117" y="49" width="86" height="135" rx="12" fill={screen}/><circle cx="160" cy="202" r="7" fill="#fff"/><rect x="141" y="35" width="38" height="5" rx="3" fill="#fff"/></>;
-    if (kind === "watch") return <><path d="M129 16h62l13 52-13 157h-62L116 68l13-52Z" fill={metal}/><rect x="95" y="65" width="130" height="130" rx="38" fill="#08101e" stroke="#fff" strokeOpacity=".55" strokeWidth="7"/><circle cx="160" cy="130" r="46" fill={screen}/><path d="M160 96v38l25 19" stroke="#fff" strokeWidth="7" strokeLinecap="round"/></>;
-    if (kind === "drone") return <><rect x="121" y="96" width="78" height="50" rx="15" fill={metal}/><path d="M122 104 65 65m134 39 57-39m-134 72-57 39m134-39 57 39" stroke="#fff" strokeWidth="8" strokeLinecap="round"/><ellipse cx="57" cy="58" rx="44" ry="11" fill="none" stroke="#fff" strokeWidth="5"/><ellipse cx="263" cy="58" rx="44" ry="11" fill="none" stroke="#fff" strokeWidth="5"/><ellipse cx="57" cy="183" rx="44" ry="11" fill="none" stroke="#fff" strokeWidth="5"/><ellipse cx="263" cy="183" rx="44" ry="11" fill="none" stroke="#fff" strokeWidth="5"/></>;
-    if (kind === "boat") return <><path d="M35 149h250l-41 52H80l-45-52Z" fill={metal}/><path d="M108 149V63h76l39 86" fill="#0b1220" stroke="#fff" strokeOpacity=".5" strokeWidth="5"/><path d="M126 80h43v39h-43z" fill={screen}/><path d="M44 220c32-19 52 17 84-2 31-18 53 17 84-1 31-18 51 15 76 2" fill="none" stroke="#fff" strokeWidth="8" strokeLinecap="round"/></>;
-    if (kind === "bike") return <><circle cx="81" cy="177" r="40" fill="none" stroke="#fff" strokeWidth="8"/><circle cx="241" cy="177" r="40" fill="none" stroke="#fff" strokeWidth="8"/><path d="m81 177 56-76h56l48 76m-104-76 33 76H81l56-76Zm56 0 34-42" fill="none" stroke={metal} strokeWidth="9" strokeLinecap="round" strokeLinejoin="round"/></>;
-    if (kind === "coffee") return <><rect x="72" y="48" width="176" height="126" rx="18" fill={metal}/><rect x="107" y="74" width="106" height="44" rx="9" fill="#07101f"/><circle cx="160" cy="96" r="12" fill={screen}/><path d="M126 174h68v39h-68z" fill="#fff" opacity=".85"/><path d="M194 184h17c14 0 14 21 0 21h-17" fill="none" stroke="#fff" strokeWidth="5"/></>;
-    if (kind === "sport") return <><circle cx="160" cy="126" r="80" fill="#fff"/><path d="m160 46 28 35-12 43h-32l-12-43 28-35Zm-73 61 45-26m101 26-45-26m-58 92 14-49m47 49-15-49m-73 49 28-6m86 6-28-6" stroke="#111827" strokeWidth="8" strokeLinecap="round"/></>;
-    if (kind === "voucher") return <><path d="M39 66h242v43c-22 0-22 35 0 35v44H39v-44c22 0 22-35 0-35V66Z" fill={metal} stroke="#fff" strokeOpacity=".5" strokeWidth="5"/><path d="M124 66v122" stroke="#07101f" strokeWidth="5" strokeDasharray="10 10"/><circle cx="196" cy="113" r="28" fill="none" stroke="#07101f" strokeWidth="8"/><path d="m178 158 40-82" stroke="#07101f" strokeWidth="8"/></>;
-    return <><rect x="52" y="93" width="216" height="120" rx="16" fill={metal}/><path d="M34 70h252v52H34z" fill={metal}/><path d="M146 70v143h28V70" fill="#07101f"/><path d="M160 70c-34-47-84-56-79-16 4 31 50 25 79 16Zm0 0c34-47 84-56 79-16-4 31-50 25-79 16Z" fill="none" stroke="#fff" strokeWidth="7"/></>;
-  };
+  const icon: Record<string, string> = { vehicle: "🚙", home: "🏡", travel: "✈️", boat: "🛥️", bike: "🚵", laptop: "💻", pc: "🖥️", console: "🎮", audio: "🎧", phone: "📱", watch: "⌚", drone: "🚁", coffee: "☕", sport: "⚽", voucher: "🎟️", gift: "🎁" };
+  const t = theme[item.rarity] || theme.common;
+  return <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_50%_32%,rgba(255,255,255,.24),transparent_30%),linear-gradient(155deg,#14162a,#050710)]"><div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,.22)_18%,transparent_36%,transparent_70%,rgba(255,255,255,.08)_86%,transparent_100%)]" /><div className="absolute h-56 w-56 rounded-full blur-3xl" style={{ background: t.glow }} /><div className="relative z-10 text-[8rem] drop-shadow-[0_30px_28px_rgba(0,0,0,.75)]">{icon[kind] || icon.gift}</div></div>;
 }
 
 function Chain() {
@@ -200,9 +190,9 @@ function Spotlight({ item }: { item: VaultItem }) {
   const t = theme[item.rarity] || theme.common;
   const progress = pct(item);
   const remaining = Math.max(0, Number(item.targetEntries || 0) - Number(item.currentEntries || 0));
-  return <section className="border-t border-white/10 bg-black/25 px-3 py-6 sm:px-7"><div className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]"><div className="grid gap-5 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[.04] p-4 sm:p-7 md:grid-cols-[1fr_.9fr] md:items-center"><div><div className="text-xs font-black uppercase tracking-[.18em]" style={{ color: t.accent }}>{item.rarity} prize</div><h3 className="mt-3 text-3xl font-black sm:text-5xl">{item.title}</h3><p className="mt-3 text-sm text-white/55">The prize is purchased only after the gameweek closes and its target has been fully funded.</p><div className="mt-5 grid grid-cols-3 gap-2"><Mini label="Value" value={money(item.value)} /><Mini label="Type" value={item.category || "Physical"} /><Mini label="Status" value={item.currentPrize || item.unlocked ? "Unlocked" : "Locked"} /></div></div><div className="relative min-h-[280px] overflow-hidden rounded-[1.5rem] border border-white/10"><PrizeArt item={item} /></div></div><div className="rounded-[2rem] border border-white/10 bg-white/[.04] p-4 sm:p-7"><div className="flex items-center gap-2 text-sm font-black"><Trophy className="h-5 w-5" style={{ color: t.accent }} />Vault progress</div><div className="mt-5 text-3xl font-black">{item.currentEntries} / {item.targetEntries} entries</div><div className="mt-4 h-4 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${progress}%`, background: t.accent, boxShadow: `0 0 22px ${t.glow}` }} /></div><p className="mt-3 text-sm text-white/55">{remaining ? `Need ${remaining} more entries to unlock this reward.` : "Funding target reached."}</p><Link href="/competitions"><Button className="mt-5 w-full rounded-xl bg-purple-500 font-black"><Zap className="mr-2 h-4 w-4" />Enter tournament</Button></Link></div></div></section>;
+  return <section className="border-t border-white/10 bg-black/25 px-3 py-6 sm:px-7"><div className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]"><div className="grid gap-5 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[.04] p-4 sm:p-7 md:grid-cols-[1fr_.9fr] md:items-center"><div><div className="text-xs font-black uppercase tracking-[.18em]" style={{ color: t.accent }}>{item.rarity} prize</div><h3 className="mt-3 text-3xl font-black sm:text-5xl">{item.title}</h3><p className="mt-3 text-sm text-white/55">The prize is purchased only after the gameweek closes and its target has been fully funded.</p><div className="mt-5 grid grid-cols-3 gap-2"><Mini label="Value" value={money(item.value)} /><Mini label="Type" value={item.category || "Physical"} /><Mini label="Status" value={item.currentPrize || item.unlocked ? "Unlocked" : "Locked"} /></div></div><div className="relative min-h-[280px] overflow-hidden rounded-[1.5rem] border border-white/10"><PrizeArt item={item} /></div></div><div className="rounded-[2rem] border border-white/10 bg-white/[.04] p-4 sm:p-7"><div className="flex items-center gap-2 text-sm font-black"><Trophy className="h-5 w-5" style={{ color: t.accent }} />{item.rarity} vault progress</div><div className="mt-5 text-3xl font-black">{item.currentEntries} / {item.targetEntries} entries</div><div className="mt-4 h-4 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${progress}%`, background: t.accent, boxShadow: `0 0 22px ${t.glow}` }} /></div><p className="mt-3 text-sm text-white/55">{remaining ? `Need ${remaining} more ${item.rarity} entries to unlock this reward.` : "Funding target reached."}</p><Link href="/competitions"><Button className="mt-5 w-full rounded-xl bg-purple-500 font-black"><Zap className="mr-2 h-4 w-4" />Enter {item.rarity} tournament</Button></Link></div></div></section>;
 }
 
-function TopStat({ icon: Icon, label, value }: { icon: any; label: string; value: string }) { return <div className="rounded-2xl border border-white/10 bg-black/30 p-3"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[.14em] text-white/40"><Icon className="h-3.5 w-3.5 text-purple-300" />{label}</div><div className="mt-2 truncate text-lg font-black">{value}</div></div>; }
-function Mini({ label, value }: { label: string; value: string }) { return <div className="rounded-xl border border-white/10 bg-black/25 p-3"><div className="text-[9px] font-black uppercase tracking-[.14em] text-white/35">{label}</div><div className="mt-1 truncate text-sm font-black">{value}</div></div>; }
+function TopStat({ icon: Icon, label, value }: { icon: any; label: string; value: string }) { return <div className="min-w-0 rounded-2xl border border-white/10 bg-black/30 p-3"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[.12em] text-white/40"><Icon className="h-3.5 w-3.5 text-purple-300" /><span className="truncate">{label}</span></div><div className="mt-2 truncate text-lg font-black">{value}</div></div>; }
+function Mini({ label, value }: { label: string; value: string }) { return <div className="min-w-0 rounded-xl border border-white/10 bg-black/25 p-3"><div className="text-[9px] font-black uppercase tracking-[.14em] text-white/35">{label}</div><div className="mt-1 truncate text-sm font-black">{value}</div></div>; }
 function Info({ icon: Icon, title, text }: { icon: any; title: string; text: string }) { return <div className="flex gap-3 rounded-2xl border border-white/10 bg-white/[.035] p-4"><div className="rounded-xl bg-purple-400/10 p-2 text-purple-200"><Icon className="h-5 w-5" /></div><div><div className="font-black">{title}</div><div className="mt-1 text-xs text-white/42">{text}</div></div></div>; }
