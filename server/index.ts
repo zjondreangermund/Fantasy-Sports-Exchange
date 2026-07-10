@@ -1,7 +1,8 @@
 // server/index.ts
 
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes.js";
+import { registerRoutes, requireAuth, isAdmin } from "./routes.js";
+import { registerAdminInsightsRoutes } from "./routes/adminInsights.routes.js";
 import { seedDatabase } from "./seed.js";
 import { serveStatic } from "./static.js";
 import { createServer } from "http";
@@ -155,6 +156,7 @@ app.use((req, res, next) => { const start = Date.now(); const requestPath = req.
   try { await seedDatabase(); } catch (error) { console.warn("Could not auto-seed player/card data:", error); }
   try { const result = await syncFplPremierLeaguePlayers(); console.log("FPL Premier League player sync complete:", result); } catch (error) { console.warn("Could not sync FPL Premier League players:", error); }
   await registerRoutes(httpServer, app);
+  registerAdminInsightsRoutes(app, { requireAuth, isAdmin });
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => { const status = err.status || err.statusCode || 500; const message = err.message || "Internal Server Error"; console.error("Internal Server Error:", err); if (res.headersSent) return next(err); return res.status(status).json({ message }); });
   const builtClientIndex = path.resolve(process.cwd(), "dist", "public", "index.html"); const hasBuiltClient = fs.existsSync(builtClientIndex);
   if (process.env.NODE_ENV === "development" && !hasBuiltClient) { const { setupVite } = await import("./vite.js"); await setupVite(httpServer, app); } else { serveStatic(app); }
