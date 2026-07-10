@@ -277,6 +277,36 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
     }
   });
 
+  app.get("/api/admin/backoffice", requireAuth, isAdmin, async (_req: any, res) => {
+    try {
+      const row = rowsOf(await db.execute(sql`
+        select
+          (select count(*)::int from app.users) as "totalUsers",
+          (select count(distinct user_id)::int from app.audit_logs where created_at >= now() - interval '30 days' and user_id is not null) as "activeUsers",
+          (select count(*)::int from app.player_cards) as "totalCardsMinted",
+          (select count(*)::int from app.player_cards where for_sale = true) as "listedCards",
+          (select count(*)::int from app.transactions where source_type = 'marketplace_sale' or type::text in ('sale','marketplace_sale')) as "soldCards",
+          (select count(*)::int from app.auctions where status::text = 'live') as "auctionsLive",
+          (select count(*)::int from app.competitions where status::text in ('open','active','upcoming')) as "competitionsLive",
+          (select coalesce(sum(balance),0)::float from app.wallets) as "walletBalances",
+          (select coalesce(sum(abs(coalesce(gross_amount, amount, 0))),0)::float from app.transactions where source_type ilike '%marketplace%' or type::text in ('purchase','sale','marketplace_buy','marketplace_sale')) as "grossMarketplaceVolume",
+          (select coalesce(sum(greatest(coalesce(fee_amount,0), greatest(abs(coalesce(gross_amount,0)) - abs(coalesce(net_amount,0)),0))),0)::float from app.transactions where source_type ilike '%marketplace%' or type::text in ('sale','marketplace_sale')) as "platformFees",
+          (select coalesce(sum(coalesce(fee_amount,0)),0)::float from app.transactions where source_type in ('user_tournament_entry','competition_entry') or type::text = 'entry_fee') as "tournamentFees",
+          (select count(*)::int from app.withdrawal_requests where status::text = 'pending') as "withdrawalsPending"
+      `))[0] || {};
+      return res.json({ overview: {
+        totalUsers: Number(row.totalUsers || 0), activeUsers: Number(row.activeUsers || 0), totalCardsMinted: Number(row.totalCardsMinted || 0),
+        listedCards: Number(row.listedCards || 0), soldCards: Number(row.soldCards || 0), auctionsLive: Number(row.auctionsLive || 0),
+        competitionsLive: Number(row.competitionsLive || 0), walletBalances: toMoney(row.walletBalances || 0),
+        grossMarketplaceVolume: toMoney(row.grossMarketplaceVolume || 0), platformFees: toMoney(row.platformFees || 0),
+        tournamentFees: toMoney(row.tournamentFees || 0), withdrawalsPending: Number(row.withdrawalsPending || 0)
+      } });
+    } catch (error: any) {
+      console.error("Failed to fetch admin backoffice:", error);
+      return res.status(500).json({ message: error?.message || "Failed to fetch admin backoffice" });
+    }
+  });
+
   app.get("/api/admin/risk/flags", requireAuth, isAdmin, async (_req: any, res) => {
     try {
       const result = await db.execute(sql`select id, user_id as "userId", action, meta, created_at as "createdAt" from app.audit_logs where action like 'risk.%' order by created_at desc nulls last limit 250`);

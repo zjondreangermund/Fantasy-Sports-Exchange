@@ -34,14 +34,16 @@ export function registerPrizeVaultRoutes(app: Express) {
       const rows = rowsOf(result);
       const activeByRarity = new Map<string, any>();
       for (const row of rows) {
-        const rarity = String(row.rarity || "common");
-        if (!["open", "active"].includes(String(row.status || ""))) continue;
+        const rarity = String(row.rarity || "common").toLowerCase();
+        if (!["open", "active"].includes(String(row.status || "").toLowerCase())) continue;
+        const gameWeek = Number(row.gameWeek || 0);
+        const entryCount = Number(row.entryCount || 0);
         const previous = activeByRarity.get(rarity);
-        const rowGameWeek = Number(row.gameWeek || 0);
-        const previousGameWeek = Number(previous?.gameWeek || -1);
-        const rowEntries = Number(row.entryCount || 0);
-        const previousEntries = Number(previous?.entryCount || 0);
-        if (!previous || rowGameWeek > previousGameWeek || (rowGameWeek === previousGameWeek && rowEntries > previousEntries)) activeByRarity.set(rarity, row);
+        if (!previous || gameWeek < Number(previous.gameWeek || Number.MAX_SAFE_INTEGER)) {
+          activeByRarity.set(rarity, { ...row, gameWeek, entryCount });
+        } else if (gameWeek === Number(previous.gameWeek || 0)) {
+          activeByRarity.set(rarity, { ...previous, entryCount: Number(previous.entryCount || 0) + entryCount });
+        }
       }
 
       const ladders: Record<string, any> = {};
