@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Handshake } from "lucide-react";
 import { Button } from "../ui/button";
@@ -47,8 +47,20 @@ export function LoanMarketPanel({
     () => myCards.filter((card) => getLoanFloorPerGameweek(rarityOf(card)) > 0 && !card.forSale),
     [myCards],
   );
-  const [selectedCardId, setSelectedCardId] = useState<number>(loanableCards[0]?.id || 0);
+  const requestedCardId = useMemo(() => {
+    if (typeof window === "undefined") return 0;
+    const value = Number(new URLSearchParams(window.location.search).get("cardId") || 0);
+    return Number.isInteger(value) && value > 0 ? value : 0;
+  }, []);
+  const [selectedCardId, setSelectedCardId] = useState<number>(requestedCardId || loanableCards[0]?.id || 0);
   const selectedCard = loanableCards.find((card) => card.id === selectedCardId) || loanableCards[0];
+  useEffect(() => {
+    if (requestedCardId && loanableCards.some((card) => card.id === requestedCardId)) {
+      setSelectedCardId(requestedCardId);
+    } else if (!selectedCardId && loanableCards[0]?.id) {
+      setSelectedCardId(loanableCards[0].id);
+    }
+  }, [loanableCards, requestedCardId, selectedCardId]);
   const selectedRarity = selectedCard ? rarityOf(selectedCard) : "rare";
   const floor = getLoanFloorPerGameweek(selectedRarity) || 20;
   const [gameweeks, setGameweeks] = useState(1);

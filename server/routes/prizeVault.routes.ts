@@ -37,7 +37,11 @@ export function registerPrizeVaultRoutes(app: Express) {
         const rarity = String(row.rarity || "common");
         if (!["open", "active"].includes(String(row.status || ""))) continue;
         const previous = activeByRarity.get(rarity);
-        if (!previous || Number(row.gameWeek || 0) < Number(previous.gameWeek || 999)) activeByRarity.set(rarity, row);
+        const rowGameWeek = Number(row.gameWeek || 0);
+        const previousGameWeek = Number(previous?.gameWeek || -1);
+        const rowEntries = Number(row.entryCount || 0);
+        const previousEntries = Number(previous?.entryCount || 0);
+        if (!previous || rowGameWeek > previousGameWeek || (rowGameWeek === previousGameWeek && rowEntries > previousEntries)) activeByRarity.set(rarity, row);
       }
 
       const ladders: Record<string, any> = {};
