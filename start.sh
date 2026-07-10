@@ -17,6 +17,13 @@ elif [ $? -ne 0 ]; then
   echo "Warning: db:push failed, but continuing anyway..."
 fi
 
+# Rebuild the official 2026/27 tournament calendar from live FPL fixtures.
+# This removes only old official ladder tournaments, preserves user-created cups,
+# creates one tournament per rarity per gameweek, and adjusts Tuesday windows
+# when a Premier League midweek round would overlap.
+echo "Syncing official rarity tournaments..."
+node scripts/sync-official-tournaments.mjs || echo "Warning: official tournament sync failed; starting with existing tournaments."
+
 # Start the server
 echo "Starting server..."
 exec node dist/server/server/index.js
