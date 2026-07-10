@@ -16,6 +16,7 @@ function normalizePin(raw: unknown) {
 }
 
 const PIN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 
 function randomPin(length = 6) {
   let pin = "";
@@ -43,6 +44,15 @@ async function getOwnedTournament(userId: string, competitionId: number) {
     limit 1
   `);
   return rowsOf(result)[0] || null;
+}
+
+async function isAdminUser(userId: string) {
+  if (!userId) return false;
+  const configuredIds = String(process.env.ADMIN_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean);
+  if (configuredIds.includes(userId)) return true;
+  const configuredEmails = String(process.env.ADMIN_EMAILS || DEFAULT_ADMIN_EMAIL).split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const user = rowsOf(await db.execute(sql`select lower(coalesce(email, '')) as email from app.users where id = ${userId} limit 1`))[0];
+  return Boolean(user?.email && configuredEmails.includes(String(user.email).toLowerCase()));
 }
 
 export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTournamentCreatorRoutesDeps) {
@@ -139,7 +149,7 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
           created_by_user_id, join_pin, visibility, max_entries, platform_fee_rate, platform_fee_total, prize_pool_total
         ) values (
           ${`${source.name || "Tournament"} Copy`}, ${source.tier}, ${Number(source.entry_fee || source.entryFee || 0)}, 'open', ${Number(source.game_week || source.gameWeek || 1)}, now(), now() + interval '7 days', ${source.prize_card_rarity || source.prizeCardRarity || source.tier},
-          ${userId}, ${pin}, ${source.visibility || "private"}, ${source.max_entries || source.maxEntries || null}, ${Number(source.platform_fee_rate || 0.2)}, 0, 0
+          ${userId}, ${pin}, ${source.visibility || "private"}, ${source.max_entries || source.maxEntries || null}, ${Number(source.platform_fee_rate || 0.1)}, 0, 0
         ) returning *
       `);
       return res.json({ success: true, tournament: rowsOf(result)[0] || null, pin });
@@ -161,6 +171,31 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
       return res.json({ success: true });
     } catch (error: any) {
       console.error("Failed to delete tournament:", error);
+      return res.status(500).json({ message: error?.message || "Failed to delete tournament" });
+    }
+  });
+
+  app.delete("/api/admin/competitions/:id", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      if (!(await isAdminUser(userId))) return res.status(403).json({ message: "Admin access required" });
+      const competitionId = Number(req.params.id);
+      if (!Number.isInteger(competitionId) || competitionId <= 0) return res.status(400).json({ message: "Valid tournament ID required" });
+
+      const tournament = rowsOf(await db.execute(sql`select id, name from app.competitions where id = ${competitionId} limit 1`))[0];
+      if (!tournament) return res.status(404).json({ message: "Tournament not found" });
+
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`delete from app.competition_entries where competition_id = ${competitionId}`);
+        await tx.execute(sql`delete from app.competitions where id = ${competitionId}`);
+      });
+      await db.execute(sql`
+        insert into app.audit_logs (user_id, action, meta)
+        values (${userId}, 'admin.tournament.deleted', ${JSON.stringify({ competitionId, name: tournament.name })}::jsonb)
+      `).catch(() => undefined);
+      return res.json({ success: true, deletedId: competitionId });
+    } catch (error: any) {
+      console.error("Failed to delete admin tournament:", error);
       return res.status(500).json({ message: error?.message || "Failed to delete tournament" });
     }
   });
