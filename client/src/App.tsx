@@ -36,7 +36,7 @@ const MarketplacePage = React.lazy(() => import("./pages/marketplace-v2"));
 const AuctionsPage = React.lazy(() => import("./pages/auctions"));
 const WalletPage = React.lazy(() => import("./pages/wallet"));
 const AccountPage = React.lazy(() => import("./pages/account"));
-const CompetitionsPage = React.lazy(() => import("./pages/competitions"));
+const CompetitionsPage = React.lazy(() => import("./pages/competitions-vault"));
 const PrizeVaultPage = React.lazy(() => import("./pages/prize-vault"));
 const PremierLeaguePage = React.lazy(() => import("./pages/premier-league"));
 const AdminPage = React.lazy(() => import("./pages/admin"));
@@ -138,5 +138,5 @@ function AppContent() {
 }
 
 export default function App() {
-  return <ThemeProvider><QueryClientProvider client={queryClient}><TooltipProvider><AppContent /><Toaster /></TooltipProvider></QueryClientProvider></ThemeProvider>;
+  return <QueryClientProvider client={queryClient}><ThemeProvider><TooltipProvider><AppContent /><Toaster /></TooltipProvider></ThemeProvider></QueryClientProvider>;
 }
