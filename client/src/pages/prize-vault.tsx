@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Flame, Gift, Lock, ShieldCheck, Sparkles, Trophy, Users, Zap } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Flame, Gift, Lock, ShieldCheck, Sparkles, Trophy, Users, Zap } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { RarePrizeArtwork } from "../components/prize-vault/RarePrizeArtwork";
 
 type VaultItem = {
   id: string;
@@ -176,6 +177,7 @@ function PrizeSlab({ item, index, selected, onSelect }: { item: VaultItem; index
 }
 
 function PrizeArt({ item }: { item: VaultItem }) {
+  if (item.rarity === "rare") return <RarePrizeArtwork title={item.title} artworkId={item.id.replace(/[^a-zA-Z0-9_-]/g, "-")} />;
   const kind = typeOf(item);
   const icon: Record<string, string> = { vehicle: "🚙", home: "🏡", travel: "✈️", boat: "🛥️", bike: "🚵", laptop: "💻", pc: "🖥️", console: "🎮", audio: "🎧", phone: "📱", watch: "⌚", drone: "🚁", coffee: "☕", sport: "⚽", voucher: "🎟️", gift: "🎁" };
   const t = theme[item.rarity] || theme.common;
