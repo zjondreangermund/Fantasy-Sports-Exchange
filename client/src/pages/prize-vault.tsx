@@ -99,7 +99,6 @@ export default function PrizeVaultPage() {
       <div className="relative mx-auto max-w-[1560px] overflow-hidden border-y border-white/10 bg-[#02050d]/95 shadow-[0_40px_160px_rgba(0,0,0,.85)] sm:rounded-[2rem] sm:border">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_76%_-8%,rgba(124,58,237,.38),transparent_27%),radial-gradient(circle_at_8%_22%,rgba(14,165,233,.20),transparent_28%),linear-gradient(180deg,rgba(255,255,255,.045),transparent_35%)]" />
         <VaultDoor />
-
         <header className="relative border-b border-white/10 px-4 py-5 sm:px-7 sm:py-7">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-2xl">
@@ -108,7 +107,6 @@ export default function PrizeVaultPage() {
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><TopStat icon={Users} label="Entries" value={String(totalEntries)} /><TopStat icon={Trophy} label="Unlocked" value={String(unlocked)} /><TopStat icon={Gift} label="Live value" value={money(liveValue)} /><TopStat icon={Clock3} label="Season" value="26/27" /></div>
           </div>
-
           <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:overflow-x-auto">
             {rarityOrder.map((rarity) => {
               const theme = themes[rarity];
@@ -117,10 +115,8 @@ export default function PrizeVaultPage() {
             })}
           </div>
         </header>
-
         <section className="relative px-3 py-5 sm:px-7 sm:py-7">
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><div className="text-xs font-black uppercase tracking-[.22em]" style={{ color: themes[activeRarity].accent }}>{activeRarity} vault</div><h2 className="mt-1 text-2xl font-black sm:text-3xl">Locked in metal. Released by entries.</h2><p className="mt-1 text-xs text-white/48">Current gameweek entries: {summary?.currentEntries || 0}. A higher unlock replaces every lower reward.</p></div><Link href="/competitions"><Button className="w-full rounded-xl bg-purple-500 font-black text-white sm:w-auto"><Trophy className="mr-2 h-4 w-4" />Enter tournament</Button></Link></div>
-
           <div className="relative rounded-[1.5rem] border border-white/10 bg-black/30 p-2 sm:rounded-[2rem] sm:p-4">
             <button onClick={() => scroll(-1)} className="absolute left-3 top-1/2 z-30 hidden -translate-y-1/2 rounded-full border border-white/15 bg-black/80 p-3 xl:block"><ArrowLeft className="h-5 w-5" /></button>
             <div ref={railRef} className="relative grid grid-cols-1 gap-4 sm:grid-cols-2 xl:flex xl:snap-x xl:overflow-x-auto xl:px-12 xl:pb-5 xl:pt-3">
@@ -130,7 +126,6 @@ export default function PrizeVaultPage() {
             <button onClick={() => scroll(1)} className="absolute right-3 top-1/2 z-30 hidden -translate-y-1/2 rounded-full border border-white/15 bg-black/80 p-3 xl:block"><ArrowRight className="h-5 w-5" /></button>
           </div>
         </section>
-
         {selected && <PrizeSpotlight item={selected} />}
         <footer className="relative grid gap-3 border-t border-white/10 bg-black/30 px-4 py-5 sm:grid-cols-2 sm:px-7 lg:grid-cols-4"><Info icon={Sparkles} title="Every gameweek" text="Fresh progress on the same ladder." /><Info icon={ShieldCheck} title="Funded before unlock" text="A reward opens only after its target is met." /><Info icon={Gift} title="Real rewards" text="Physical prize or approved equivalent value." /><Info icon={Flame} title="Highest prize wins" text="Lower unlocked rewards fall away." /></footer>
       </div>
@@ -142,22 +137,7 @@ function MetalPrizeSlab({ item, selected, onClick }: { item: VaultItem; selected
   const theme = themes[item.rarity] || themes.common;
   const value = progress(item);
   const isUnlocked = Boolean(item.currentPrize || item.unlocked);
-  return (
-    <button onClick={onClick} className={`group relative mx-auto w-full max-w-[360px] text-left transition duration-300 xl:min-w-[300px] xl:max-w-[300px] xl:snap-start ${selected ? "-translate-y-1" : ""}`}>
-      <div className={`relative overflow-hidden rounded-[2rem] bg-gradient-to-br ${theme.frame} p-[3px]`} style={{ boxShadow: `0 0 ${selected ? 58 : 30}px ${theme.glow},0 28px 65px rgba(0,0,0,.72)` }}>
-        <div className="relative min-h-[470px] overflow-hidden rounded-[1.82rem] border border-white/20 p-4" style={{ background: `linear-gradient(160deg,rgba(255,255,255,.08),transparent 28%),${theme.dark}` }}>
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(118deg,transparent_0%,rgba(255,255,255,.20)_16%,transparent_31%,transparent_70%,rgba(255,255,255,.08)_82%,transparent_100%)] opacity-70 transition-transform duration-700 group-hover:translate-x-8" />
-          <Bolts accent={theme.accent} />
-          <div className="relative z-10 flex items-center justify-between"><Badge className="border border-white/15 bg-black/55 text-white">#{item.tierIndex}</Badge><span className="text-[9px] font-black uppercase tracking-[.18em]" style={{ color: theme.accent }}>{theme.label}</span></div>
-          <div className={`relative z-10 mt-4 h-[220px] overflow-hidden rounded-[1.4rem] border border-white/10 ${!isUnlocked ? "brightness-[.48] saturate-[.35]" : ""}`}><PrizeArtwork item={item} accent={theme.accent} glow={theme.glow} /></div>
-          <div className="relative z-10 mt-4 text-center"><div className="line-clamp-2 min-h-[54px] text-xl font-black leading-tight">{item.title}</div><div className="mt-1 text-xs text-white/50">Approx. value {money(item.value)}</div></div>
-          <div className="relative z-10 mt-4"><div className="flex justify-between text-[10px] font-black uppercase tracking-[.12em] text-white/45"><span>Funding target</span><span>{item.targetEntries} entries</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${value}%`, background: isUnlocked ? "#34d399" : theme.accent, boxShadow: `0 0 18px ${theme.glow}` }} /></div><div className="mt-2 flex justify-between text-xs"><b>{item.currentEntries}/{item.targetEntries}</b><span style={{ color: isUnlocked ? "#6ee7b7" : theme.accent }}>{isUnlocked ? "UNLOCKED" : `${value}%`}</span></div></div>
-          {!isUnlocked && <ChainLock accent={theme.accent} />}
-          {isUnlocked && <div className="absolute inset-x-5 bottom-5 z-30 flex items-center justify-center gap-2 rounded-xl border border-emerald-300/30 bg-emerald-400/15 py-2 text-xs font-black text-emerald-200"><CheckCircle2 className="h-4 w-4" />UNLOCKED THIS GAMEWEEK</div>}
-        </div>
-      </div>
-    </button>
-  );
+  return <button onClick={onClick} className={`group relative mx-auto w-full max-w-[360px] text-left transition duration-300 xl:min-w-[300px] xl:max-w-[300px] xl:snap-start ${selected ? "-translate-y-1" : ""}`}><div className={`relative overflow-hidden rounded-[2rem] bg-gradient-to-br ${theme.frame} p-[3px]`} style={{ boxShadow: `0 0 ${selected ? 58 : 30}px ${theme.glow},0 28px 65px rgba(0,0,0,.72)` }}><div className="relative min-h-[470px] overflow-hidden rounded-[1.82rem] border border-white/20 p-4" style={{ background: `linear-gradient(160deg,rgba(255,255,255,.08),transparent 28%),${theme.dark}` }}><div className="pointer-events-none absolute inset-0 bg-[linear-gradient(118deg,transparent_0%,rgba(255,255,255,.20)_16%,transparent_31%,transparent_70%,rgba(255,255,255,.08)_82%,transparent_100%)] opacity-70 transition-transform duration-700 group-hover:translate-x-8" /><Bolts accent={theme.accent} /><div className="relative z-10 flex items-center justify-between"><Badge className="border border-white/15 bg-black/55 text-white">#{item.tierIndex}</Badge><span className="text-[9px] font-black uppercase tracking-[.18em]" style={{ color: theme.accent }}>{theme.label}</span></div><div className={`relative z-10 mt-4 h-[220px] overflow-hidden rounded-[1.4rem] border border-white/10 ${!isUnlocked ? "brightness-[.48] saturate-[.35]" : ""}`}><PrizeArtwork item={item} accent={theme.accent} glow={theme.glow} /></div><div className="relative z-10 mt-4 text-center"><div className="line-clamp-2 min-h-[54px] text-xl font-black leading-tight">{item.title}</div><div className="mt-1 text-xs text-white/50">Approx. value {money(item.value)}</div></div><div className="relative z-10 mt-4"><div className="flex justify-between text-[10px] font-black uppercase tracking-[.12em] text-white/45"><span>Funding target</span><span>{item.targetEntries} entries</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${value}%`, background: isUnlocked ? "#34d399" : theme.accent, boxShadow: `0 0 18px ${theme.glow}` }} /></div><div className="mt-2 flex justify-between text-xs"><b>{item.currentEntries}/{item.targetEntries}</b><span style={{ color: isUnlocked ? "#6ee7b7" : theme.accent }}>{isUnlocked ? "UNLOCKED" : `${value}%`}</span></div></div>{!isUnlocked && <ChainLock accent={theme.accent} />}{isUnlocked && <div className="absolute inset-x-5 bottom-5 z-30 flex items-center justify-center gap-2 rounded-xl border border-emerald-300/30 bg-emerald-400/15 py-2 text-xs font-black text-emerald-200"><CheckCircle2 className="h-4 w-4" />UNLOCKED THIS GAMEWEEK</div>}</div></div></button>;
 }
 
 function PrizeArtwork({ item, accent, glow }: { item: VaultItem; accent: string; glow: string }) {
@@ -176,14 +156,12 @@ function PrizeArtwork({ item, accent, glow }: { item: VaultItem; accent: string;
     voucher: <><path d="M33 58h214v42c-21 0-21 34 0 34v43H33v-43c21 0 21-34 0-34V58Z" fill="url(#paint)" stroke="currentColor" strokeWidth="6"/><path d="M107 58v119" stroke="#07101f" strokeWidth="5" strokeDasharray="9 9"/><circle cx="168" cy="103" r="26" fill="none" stroke="#07101f" strokeWidth="7"/><path d="m151 145 38-78" stroke="#07101f" strokeWidth="7"/></>,
     boat: <><path d="M30 139h220l-36 49H70l-40-49Z" fill="url(#paint)" stroke="currentColor" strokeWidth="6"/><path d="M96 139V57h66l34 82" fill="#0b1220" stroke="currentColor" strokeWidth="6"/><path d="M110 73h39v38h-39z" fill="#9bd7ff"/><path d="M35 204c30-19 49 17 79-2 29-18 49 17 78-1 29-18 48 15 71 2" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round"/></>,
     bike: <><circle cx="71" cy="169" r="38" fill="none" stroke="currentColor" strokeWidth="8"/><circle cx="211" cy="169" r="38" fill="none" stroke="currentColor" strokeWidth="8"/><path d="m71 169 50-70h54l36 70m-90-70 30 70H71l50-70Zm54 0 31-38" fill="none" stroke="currentColor" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round"/><path d="M190 60h33" stroke="currentColor" strokeWidth="8" strokeLinecap="round"/></>,
-    gift: <><rect x="44" y="92" width="192" height="118" rx="14" fill="url(#paint)" stroke="currentColor" strokeWidth="6"/><path d="M28 70h224v48H28z" fill="url(#paint)" stroke="currentColor" strokeWidth="6"/><path d="M126 70v140h28V70" fill="#07101f" opacity=".8"/><path d="M140 70c-32-45-80-54-75-15 4 30 48 24 75 15Zm0 0c32-45 80-54 75-15-4 30-48 24-75 15Z" fill="none" stroke="currentColor" strokeWidth="7"/>
+    gift: <><rect x="44" y="92" width="192" height="118" rx="14" fill="url(#paint)" stroke="currentColor" strokeWidth="6"/><path d="M28 70h224v48H28z" fill="url(#paint)" stroke="currentColor" strokeWidth="6"/><path d="M126 70v140h28V70" fill="#07101f" opacity=".8"/><path d="M140 70c-32-45-80-54-75-15 4 30 48 24 75 15Zm0 0c32-45 80-54 75-15-4 30-48 24-75 15Z" fill="none" stroke="currentColor" strokeWidth="7"/></>,
   };
   return <div className="absolute inset-0 flex items-center justify-center"><div className="absolute inset-0" style={{ background: `radial-gradient(circle at 50% 45%,${glow},transparent 56%)` }} /><svg viewBox="0 0 280 230" className="relative h-[88%] w-[88%] drop-shadow-[0_18px_20px_rgba(0,0,0,.65)]" style={{ color: accent }}><defs><linearGradient id="paint" x1="0" y1="0" x2="1" y2="1"><stop stopColor="white" stopOpacity=".95"/><stop offset=".42" stopColor={accent}/><stop offset="1" stopColor="#111827"/></linearGradient><linearGradient id="screen" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#22d3ee"/><stop offset=".5" stopColor="#7c3aed"/><stop offset="1" stopColor="#020617"/></linearGradient></defs>{art[type] || art.gift}</svg></div>;
 }
 
-function ChainLock({ accent }: { accent: string }) {
-  return <div className="pointer-events-none absolute inset-0 z-20"><svg viewBox="0 0 360 470" className="h-full w-full"><defs><pattern id="chain" width="22" height="14" patternUnits="userSpaceOnUse"><ellipse cx="11" cy="7" rx="8" ry="4" fill="none" stroke="#d7b16a" strokeWidth="3"/><ellipse cx="11" cy="7" rx="4" ry="2" fill="none" stroke="#3a2815" strokeWidth="2"/></pattern></defs><path d="M-35 150 395 315" stroke="url(#chain)" strokeWidth="22"/><path d="M395 150-35 315" stroke="url(#chain)" strokeWidth="22"/></svg><div className="absolute left-1/2 top-[49%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border-2 border-amber-100/70 bg-gradient-to-b from-amber-200 via-amber-500 to-amber-950 p-4 shadow-[0_0_36px_rgba(245,158,11,.65)]"><Lock className="h-8 w-8 text-amber-950" /></div><div className="absolute inset-x-8 top-[64%] rounded-xl border border-white/10 bg-black/70 px-3 py-2 text-center text-[10px] font-black uppercase tracking-[.18em]" style={{ color: accent }}>Locked until target reached</div></div>;
-}
+function ChainLock({ accent }: { accent: string }) { return <div className="pointer-events-none absolute inset-0 z-20"><svg viewBox="0 0 360 470" className="h-full w-full"><defs><pattern id="chain" width="22" height="14" patternUnits="userSpaceOnUse"><ellipse cx="11" cy="7" rx="8" ry="4" fill="none" stroke="#d7b16a" strokeWidth="3"/><ellipse cx="11" cy="7" rx="4" ry="2" fill="none" stroke="#3a2815" strokeWidth="2"/></pattern></defs><path d="M-35 150 395 315" stroke="url(#chain)" strokeWidth="22"/><path d="M395 150-35 315" stroke="url(#chain)" strokeWidth="22"/></svg><div className="absolute left-1/2 top-[49%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border-2 border-amber-100/70 bg-gradient-to-b from-amber-200 via-amber-500 to-amber-950 p-4 shadow-[0_0_36px_rgba(245,158,11,.65)]"><Lock className="h-8 w-8 text-amber-950" /></div><div className="absolute inset-x-8 top-[64%] rounded-xl border border-white/10 bg-black/70 px-3 py-2 text-center text-[10px] font-black uppercase tracking-[.18em]" style={{ color: accent }}>Locked until target reached</div></div>; }
 
 function PrizeSpotlight({ item }: { item: VaultItem }) {
   const theme = themes[item.rarity] || themes.common;
