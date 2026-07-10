@@ -39,12 +39,23 @@ async function fetchJson(url) {
   return response.json();
 }
 
+async function ensureCompetitionTierValues(client) {
+  const values = ["unique", "epic", "legendary"];
+  for (const value of values) {
+    await client.query(`ALTER TYPE app.competition_tier ADD VALUE IF NOT EXISTS '${value}'`);
+  }
+}
+
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
   const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined });
   await client.connect();
 
   try {
+    // PostgreSQL enum additions must be committed before the values can be used
+    // by inserts. Run them outside the tournament transaction.
+    await ensureCompetitionTierValues(client);
+
     const [fixtures, bootstrap] = await Promise.all([
       fetchJson("https://fantasy.premierleague.com/api/fixtures/"),
       fetchJson("https://fantasy.premierleague.com/api/bootstrap-static/"),
