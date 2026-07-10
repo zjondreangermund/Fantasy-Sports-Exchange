@@ -8,7 +8,7 @@ import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { type CompetitionEntry, type Lineup, type PlayerCardWithPlayer } from "../../../shared/schema";
-import { CalendarDays, CheckCircle2, Clock3, Filter, Gift, Lock, Sparkles, Trophy, Users } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, Filter, Gift, Lock, Trophy } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 
 const rarityOrder = ["common", "rare", "unique", "epic", "legendary"];
@@ -22,10 +22,7 @@ const rarityTheme: Record<string, { accent: string; glow: string; panel: string;
 
 type Tournament = any;
 
-function money(value: unknown) {
-  const n = Number(value || 0);
-  return `N$${Number.isFinite(n) ? n.toFixed(2) : "0.00"}`;
-}
+function money(value: unknown) { const n = Number(value || 0); return `N$${Number.isFinite(n) ? n.toFixed(2) : "0.00"}`; }
 function tier(value: unknown) { return String(value || "common").toLowerCase(); }
 function dateLabel(value: unknown) { const d = new Date(String(value || "")); return Number.isFinite(d.getTime()) ? d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "Fixture controlled"; }
 function pct(comp: Tournament) { const target = Number(comp.requiredEntrants || 0); return target ? Math.min(100, Math.round((Number(comp.entryCount || 0) / target) * 100)) : 0; }
@@ -46,7 +43,13 @@ export default function CompetitionsVaultPage() {
   const { data: lineup } = useQuery<{ lineup: Lineup; cards: PlayerCardWithPlayer[] }>({ queryKey: ["/api/lineup"], queryFn: async () => { const res = await fetch("/api/lineup", { credentials: "include" }); if (!res.ok) return { lineup: { cardIds: [] } as Lineup, cards: [] }; return res.json(); } });
   const { data: entries = [] } = useQuery<CompetitionEntry[]>({ queryKey: ["/api/competitions/my-entries"], queryFn: async () => { const res = await fetch("/api/competitions/my-entries", { credentials: "include" }); return res.ok ? res.json() : []; } });
 
-  const official = useMemo(() => competitions.filter((c) => c.prizeKey === "ladder" || /Prize Ladder/i.test(String(c.name || ""))), [competitions]);
+  const official = useMemo(() => competitions.filter((c) =>
+    c.ladderLinked === true ||
+    c.rawPrizeKey === "ladder" ||
+    c.prize_key === "ladder" ||
+    Boolean(c.created_by_user_id || c.createdByUserId) ||
+    /Prize Ladder/i.test(String(c.name || ""))
+  ), [competitions]);
   const currentGw = useMemo(() => {
     const open = official.filter((c) => c.status === "open" || c.status === "active").map((c) => Number(c.gameWeek || 0)).filter(Boolean).sort((a, b) => a - b);
     if (open.length) return open[0];
@@ -81,25 +84,14 @@ export default function CompetitionsVaultPage() {
         <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_80%_0%,rgba(124,58,237,.3),transparent_30%),linear-gradient(180deg,#090d20,#040711)] p-5 sm:p-7">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><div className="text-[10px] font-black uppercase tracking-[.28em] text-purple-200/70">Official 2026/27 Arena</div><h1 className="mt-2 text-4xl font-black sm:text-6xl">Rarity Tournaments</h1><p className="mt-2 max-w-3xl text-sm text-white/55">One official tournament per rarity for the selected gameweek. Prize progress is linked directly to the matching Prize Vault ladder.</p></div><div className="grid grid-cols-3 gap-2"><Stat icon={CalendarDays} label="Gameweek" value={`GW${shownGw}`} /><Stat icon={Trophy} label="Rarities" value="5" /><Stat icon={Clock3} label="Window" value="Tue–Tue" /></div></div>
         </section>
-
         <section className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-4 sm:p-5">
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:overflow-x-auto">
-            {rarityOrder.map((rarity) => { const t = rarityTheme[rarity]; const count = official.filter((c) => Number(c.gameWeek) === Number(shownGw) && tier(c.tier) === rarity).length; return <button key={rarity} onClick={() => setActiveRarity(rarity)} className="rounded-2xl border px-4 py-3 text-left sm:min-w-[160px]" style={{ borderColor: activeRarity === rarity ? t.accent : "rgba(255,255,255,.1)", background: activeRarity === rarity ? `${t.accent}18` : "rgba(0,0,0,.22)", boxShadow: activeRarity === rarity ? `0 0 28px ${t.glow}` : undefined }}><div className="text-[10px] font-black uppercase tracking-[.18em]" style={{ color: t.accent }}>{rarity}</div><div className="mt-1 font-black">{count ? `${count} tournament` : "No tournament"}</div></button>; })}
-          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:overflow-x-auto">{rarityOrder.map((rarity) => { const t = rarityTheme[rarity]; const count = official.filter((c) => Number(c.gameWeek) === Number(shownGw) && tier(c.tier) === rarity).length; return <button key={rarity} onClick={() => setActiveRarity(rarity)} className="rounded-2xl border px-4 py-3 text-left sm:min-w-[160px]" style={{ borderColor: activeRarity === rarity ? t.accent : "rgba(255,255,255,.1)", background: activeRarity === rarity ? `${t.accent}18` : "rgba(0,0,0,.22)", boxShadow: activeRarity === rarity ? `0 0 28px ${t.glow}` : undefined }}><div className="text-[10px] font-black uppercase tracking-[.18em]" style={{ color: t.accent }}>{rarity}</div><div className="mt-1 font-black">{count ? `${count} tournament` : "No tournament"}</div></button>; })}</div>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center"><div className="flex items-center gap-2 text-xs font-black uppercase tracking-[.14em] text-white/45"><Filter className="h-4 w-4" />Gameweek filter</div><select value={gameweekFilter} onChange={(e) => setGameweekFilter(e.target.value === "current" ? "current" : Number(e.target.value))} className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-white"><option value="current">Current gameweek (GW{currentGw})</option>{gameweeks.map((gw) => <option key={gw} value={gw}>GW{gw}</option>)}</select><Link href="/prize-vault" className="sm:ml-auto"><Button variant="outline" className="w-full border-white/15 bg-white/5 text-white sm:w-auto"><Gift className="mr-2 h-4 w-4" />View {activeRarity} ladder</Button></Link></div>
         </section>
-
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {isLoading ? <Card className="col-span-full border-white/10 bg-white/5 p-8 text-center text-white/50">Loading tournaments…</Card> : visible.length ? visible.map((comp) => <TournamentCard key={comp.id} comp={comp} entered={enteredIds.has(Number(comp.id))} onEnter={() => openTournament(comp)} />) : <Card className="col-span-full border-white/10 bg-white/5 p-8 text-center text-white/50">No {activeRarity} tournament found for GW{shownGw}. The startup sync will create it on the next Railway deploy.</Card>}
-        </section>
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{isLoading ? <Card className="col-span-full border-white/10 bg-white/5 p-8 text-center text-white/50">Loading tournaments…</Card> : visible.length ? visible.map((comp) => <TournamentCard key={comp.id} comp={comp} entered={enteredIds.has(Number(comp.id))} onEnter={() => openTournament(comp)} />) : <Card className="col-span-full border-white/10 bg-white/5 p-8 text-center text-white/50">No {activeRarity} tournament found for GW{shownGw}.</Card>}</section>
       </div>
-
       <Dialog open={Boolean(selected)} onOpenChange={() => setSelected(null)}>
-        <DialogContent className="max-h-[88vh] max-w-5xl overflow-y-auto border-white/10 bg-slate-950 text-white">
-          <DialogHeader><DialogTitle>Enter {selected?.name}</DialogTitle></DialogHeader>
-          {selected && <div className="space-y-4"><div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/60">Choose exactly five {selectedTier} cards: at least one GK, DEF, MID and FWD. Set a captain before entering.</div><div className="grid max-h-[54vh] grid-cols-1 gap-4 overflow-y-auto sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">{availableCards.map((card) => <div key={card.id} className="relative mx-auto"><CardThumbnail card={card} size="sm" selected={selectedCards.includes(card.id)} selectable onClick={() => toggleCard(card.id)} />{selectedCards.includes(card.id) && <button onClick={() => setCaptainId(card.id)} className={`absolute left-1 top-1 z-40 h-8 w-8 rounded-full text-xs font-black ${captainId === card.id ? "bg-yellow-300 text-black" : "bg-slate-700 text-white"}`}>C</button>}</div>)}</div></div>}
-          <DialogFooter><Button variant="outline" onClick={() => setSelected(null)}>Cancel</Button><Button onClick={() => joinMutation.mutate()} disabled={!validLineup || !captainId || joinMutation.isPending}>{joinMutation.isPending ? "Entering…" : `Enter ${money(selected?.entryFee)}`}</Button></DialogFooter>
-        </DialogContent>
+        <DialogContent className="max-h-[88vh] max-w-5xl overflow-y-auto border-white/10 bg-slate-950 text-white"><DialogHeader><DialogTitle>Enter {selected?.name}</DialogTitle></DialogHeader>{selected && <div className="space-y-4"><div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/60">Choose exactly five {selectedTier} cards: at least one GK, DEF, MID and FWD. Set a captain before entering.</div><div className="grid max-h-[54vh] grid-cols-1 gap-4 overflow-y-auto sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">{availableCards.map((card) => <div key={card.id} className="relative mx-auto"><CardThumbnail card={card} size="sm" selected={selectedCards.includes(card.id)} selectable onClick={() => toggleCard(card.id)} />{selectedCards.includes(card.id) && <button onClick={() => setCaptainId(card.id)} className={`absolute left-1 top-1 z-40 h-8 w-8 rounded-full text-xs font-black ${captainId === card.id ? "bg-yellow-300 text-black" : "bg-slate-700 text-white"}`}>C</button>}</div>)}</div></div>}<DialogFooter><Button variant="outline" onClick={() => setSelected(null)}>Cancel</Button><Button onClick={() => joinMutation.mutate()} disabled={!validLineup || !captainId || joinMutation.isPending}>{joinMutation.isPending ? "Entering…" : `Enter ${money(selected?.entryFee)}`}</Button></DialogFooter></DialogContent>
       </Dialog>
     </main>
   );
