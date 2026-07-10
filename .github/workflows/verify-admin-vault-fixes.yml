@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/admin-tournaments-and-vault
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
