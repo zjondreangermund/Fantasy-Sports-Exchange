@@ -1,0 +1,69 @@
+import type { ReactNode } from "react";
+
+type RarePrizeArtworkProps = {
+  title: string;
+  artworkId: string;
+};
+
+function ProductStage({ children, artworkId }: { children: ReactNode; artworkId: string }) {
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_50%_30%,rgba(165,243,252,.28),transparent_28%),linear-gradient(155deg,#071927,#02050b_68%,#001018)]">
+      <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,.18)_18%,transparent_34%,transparent_72%,rgba(34,211,238,.11)_88%,transparent_100%)]" />
+      <div className="absolute left-1/2 top-[44%] h-52 w-52 -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-400/25 blur-3xl" />
+      <div className="absolute inset-x-5 bottom-4 h-10 rounded-[50%] bg-cyan-300/15 blur-xl" />
+      <svg viewBox="0 0 320 240" className="relative z-10 h-full w-full drop-shadow-[0_28px_24px_rgba(0,0,0,.8)]" role="img" aria-label="Rare prize artwork">
+        <defs>
+          <linearGradient id={`rare-metal-${artworkId}`} x1="0" y1="0" x2="1" y2="1">
+            <stop stopColor="#ffffff" />
+            <stop offset=".3" stopColor="#a5f3fc" />
+            <stop offset=".58" stopColor="#22d3ee" />
+            <stop offset="1" stopColor="#0f172a" />
+          </linearGradient>
+          <linearGradient id={`rare-screen-${artworkId}`} x1="0" y1="0" x2="1" y2="1">
+            <stop stopColor="#67e8f9" />
+            <stop offset=".45" stopColor="#2563eb" />
+            <stop offset="1" stopColor="#020617" />
+          </linearGradient>
+          <radialGradient id={`rare-glow-${artworkId}`}>
+            <stop stopColor="#ecfeff" />
+            <stop offset=".35" stopColor="#22d3ee" />
+            <stop offset="1" stopColor="#0891b2" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <ellipse cx="160" cy="211" rx="112" ry="16" fill="#020617" opacity=".76" />
+        {children}
+      </svg>
+      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-cyan-950/55 to-transparent" />
+    </div>
+  );
+}
+
+export function RarePrizeArtwork({ title, artworkId }: RarePrizeArtworkProps) {
+  const key = title.toLowerCase();
+  const metal = `url(#rare-metal-${artworkId})`;
+  const screen = `url(#rare-screen-${artworkId})`;
+  const glow = `url(#rare-glow-${artworkId})`;
+
+  if (key.includes("airtime") || key.includes("data")) return <ProductStage artworkId={artworkId}><rect x="100" y="24" width="120" height="188" rx="25" fill="#06111d" stroke={metal} strokeWidth="7"/><rect x="113" y="48" width="94" height="130" rx="13" fill={screen}/><path d="M133 91c16-18 38-18 54 0M143 108c10-10 24-10 34 0M157 126h6" fill="none" stroke="#fff" strokeWidth="8" strokeLinecap="round"/><rect x="135" y="188" width="50" height="7" rx="4" fill="#cffafe"/></ProductStage>;
+  if (key.includes("shopping voucher")) return <ProductStage artworkId={artworkId}><g transform="rotate(-7 160 120)"><rect x="49" y="65" width="222" height="119" rx="18" fill={metal} stroke="#fff" strokeOpacity=".65" strokeWidth="4"/><rect x="63" y="80" width="194" height="89" rx="12" fill="#071827"/><path d="M95 104h132M95 129h82" stroke="#67e8f9" strokeWidth="8" strokeLinecap="round"/><circle cx="224" cy="133" r="22" fill={glow}/><path d="m214 133 7 7 14-17" fill="none" stroke="#fff" strokeWidth="5" strokeLinecap="round"/></g></ProductStage>;
+  if (key.includes("headset")) return <ProductStage artworkId={artworkId}><path d="M77 139V98c0-49 35-78 83-78s83 29 83 78v41" fill="none" stroke={metal} strokeWidth="18" strokeLinecap="round"/><rect x="54" y="117" width="59" height="88" rx="24" fill="#08111f" stroke="#a5f3fc" strokeWidth="6"/><rect x="207" y="117" width="59" height="88" rx="24" fill="#08111f" stroke="#a5f3fc" strokeWidth="6"/><circle cx="83" cy="159" r="15" fill={glow}/><circle cx="236" cy="159" r="15" fill={glow}/><path d="M236 197c0 22-17 31-46 31" fill="none" stroke="#67e8f9" strokeWidth="7" strokeLinecap="round"/></ProductStage>;
+  if (key.includes("smart watch")) return <ProductStage artworkId={artworkId}><path d="M131 13h58l13 54-13 159h-58L118 67l13-54Z" fill={metal}/><rect x="92" y="62" width="136" height="136" rx="40" fill="#06111f" stroke="#cffafe" strokeWidth="7"/><circle cx="160" cy="130" r="48" fill={screen}/><path d="M160 95v38l27 18" stroke="#fff" strokeWidth="7" strokeLinecap="round"/><circle cx="160" cy="130" r="7" fill="#fff"/></ProductStage>;
+  if (key.includes("jbl") || (key.includes("speaker") && !key.includes("soundbar"))) return <ProductStage artworkId={artworkId}><rect x="73" y="65" width="174" height="116" rx="55" fill="#07121d" stroke={metal} strokeWidth="7"/><circle cx="128" cy="123" r="39" fill="#0f2231" stroke="#22d3ee" strokeWidth="5"/><circle cx="192" cy="123" r="39" fill="#0f2231" stroke="#22d3ee" strokeWidth="5"/><circle cx="128" cy="123" r="19" fill={glow}/><circle cx="192" cy="123" r="19" fill={glow}/><rect x="139" y="85" width="42" height="20" rx="7" fill="#ef4444"/><text x="160" y="100" textAnchor="middle" fontSize="14" fontWeight="900" fill="#fff">JBL</text></ProductStage>;
+  if (key.includes("ps5 game bundle")) return <ProductStage artworkId={artworkId}><rect x="35" y="54" width="76" height="108" rx="9" fill="#0b1220" stroke="#67e8f9" strokeWidth="4"/><rect x="45" y="65" width="56" height="77" rx="5" fill={screen}/><rect x="122" y="42" width="76" height="120" rx="9" fill="#0b1220" stroke="#67e8f9" strokeWidth="4"/><rect x="132" y="53" width="56" height="88" rx="5" fill={screen}/><rect x="209" y="58" width="76" height="104" rx="9" fill="#0b1220" stroke="#67e8f9" strokeWidth="4"/><rect x="219" y="69" width="56" height="73" rx="5" fill={screen}/><path d="M72 185c0-20 17-31 35-23l24 10h58l24-10c18-8 35 3 35 23 0 19-15 31-31 22l-28-15h-58l-28 15c-16 9-31-3-31-22Z" fill="#f8fafc" stroke="#67e8f9" strokeWidth="4"/></ProductStage>;
+  if (key.includes("coffee")) return <ProductStage artworkId={artworkId}><rect x="70" y="43" width="180" height="139" rx="20" fill={metal}/><rect x="95" y="66" width="130" height="55" rx="11" fill="#06111f"/><circle cx="160" cy="93" r="17" fill={screen}/><path d="M126 182h68v37h-68z" fill="#f8fafc"/><path d="M194 190h16c15 0 15 21 0 21h-16" fill="none" stroke="#f8fafc" strokeWidth="7"/><path d="M133 138h54M144 138v31M176 138v31" stroke="#0f172a" strokeWidth="7" strokeLinecap="round"/><path d="M139 31c-11-15 12-18 1-32M171 31c-11-15 12-18 1-32" fill="none" stroke="#cffafe" strokeWidth="5" strokeLinecap="round"/></ProductStage>;
+  if (key === "tablet" || key.includes(" tablet")) return <ProductStage artworkId={artworkId}><g transform="rotate(-7 160 120)"><rect x="72" y="28" width="176" height="184" rx="20" fill="#07111c" stroke={metal} strokeWidth="7"/><rect x="87" y="47" width="146" height="140" rx="10" fill={screen}/><path d="M100 157 133 119l24 26 26-43 38 55" fill="none" stroke="#fff" strokeWidth="7" strokeLinejoin="round"/><circle cx="160" cy="199" r="6" fill="#cffafe"/></g></ProductStage>;
+  if (key.includes("gaming monitor")) return <ProductStage artworkId={artworkId}><rect x="35" y="39" width="250" height="143" rx="15" fill="#050b13" stroke={metal} strokeWidth="7"/><rect x="50" y="54" width="220" height="112" rx="8" fill={screen}/><path d="m71 143 49-61 35 35 31-49 62 75" fill="none" stroke="#fff" strokeWidth="8" strokeLinejoin="round"/><path d="M160 182v28m-46 9h92" stroke="#cffafe" strokeWidth="8" strokeLinecap="round"/></ProductStage>;
+  if (key.includes("gaming chair")) return <ProductStage artworkId={artworkId}><path d="M114 27h92c17 0 30 14 27 31l-16 94c-3 17-18 30-35 30h-44c-17 0-32-13-35-30L87 58c-3-17 10-31 27-31Z" fill="#07111c" stroke={metal} strokeWidth="7"/><path d="m123 50 37 27 37-27-13 78h-48l-13-78Z" fill={screen}/><rect x="112" y="160" width="96" height="42" rx="18" fill={metal}/><path d="M160 202v22m-44 5h88M123 179 83 199M197 179l40 20" stroke="#cffafe" strokeWidth="8" strokeLinecap="round"/></ProductStage>;
+  if (key.includes("soundbar")) return <ProductStage artworkId={artworkId}><rect x="34" y="98" width="252" height="52" rx="20" fill="#07111c" stroke={metal} strokeWidth="6"/><circle cx="72" cy="124" r="13" fill={glow}/><circle cx="112" cy="124" r="13" fill={glow}/><circle cx="208" cy="124" r="13" fill={glow}/><circle cx="248" cy="124" r="13" fill={glow}/><rect x="145" y="111" width="30" height="26" rx="7" fill="#0e7490"/><path d="M66 174h188" stroke="#67e8f9" strokeWidth="5" strokeLinecap="round" opacity=".7"/></ProductStage>;
+  if (key.includes("55-inch") || key.includes("smart tv")) return <ProductStage artworkId={artworkId}><rect x="25" y="34" width="270" height="162" rx="13" fill="#04080f" stroke={metal} strokeWidth="7"/><rect x="41" y="50" width="238" height="129" rx="7" fill={screen}/><circle cx="224" cy="91" r="31" fill={glow}/><path d="M49 166 102 105l37 36 37-56 91 81" fill="none" stroke="#fff" strokeWidth="8" strokeLinejoin="round"/><path d="M160 196v21m-55 8h110" stroke="#cffafe" strokeWidth="8" strokeLinecap="round"/></ProductStage>;
+  if (key.includes("weekend getaway")) return <ProductStage artworkId={artworkId}><circle cx="221" cy="76" r="39" fill={glow}/><path d="M28 185 105 90l44 52 34-37 109 80H28Z" fill={metal}/><path d="M47 185 111 112l34 43 37-36 83 66H47Z" fill="#0b4960"/><path d="M115 184c18-41 50-61 97-59-21 14-34 34-39 59h-58Z" fill="#e0f2fe"/><path d="M210 103c18-17 37-19 57-7M223 87c10-9 22-10 34-4" fill="none" stroke="#fff" strokeWidth="5" strokeLinecap="round"/></ProductStage>;
+  if (key.includes("vr headset")) return <ProductStage artworkId={artworkId}><path d="M63 76c7-25 28-40 54-40h86c26 0 47 15 54 40l20 74c6 23-12 45-36 45h-35c-15 0-29-9-35-23l-11-24-11 24c-6 14-20 23-35 23H79c-24 0-42-22-36-45l20-74Z" fill="#07111c" stroke={metal} strokeWidth="7"/><rect x="82" y="71" width="156" height="76" rx="31" fill={screen}/><circle cx="123" cy="109" r="23" fill="#020617" stroke="#a5f3fc" strokeWidth="5"/><circle cx="197" cy="109" r="23" fill="#020617" stroke="#a5f3fc" strokeWidth="5"/></ProductStage>;
+  if (key.includes("playstation 5")) return <ProductStage artworkId={artworkId}><path d="M116 24h87l22 174H95l21-174Z" fill="#f8fafc" stroke="#67e8f9" strokeWidth="5"/><path d="M145 30h31l12 161h-56l13-161Z" fill="#07111c"/><path d="M38 177c0-25 20-40 44-32l31 11h94l31-11c24-8 44 7 44 32 0 24-19 40-40 29l-35-18h-94l-35 18c-21 11-40-5-40-29Z" fill="#f8fafc" stroke="#67e8f9" strokeWidth="5"/><circle cx="79" cy="177" r="9" fill="#0f172a"/><path d="M235 165h22m-11-11v22" stroke="#0f172a" strokeWidth="6" strokeLinecap="round"/></ProductStage>;
+  if (key.includes("xbox series x")) return <ProductStage artworkId={artworkId}><rect x="104" y="24" width="112" height="179" rx="10" fill="#07111c" stroke={metal} strokeWidth="6"/><circle cx="160" cy="70" r="38" fill="#031b12"/><g fill="#22c55e"><circle cx="143" cy="57" r="5"/><circle cx="160" cy="51" r="5"/><circle cx="177" cy="57" r="5"/><circle cx="137" cy="75" r="5"/><circle cx="154" cy="69" r="5"/><circle cx="171" cy="75" r="5"/><circle cx="183" cy="72" r="5"/></g><circle cx="160" cy="174" r="9" fill="#22c55e"/><path d="M55 197c0-20 17-32 35-24l26 11h88l26-11c18-8 35 4 35 24" fill="none" stroke="#a5f3fc" strokeWidth="10" strokeLinecap="round"/></ProductStage>;
+  if (key.includes("drone")) return <ProductStage artworkId={artworkId}><rect x="119" y="92" width="82" height="55" rx="16" fill={metal}/><path d="M122 101 64 61m134 40 58-40m-134 78-58 40m134-40 58 40" stroke="#cffafe" strokeWidth="8" strokeLinecap="round"/><ellipse cx="56" cy="56" rx="46" ry="12" fill="none" stroke="#67e8f9" strokeWidth="5"/><ellipse cx="264" cy="56" rx="46" ry="12" fill="none" stroke="#67e8f9" strokeWidth="5"/><ellipse cx="56" cy="184" rx="46" ry="12" fill="none" stroke="#67e8f9" strokeWidth="5"/><ellipse cx="264" cy="184" rx="46" ry="12" fill="none" stroke="#67e8f9" strokeWidth="5"/><circle cx="160" cy="132" r="13" fill="#020617" stroke="#fff" strokeWidth="4"/></ProductStage>;
+  if (key.includes("gaming laptop")) return <ProductStage artworkId={artworkId}><rect x="48" y="29" width="224" height="145" rx="14" fill="#050b13" stroke={metal} strokeWidth="7"/><rect x="64" y="45" width="192" height="112" rx="7" fill={screen}/><path d="m79 137 47-55 31 31 30-45 54 69" fill="none" stroke="#fff" strokeWidth="7" strokeLinejoin="round"/><path d="M24 181h272l-25 36H49l-25-36Z" fill={metal} stroke="#fff" strokeOpacity=".45" strokeWidth="4"/><rect x="126" y="190" width="68" height="8" rx="4" fill="#07111c"/></ProductStage>;
+  if (key.includes("mountain bike")) return <ProductStage artworkId={artworkId}><circle cx="78" cy="176" r="45" fill="none" stroke="#cffafe" strokeWidth="8"/><circle cx="244" cy="176" r="45" fill="none" stroke="#cffafe" strokeWidth="8"/><path d="m78 176 58-80h59l49 80m-108-80 35 80H78l58-80Zm59 0 36-44" fill="none" stroke={metal} strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/><path d="M119 83h43M211 50h32" stroke="#fff" strokeWidth="8" strokeLinecap="round"/></ProductStage>;
+  if (key.includes("gaming pc")) return <ProductStage artworkId={artworkId}><rect x="30" y="45" width="180" height="125" rx="13" fill="#050b13" stroke={metal} strokeWidth="6"/><rect x="44" y="59" width="152" height="96" rx="7" fill={screen}/><rect x="226" y="37" width="65" height="171" rx="13" fill="#07111c" stroke={metal} strokeWidth="6"/><circle cx="258" cy="80" r="21" fill="none" stroke="#22d3ee" strokeWidth="7"/><circle cx="258" cy="136" r="21" fill="none" stroke="#22d3ee" strokeWidth="7"/><circle cx="258" cy="80" r="8" fill={glow}/><circle cx="258" cy="136" r="8" fill={glow}/><path d="M120 170v28m-45 8h90" stroke="#cffafe" strokeWidth="8" strokeLinecap="round"/></ProductStage>;
+
+  return <ProductStage artworkId={artworkId}><path d="M83 79h154v121H83z" fill={metal}/><path d="M69 79h182l-30-34H99L69 79Z" fill="#cffafe"/><path d="M160 46v154M83 113h154" stroke="#07111c" strokeWidth="9"/></ProductStage>;
+}
