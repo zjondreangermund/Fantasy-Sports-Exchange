@@ -5,7 +5,7 @@ import { ARENA_TOURNAMENT_PRICE_PRESETS } from "../services/tournamentRules.js";
 
 interface RegisterUserTournamentRoutesDeps { requireAuth: any; }
 
-const TOURNAMENT_FEE_RATE = 0.2;
+const TOURNAMENT_FEE_RATE = 0.10;
 const PIN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const ALLOWED_RARITIES = new Set(["common", "rare", "unique", "epic", "legendary"]);
 const ALLOWED_PRIZE_TYPES = new Set(["cash_pool", "goods", "goods_plus_cash", "packs", "sponsor_prize"]);
@@ -113,24 +113,10 @@ export function registerUserTournamentRoutes(app: Express, deps: RegisterUserTou
         values (${name}, ${tier}, ${entryFee}, 'open', ${gameWeek}, ${startDate}, ${endDate}, ${prizeRarity}, ${userId}, ${pin}, ${visibility}, ${maxEntries}, ${TOURNAMENT_FEE_RATE}, 0, 0, ${prizeType}, ${prizeDescription}, ${VAULT_SEASON}) returning *
       `);
       const rows = rowsOf(result);
-      return res.json({ success: true, tournament: rows[0] || null, pin });
+      return res.json({ success: true, tournament: rows[0] || null, pin, platformFeeRate: TOURNAMENT_FEE_RATE });
     } catch (error: any) {
       console.error("Failed to create user tournament:", error);
       return res.status(500).json({ message: error?.message || "Failed to create tournament" });
-    }
-  });
-
-  app.get("/api/user-tournaments/pin/:pin", requireAuth, async (req: any, res) => {
-    try {
-      const pin = normalizePin(req.params.pin);
-      if (!pin) return res.status(400).json({ message: "PIN required" });
-      const result = await db.execute(sql`select c.*, count(ce.id)::int as entry_count from app.competitions c left join app.competition_entries ce on ce.competition_id = c.id where c.join_pin = ${pin} group by c.id limit 1`);
-      const tournament = rowsOf(result)[0];
-      if (!tournament) return res.status(404).json({ message: "Tournament PIN not found" });
-      return res.json({ tournament });
-    } catch (error: any) {
-      console.error("Failed to find tournament PIN:", error);
-      return res.status(500).json({ message: error?.message || "Failed to find tournament" });
     }
   });
 }
