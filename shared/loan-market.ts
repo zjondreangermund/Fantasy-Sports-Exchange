@@ -1,6 +1,6 @@
 export type LoanRarity = "rare" | "unique" | "epic" | "legendary";
 
-export const LOAN_MARKET_FEE_RATE = 0.08;
+export const LOAN_MARKET_FEE_RATE = 0.10;
 
 export const LOAN_DURATIONS_GAMEWEEKS = [1, 2, 3, 4] as const;
 
@@ -20,17 +20,21 @@ export function normalizeLoanRarity(rarity: string): LoanRarity | null {
   return null;
 }
 
-export function getLoanFloorPerGameweek(rarity: string): number {
+export function getLoanFloorPerGameweek(rarity: string, costBasis = 0): number {
   const normalized = normalizeLoanRarity(rarity);
-  return normalized ? LOAN_FLOOR_PER_GAMEWEEK[normalized] : 0;
+  if (!normalized) return 0;
+  const rarityFloor = LOAN_FLOOR_PER_GAMEWEEK[normalized];
+  const valueFloor = Math.round(Math.max(0, Number(costBasis || 0)) * 0.10 * 100) / 100;
+  return Math.max(rarityFloor, valueFloor);
 }
 
 export function getLoanFeeBreakdown(input: {
   rarity: string;
   pricePerGameweek?: number;
   gameweeks?: number;
+  costBasis?: number;
 }) {
-  const floor = getLoanFloorPerGameweek(input.rarity);
+  const floor = getLoanFloorPerGameweek(input.rarity, input.costBasis);
   const pricePerGameweek = Math.max(floor, Number(input.pricePerGameweek || floor || 0));
   const gameweeks = Math.max(1, Math.min(4, Math.round(Number(input.gameweeks || 1))));
   const gross = Math.round(pricePerGameweek * gameweeks * 100) / 100;
@@ -45,5 +49,6 @@ export function getLoanFeeBreakdown(input: {
     fee,
     ownerReceives,
     feeRate: LOAN_MARKET_FEE_RATE,
+    costBasis: Math.max(0, Number(input.costBasis || 0)),
   };
 }
