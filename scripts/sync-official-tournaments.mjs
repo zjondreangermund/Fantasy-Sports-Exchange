@@ -40,20 +40,21 @@ async function fetchJson(url) {
 }
 
 async function ensureCompetitionTierValues(client) {
-  const values = ["unique", "epic", "legendary"];
-  for (const value of values) {
+  for (const value of ["unique", "epic", "legendary"]) {
     await client.query(`ALTER TYPE app.competition_tier ADD VALUE IF NOT EXISTS '${value}'`);
   }
 }
 
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
-  const client = new Client({ connectionString: process.env.DATABASE_URL, ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined });
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined,
+  });
   await client.connect();
 
   try {
-    // PostgreSQL enum additions must be committed before the values can be used
-    // by inserts. Run them outside the tournament transaction.
+    // Enum values must be committed before they can be used by later inserts.
     await ensureCompetitionTierValues(client);
 
     const [fixtures, bootstrap] = await Promise.all([
@@ -74,7 +75,11 @@ async function main() {
     }
 
     const now = new Date();
-    const currentEvent = events.find((event) => event.is_current) || events.find((event) => event.is_next) || events.find((event) => new Date(event.deadline_time).getTime() > now.getTime()) || events[0];
+    const currentEvent =
+      events.find((event) => event.is_current) ||
+      events.find((event) => event.is_next) ||
+      events.find((event) => new Date(event.deadline_time).getTime() > now.getTime()) ||
+      events[0];
     const currentGw = Math.max(1, Math.min(38, Number(currentEvent?.id || 1)));
 
     const windows = [];
@@ -87,25 +92,38 @@ async function main() {
 
       const preferredStart = catTuesdayBefore(first);
       const preferredEnd = catTuesdayAfter(last);
-      const start = previousLast && previousLast.getTime() >= preferredStart.getTime() ? new Date(previousLast.getTime() + 60 * 1000) : preferredStart;
-      const end = nextFirst && nextFirst.getTime() < preferredEnd.getTime() ? new Date(nextFirst.getTime() - 60 * 1000) : preferredEnd;
-      const adjusted = start.getTime() !== preferredStart.getTime() || end.getTime() !== preferredEnd.getTime();
-      windows.push({ gw, first, last, start, end, adjusted });
+      const start = previousLast && previousLast.getTime() >= preferredStart.getTime()
+        ? new Date(previousLast.getTime() + 60 * 1000)
+        : preferredStart;
+      const end = nextFirst && nextFirst.getTime() < preferredEnd.getTime()
+        ? new Date(nextFirst.getTime() - 60 * 1000)
+        : preferredEnd;
+      windows.push({
+        gw,
+        start,
+        end,
+        adjusted: start.getTime() !== preferredStart.getTime() || end.getTime() !== preferredEnd.getTime(),
+      });
     }
 
     await client.query("BEGIN");
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS created_by_user_id varchar(255)`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS prize_type text DEFAULT 'goods'`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS prize_description text`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS prize_key text`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS visibility text DEFAULT 'public'`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS max_entries integer`);
 
+    // Remove only auto-generated official rows. Never delete tournaments created
+    // manually in Admin, even when they are linked to a Prize Vault ladder.
     const officialRows = await client.query(`
       select id from app.competitions
-      where prize_key = 'ladder'
-         or name ~* '^GW[0-9]+ (Common|Rare|Unique|Epic|Legendary) (Prize )?Ladder$'
-         or name ~* '^Common Tournament - GW[0-9]+$'
-         or name ~* '^GW[0-9]+ Community Cup$'
+      where created_by_user_id is null
+        and (
+          name ~* '^GW[0-9]+ (Common|Rare|Unique|Epic|Legendary) (Prize )?Ladder$'
+          or name ~* '^Common Tournament - GW[0-9]+$'
+          or name ~* '^GW[0-9]+ Community Cup$'
+        )
     `);
     const officialIds = officialRows.rows.map((row) => Number(row.id)).filter(Number.isFinite);
     if (officialIds.length) {
@@ -131,8 +149,11 @@ async function main() {
 
     await client.query("COMMIT");
     const adjusted = windows.filter((window) => window.adjusted).map((window) => window.gw);
-    console.log(`Official tournaments synced for ${SEASON}. Current GW: ${currentGw}. Created ${38 * RARITIES.length} rarity tournaments.`);
-    console.log(adjusted.length ? `Fixture-overlap adjustments applied to GW: ${adjusted.join(", ")}` : "No Tuesday-window overlaps required adjustment.");
+    console.log(`Official tournaments synced for ${SEASON}. Current GW: ${currentGw}. Created ${38 * RARITIES.length} official rarity tournaments.`);
+    console.log("Admin-created tournaments were preserved and remain visible in Play.");
+    console.log(adjusted.length
+      ? `Fixture-overlap adjustments applied to GW: ${adjusted.join(", ")}`
+      : "No Tuesday-window overlaps required adjustment.");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;
