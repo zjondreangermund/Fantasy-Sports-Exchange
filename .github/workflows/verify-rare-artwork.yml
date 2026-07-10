@@ -23,6 +23,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Type check
-        run: npm run check
+        id: typecheck
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee typecheck.log
       - name: Build
-        run: npm run build
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build.log
+      - name: Upload verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rare-artwork-verification-logs
+          path: |
+            typecheck.log
+            build.log
+      - name: Fail when verification failed
+        if: steps.typecheck.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
