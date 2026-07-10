@@ -1,0 +1,29 @@
+
+> rest-express@1.0.0 check
+> tsc
+
+client/src/components/Card3D.tsx(15,42): error TS2724: '"../../../shared/schema"' has no exported member named 'EplPlayer'. Did you mean 'Player'?
+client/src/components/cards/CardProfileModal.tsx(45,98): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+client/src/components/cards/CardProfileModal.tsx(67,32): error TS2339: Property 'totalPoints' does not exist on type 'PlayerCardWithPlayer'.
+client/src/hooks/use-scroll-repair.ts(53,14): error TS2339: Property 'webkitOverflowScrolling' does not exist on type 'CSSStyleDeclaration'.
+client/src/pages/card-lab.tsx(187,25): error TS2322: Type 'number' is not assignable to type 'string'.
+client/src/pages/competitions-vault.tsx(46,238): error TS2352: Conversion of type '{ cardIds: never[]; }' to type '{ id: number; userId: string; cardIds: number[]; captainId: number | null; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ cardIds: never[]; }' is missing the following properties from type '{ id: number; userId: string; cardIds: number[]; captainId: number | null; }': id, userId, captainId
+client/src/pages/competitions-vault.tsx(51,39): error TS2802: Type 'Set<number>' can only be iterated through when using the '--downlevelIteration' flag or with a '--target' of 'es2015' or higher.
+client/src/pages/competitions.tsx(95,243): error TS2352: Conversion of type '{ cardIds: never[]; }' to type '{ id: number; userId: string; cardIds: number[]; captainId: number | null; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type '{ cardIds: never[]; }' is missing the following properties from type '{ id: number; userId: string; cardIds: number[]; captainId: number | null; }': id, userId, captainId
+client/src/pages/competitions.tsx(175,6): error TS2741: Property 'tone' is missing in type '{ children: Element[]; }' but required in type '{ tone: LivePageTone; children: ReactNode; className?: string | undefined; }'.
+client/src/pages/competitions.tsx(176,17): error TS2322: Type '{ kicker: string; title: string; subtitle: string; }' is not assignable to type 'IntrinsicAttributes & { eyebrow: string; title: string; description: string; children?: ReactNode; }'.
+  Property 'kicker' does not exist on type 'IntrinsicAttributes & { eyebrow: string; title: string; description: string; children?: ReactNode; }'.
+client/src/pages/onboarding-packs.tsx(80,40): error TS7006: Parameter 'card' implicitly has an 'any' type.
+client/src/pages/onboarding-packs.tsx(156,22): error TS2552: Cannot find name 'Rarity_ORDER'. Did you mean 'RARITY_ORDER'?
+client/src/pages/onboarding-packs.tsx(156,43): error TS7006: Parameter 'rarity' implicitly has an 'any' type.
+client/src/pages/onboarding-packs.tsx(156,92): error TS7006: Parameter 'rarity' implicitly has an 'any' type.
+client/src/pages/premier-league.tsx(18,15): error TS2724: '"../../../shared/schema"' has no exported member named 'EplPlayer'. Did you mean 'Player'?
+client/src/pages/premier-league.tsx(18,31): error TS2305: Module '"../../../shared/schema"' has no exported member 'EplFixture'.
+client/src/pages/premier-league.tsx(18,48): error TS2305: Module '"../../../shared/schema"' has no exported member 'EplInjury'.
+client/src/pages/premier-league.tsx(18,64): error TS2305: Module '"../../../shared/schema"' has no exported member 'EplStanding'.
+server/index.ts(88,95): error TS1501: This regular expression flag is only available when targeting 'es2018' or later.
+server/index.ts(97,257): error TS2802: Type 'RegExpStringIterator<RegExpExecArray>' can only be iterated through when using the '--downlevelIteration' flag or with a '--target' of 'es2015' or higher.
+server/routes/onboarding.routes.ts(294,33): error TS2783: 'kept' is specified more than once, so this usage will be overwritten.

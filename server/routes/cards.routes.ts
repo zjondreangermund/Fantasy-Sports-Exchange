@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { desc, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { seedDatabase } from "../seed.js";
 import { fplApi } from "../services/fplApi.js";
 import {
@@ -7,7 +7,7 @@ import {
   mapFplStatsToPlayerStats,
 } from "../services/scoring.js";
 import { db } from "../db.js";
-import { auditLogs } from "../../shared/schema.js";
+import { auditLogs, transactions } from "../../shared/schema.js";
 import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../shared/card-economy.js";
 
 interface RegisterCardsRoutesDeps {
@@ -222,6 +222,13 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       const card = userCards.find((item: any) => Number(item.id) === cardId);
       if (!card) return res.status(404).json({ message: "Card not found" });
       const player = card.player || {};
+      const [lastSaleTransaction] = await db
+        .select({ grossAmount: transactions.grossAmount, amount: transactions.amount })
+        .from(transactions)
+        .where(and(eq(transactions.type, "sale" as any), sql`${transactions.description} ilike ${`%card:${cardId}%`}`))
+        .orderBy(desc(transactions.createdAt))
+        .limit(1);
+      const lastSaleValue = Number(lastSaleTransaction?.grossAmount || lastSaleTransaction?.amount || 0) || null;
       const bootstrap = await fplApi.bootstrap();
       const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
       const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
@@ -240,12 +247,12 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         return elementTeam === teamName && (fullName === playerName || webName === playerName || fullName.includes(playerName) || playerName.includes(webName));
       });
       if (!matchedElement) {
-        return res.json({ source: "card-fallback", player: { name: player.name, team: player.team, position: player.position, imageUrl: player.imageUrl }, last10: lastScoresFallback(card), stats: { matchesPlayed: 0, minutes: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, totalPoints: Number(card.totalPoints || 0), selectedBy: null, value: null } });
+        return res.json({ source: "card-fallback", player: { name: player.name, team: player.team, position: player.position, imageUrl: player.imageUrl }, last10: lastScoresFallback(card), stats: { matchesPlayed: 0, minutes: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, totalPoints: Number(card.totalPoints || 0), selectedBy: null, value: lastSaleValue } });
       }
       const summary = await fplApi.playerSummary(Number(matchedElement.id));
       const history = Array.isArray(summary?.history) ? summary.history : [];
       const last10 = history.slice(-10).map((row: any) => ({ gameweek: Number(row.round || row.event || 0), opponent: teamShortById.get(Number(row.opponent_team)) || `T${row.opponent_team}`, points: Number(row.total_points || 0), minutes: Number(row.minutes || 0), goals: Number(row.goals_scored || 0), assists: Number(row.assists || 0), kickoffTime: row.kickoff_time || null, wasHome: Boolean(row.was_home) }));
-      return res.json({ source: "fpl-live", fplElementId: Number(matchedElement.id), player: { name: `${matchedElement.first_name || ""} ${matchedElement.second_name || ""}`.trim() || player.name, webName: matchedElement.web_name, team: player.team, position: player.position, imageUrl: fplApi.playerPhotoUrl(matchedElement, 250), status: matchedElement.status, news: matchedElement.news || "" }, last10: last10.length ? last10 : lastScoresFallback(card), stats: { matchesPlayed: Number(matchedElement.starts || 0), minutes: Number(matchedElement.minutes || 0), goals: Number(matchedElement.goals_scored || 0), assists: Number(matchedElement.assists || 0), cleanSheets: Number(matchedElement.clean_sheets || 0), yellowCards: Number(matchedElement.yellow_cards || 0), redCards: Number(matchedElement.red_cards || 0), bonus: Number(matchedElement.bonus || 0), totalPoints: Number(matchedElement.total_points || 0), selectedBy: matchedElement.selected_by_percent, value: Number(matchedElement.now_cost || 0) / 10 } });
+      return res.json({ source: "fpl-live", fplElementId: Number(matchedElement.id), player: { name: `${matchedElement.first_name || ""} ${matchedElement.second_name || ""}`.trim() || player.name, webName: matchedElement.web_name, team: player.team, position: player.position, imageUrl: fplApi.playerPhotoUrl(matchedElement, 250), status: matchedElement.status, news: matchedElement.news || "" }, last10: last10.length ? last10 : lastScoresFallback(card), stats: { matchesPlayed: Number(matchedElement.starts || 0), minutes: Number(matchedElement.minutes || 0), goals: Number(matchedElement.goals_scored || 0), assists: Number(matchedElement.assists || 0), cleanSheets: Number(matchedElement.clean_sheets || 0), yellowCards: Number(matchedElement.yellow_cards || 0), redCards: Number(matchedElement.red_cards || 0), bonus: Number(matchedElement.bonus || 0), totalPoints: Number(matchedElement.total_points || 0), selectedBy: matchedElement.selected_by_percent, value: lastSaleValue } });
     } catch (error: any) {
       console.error("Failed to fetch card profile:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch card profile" });

@@ -81,8 +81,8 @@ function statNumber(value: unknown) {
 }
 
 function money(value?: number | null) {
-  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
-  return `£${Number(value).toFixed(1)}m`;
+  if (value === null || value === undefined || !Number.isFinite(Number(value)) || Number(value) <= 0) return "Not sold yet";
+  return `N${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export default function CardProfileModal({ card, onClose }: { card: PlayerCardWithPlayer; onClose: () => void }) {
@@ -146,7 +146,7 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <HeroStat icon={<Star className="h-4 w-4" />} label="Total Points" value={data.stats.totalPoints} />
                 <HeroStat icon={<TrendingUp className="h-4 w-4" />} label="Ownership" value={data.stats.selectedBy ? `${data.stats.selectedBy}%` : "—"} />
-                <HeroStat icon={<Zap className="h-4 w-4" />} label="FPL Value" value={money(data.stats.value)} />
+                <HeroStat icon={<Zap className="h-4 w-4" />} label="Last Arena Sale" value={money(data.stats.value)} />
                 <HeroStat icon={<Award className="h-4 w-4" />} label="Bonus" value={data.stats.bonus || 0} />
               </div>
 
