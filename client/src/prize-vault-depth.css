@@ -1,0 +1,44 @@
+/* Extra visual depth for Prize Vault reward slabs. Desktop only so mobile stays clean. */
+@media (min-width: 1280px) {
+  .premium-page button.group {
+    transform-style: preserve-3d;
+    perspective: 1700px;
+  }
+
+  .premium-page button.group > div {
+    transform-style: preserve-3d;
+  }
+
+  .premium-page button.group > div::after {
+    content: "";
+    position: absolute;
+    z-index: -2;
+    top: 34px;
+    right: -42px;
+    bottom: -34px;
+    left: 34px;
+    border-radius: 2.35rem;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,.16), transparent 12%),
+      linear-gradient(145deg, #1f2937 0%, #06080f 42%, #000 100%);
+    box-shadow:
+      34px 34px 60px rgba(0,0,0,.78),
+      inset -6px -6px 14px rgba(0,0,0,.9),
+      inset 4px 4px 8px rgba(255,255,255,.08);
+    transform: translateZ(-42px);
+    pointer-events: none;
+  }
+
+  .premium-page button.group:hover > div::after {
+    right: -48px;
+    bottom: -38px;
+  }
+}
+
+@media (max-width: 1279px) {
+  .premium-page button.group,
+  .premium-page button.group > div {
+    transform: none !important;
+    perspective: none !important;
+  }
+}
