@@ -1,0 +1,55 @@
+import fs from 'node:fs';
+
+function replaceOrThrow(file, search, replacement) {
+  let text = fs.readFileSync(file, 'utf8');
+  if (!text.includes(search)) throw new Error(`Missing target in ${file}: ${search.slice(0, 80)}`);
+  text = text.replace(search, replacement);
+  fs.writeFileSync(file, text);
+}
+
+replaceOrThrow(
+  'server/routes/prizeVault.routes.ts',
+  `      const activeByRarity = new Map<string, any>();\n      for (const row of rows) {\n        const rarity = String(row.rarity || "common");\n        if (!["open", "active"].includes(String(row.status || ""))) continue;\n        const previous = activeByRarity.get(rarity);\n        const rowGameWeek = Number(row.gameWeek || 0);\n        const previousGameWeek = Number(previous?.gameWeek || -1);\n        const rowEntries = Number(row.entryCount || 0);\n        const previousEntries = Number(previous?.entryCount || 0);\n        if (!previous || rowGameWeek > previousGameWeek || (rowGameWeek === previousGameWeek && rowEntries > previousEntries)) activeByRarity.set(rarity, row);\n      }`,
+  `      const activeByRarity = new Map<string, any>();\n      for (const row of rows) {\n        const rarity = String(row.rarity || "common").toLowerCase();\n        if (!["open", "active"].includes(String(row.status || "").toLowerCase())) continue;\n        const gameWeek = Number(row.gameWeek || 0);\n        const entryCount = Number(row.entryCount || 0);\n        const previous = activeByRarity.get(rarity);\n        if (!previous || gameWeek < Number(previous.gameWeek || Number.MAX_SAFE_INTEGER)) {\n          activeByRarity.set(rarity, { ...row, gameWeek, entryCount });\n        } else if (gameWeek === Number(previous.gameWeek || 0)) {\n          activeByRarity.set(rarity, { ...previous, entryCount: Number(previous.entryCount || 0) + entryCount });\n        }\n      }`
+);
+
+replaceOrThrow(
+  'server/routes/admin.routes.ts',
+  `  app.get("/api/admin/risk/flags", requireAuth, isAdmin, async (_req: any, res) => {`,
+  `  app.get("/api/admin/backoffice", requireAuth, isAdmin, async (_req: any, res) => {\n    try {\n      const row = rowsOf(await db.execute(sql\`\n        select\n          (select count(*)::int from app.users) as "totalUsers",\n          (select count(distinct user_id)::int from app.audit_logs where created_at >= now() - interval '30 days' and user_id is not null) as "activeUsers",\n          (select count(*)::int from app.player_cards) as "totalCardsMinted",\n          (select count(*)::int from app.player_cards where for_sale = true) as "listedCards",\n          (select count(*)::int from app.transactions where source_type = 'marketplace_sale' or type::text in ('sale','marketplace_sale')) as "soldCards",\n          (select count(*)::int from app.auctions where status::text = 'live') as "auctionsLive",\n          (select count(*)::int from app.competitions where status::text in ('open','active','upcoming')) as "competitionsLive",\n          (select coalesce(sum(balance),0)::float from app.wallets) as "walletBalances",\n          (select coalesce(sum(abs(coalesce(gross_amount, amount, 0))),0)::float from app.transactions where source_type ilike '%marketplace%' or type::text in ('purchase','sale','marketplace_buy','marketplace_sale')) as "grossMarketplaceVolume",\n          (select coalesce(sum(greatest(coalesce(fee_amount,0), greatest(abs(coalesce(gross_amount,0)) - abs(coalesce(net_amount,0)),0))),0)::float from app.transactions where source_type ilike '%marketplace%' or type::text in ('sale','marketplace_sale')) as "platformFees",\n          (select coalesce(sum(coalesce(fee_amount,0)),0)::float from app.transactions where source_type in ('user_tournament_entry','competition_entry') or type::text = 'entry_fee') as "tournamentFees",\n          (select count(*)::int from app.withdrawal_requests where status::text = 'pending') as "withdrawalsPending"\n      \`))[0] || {};\n      return res.json({ overview: {\n        totalUsers: Number(row.totalUsers || 0), activeUsers: Number(row.activeUsers || 0), totalCardsMinted: Number(row.totalCardsMinted || 0),\n        listedCards: Number(row.listedCards || 0), soldCards: Number(row.soldCards || 0), auctionsLive: Number(row.auctionsLive || 0),\n        competitionsLive: Number(row.competitionsLive || 0), walletBalances: toMoney(row.walletBalances || 0),\n        grossMarketplaceVolume: toMoney(row.grossMarketplaceVolume || 0), platformFees: toMoney(row.platformFees || 0),\n        tournamentFees: toMoney(row.tournamentFees || 0), withdrawalsPending: Number(row.withdrawalsPending || 0)\n      } });\n    } catch (error: any) {\n      console.error("Failed to fetch admin backoffice:", error);\n      return res.status(500).json({ message: error?.message || "Failed to fetch admin backoffice" });\n    }\n  });\n\n  app.get("/api/admin/risk/flags", requireAuth, isAdmin, async (_req: any, res) => {`
+);
+
+replaceOrThrow(
+  'client/src/pages/competitions-vault.tsx',
+  `  const official = useMemo(() => competitions.filter((c) => rarityOrder.includes(tier(c.tier)) && isPublicArenaTournament(c)), [competitions]);`,
+  `  const official = useMemo(() => competitions.filter((c) => rarityOrder.includes(tier(c.tier)) && isPublicArenaTournament(c) && !["completed", "closed", "cancelled"].includes(String(c.status || "").toLowerCase())), [competitions]);\n  const completedOfficial = useMemo(() => competitions.filter((c) => rarityOrder.includes(tier(c.tier)) && isPublicArenaTournament(c) && ["completed", "closed"].includes(String(c.status || "").toLowerCase())), [competitions]);`
+);
+replaceOrThrow(
+  'client/src/pages/competitions-vault.tsx',
+  `    <section className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-4"><h2 className="mb-4 text-xl font-black">My Private Tournaments</h2><TournamentCreatorHub /></section>`,
+  `    {completedOfficial.length ? <section className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-4"><h2 className="mb-4 text-xl font-black">Completed Tournaments</h2><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{completedOfficial.map((comp) => <TournamentCard key={comp.id} comp={comp} entered={enteredIds.has(Number(comp.id))} onEnter={() => toast({ title: "Tournament completed", description: "This tournament is kept for records and can no longer be entered." })} />)}</div></section> : null}\n    <section className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-4"><h2 className="mb-4 text-xl font-black">My Private Tournaments</h2><TournamentCreatorHub /></section>`
+);
+
+replaceOrThrow(
+  'client/src/components/admin/AdminTournamentManager.tsx',
+  `import { Gift, Plus, Save, Trophy } from "lucide-react";`,
+  `import { Gift, Plus, Save, Trash2, Trophy } from "lucide-react";`
+);
+replaceOrThrow(
+  'client/src/components/admin/AdminTournamentManager.tsx',
+  `  const sortedCompetitions = useMemo(() => [...(Array.isArray(competitions) ? competitions : [])].sort((a, b) => Number(a.gameWeek || 0) - Number(b.gameWeek || 0) || Number(a.id || 0) - Number(b.id || 0)), [competitions]);`,
+  `  const sortedCompetitions = useMemo(() => [...(Array.isArray(competitions) ? competitions : [])].sort((a, b) => Number(a.gameWeek || 0) - Number(b.gameWeek || 0) || Number(a.id || 0) - Number(b.id || 0)), [competitions]);\n  const activeCompetitions = sortedCompetitions.filter((comp) => !["completed", "closed", "cancelled"].includes(String(comp.status || "").toLowerCase()));\n  const completedCompetitions = sortedCompetitions.filter((comp) => ["completed", "closed", "cancelled"].includes(String(comp.status || "").toLowerCase()));`
+);
+replaceOrThrow(
+  'client/src/components/admin/AdminTournamentManager.tsx',
+  `  const loadCompetition = (comp: any) => {`,
+  `  const deleteMutation = useMutation({\n    mutationFn: async (competitionId: number) => (await apiRequest("DELETE", \`/api/admin/competitions/\${competitionId}\`)).json(),\n    onSuccess: () => {\n      queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });\n      queryClient.invalidateQueries({ queryKey: ["/api/prize-vault"] });\n      queryClient.invalidateQueries({ queryKey: ["/api/admin/backoffice?range=30d"] });\n      setForm(buildEmptyForm());\n      toast({ title: "Tournament deleted" });\n    },\n    onError: (error: any) => toast({ title: "Tournament deletion failed", description: error.message, variant: "destructive" }),\n  });\n\n  const requestDelete = (comp: any) => {\n    if (!window.confirm(\`Delete \"\${comp.name || "this tournament"}\" and all related entries? This cannot be undone.\`)) return;\n    deleteMutation.mutate(Number(comp.id));\n  };\n\n  const loadCompetition = (comp: any) => {`
+);
+
+const managerFile = 'client/src/components/admin/AdminTournamentManager.tsx';
+let manager = fs.readFileSync(managerFile, 'utf8');
+const listRegex = /<div className="max-h-\[34rem\] space-y-2 overflow-y-auto pr-1">\{sortedCompetitions\.map\(\(comp\) => <button[\s\S]*?<\/div>/;
+if (!listRegex.test(manager)) throw new Error('Could not locate admin tournament list');
+manager = manager.replace(listRegex, `<div className="max-h-[34rem] space-y-4 overflow-y-auto pr-1">\n            <TournamentList title="Current & Upcoming" competitions={activeCompetitions} selectedId={form.id} onLoad={loadCompetition} onDelete={requestDelete} deleting={deleteMutation.isPending} />\n            <TournamentList title="Completed" competitions={completedCompetitions} selectedId={form.id} onLoad={loadCompetition} onDelete={requestDelete} deleting={deleteMutation.isPending} />\n          </div>`);
+manager += `\n\nfunction TournamentList({ title, competitions, selectedId, onLoad, onDelete, deleting }: any) {\n  return <section><div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-black uppercase tracking-[.14em] text-white/60">{title}</h4><Badge variant="outline">{competitions.length}</Badge></div><div className="space-y-2">{competitions.length ? competitions.map((comp: any) => <div key={comp.id} className={\`rounded-xl border p-3 text-sm transition \${String(selectedId) === String(comp.id) ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25"}\`}><button onClick={() => onLoad(comp)} className="w-full text-left"><div className="flex items-center justify-between gap-3"><span className="font-bold">{comp.name}</span><Badge className="capitalize">{comp.status}</Badge></div><div className="mt-1 text-white/50">GW {comp.gameWeek ?? comp.game_week} • {comp.tier} ladder • Entry {money(comp.entryFee ?? comp.entry_fee)}</div><div className="mt-1 text-xs text-cyan-100/60">Current entries: {comp.entryCount ?? comp.entry_count ?? 0}</div></button><Button variant="destructive" size="sm" disabled={deleting} onClick={() => onDelete(comp)} className="mt-3 w-full"><Trash2 className="mr-2 h-4 w-4" />Delete Tournament</Button></div>) : <div className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-white/40">No tournaments in this section.</div>}</div></section>;\n}\n`;
+fs.writeFileSync(managerFile, manager);

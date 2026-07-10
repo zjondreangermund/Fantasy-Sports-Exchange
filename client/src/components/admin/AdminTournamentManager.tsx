@@ -7,7 +7,7 @@ import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { useToast } from "../../hooks/use-toast";
-import { Gift, Plus, Save, Trophy } from "lucide-react";
+import { Gift, Plus, Save, Trash2, Trophy } from "lucide-react";
 
 const rarityOptions = ["common", "rare", "unique", "epic", "legendary"];
 const statusOptions = ["open", "upcoming", "active", "completed"];
@@ -47,6 +47,8 @@ export default function AdminTournamentManager() {
   const { data: prizePayload } = useQuery<any>({ queryKey: ["/api/admin/prizes"] });
   const prizes = Array.isArray(prizePayload?.prizes) ? prizePayload.prizes : [];
   const sortedCompetitions = useMemo(() => [...(Array.isArray(competitions) ? competitions : [])].sort((a, b) => Number(a.gameWeek || 0) - Number(b.gameWeek || 0) || Number(a.id || 0) - Number(b.id || 0)), [competitions]);
+  const activeCompetitions = sortedCompetitions.filter((comp) => !["completed", "closed", "cancelled"].includes(String(comp.status || "").toLowerCase()));
+  const completedCompetitions = sortedCompetitions.filter((comp) => ["completed", "closed", "cancelled"].includes(String(comp.status || "").toLowerCase()));
   const prizesByRarity = useMemo(() => {
     const groups: Record<string, any[]> = {};
     for (const rarity of rarityOptions) groups[rarity] = [];
@@ -75,6 +77,23 @@ export default function AdminTournamentManager() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/competitions"] }); toast({ title: form.id ? "Tournament updated" : "Tournament created", description: `${form.tier} ladder linked. Prize upscales as entries grow.` }); if (!form.id) setForm(buildEmptyForm()); },
     onError: (error: any) => toast({ title: "Tournament save failed", description: error.message, variant: "destructive" }),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (competitionId: number) => (await apiRequest("DELETE", `/api/admin/competitions/${competitionId}`)).json(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/prize-vault"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/backoffice?range=30d"] });
+      setForm(buildEmptyForm());
+      toast({ title: "Tournament deleted" });
+    },
+    onError: (error: any) => toast({ title: "Tournament deletion failed", description: error.message, variant: "destructive" }),
+  });
+
+  const requestDelete = (comp: any) => {
+    if (!window.confirm(`Delete "${comp.name || "this tournament"}" and all related entries? This cannot be undone.`)) return;
+    deleteMutation.mutate(Number(comp.id));
+  };
 
   const loadCompetition = (comp: any) => {
     const tier = String(comp.tier || "common").toLowerCase();
@@ -112,9 +131,17 @@ export default function AdminTournamentManager() {
               {(prizesByRarity[previewRarity] || []).map((p: any) => <div key={p.key} className="rounded-xl border border-white/10 bg-black/25 p-2 text-xs"><div className="font-bold text-white">#{p.tierIndex} {p.title}</div><div className="text-white/55">Value {money(p.value)} • target {money(p.unlockTarget)}</div><div className="mt-1 font-black text-cyan-100">Unlocks at {p.requiredEntrants} entries</div></div>)}
             </div>
           </div>
-          <div className="max-h-[34rem] space-y-2 overflow-y-auto pr-1">{sortedCompetitions.map((comp) => <button key={comp.id} onClick={() => loadCompetition(comp)} className={`w-full rounded-xl border p-3 text-left text-sm transition ${String(form.id) === String(comp.id) ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25 hover:bg-white/10"}`}><div className="flex items-center justify-between gap-3"><span className="font-bold">{comp.name}</span><Badge className="capitalize">{comp.status}</Badge></div><div className="mt-1 text-white/50">GW {comp.gameWeek} • {comp.tier} ladder • Entry {money(comp.entryFee)} • {comp.prizeDescription || "Prize Vault ladder"}</div><div className="mt-1 text-xs text-cyan-100/60">Unlock: {comp.requiredEntrants || 0} entries • Current: {comp.entryCount || 0} • {comp.prizeUnlocked ? "Prize unlocked" : "Prize locked"}</div><div className="mt-1 text-xs text-cyan-100/60">Cutoff: {comp.submissionClosesAt ? new Date(comp.submissionClosesAt).toLocaleString() : "first fixture fallback"}</div></button>)}{sortedCompetitions.length === 0 && <div className="rounded-xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">No tournaments found.</div>}</div>
+          <div className="max-h-[34rem] space-y-4 overflow-y-auto pr-1">
+            <TournamentList title="Current & Upcoming" competitions={activeCompetitions} selectedId={form.id} onLoad={loadCompetition} onDelete={requestDelete} deleting={deleteMutation.isPending} />
+            <TournamentList title="Completed" competitions={completedCompetitions} selectedId={form.id} onLoad={loadCompetition} onDelete={requestDelete} deleting={deleteMutation.isPending} />
+          </div><div className="mt-1 text-white/50">GW {comp.gameWeek} • {comp.tier} ladder • Entry {money(comp.entryFee)} • {comp.prizeDescription || "Prize Vault ladder"}</div><div className="mt-1 text-xs text-cyan-100/60">Unlock: {comp.requiredEntrants || 0} entries • Current: {comp.entryCount || 0} • {comp.prizeUnlocked ? "Prize unlocked" : "Prize locked"}</div><div className="mt-1 text-xs text-cyan-100/60">Cutoff: {comp.submissionClosesAt ? new Date(comp.submissionClosesAt).toLocaleString() : "first fixture fallback"}</div></button>)}{sortedCompetitions.length === 0 && <div className="rounded-xl border border-white/10 bg-black/25 p-4 text-sm text-white/45">No tournaments found.</div>}</div>
         </div>
       </div>
     </Card>
   );
+}
+
+
+function TournamentList({ title, competitions, selectedId, onLoad, onDelete, deleting }: any) {
+  return <section><div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-black uppercase tracking-[.14em] text-white/60">{title}</h4><Badge variant="outline">{competitions.length}</Badge></div><div className="space-y-2">{competitions.length ? competitions.map((comp: any) => <div key={comp.id} className={`rounded-xl border p-3 text-sm transition ${String(selectedId) === String(comp.id) ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25"}`}><button onClick={() => onLoad(comp)} className="w-full text-left"><div className="flex items-center justify-between gap-3"><span className="font-bold">{comp.name}</span><Badge className="capitalize">{comp.status}</Badge></div><div className="mt-1 text-white/50">GW {comp.gameWeek ?? comp.game_week} • {comp.tier} ladder • Entry {money(comp.entryFee ?? comp.entry_fee)}</div><div className="mt-1 text-xs text-cyan-100/60">Current entries: {comp.entryCount ?? comp.entry_count ?? 0}</div></button><Button variant="destructive" size="sm" disabled={deleting} onClick={() => onDelete(comp)} className="mt-3 w-full"><Trash2 className="mr-2 h-4 w-4" />Delete Tournament</Button></div>) : <div className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-white/40">No tournaments in this section.</div>}</div></section>;
 }
