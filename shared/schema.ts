@@ -20,7 +20,7 @@ export const positionEnum = pgEnum("position", ["GK", "DEF", "MID", "FWD"]);
 export const transactionTypeEnum = pgEnum("transaction_type", [
   "deposit", "withdrawal", "marketplace_buy", "marketplace_sale", "auction_bid_lock", "auction_bid_release", "auction_sale", "tournament_entry", "tournament_payout", "admin_adjustment", "bonus_credit", "purchase", "sale", "entry_fee", "prize", "swap_fee", "auction_bid", "auction_settlement",
 ]);
-export const competitionTierEnum = pgEnum("competition_tier", ["common", "rare", "unique", "legendary"]);
+export const competitionTierEnum = pgEnum("competition_tier", ["common", "rare", "unique", "epic", "legendary"]);
 export const competitionStatusEnum = pgEnum("competition_status", ["open", "upcoming", "active", "completed"]);
 export const swapStatusEnum = pgEnum("swap_status", ["pending", "accepted", "rejected", "cancelled"]);
 export const withdrawalStatusEnum = pgEnum("withdrawal_status", ["pending", "approved", "paid", "rejected"]);
@@ -167,7 +167,7 @@ export const swapOffers = appSchema.table("swap_offers", {
 
 export const withdrawalRequests = appSchema.table("withdrawal_requests", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id).unique(),
   amount: real("amount").notNull(),
   fee: real("fee").notNull().default(0),
   netAmount: real("net_amount").notNull(),
@@ -218,56 +218,7 @@ export const cardLocks = appSchema.table("card_locks", {
   reason: lockReasonEnum("reason").notNull(),
   refId: text("ref_id"),
   createdAt: timestamp("created_at").defaultNow(),
-  expiresAt: timestamp("expires_at"),
 });
-
-export const playerValues = appSchema.table("player_values", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  playerId: integer("player_id").notNull().references(() => players.id).unique(),
-  baseValue: real("base_value").notNull().default(0),
-  formMultiplier: real("form_multiplier").notNull().default(1),
-  lastUpdated: timestamp("last_updated").defaultNow(),
-});
-
-export const auditLogs = appSchema.table("audit_logs", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  userId: varchar("user_id", { length: 255 }).references(() => users.id),
-  action: text("action").notNull(),
-  meta: jsonb("meta").$type<Record<string, any>>().default({}),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const idempotencyKeys = appSchema.table("idempotency_keys", {
-  key: text("key").primaryKey(),
-  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow(),
-  expiresAt: timestamp("expires_at"),
-});
-
-export const notifications = appSchema.table("notifications", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
-  type: notificationTypeEnum("type").notNull().default("system"),
-  title: text("title").notNull(),
-  message: text("message").notNull(),
-  read: boolean("read").notNull().default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const RARITY_SUPPLY: Record<string, number> = { common: 0, rare: 100, unique: 1, epic: 10, legendary: 5 };
-export const DECISIVE_LEVELS: { level: number; points: number }[] = [{ level: 0, points: 35 }, { level: 1, points: 60 }, { level: 2, points: 70 }, { level: 3, points: 80 }, { level: 4, points: 90 }, { level: 5, points: 100 }];
-
-export function calculateDecisiveLevel(stats: { goals?: number; assists?: number; cleanSheets?: number; penaltySaves?: number; redCards?: number; ownGoals?: number; errorsLeadingToGoal?: number; }): { level: number; points: number } {
-  const positives = (stats.goals ?? 0) + (stats.assists ?? 0) + (stats.cleanSheets ?? 0) + (stats.penaltySaves ?? 0);
-  const negatives = (stats.redCards ?? 0) + (stats.ownGoals ?? 0) + (stats.errorsLeadingToGoal ?? 0);
-  const score = positives - negatives;
-  if (score >= 5) return DECISIVE_LEVELS[5];
-  if (score >= 4) return DECISIVE_LEVELS[4];
-  if (score >= 3) return DECISIVE_LEVELS[3];
-  if (score >= 2) return DECISIVE_LEVELS[2];
-  if (score >= 1) return DECISIVE_LEVELS[1];
-  return DECISIVE_LEVELS[0];
-}
 
 export const insertUserSchema = createInsertSchema(users);
 export const insertPlayerSchema = createInsertSchema(players);
@@ -275,36 +226,44 @@ export const insertPlayerCardSchema = createInsertSchema(playerCards);
 export const insertWalletSchema = createInsertSchema(wallets);
 export const insertTransactionSchema = createInsertSchema(transactions);
 export const insertLineupSchema = createInsertSchema(lineups);
-export const insertOnboardingSchema = createInsertSchema(userOnboarding);
 export const insertCompetitionSchema = createInsertSchema(competitions);
 export const insertCompetitionEntrySchema = createInsertSchema(competitionEntries);
 export const insertSwapOfferSchema = createInsertSchema(swapOffers);
 export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalRequests);
+export const insertAuctionSchema = createInsertSchema(auctions);
+export const insertAuctionBidSchema = createInsertSchema(auctionBids);
+export const insertCardLockSchema = createInsertSchema(cardLocks);
 
 export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertUser = typeof users.$inferInsert;
 export type Player = typeof players.$inferSelect;
-export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
+export type InsertPlayer = typeof players.$inferInsert;
 export type PlayerCard = typeof playerCards.$inferSelect;
-export type InsertPlayerCard = z.infer<typeof insertPlayerCardSchema>;
+export type InsertPlayerCard = typeof playerCards.$inferInsert;
 export type Wallet = typeof wallets.$inferSelect;
-export type InsertWallet = z.infer<typeof insertWalletSchema>;
+export type InsertWallet = typeof wallets.$inferInsert;
 export type Transaction = typeof transactions.$inferSelect;
-export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type InsertTransaction = typeof transactions.$inferInsert;
 export type Lineup = typeof lineups.$inferSelect;
-export type InsertLineup = z.infer<typeof insertLineupSchema>;
-export type UserOnboarding = typeof userOnboarding.$inferSelect;
-export type InsertOnboarding = z.infer<typeof insertOnboardingSchema>;
+export type InsertLineup = typeof lineups.$inferInsert;
 export type Competition = typeof competitions.$inferSelect;
-export type InsertCompetition = z.infer<typeof insertCompetitionSchema>;
+export type InsertCompetition = typeof competitions.$inferInsert;
 export type CompetitionEntry = typeof competitionEntries.$inferSelect;
-export type InsertCompetitionEntry = z.infer<typeof insertCompetitionEntrySchema>;
+export type InsertCompetitionEntry = typeof competitionEntries.$inferInsert;
 export type SwapOffer = typeof swapOffers.$inferSelect;
-export type InsertSwapOffer = z.infer<typeof insertSwapOfferSchema>;
+export type InsertSwapOffer = typeof swapOffers.$inferInsert;
 export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
-export type InsertWithdrawalRequest = z.infer<typeof insertWithdrawalRequestSchema>;
-export type PlayerCardWithPlayer = PlayerCard & { player: Player; ownerName?: string | null; ownerUsername?: string | null; };
+export type InsertWithdrawalRequest = typeof withdrawalRequests.$inferInsert;
+export type Auction = typeof auctions.$inferSelect;
+export type InsertAuction = typeof auctions.$inferInsert;
+export type AuctionBid = typeof auctionBids.$inferSelect;
+export type InsertAuctionBid = typeof auctionBids.$inferInsert;
+export type CardLock = typeof cardLocks.$inferSelect;
+export type InsertCardLock = typeof cardLocks.$inferInsert;
 
-export const playerRelations = relations(players, ({ many }) => ({ cards: many(playerCards) }));
-export const playerCardRelations = relations(playerCards, ({ one }) => ({ player: one(players, { fields: [playerCards.playerId], references: [players.id] }), owner: one(users, { fields: [playerCards.ownerId], references: [users.id] }) }));
-export const userRelations = relations(users, ({ many, one }) => ({ cards: many(playerCards), wallet: one(wallets), lineup: one(lineups), onboarding: one(userOnboarding) }));
+export type PlayerCardWithPlayer = PlayerCard & { player: Player };
+export type MarketplaceListing = PlayerCardWithPlayer & { owner?: User | null };
+export type CompetitionWithEntries = Competition & { entries: (CompetitionEntry & { user: User })[] };
+
+export const RARITY_SUPPLY = { common: 1000, rare: 100, unique: 10, epic: 3, legendary: 1 } as const;
+export const PLATFORM_FEE_RATE = 0.04;
