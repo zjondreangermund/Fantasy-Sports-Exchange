@@ -76,7 +76,11 @@ function typeOf(item: VaultItem) {
 }
 
 export default function PrizeVaultPage() {
-  const [rarity, setRarity] = useState("rare");
+  const [rarity, setRarity] = useState(() => {
+    if (typeof window === "undefined") return "rare";
+    const requested = new URLSearchParams(window.location.search).get("rarity")?.toLowerCase() || "rare";
+    return rarities.includes(requested) ? requested : "rare";
+  });
   const [selectedId, setSelectedId] = useState("");
   const rail = useRef<HTMLDivElement>(null);
   const { data, isLoading } = useQuery<VaultPayload>({
