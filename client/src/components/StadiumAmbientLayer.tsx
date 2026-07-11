@@ -72,6 +72,8 @@ export default function StadiumAmbientLayer({ teamName }: StadiumAmbientLayerPro
   };
 
   useEffect(() => {
+    if (!window.matchMedia("(min-width: 768px)").matches) return;
+
     const id = window.setInterval(() => {
       setFlash(true);
       window.setTimeout(() => setFlash(false), 180);
@@ -82,7 +84,7 @@ export default function StadiumAmbientLayer({ teamName }: StadiumAmbientLayerPro
 
   return (
     <>
-      <div className="absolute right-4 top-4 z-20 pointer-events-auto">
+      <div className="absolute right-4 top-4 z-20 hidden pointer-events-auto md:block">
         <button
           type="button"
           onClick={toggleAudio}
@@ -92,19 +94,16 @@ export default function StadiumAmbientLayer({ teamName }: StadiumAmbientLayerPro
         </button>
       </div>
 
-      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 z-0 hidden overflow-hidden md:block">
         <div className="absolute -left-24 top-0 h-full w-56 bg-gradient-to-r from-transparent via-white/7 to-transparent animate-[stadium-beam_16s_linear_infinite]" />
         <div className="absolute -right-24 top-0 h-full w-56 bg-gradient-to-l from-transparent via-white/7 to-transparent animate-[stadium-beam-reverse_20s_linear_infinite]" />
         <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/20 to-transparent animate-[fog-drift_18s_ease-in-out_infinite]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(148,163,184,0.10),transparent_60%)]" />
       </div>
 
-      {flash && <div className="absolute inset-0 z-0 pointer-events-none bg-white/[0.035] animate-pulse" />}
+      {flash && <div className="pointer-events-none absolute inset-0 z-0 hidden bg-white/[0.035] animate-pulse md:block" />}
 
-      <div
-        className="absolute inset-x-0 top-1/2 -translate-y-1/2 pointer-events-none z-0 text-center"
-        style={{ opacity: 0.045 }}
-      >
+      <div className="pointer-events-none absolute inset-x-0 top-1/2 z-0 hidden -translate-y-1/2 text-center md:block" style={{ opacity: 0.045 }}>
         <div
           style={{
             fontSize: "clamp(3rem, 12vw, 10rem)",
