@@ -1,0 +1,39 @@
+import fs from 'node:fs';
+
+function replace(path, from, to) {
+  let text = fs.readFileSync(path, 'utf8');
+  if (!text.includes(from)) throw new Error(`Missing target in ${path}: ${from.slice(0, 80)}`);
+  fs.writeFileSync(path, text.replace(from, to));
+}
+
+{
+  const path = 'client/src/components/admin/AdminTournamentManager.tsx';
+  let text = fs.readFileSync(path, 'utf8');
+  const marker = '</div><div className="mt-1 text-white/50">GW {comp.gameWeek}';
+  const start = text.indexOf(marker);
+  if (start >= 0) {
+    const endMarker = 'No tournaments found.</div>}</div>';
+    const end = text.indexOf(endMarker, start);
+    if (end < 0) throw new Error('Could not locate end of malformed tournament fragment');
+    text = text.slice(0, start + 6) + text.slice(end + endMarker.length);
+    fs.writeFileSync(path, text);
+  }
+}
+
+replace('client/src/components/Card3D.tsx', 'import { type PlayerCardWithPlayer, type EplPlayer } from "../../../shared/schema";', 'import { type PlayerCardWithPlayer, type Player as EplPlayer } from "../../../shared/schema";');
+replace('client/src/components/cards/CardProfileModal.tsx', 'imageUrl: card.player?.imageUrl },', 'imageUrl: card.player?.imageUrl || undefined },');
+replace('client/src/components/cards/CardProfileModal.tsx', 'totalPoints: Number(card.totalPoints || 0),', 'totalPoints: Number(card.player?.totalPoints || 0),');
+replace('client/src/hooks/use-scroll-repair.ts', 'root.style.webkitOverflowScrolling = "touch";', 'root.style.setProperty("-webkit-overflow-scrolling", "touch");');
+replace('client/src/pages/card-lab.tsx', 'id: activeOption.playerId,', 'id: String(activeOption.playerId),');
+replace('client/src/pages/competitions-vault.tsx', 'return { lineup: { cardIds: [] } as Lineup, cards: [] };', 'return { lineup: { id: 0, userId: "", cardIds: [], captainId: null }, cards: [] };');
+replace('client/src/pages/competitions-vault.tsx', '[...new Set(official.map((c) => Number(c.gameWeek || c.game_week || 0)).filter(Boolean))]', 'Array.from(new Set(official.map((c) => Number(c.gameWeek || c.game_week || 0)).filter(Boolean)))');
+replace('client/src/pages/competitions-vault.tsx', '.sort((a, b) => a - b); if (live.length) return live[0];', '.sort((a, b) => b - a); if (live.length) return live[0];');
+replace('client/src/pages/competitions.tsx', 'return { lineup: { cardIds: [] } as Lineup, cards: [] };', 'return { lineup: { id: 0, userId: "", cardIds: [], captainId: null }, cards: [] };');
+replace('client/src/pages/competitions.tsx', '<LivePageShell>', '<LivePageShell tone="arena">');
+replace('client/src/pages/competitions.tsx', '<LiveHero kicker="Fantasy Arena" title="Tournament Arena" subtitle="Premier League 2026/27 only. Each gameweek starts from zero and locks at the first kickoff." />', '<LiveHero eyebrow="Fantasy Arena" title="Tournament Arena" description="Premier League 2026/27 only. Each gameweek starts from zero and locks at the first kickoff." />');
+replace('client/src/pages/onboarding-packs.tsx', 'collectionPreview.map((card) =>', 'collectionPreview.map((card: PlayerCardWithPlayer) =>');
+replace('client/src/pages/onboarding-packs.tsx', 'Rarity_ORDER.filter((rarity) => pack.rarityMix.includes(rarity)).map((rarity) =>', 'RARITY_ORDER.filter((rarity: (typeof RARITY_ORDER)[number]) => pack.rarityMix.includes(rarity)).map((rarity: (typeof RARITY_ORDER)[number]) =>');
+replace('client/src/pages/premier-league.tsx', 'import { type EplPlayer, type EplFixture, type EplInjury, type EplStanding } from "../../../shared/schema";', 'import type { Player as EplPlayer } from "../../../shared/schema";\ntype EplFixture = any;\ntype EplInjury = any;\ntype EplStanding = any;');
+replace('server/index.ts', 'replace(/<!\\[CDATA\\[(.*?)\\]\\]>/gs, "$1")', 'replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, "$1")');
+replace('server/index.ts', 'result.news = [...xml.matchAll(/<item>[\\s\\S]*?<\\/item>/g)]', 'result.news = Array.from(xml.matchAll(/<item>[\\s\\S]*?<\\/item>/g))');
+replace('server/routes/onboarding.routes.ts', 'res.json({ success: true, kept: 5, ...grantResult });', 'res.json({ success: true, ...grantResult });');
