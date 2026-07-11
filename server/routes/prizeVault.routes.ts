@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { storage } from "../storage.js";
 import {
   RARITIES,
   SEASON_KEY,
@@ -23,15 +24,22 @@ export function registerPrizeVaultRoutes(app: Express) {
           c.game_week as "gameWeek",
           c.tier::text as rarity,
           coalesce(c.entry_fee, 0)::float as "entryFee",
-          c.status::text as status,
-          count(ce.id)::int as "entryCount"
+          c.status::text as status
         from app.competitions c
-        left join app.competition_entries ce on ce.competition_id = c.id
-        group by c.id
         order by c.game_week asc, c.id asc
       `);
 
-      const rows = rowsOf(result);
+      const competitionRows = rowsOf(result);
+      const rows = await Promise.all(
+        competitionRows.map(async (row) => {
+          const entries = await storage.getCompetitionEntries(Number(row.id));
+          return {
+            ...row,
+            entryCount: Array.isArray(entries) ? entries.length : 0,
+          };
+        }),
+      );
+
       const activeByRarity = new Map<string, any>();
       for (const row of rows) {
         const rarity = String(row.rarity || "common").toLowerCase();
