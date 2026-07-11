@@ -1,0 +1,35 @@
+name: Apply Prize Vault Rarity Links
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - scripts/apply-prize-vault-rarity-links.mjs
+      - .github/workflows/apply-prize-vault-rarity-links.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: node scripts/apply-prize-vault-rarity-links.mjs
+      - run: npm run build
+      - name: Commit routing fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Open the correct Prize Vault rarity from tournaments"
+          git push origin HEAD:main
