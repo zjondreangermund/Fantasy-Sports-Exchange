@@ -1,5 +1,5 @@
-const CACHE_NAME = "fantasy-site-v5";
-const APP_SHELL = ["/", "/manifest.json", "/icons/icon-192.svg", "/icons/icon-512.svg"];
+const CACHE_NAME = "fantasy-site-v6";
+const APP_SHELL = ["/", "/manifest.json", "/brand/fa-premium-2026.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
