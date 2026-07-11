@@ -26,6 +26,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Type check
-        run: npm run check
+        shell: bash
+        run: |
+          npm run check > /tmp/typecheck.log 2>&1 || {
+            echo "--- TYPECHECK ERRORS ---"
+            tail -n 120 /tmp/typecheck.log
+            exit 1
+          }
+          cat /tmp/typecheck.log
       - name: Build
         run: npm run build
