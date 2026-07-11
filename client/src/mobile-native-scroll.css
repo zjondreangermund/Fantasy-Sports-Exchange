@@ -1,39 +1,47 @@
-/* Final mobile scroll authority: one native vertical scroller, no nested page scrolling. */
+/* Final mobile authority: use normal document scrolling on phones. */
 @media (max-width: 767px) {
   html,
   body,
   #root {
     width: 100% !important;
-    height: 100dvh !important;
-    min-height: 100dvh !important;
-    overflow: hidden !important;
-    overscroll-behavior: none !important;
+    height: auto !important;
+    min-height: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: auto !important;
+    touch-action: pan-y !important;
+  }
+
+  body {
+    position: static !important;
+    -webkit-overflow-scrolling: touch !important;
   }
 
   .app-shell,
   .app-content {
-    display: flex !important;
-    flex-direction: column !important;
+    display: block !important;
     width: 100% !important;
-    height: 100dvh !important;
+    height: auto !important;
     min-height: 100dvh !important;
-    max-height: 100dvh !important;
-    overflow: hidden !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
   }
 
   .app-scroll-root,
   [data-app-scroll-root] {
     display: block !important;
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
+    width: 100% !important;
     height: auto !important;
+    min-height: 100dvh !important;
     max-height: none !important;
     overflow-x: hidden !important;
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    overscroll-behavior-y: contain !important;
+    overflow-y: visible !important;
+    overscroll-behavior-y: auto !important;
     touch-action: pan-y !important;
     scroll-behavior: auto !important;
+    padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   [data-app-scroll-root] > div,
@@ -47,6 +55,7 @@
   .mobile-page-safe,
   .flex-1.overflow-auto,
   .flex-1.overflow-y-auto {
+    display: block !important;
     height: auto !important;
     min-height: auto !important;
     max-height: none !important;
@@ -55,7 +64,7 @@
     touch-action: pan-y !important;
   }
 
-  /* Keep only the lightweight base gradient from the route scene on phones. */
+  /* Keep only the lightweight base route gradient on phones. */
   .app-content > [aria-hidden="true"] > div:not(:first-child) {
     display: none !important;
   }
