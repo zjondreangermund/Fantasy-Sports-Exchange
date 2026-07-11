@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/prize-vault-current-gameweek
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
