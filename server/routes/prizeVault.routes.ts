@@ -18,32 +18,52 @@ export function registerPrizeVaultRoutes(app: Express) {
   app.get("/api/prize-vault", async (_req, res) => {
     try {
       const result = await db.execute(sql`
+        with official_counts as (
+          select
+            c.id,
+            c.game_week as "gameWeek",
+            lower(coalesce(c.tier::text, c.prize_card_rarity::text, 'common')) as rarity,
+            coalesce(c.entry_fee, 0)::float as "entryFee",
+            lower(coalesce(c.status::text, 'upcoming')) as status,
+            count(distinct ce.id)::int as "entryCount"
+          from app.competitions c
+          left join app.competition_entries ce on ce.competition_id = c.id
+          where coalesce(c.visibility, 'public') <> 'private'
+            and (
+              lower(coalesce(c.prize_key, '')) = 'ladder'
+              or coalesce(c.prize_description, '') ilike '%prize vault%'
+              or coalesce(c.name, '') ilike '%vault%'
+            )
+          group by c.id
+        ),
+        latest_gameweeks as (
+          select rarity, max("gameWeek")::int as "gameWeek"
+          from official_counts
+          where status in ('open', 'active')
+          group by rarity
+        )
         select
-          c.id,
-          c.game_week as "gameWeek",
-          c.tier::text as rarity,
-          coalesce(c.entry_fee, 0)::float as "entryFee",
-          c.status::text as status,
-          count(ce.id)::int as "entryCount"
-        from app.competitions c
-        left join app.competition_entries ce on ce.competition_id = c.id
-        group by c.id
-        order by c.game_week asc, c.id asc
+          counts.rarity,
+          counts."gameWeek",
+          min(counts."entryFee")::float as "entryFee",
+          sum(counts."entryCount")::int as "entryCount"
+        from official_counts counts
+        inner join latest_gameweeks latest
+          on latest.rarity = counts.rarity
+         and latest."gameWeek" = counts."gameWeek"
+        where counts.status in ('open', 'active')
+        group by counts.rarity, counts."gameWeek"
+        order by counts.rarity
       `);
 
-      const rows = rowsOf(result);
       const activeByRarity = new Map<string, any>();
-      for (const row of rows) {
+      for (const row of rowsOf(result)) {
         const rarity = String(row.rarity || "common").toLowerCase();
-        if (!["open", "active"].includes(String(row.status || "").toLowerCase())) continue;
-        const gameWeek = Number(row.gameWeek || 0);
-        const entryCount = Number(row.entryCount || 0);
-        const previous = activeByRarity.get(rarity);
-        if (!previous || gameWeek < Number(previous.gameWeek || Number.MAX_SAFE_INTEGER)) {
-          activeByRarity.set(rarity, { ...row, gameWeek, entryCount });
-        } else if (gameWeek === Number(previous.gameWeek || 0)) {
-          activeByRarity.set(rarity, { ...previous, entryCount: Number(previous.entryCount || 0) + entryCount });
-        }
+        activeByRarity.set(rarity, {
+          ...row,
+          gameWeek: Number(row.gameWeek || 0),
+          entryCount: Number(row.entryCount || 0),
+        });
       }
 
       const ladders: Record<string, any> = {};
@@ -110,7 +130,7 @@ export function registerPrizeVaultRoutes(app: Express) {
 
       return res.json({
         season: SEASON_KEY,
-        mode: "rarity_ladder_current_gameweek",
+        mode: "rarity_ladder_latest_active_gameweek",
         ladders,
         items,
         summary,
