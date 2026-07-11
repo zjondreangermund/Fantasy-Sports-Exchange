@@ -1,0 +1,77 @@
+/* Final mobile scroll authority: one native vertical scroller, no nested page scrolling. */
+@media (max-width: 767px) {
+  html,
+  body,
+  #root {
+    width: 100% !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
+  }
+
+  .app-shell,
+  .app-content {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  .app-scroll-root,
+  [data-app-scroll-root] {
+    display: block !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: contain !important;
+    touch-action: pan-y !important;
+    scroll-behavior: auto !important;
+  }
+
+  [data-app-scroll-root] > div,
+  [data-app-scroll-root] > div > main,
+  .app-scroll-root > div,
+  .app-scroll-root > div > main,
+  .premium-page,
+  .collection-page,
+  .marketplace-page,
+  .admin-page,
+  .mobile-page-safe,
+  .flex-1.overflow-auto,
+  .flex-1.overflow-y-auto {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    touch-action: pan-y !important;
+  }
+
+  /* Keep only the lightweight base gradient from the route scene on phones. */
+  .app-content > [aria-hidden="true"] > div:not(:first-child) {
+    display: none !important;
+  }
+
+  /* Avoid Samsung/Android GPU corruption from large moving blur and blend layers. */
+  .app-scroll-root [class*="mix-blend"],
+  .app-scroll-root [class*="blur-3xl"],
+  .app-scroll-root [class*="blur-2xl"],
+  .app-scroll-root [class*="animate-[stadium"],
+  .app-scroll-root [class*="animate-[fog"] {
+    display: none !important;
+  }
+
+  .app-scroll-root [class*="backdrop-blur-2xl"],
+  .app-scroll-root [class*="backdrop-blur-xl"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
