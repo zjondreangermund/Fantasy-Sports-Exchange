@@ -41,7 +41,19 @@ jobs:
           }
           NODE
       - run: npm ci
-      - run: npm run check
+      - name: Type check
+        id: typecheck
+        continue-on-error: true
+        run: npm run check > typecheck.log 2>&1
+      - name: Upload typecheck log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prize-vault-typecheck-remaining
+          path: typecheck.log
+      - name: Stop on typecheck failure
+        if: steps.typecheck.outcome == 'failure'
+        run: exit 1
       - run: npm run build
       - name: Commit verified fixes
         if: github.event_name == 'push'
