@@ -35,14 +35,22 @@ export function registerPrizeVaultRoutes(app: Express) {
       const activeByRarity = new Map<string, any>();
       for (const row of rows) {
         const rarity = String(row.rarity || "common").toLowerCase();
-        if (!["open", "active"].includes(String(row.status || "").toLowerCase())) continue;
+        const status = String(row.status || "").toLowerCase();
+        if (!["open", "active"].includes(status)) continue;
+
         const gameWeek = Number(row.gameWeek || 0);
+        if (!Number.isFinite(gameWeek) || gameWeek <= 0) continue;
         const entryCount = Number(row.entryCount || 0);
         const previous = activeByRarity.get(rarity);
-        if (!previous || gameWeek < Number(previous.gameWeek || Number.MAX_SAFE_INTEGER)) {
-          activeByRarity.set(rarity, { ...row, gameWeek, entryCount });
-        } else if (gameWeek === Number(previous.gameWeek || 0)) {
-          activeByRarity.set(rarity, { ...previous, entryCount: Number(previous.entryCount || 0) + entryCount });
+        const previousGameWeek = Number(previous?.gameWeek || 0);
+
+        if (!previous || gameWeek > previousGameWeek) {
+          activeByRarity.set(rarity, { ...row, rarity, gameWeek, entryCount });
+        } else if (gameWeek === previousGameWeek) {
+          activeByRarity.set(rarity, {
+            ...previous,
+            entryCount: Number(previous.entryCount || 0) + entryCount,
+          });
         }
       }
 
