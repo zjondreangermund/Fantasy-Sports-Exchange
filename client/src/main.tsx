@@ -7,6 +7,7 @@ import "./mobile-action-slabs.css";
 import "./mobile-scroll-fix.css";
 import "./prize-vault-depth.css";
 import "./marketplace-rarity.css";
+import "./mobile-native-scroll.css";
 import { patchFetchForApiBase } from "./lib/api-base";
 
 patchFetchForApiBase();
