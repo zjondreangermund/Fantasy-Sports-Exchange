@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/prize-vault-live-entries
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
