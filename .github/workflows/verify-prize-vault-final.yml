@@ -1,0 +1,41 @@
+name: Verify Prize Vault Final
+
+on:
+  push:
+    branches:
+      - fix/prize-vault-live-entries
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/prize-vault-live-entries
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: node scripts/fix-prize-vault-build.mjs
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - name: Commit verified fixes
+        if: github.event_name == 'push'
+        run: |
+          rm scripts/fix-prize-vault-build.mjs
+          rm .github/workflows/verify-prize-vault-live-entries.yml
+          rm .github/workflows/verify-prize-vault-final.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Link Prize Vault entries to latest rarity gameweek"
+          git push origin HEAD:fix/prize-vault-live-entries
