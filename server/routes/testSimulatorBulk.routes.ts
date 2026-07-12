@@ -57,7 +57,7 @@ export function registerTestSimulatorBulkRoutes(app: Express, deps: { requireAut
           created_by_user_id, visibility, max_entries, platform_fee_rate, platform_fee_total,
           prize_pool_total, prize_type, prize_description
         ) values (
-          ${name}, ${rarity}, 0, 'active', ${gameWeek}, now(), now() + interval '7 days', ${rarity},
+          ${name}, ${rarity}::competition_tier, 0, 'active', ${gameWeek}, now(), now() + interval '7 days', ${rarity}::rarity,
           ${adminId}, 'private', ${entries}, 0, 0, 0, 'goods', 'Shared rarity Prize Vault ladder'
         ) returning id, name, tier::text as tier, game_week as "gameWeek"
       `))[0];
@@ -111,7 +111,7 @@ export function registerTestSimulatorBulkRoutes(app: Express, deps: { requireAut
           insert into app.player_cards (
             player_id,owner_id,rarity,serial_id,serial_number,max_supply,level,xp,decisive_score,last_5_scores,for_sale,price,acquired_at
           )
-          select x."playerId",x."ownerId",x.rarity,x."serialId",x."serialNumber",500000,1,0,35,'[0,0,0,0,0]'::jsonb,false,0,now()
+          select x."playerId",x."ownerId",x.rarity::rarity,x."serialId",x."serialNumber",500000,1,0,35,'[0,0,0,0,0]'::jsonb,false,0,now()
           from jsonb_to_recordset(${JSON.stringify(chunk)}::jsonb)
             as x("playerId" int,"ownerId" text,rarity text,"serialId" text,"serialNumber" int)
           on conflict (serial_id) do update set owner_id=excluded.owner_id,player_id=excluded.player_id,rarity=excluded.rarity,for_sale=false,price=0
