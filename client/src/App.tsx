@@ -41,6 +41,7 @@ const PrizeVaultPage = React.lazy(() => import("./pages/prize-vault"));
 const PremierLeaguePage = React.lazy(() => import("./pages/premier-league"));
 const AdminPage = React.lazy(() => import("./pages/admin"));
 const AdminTestConsolePage = React.lazy(() => import("./pages/admin-test-console"));
+const AdminSeasonSimulatorPage = React.lazy(() => import("./pages/admin-season-simulator"));
 const CardLabPage = React.lazy(() => import("./pages/card-lab"));
 
 function RouteFallback() {
@@ -88,6 +89,7 @@ function AuthenticatedRouter() {
         <Route path="/wallet" component={WalletPage} />
         <Route path="/account" component={AccountPage} />
         <Route path="/admin/test-console" component={AdminTestConsolePage} />
+        <Route path="/admin/season-simulator" component={AdminSeasonSimulatorPage} />
         <Route path="/admin" component={AdminPage} />
         <Route component={NotFound} />
       </Switch>
