@@ -1,6 +1,9 @@
-/* Play page safety: applies at every breakpoint, including phones rendered in desktop mode. */
-.play-route-shell,
-.play-route-content {
+/* Safe route mode for Play and Prize Vault, including phones rendered at desktop breakpoints. */
+.play-route-shell {
+  width: 100% !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  max-height: 100dvh !important;
   min-width: 0 !important;
   overflow: hidden !important;
 }
@@ -9,19 +12,25 @@
   height: 100dvh !important;
   min-height: 100dvh !important;
   max-height: 100dvh !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
 }
 
 .play-route-scroll {
-  flex: 1 1 auto !important;
+  position: relative !important;
+  display: block !important;
+  flex: 1 1 0% !important;
+  width: 100% !important;
+  height: 0 !important;
   min-height: 0 !important;
-  height: auto !important;
   max-height: none !important;
   overflow-x: hidden !important;
-  overflow-y: auto !important;
+  overflow-y: scroll !important;
   -webkit-overflow-scrolling: touch !important;
   overscroll-behavior-y: contain !important;
   touch-action: pan-y !important;
   scroll-behavior: auto !important;
+  contain: layout paint !important;
 }
 
 .play-route-scroll > div,
@@ -30,6 +39,13 @@
 .play-route-scroll article {
   min-width: 0 !important;
   max-width: 100% !important;
+}
+
+.play-route-scroll > div {
+  display: block !important;
+  min-height: max-content !important;
+  height: auto !important;
+  overflow: visible !important;
 }
 
 .play-route-scroll main {
@@ -42,15 +58,18 @@
   touch-action: pan-y !important;
 }
 
-/* Remove the effects that trigger Samsung/Android layer corruption. */
-.play-route-content [class*="backdrop-blur"],
-.play-route-content [class*="mix-blend"],
-.play-route-content [class*="blur-"],
-.play-route-content [class*="animate-"],
-.play-route-content [style*="filter"],
-.play-route-content [style*="box-shadow"] {
+/* Remove effects known to corrupt Samsung/Android compositing. */
+.play-route-content *,
+.play-route-content *::before,
+.play-route-content *::after {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+  mix-blend-mode: normal !important;
+}
+
+.play-route-content [class*="blur-"],
+.play-route-content [class*="animate-"],
+.play-route-content [style*="filter"] {
   filter: none !important;
   animation: none !important;
 }
@@ -60,33 +79,18 @@
 .play-route-scroll button,
 .play-route-scroll [class*="rounded-"] {
   transform: none !important;
+  perspective: none !important;
   backface-visibility: visible !important;
+}
+
+.play-route-scroll section,
+.play-route-scroll article,
+.play-route-scroll button,
+.play-route-scroll [style*="box-shadow"] {
+  box-shadow: none !important;
 }
 
 .play-route-scroll .fixed,
 .play-route-scroll .sticky {
   transform: none !important;
-}
-
-/* Keep cards readable while avoiding huge glow layers. */
-.play-route-scroll article,
-.play-route-scroll section,
-.play-route-scroll .card {
-  box-shadow: none !important;
-}
-
-@media (max-width: 767px) {
-  .play-route-content {
-    height: auto !important;
-    min-height: 100dvh !important;
-    max-height: none !important;
-    overflow: visible !important;
-  }
-
-  .play-route-scroll {
-    height: auto !important;
-    min-height: auto !important;
-    overflow-y: visible !important;
-    overscroll-behavior-y: auto !important;
-  }
 }
