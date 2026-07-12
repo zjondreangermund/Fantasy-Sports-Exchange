@@ -15,7 +15,9 @@ export async function apiRequest(
 ): Promise<Response> {
   const resolvedUrl = url === "/api/admin/test-console/cleanup"
     ? "/api/admin/simulator/cleanup"
-    : url;
+    : url === "/api/admin/simulator/run"
+      ? "/api/admin/simulator/run-v2"
+      : url;
 
   const res = await fetch(toApiUrl(resolvedUrl), {
     method,
