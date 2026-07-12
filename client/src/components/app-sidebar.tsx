@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, SidebarHeader, useSidebar } from "./ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
-import { LayoutDashboard, ShoppingCart, Wallet, Trophy, Activity, LogOut, Shield, Swords, UserCircle, Gift } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Wallet, Trophy, Activity, LogOut, Shield, Swords, UserCircle, Gift, Beaker } from "lucide-react";
 
 type NavItem = { title: string; href: string; icon: typeof LayoutDashboard; section: "Main" | "Account" };
 
@@ -30,7 +30,7 @@ export function AppSidebar() {
   useEffect(() => { if (isMobile) setOpenMobile(false); }, [isMobile, location, setOpenMobile]);
   const closeMobileDrawer = () => { if (isMobile) setOpenMobile(false); };
   const { data: adminCheck } = useQuery<{ isAdmin: boolean }>({ queryKey: ["/api/admin/check"] });
-  const allItems: NavItem[] = adminCheck?.isAdmin ? [...menuItems, { title: "Admin", href: "/admin", icon: Shield, section: "Account" }] : menuItems;
+  const allItems: NavItem[] = adminCheck?.isAdmin ? [...menuItems, { title: "Admin", href: "/admin", icon: Shield, section: "Account" }, { title: "Test Console", href: "/admin/test-console", icon: Beaker, section: "Account" }] : menuItems;
 
   return (
     <Sidebar className="border-r border-slate-800/80 bg-[#050812] text-slate-300">
