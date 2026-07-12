@@ -55,6 +55,24 @@ async function isAdminUser(userId: string) {
   return Boolean(user?.email && configuredEmails.includes(String(user.email).toLowerCase()));
 }
 
+async function requireAdminUser(req: any, res: any) {
+  const userId = String(req.authUserId || "");
+  if (!(await isAdminUser(userId))) {
+    res.status(403).json({ message: "Admin access required" });
+    return null;
+  }
+  return userId;
+}
+
+function allowedRarity(value: unknown) {
+  const rarity = String(value || "common").toLowerCase();
+  return ["common", "rare", "unique", "epic", "legendary"].includes(rarity) ? rarity : "common";
+}
+
+function entryFeeFor(rarity: string) {
+  return ({ common: 10, rare: 20, unique: 50, epic: 100, legendary: 250 } as Record<string, number>)[rarity] || 10;
+}
+
 export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTournamentCreatorRoutesDeps) {
   const { requireAuth } = deps;
 
@@ -197,6 +215,176 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
     } catch (error: any) {
       console.error("Failed to delete admin tournament:", error);
       return res.status(500).json({ message: error?.message || "Failed to delete tournament" });
+    }
+  });
+
+  app.get("/api/admin/test-console", requireAuth, async (req: any, res) => {
+    try {
+      if (!(await requireAdminUser(req, res))) return;
+      const tournaments = rowsOf(await db.execute(sql`
+        select c.id, c.name, c.tier::text as tier, c.status::text as status, c.game_week as "gameWeek",
+          coalesce(c.entry_fee, 0)::float as "entryFee", c.max_entries as "maxEntries", count(ce.id)::int as "entryCount"
+        from app.competitions c
+        left join app.competition_entries ce on ce.competition_id = c.id
+        where c.name like '[TEST]%'
+        group by c.id
+        order by c.id desc
+      `));
+      const users = rowsOf(await db.execute(sql`
+        select u.id, u.email, u.name, u.manager_team_name as "managerTeamName", coalesce(w.balance,0)::float as balance
+        from app.users u left join app.wallets w on w.user_id = u.id
+        order by u.created_at desc nulls last limit 100
+      `));
+      const counts = rowsOf(await db.execute(sql`
+        select
+          (select count(*)::int from app.competitions where name like '[TEST]%') as "testTournaments",
+          (select count(*)::int from app.competition_entries ce join app.competitions c on c.id=ce.competition_id where c.name like '[TEST]%') as "testEntries",
+          (select count(*)::int from app.transactions where source_type='admin_test') as "testTransactions"
+      `))[0] || {};
+      return res.json({ tournaments, users, counts });
+    } catch (error: any) {
+      console.error("Failed to load test console:", error);
+      return res.status(500).json({ message: error?.message || "Failed to load test console" });
+    }
+  });
+
+  app.post("/api/admin/test-console/create-tournament", requireAuth, async (req: any, res) => {
+    try {
+      const adminId = await requireAdminUser(req, res);
+      if (!adminId) return;
+      const gameWeek = Math.max(1, Math.min(38, Number(req.body?.gameWeek) || 1));
+      const rarity = allowedRarity(req.body?.rarity);
+      const maxEntries = Math.max(2, Math.min(500, Number(req.body?.maxEntries) || 20));
+      const fee = entryFeeFor(rarity);
+      const result = await db.execute(sql`
+        insert into app.competitions (
+          name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity,
+          created_by_user_id, visibility, max_entries, platform_fee_rate, platform_fee_total, prize_pool_total
+        ) values (
+          ${`[TEST] GW${gameWeek} ${rarity.toUpperCase()} Sandbox`}, ${rarity}, ${fee}, 'open', ${gameWeek}, now(), now() + interval '7 days', ${rarity},
+          ${adminId}, 'private', ${maxEntries}, .1, 0, 0
+        ) returning *
+      `);
+      await db.execute(sql`insert into app.audit_logs (user_id, action, meta) values (${adminId}, 'admin.test.tournament_created', ${JSON.stringify({ gameWeek, rarity, maxEntries })}::jsonb)`).catch(() => undefined);
+      return res.json({ success: true, tournament: rowsOf(result)[0] || null });
+    } catch (error: any) {
+      console.error("Failed to create test tournament:", error);
+      return res.status(500).json({ message: error?.message || "Failed to create test tournament" });
+    }
+  });
+
+  app.post("/api/admin/test-console/tournament/:id/fill", requireAuth, async (req: any, res) => {
+    try {
+      if (!(await requireAdminUser(req, res))) return;
+      const competitionId = Number(req.params.id);
+      const requested = Math.max(1, Math.min(200, Number(req.body?.count) || 1));
+      const tournament = rowsOf(await db.execute(sql`select * from app.competitions where id=${competitionId} and name like '[TEST]%' limit 1`))[0];
+      if (!tournament) return res.status(404).json({ message: "Test tournament not found" });
+      const candidates = rowsOf(await db.execute(sql`
+        select u.id as "userId", array_agg(pc.id order by pc.id) filter (where pc.id is not null) as cards
+        from app.users u
+        join app.player_cards pc on pc.owner_id=u.id and pc.rarity::text=${String(tournament.tier)} and pc.for_sale=false
+        where not exists (select 1 from app.competition_entries ce where ce.competition_id=${competitionId} and ce.user_id=u.id)
+        group by u.id having count(pc.id) >= 5
+        limit ${requested}
+      `));
+      let inserted = 0;
+      for (const candidate of candidates) {
+        const cards = Array.isArray(candidate.cards) ? candidate.cards.slice(0, 5).map(Number) : [];
+        if (cards.length < 5) continue;
+        await db.execute(sql`
+          insert into app.competition_entries (competition_id, user_id, lineup_card_ids, captain_id, total_score, joined_at)
+          values (${competitionId}, ${String(candidate.userId)}, ${JSON.stringify(cards)}::jsonb, ${cards[0]}, 0, now())
+          on conflict do nothing
+        `);
+        inserted += 1;
+      }
+      return res.json({ success: true, inserted });
+    } catch (error: any) {
+      console.error("Failed to fill test tournament:", error);
+      return res.status(500).json({ message: error?.message || "Failed to fill test tournament" });
+    }
+  });
+
+  app.post("/api/admin/test-console/tournament/:id/score", requireAuth, async (req: any, res) => {
+    try {
+      if (!(await requireAdminUser(req, res))) return;
+      const competitionId = Number(req.params.id);
+      const mode = String(req.body?.mode || "random");
+      const tournament = rowsOf(await db.execute(sql`select id from app.competitions where id=${competitionId} and name like '[TEST]%' limit 1`))[0];
+      if (!tournament) return res.status(404).json({ message: "Test tournament not found" });
+      const entries = rowsOf(await db.execute(sql`select id from app.competition_entries where competition_id=${competitionId} order by id asc`));
+      for (let index = 0; index < entries.length; index += 1) {
+        const score = mode === "tie" ? 55 : mode === "ascending" ? 20 + index * 5 : 25 + Math.floor(Math.random() * 76);
+        await db.execute(sql`update app.competition_entries set total_score=${score} where id=${Number(entries[index].id)}`);
+      }
+      await db.execute(sql`
+        with ranked as (
+          select id, rank() over (order by total_score desc, joined_at asc, id asc)::int as new_rank
+          from app.competition_entries where competition_id=${competitionId}
+        )
+        update app.competition_entries ce set rank=ranked.new_rank from ranked where ce.id=ranked.id
+      `);
+      return res.json({ success: true, scored: entries.length });
+    } catch (error: any) {
+      console.error("Failed to score test tournament:", error);
+      return res.status(500).json({ message: error?.message || "Failed to score test tournament" });
+    }
+  });
+
+  app.post("/api/admin/test-console/tournament/:id/status", requireAuth, async (req: any, res) => {
+    try {
+      if (!(await requireAdminUser(req, res))) return;
+      const competitionId = Number(req.params.id);
+      const status = String(req.body?.status || "").toLowerCase();
+      if (!["open", "active", "completed"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+      const result = await db.execute(sql`update app.competitions set status=${status} where id=${competitionId} and name like '[TEST]%' returning *`);
+      if (!rowsOf(result)[0]) return res.status(404).json({ message: "Test tournament not found" });
+      return res.json({ success: true, tournament: rowsOf(result)[0] });
+    } catch (error: any) {
+      console.error("Failed to update test status:", error);
+      return res.status(500).json({ message: error?.message || "Failed to update status" });
+    }
+  });
+
+  app.post("/api/admin/test-console/wallet", requireAuth, async (req: any, res) => {
+    try {
+      const adminId = await requireAdminUser(req, res);
+      if (!adminId) return;
+      const userId = String(req.body?.userId || "");
+      const amount = Math.round(Number(req.body?.amount || 0) * 100) / 100;
+      if (!userId || !Number.isFinite(amount) || amount === 0) return res.status(400).json({ message: "Valid user and non-zero amount required" });
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`
+          insert into app.wallets (user_id, balance, locked_balance) values (${userId}, ${amount}, 0)
+          on conflict (user_id) do update set balance=app.wallets.balance + ${amount}
+        `);
+        await tx.execute(sql`
+          insert into app.transactions (user_id, type, amount, gross_amount, fee_amount, net_amount, source_type, status, description)
+          values (${userId}, 'admin_adjustment', ${amount}, ${amount}, 0, ${amount}, 'admin_test', 'completed', ${`Test console adjustment by ${adminId}`})
+        `);
+      });
+      return res.json({ success: true });
+    } catch (error: any) {
+      console.error("Failed test wallet adjustment:", error);
+      return res.status(500).json({ message: error?.message || "Failed to adjust wallet" });
+    }
+  });
+
+  app.delete("/api/admin/test-console/cleanup", requireAuth, async (req: any, res) => {
+    try {
+      if (!(await requireAdminUser(req, res))) return;
+      const ids = rowsOf(await db.execute(sql`select id from app.competitions where name like '[TEST]%'`)).map((row) => Number(row.id));
+      await db.transaction(async (tx) => {
+        if (ids.length) {
+          await tx.execute(sql`delete from app.competition_entries where competition_id = any(${ids}::int[])`);
+          await tx.execute(sql`delete from app.competitions where id = any(${ids}::int[])`);
+        }
+      });
+      return res.json({ success: true, deletedTournaments: ids.length });
+    } catch (error: any) {
+      console.error("Failed to clean test data:", error);
+      return res.status(500).json({ message: error?.message || "Failed to clean test data" });
     }
   });
 }
