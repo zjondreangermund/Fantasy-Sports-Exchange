@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import { sql } from "drizzle-orm";
 import { registerTestSimulatorRoutes } from "./testSimulator.routes.js";
 import { registerTestSimulatorCleanupRoutes } from "./testSimulatorCleanup.routes.js";
+import { registerTestSimulatorBulkRoutes } from "./testSimulatorBulk.routes.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -13,6 +14,7 @@ export function registerAdminInsightsRoutes(app: Express, deps: { requireAuth: a
 
   registerTestSimulatorRoutes(app, { requireAuth });
   registerTestSimulatorCleanupRoutes(app, { requireAuth });
+  registerTestSimulatorBulkRoutes(app, { requireAuth });
 
   app.get("/api/admin/users/:id/cards", requireAuth, isAdmin, async (req: any, res) => {
     try {
