@@ -1,0 +1,92 @@
+/* Play page safety: applies at every breakpoint, including phones rendered in desktop mode. */
+.play-route-shell,
+.play-route-content {
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.play-route-content {
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  max-height: 100dvh !important;
+}
+
+.play-route-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: contain !important;
+  touch-action: pan-y !important;
+  scroll-behavior: auto !important;
+}
+
+.play-route-scroll > div,
+.play-route-scroll main,
+.play-route-scroll section,
+.play-route-scroll article {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.play-route-scroll main {
+  display: block !important;
+  height: auto !important;
+  min-height: max-content !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  touch-action: pan-y !important;
+}
+
+/* Remove the effects that trigger Samsung/Android layer corruption. */
+.play-route-content [class*="backdrop-blur"],
+.play-route-content [class*="mix-blend"],
+.play-route-content [class*="blur-"],
+.play-route-content [class*="animate-"],
+.play-route-content [style*="filter"],
+.play-route-content [style*="box-shadow"] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+  animation: none !important;
+}
+
+.play-route-scroll section,
+.play-route-scroll article,
+.play-route-scroll button,
+.play-route-scroll [class*="rounded-"] {
+  transform: none !important;
+  backface-visibility: visible !important;
+}
+
+.play-route-scroll .fixed,
+.play-route-scroll .sticky {
+  transform: none !important;
+}
+
+/* Keep cards readable while avoiding huge glow layers. */
+.play-route-scroll article,
+.play-route-scroll section,
+.play-route-scroll .card {
+  box-shadow: none !important;
+}
+
+@media (max-width: 767px) {
+  .play-route-content {
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .play-route-scroll {
+    height: auto !important;
+    min-height: auto !important;
+    overflow-y: visible !important;
+    overscroll-behavior-y: auto !important;
+  }
+}
