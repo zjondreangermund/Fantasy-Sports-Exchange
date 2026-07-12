@@ -95,7 +95,7 @@ function AuthenticatedRouter() {
 
 function AuthenticatedApp() {
   const [location] = useLocation();
-  const isPlayRoute = location.startsWith("/competitions");
+  const isPlayRoute = location.startsWith("/competitions") || location.startsWith("/prize-vault");
   const style = { "--sidebar-width": "16rem", "--sidebar-width-icon": "3rem" };
   const { data: user } = useQuery<{ managerTeamName?: string }>({ queryKey: ["/api/user"] });
   const teamName = user?.managerTeamName || "Your Stadium";
