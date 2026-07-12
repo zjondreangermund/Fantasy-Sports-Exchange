@@ -13,7 +13,11 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(toApiUrl(url), {
+  const resolvedUrl = url === "/api/admin/test-console/cleanup"
+    ? "/api/admin/simulator/cleanup"
+    : url;
+
+  const res = await fetch(toApiUrl(resolvedUrl), {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
