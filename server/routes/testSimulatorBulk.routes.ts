@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
+import { generateSimulatedGameweekScores, getGameweekScores } from "../services/gameweekScoring.js";
 
 const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 const BOT_PREFIX = "test-bot-";
@@ -25,17 +26,6 @@ function rarityOf(value: unknown) {
   return RARITIES.includes(rarity) ? rarity : "common";
 }
 
-function pointsFor(position: string, seed: number) {
-  const minutes = 2;
-  const goal = position === "FWD" ? (seed % 5 === 0 ? 4 : 0) : position === "MID" ? (seed % 7 === 0 ? 5 : 0) : position === "DEF" ? (seed % 13 === 0 ? 6 : 0) : 0;
-  const assist = seed % 6 === 0 ? 3 : 0;
-  const cleanSheet = ["GK", "DEF"].includes(position) && seed % 4 === 0 ? 4 : position === "MID" && seed % 4 === 0 ? 1 : 0;
-  const bonus = seed % 4;
-  const cards = seed % 19 === 0 ? -3 : seed % 11 === 0 ? -1 : 0;
-  const base = 2 + (seed % 8);
-  return { minutes, goal, assist, cleanSheet, bonus, cards, total: Math.max(0, base + minutes + goal + assist + cleanSheet + bonus + cards) };
-}
-
 export function registerTestSimulatorBulkRoutes(app: Express, deps: { requireAuth: any }) {
   const { requireAuth } = deps;
 
@@ -50,6 +40,10 @@ export function registerTestSimulatorBulkRoutes(app: Express, deps: { requireAut
       const entries = Math.max(1, Math.min(5000, Math.floor(Number(req.body?.entries) || 100)));
       const rawName = String(req.body?.name || `GW${gameWeek} ${rarity.toUpperCase()} ${entries} Entries`).slice(0, 150);
       const name = rawName.startsWith("[TEST]") ? rawName : `[TEST] ${rawName}`;
+
+      await generateSimulatedGameweekScores(gameWeek, false);
+      const officialScores = await getGameweekScores(gameWeek);
+      const scoreByPlayer = new Map(officialScores.map((row: any) => [Number(row.playerId), row]));
 
       const created = rowsOf(await db.execute(sql`
         insert into app.competitions (
@@ -94,7 +88,8 @@ export function registerTestSimulatorBulkRoutes(app: Express, deps: { requireAut
         for (let slot = 0; slot < 5; slot += 1) {
           const position = slot === 4 && index % 2 ? "DEF" : plans[slot];
           const pool = pools.get(position)!;
-          const player = pool[(index + slot) % pool.length];
+          const rotation = (index * (slot + 3) + slot * 7 + gameWeek) % pool.length;
+          const player = pool[rotation];
           cardRows.push({
             playerId: Number(player.id),
             ownerId: botRows[index].id,
@@ -133,7 +128,7 @@ export function registerTestSimulatorBulkRoutes(app: Express, deps: { requireAut
       }
 
       const allCards = rowsOf(await db.execute(sql`
-        select pc.id,pc.owner_id as "ownerId",p.name,p.team,p.position::text as position
+        select pc.id,pc.player_id as "playerId",pc.owner_id as "ownerId",p.name,p.team,p.position::text as position
         from app.player_cards pc join app.players p on p.id=pc.player_id
         where pc.owner_id like ${`${BOT_PREFIX}${rarity}-%`} and pc.rarity::text=${rarity}
         order by pc.owner_id,pc.id
@@ -145,15 +140,44 @@ export function registerTestSimulatorBulkRoutes(app: Express, deps: { requireAut
         cardsByOwner.set(String(card.ownerId), list);
       }
 
-      const scoreRows = botRows.map((bot, index) => {
+      const scoreRows = botRows.map((bot) => {
         const cards = (cardsByOwner.get(bot.id) || []).slice(0, 5);
         const captainId = Number(cards[0]?.id || 0);
-        const breakdown = cards.map((card, cardIndex) => ({
-          id: Number(card.id), name: card.name, team: card.team, position: card.position,
-          points: pointsFor(String(card.position), index * 7 + cardIndex * 11 + gameWeek),
-        }));
-        const totalScore = breakdown.reduce((sum, card) => sum + card.points.total * (card.id === captainId ? 2 : 1), 0);
-        return { userId: bot.id, totalScore, meta: { source: "test_simulator_v2", gameWeek, rarity, cardBreakdown: breakdown, captainMultiplier: 2 } };
+        const breakdown = cards.map((card) => {
+          const official = scoreByPlayer.get(Number(card.playerId));
+          const score = Number(official?.score || 0);
+          return {
+            id: Number(card.id),
+            playerId: Number(card.playerId),
+            name: card.name,
+            team: card.team,
+            position: card.position,
+            score,
+            decisiveScore: Number(official?.decisiveScore || 0),
+            allAroundScore: Number(official?.allAroundScore || 0),
+            performance: official?.breakdown || {},
+          };
+        });
+        const captain = breakdown.find((card) => card.id === captainId);
+        const baseTotal = breakdown.reduce((sum, card) => sum + card.score, 0);
+        const captainBonus = Number(((captain?.score || 0) * 0.2).toFixed(1));
+        const totalScore = Number((baseTotal + captainBonus).toFixed(1));
+        const highestCard = Math.max(0, ...breakdown.map((card) => card.score));
+        const allAroundTotal = Number(breakdown.reduce((sum, card) => sum + card.allAroundScore, 0).toFixed(1));
+        return {
+          userId: bot.id,
+          totalScore,
+          meta: {
+            source: "shared_gameweek_engine",
+            gameWeek,
+            rarity,
+            cardBreakdown: breakdown,
+            captainMultiplier: 1.2,
+            captainBonus,
+            highestCard,
+            allAroundTotal,
+          },
+        };
       });
 
       for (let start = 0; start < scoreRows.length; start += 500) {
@@ -161,14 +185,19 @@ export function registerTestSimulatorBulkRoutes(app: Express, deps: { requireAut
         await db.execute(sql`
           update app.competition_entries ce
           set total_score=x."totalScore",tiebreak_meta=x.meta
-          from jsonb_to_recordset(${JSON.stringify(chunk)}::jsonb) as x("userId" text,"totalScore" int,meta jsonb)
+          from jsonb_to_recordset(${JSON.stringify(chunk)}::jsonb) as x("userId" text,"totalScore" real,meta jsonb)
           where ce.competition_id=${competitionId} and ce.user_id=x."userId"
         `);
       }
 
       await db.execute(sql`
         with ranked as (
-          select id,row_number() over(order by total_score desc,joined_at asc,id asc)::int as position
+          select id,row_number() over(
+            order by total_score desc,
+              coalesce((tiebreak_meta->>'highestCard')::real,0) desc,
+              coalesce((tiebreak_meta->>'allAroundTotal')::real,0) desc,
+              joined_at asc,id asc
+          )::int as position
           from app.competition_entries where competition_id=${competitionId}
         )
         update app.competition_entries ce set rank=ranked.position from ranked where ce.id=ranked.id
@@ -178,10 +207,10 @@ export function registerTestSimulatorBulkRoutes(app: Express, deps: { requireAut
       const activePrize = state.activePrize || state.nextPrize;
       await db.execute(sql`
         insert into app.audit_logs (user_id,action,meta)
-        values (${adminId},'admin.simulator.run_v2',${JSON.stringify({ competitionId,gameWeek,rarity,entries,activePrize })}::jsonb)
+        values (${adminId},'admin.simulator.shared_gameweek_run',${JSON.stringify({ competitionId,gameWeek,rarity,entries,activePrize })}::jsonb)
       `).catch(() => undefined);
 
-      return res.json({ success: true, tournament: created, entries, activePrize });
+      return res.json({ success: true, tournament: created, entries, activePrize, scoring: { source: "shared_gameweek_engine", cardsPerLineup: 5, captainMultiplier: 1.2 } });
     } catch (error: any) {
       if (competitionId) {
         await db.execute(sql`delete from app.competition_entries where competition_id=${competitionId}`).catch(() => undefined);
