@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { db } from "../db.js";
 import { sql } from "drizzle-orm";
+import { registerTestSimulatorRoutes } from "./testSimulator.routes.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -8,6 +9,8 @@ function rowsOf(result: any): any[] {
 
 export function registerAdminInsightsRoutes(app: Express, deps: { requireAuth: any; isAdmin: any }) {
   const { requireAuth, isAdmin } = deps;
+
+  registerTestSimulatorRoutes(app, { requireAuth });
 
   app.get("/api/admin/users/:id/cards", requireAuth, isAdmin, async (req: any, res) => {
     try {
