@@ -9,6 +9,9 @@ import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 
 const rarities = ["common", "rare", "unique", "epic", "legendary"];
+const ladderSweep = [1, 10, 19, 20, 49, 50, 99, 100, 249, 250, 499, 500, 999, 1000, 2499, 2500, 4999, 5000];
+
+type EntryMode = "fixed" | "step" | "random" | "custom" | "ladder";
 
 type ConsoleData = {
   tournaments: Array<{ id: number; name: string; tier: string; status: string; gameWeek: number; entryCount: number }>;
@@ -24,12 +27,28 @@ type RunLog = {
   message: string;
 };
 
+type PlannedRun = {
+  gameWeek: number;
+  rarity: string;
+  entries: number;
+};
+
+function clampEntries(value: number) {
+  return Math.max(1, Math.min(5000, Math.floor(Number(value) || 1)));
+}
+
 export default function AdminSeasonSimulatorPage() {
   const [fromGw, setFromGw] = useState(1);
   const [toGw, setToGw] = useState(5);
   const [rarity, setRarity] = useState("common");
   const [allRarities, setAllRarities] = useState(false);
-  const [entriesPerTournament, setEntriesPerTournament] = useState(100);
+  const [entryMode, setEntryMode] = useState<EntryMode>("step");
+  const [fixedEntries, setFixedEntries] = useState(100);
+  const [startEntries, setStartEntries] = useState(10);
+  const [entryStep, setEntryStep] = useState(50);
+  const [randomMin, setRandomMin] = useState(10);
+  const [randomMax, setRandomMax] = useState(1000);
+  const [customEntries, setCustomEntries] = useState("10, 20, 50, 100, 250, 500, 1000");
   const [running, setRunning] = useState(false);
   const [logs, setLogs] = useState<RunLog[]>([]);
   const [completedRuns, setCompletedRuns] = useState(0);
@@ -44,7 +63,38 @@ export default function AdminSeasonSimulatorPage() {
   }, [fromGw, toGw]);
 
   const selectedRarities = allRarities ? rarities : [rarity];
-  const totalRuns = weeks.length * selectedRarities.length;
+
+  const parsedCustomEntries = useMemo(() => {
+    const values = customEntries
+      .split(/[,;\s]+/)
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .map(clampEntries);
+    return values.length ? values : [100];
+  }, [customEntries]);
+
+  const plannedRuns = useMemo<PlannedRun[]>(() => {
+    const combinations: Array<{ gameWeek: number; rarity: string }> = [];
+    for (const gameWeek of weeks) {
+      for (const rarityName of selectedRarities) combinations.push({ gameWeek, rarity: rarityName });
+    }
+
+    return combinations.map((item, index) => {
+      let count = fixedEntries;
+      if (entryMode === "step") count = startEntries + entryStep * index;
+      if (entryMode === "random") {
+        const min = Math.min(randomMin, randomMax);
+        const max = Math.max(randomMin, randomMax);
+        count = Math.floor(min + Math.random() * (max - min + 1));
+      }
+      if (entryMode === "custom") count = parsedCustomEntries[index % parsedCustomEntries.length];
+      if (entryMode === "ladder") count = ladderSweep[index % ladderSweep.length];
+      return { ...item, entries: clampEntries(count) };
+    });
+  }, [weeks, selectedRarities, entryMode, fixedEntries, startEntries, entryStep, randomMin, randomMax, parsedCustomEntries]);
+
+  const totalRuns = plannedRuns.length;
+  const totalPlannedEntries = plannedRuns.reduce((sum, run) => sum + run.entries, 0);
   const progress = totalRuns ? Math.min(100, Math.round((completedRuns / totalRuns) * 100)) : 0;
 
   const addLog = (gameWeek: number, rarityName: string, status: RunLog["status"], message: string) => {
@@ -71,29 +121,27 @@ export default function AdminSeasonSimulatorPage() {
     setLogs([]);
 
     try {
-      for (const gameWeek of weeks) {
-        for (const rarityName of selectedRarities) {
-          if (stopRef.current) {
-            addLog(gameWeek, rarityName, "stopped", "Simulation stopped by admin.");
-            return;
-          }
-
-          addLog(gameWeek, rarityName, "running", `Generating ${entriesPerTournament.toLocaleString()} bots, cards, scores and rankings…`);
-          const response = await apiRequest("POST", "/api/admin/simulator/run", {
-            name: `[TEST] GW${gameWeek} ${rarityName.toUpperCase()} ${entriesPerTournament} Entries`,
-            gameWeek,
-            rarity: rarityName,
-            entries: entriesPerTournament,
-          });
-          const result = await response.json();
-          setCompletedRuns((value) => value + 1);
-          addLog(
-            gameWeek,
-            rarityName,
-            "done",
-            `${Number(result?.entries || entriesPerTournament).toLocaleString()} bot entries created and ranked. ${result?.activePrize?.title ? `Prize Vault: ${result.activePrize.title}.` : "No prize tier unlocked yet."}`,
-          );
+      for (const run of plannedRuns) {
+        if (stopRef.current) {
+          addLog(run.gameWeek, run.rarity, "stopped", "Simulation stopped by admin.");
+          return;
         }
+
+        addLog(run.gameWeek, run.rarity, "running", `Generating ${run.entries.toLocaleString()} bots, cards, scores and rankings…`);
+        const response = await apiRequest("POST", "/api/admin/simulator/run", {
+          name: `[TEST] GW${run.gameWeek} ${run.rarity.toUpperCase()} ${run.entries} Entries`,
+          gameWeek: run.gameWeek,
+          rarity: run.rarity,
+          entries: run.entries,
+        });
+        const result = await response.json();
+        setCompletedRuns((value) => value + 1);
+        addLog(
+          run.gameWeek,
+          run.rarity,
+          "done",
+          `${Number(result?.entries || run.entries).toLocaleString()} bot entries created and ranked. ${result?.activePrize?.title ? `Prize Vault unlocked: ${result.activePrize.title}.` : "No prize tier unlocked yet."}`,
+        );
       }
     } catch (error: any) {
       addLog(0, "system", "error", error?.message || "Season simulation failed");
@@ -121,13 +169,13 @@ export default function AdminSeasonSimulatorPage() {
         <section className="rounded-[2rem] border border-purple-300/20 bg-[linear-gradient(135deg,rgba(124,58,237,.18),rgba(37,99,235,.12),rgba(2,6,23,.96))] p-5 sm:p-7">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-purple-300/25 bg-purple-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[.2em] text-purple-100"><FastForward className="h-3.5 w-3.5" /> Multi-gameweek bot automation</div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-purple-300/25 bg-purple-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[.2em] text-purple-100"><FastForward className="h-3.5 w-3.5" /> Prize-ladder test automation</div>
               <h1 className="mt-3 text-3xl font-black sm:text-5xl">Season Simulator</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-300">Each run now uses generated bot users and same-rarity cards. It can create up to 5,000 entries per tournament without depending on registered players.</p>
+              <p className="mt-2 max-w-3xl text-sm text-slate-300">Each tournament can now receive a different bot-entry count so you can confirm Prize Vault unlocks at low, boundary and high participation levels.</p>
             </div>
             <div className="flex flex-wrap gap-2"><Link href="/admin/test-console"><Button variant="outline" className="border-white/15 bg-white/5 text-white"><ArrowLeft className="mr-2 h-4 w-4" />Test Console</Button></Link><Button onClick={() => refreshAffectedData()} variant="outline" className="border-white/15 bg-white/5 text-white"><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button></div>
           </div>
-          <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm text-amber-100"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><p>Tournaments are created, filled, scored and ranked in one server operation. They remain unsettled so you can inspect rankings and card points in Test Console before pressing Settle.</p></div>
+          <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm text-amber-100"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><p>Use Prize Ladder Sweep for automatic boundary testing, or enter your own sequence such as 19, 20, 49, 50, 99, 100.</p></div>
         </section>
 
         <section className="grid grid-cols-3 gap-3">
@@ -142,17 +190,27 @@ export default function AdminSeasonSimulatorPage() {
             <label className="text-xs text-white/55">From gameweek<Input type="number" min={1} max={38} value={fromGw} disabled={running} onChange={(e) => setFromGw(Math.max(1, Math.min(38, Number(e.target.value) || 1)))} className="mt-1 border-white/10 bg-black/35" /></label>
             <label className="text-xs text-white/55">To gameweek<Input type="number" min={1} max={38} value={toGw} disabled={running} onChange={(e) => setToGw(Math.max(1, Math.min(38, Number(e.target.value) || 1)))} className="mt-1 border-white/10 bg-black/35" /></label>
             <label className="text-xs text-white/55">Rarity<select value={rarity} disabled={running || allRarities} onChange={(e) => setRarity(e.target.value)} className="mt-1 h-10 w-full rounded-md border border-white/10 bg-black/35 px-3">{rarities.map((item) => <option key={item}>{item}</option>)}</select></label>
-            <label className="text-xs text-white/55">Entries per tournament (1–5,000)<Input type="number" min={1} max={5000} value={entriesPerTournament} disabled={running} onChange={(e) => setEntriesPerTournament(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))} className="mt-1 border-white/10 bg-black/35" /></label>
+            <label className="text-xs text-white/55">Entry-count pattern<select value={entryMode} disabled={running} onChange={(e) => setEntryMode(e.target.value as EntryMode)} className="mt-1 h-10 w-full rounded-md border border-white/10 bg-black/35 px-3"><option value="step">Increase each tournament</option><option value="ladder">Prize Ladder sweep</option><option value="custom">Custom list</option><option value="random">Random range</option><option value="fixed">Same amount</option></select></label>
           </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {entryMode === "fixed" && <label className="text-xs text-white/55">Entries per tournament<Input type="number" min={1} max={5000} value={fixedEntries} disabled={running} onChange={(e) => setFixedEntries(clampEntries(Number(e.target.value)))} className="mt-1 border-white/10 bg-black/35" /></label>}
+            {entryMode === "step" && <><label className="text-xs text-white/55">Starting entries<Input type="number" min={1} max={5000} value={startEntries} disabled={running} onChange={(e) => setStartEntries(clampEntries(Number(e.target.value)))} className="mt-1 border-white/10 bg-black/35" /></label><label className="text-xs text-white/55">Increase per tournament<Input type="number" min={0} max={5000} value={entryStep} disabled={running} onChange={(e) => setEntryStep(Math.max(0, Math.min(5000, Number(e.target.value) || 0)))} className="mt-1 border-white/10 bg-black/35" /></label></>}
+            {entryMode === "random" && <><label className="text-xs text-white/55">Minimum entries<Input type="number" min={1} max={5000} value={randomMin} disabled={running} onChange={(e) => setRandomMin(clampEntries(Number(e.target.value)))} className="mt-1 border-white/10 bg-black/35" /></label><label className="text-xs text-white/55">Maximum entries<Input type="number" min={1} max={5000} value={randomMax} disabled={running} onChange={(e) => setRandomMax(clampEntries(Number(e.target.value)))} className="mt-1 border-white/10 bg-black/35" /></label></>}
+            {entryMode === "custom" && <label className="text-xs text-white/55 md:col-span-2 xl:col-span-3">Custom sequence<Input value={customEntries} disabled={running} onChange={(e) => setCustomEntries(e.target.value)} placeholder="19, 20, 49, 50, 99, 100" className="mt-1 border-white/10 bg-black/35" /></label>}
+            {entryMode === "ladder" && <div className="rounded-xl border border-purple-300/20 bg-purple-500/10 p-3 text-sm text-purple-100 md:col-span-2 xl:col-span-3">Sweep sequence: {ladderSweep.join(", ")}. Values repeat if you create more tournaments than the sequence length.</div>}
+          </div>
+
           <div className="mt-4"><label className="flex min-h-12 items-center gap-3 rounded-xl border border-white/10 bg-black/25 px-3 text-sm"><input type="checkbox" checked={allRarities} disabled={running} onChange={(e) => setAllRarities(e.target.checked)} />Run all five rarities for every selected gameweek</label></div>
 
           <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="font-black">{weeks.length} gameweek{weeks.length === 1 ? "" : "s"} × {selectedRarities.length} rarit{selectedRarities.length === 1 ? "y" : "ies"}</div><div className="mt-1 text-xs text-white/45">{totalRuns} complete tournament simulations • up to {(totalRuns * entriesPerTournament).toLocaleString()} generated entries</div></div><Badge className="bg-purple-500/20 text-purple-100">{progress}%</Badge></div>
+            <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="font-black">{plannedRuns.length} tournaments planned</div><div className="mt-1 text-xs text-white/45">{totalPlannedEntries.toLocaleString()} total generated entries with different counts</div></div><Badge className="bg-purple-500/20 text-purple-100">{progress}%</Badge></div>
             <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-400 transition-all" style={{ width: `${progress}%` }} /></div>
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">{plannedRuns.slice(0, 18).map((run, index) => <div key={`${run.gameWeek}-${run.rarity}-${index}`} className="min-w-[132px] rounded-xl border border-white/10 bg-white/5 p-2"><div className="text-[9px] font-black uppercase text-white/35">GW{run.gameWeek} {run.rarity}</div><div className="mt-1 font-black text-cyan-200">{run.entries.toLocaleString()} entries</div></div>)}</div>
           </div>
 
           <div className="mt-5 grid gap-2 sm:grid-cols-3">
-            {!running ? <Button onClick={runSeason} className="min-h-12 bg-purple-500 font-black hover:bg-purple-400"><Play className="mr-2 h-4 w-4" />Run bot simulation</Button> : <Button onClick={stopSeason} variant="destructive" className="min-h-12"><Pause className="mr-2 h-4 w-4" />Stop after current tournament</Button>}
+            {!running ? <Button onClick={runSeason} className="min-h-12 bg-purple-500 font-black hover:bg-purple-400"><Play className="mr-2 h-4 w-4" />Run varied simulation</Button> : <Button onClick={stopSeason} variant="destructive" className="min-h-12"><Pause className="mr-2 h-4 w-4" />Stop after current tournament</Button>}
             <Button onClick={() => { setLogs([]); setCompletedRuns(0); }} disabled={running} variant="outline" className="min-h-12 border-white/15 bg-white/5 text-white"><RotateCcw className="mr-2 h-4 w-4" />Clear run log</Button>
             <Button onClick={cleanup} disabled={running} variant="outline" className="min-h-12 border-red-300/20 bg-red-500/10 text-red-100"><Trophy className="mr-2 h-4 w-4" />Remove all test data</Button>
           </div>
