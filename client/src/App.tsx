@@ -42,6 +42,7 @@ const PremierLeaguePage = React.lazy(() => import("./pages/premier-league"));
 const AdminPage = React.lazy(() => import("./pages/admin"));
 const AdminTestConsolePage = React.lazy(() => import("./pages/admin-test-console"));
 const AdminSeasonSimulatorPage = React.lazy(() => import("./pages/admin-season-simulator"));
+const AdminLiveDataPage = React.lazy(() => import("./pages/admin-live-data"));
 const CardLabPage = React.lazy(() => import("./pages/card-lab"));
 
 function RouteFallback() {
@@ -90,6 +91,7 @@ function AuthenticatedRouter() {
         <Route path="/account" component={AccountPage} />
         <Route path="/admin/test-console" component={AdminTestConsolePage} />
         <Route path="/admin/season-simulator" component={AdminSeasonSimulatorPage} />
+        <Route path="/admin/live-data" component={AdminLiveDataPage} />
         <Route path="/admin" component={AdminPage} />
         <Route component={NotFound} />
       </Switch>
@@ -142,7 +144,7 @@ function AuthenticatedApp() {
 function AppContent() {
   const { user, isLoading } = useAuth();
   React.useEffect(() => { const params = new URLSearchParams(window.location.search); const ref = String(params.get("ref") || "").trim(); if (ref) localStorage.setItem("fantasy_referral_code", ref); }, []);
-  React.useEffect(() => { if (!user) return; const code = localStorage.getItem("fantasy_referral_code"); if (!code) return; fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) }).then(() => localStorage.removeItem("fantasy_referral_code")).catch(() => {}); }, [user]);
+  React.useEffect(() => { if (!user) return; const code = localStorage.getItem("fantasy_referral_code"); if (!code) return; fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }), }).then(() => localStorage.removeItem("fantasy_referral_code")).catch(() => {}); }, [user]);
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Skeleton className="w-12 h-12 rounded-md" /><Skeleton className="w-32 h-4" /></div></div>;
   if (!user) { const pathname = window.location.pathname || "/"; return <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen"><React.Suspense fallback={<RouteFallback />}><LandingPage /></React.Suspense></PageScene>; }
   return <AuthenticatedApp />;
