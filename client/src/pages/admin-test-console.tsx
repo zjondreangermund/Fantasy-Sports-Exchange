@@ -5,6 +5,7 @@ import {
   Activity,
   Beaker,
   Bot,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Coins,
@@ -115,6 +116,13 @@ type RankingsData = {
   entrantsToNext: number;
 };
 
+type LedgerLine = {
+  group: "Decisive" | "All-around" | "Captain";
+  label: string;
+  calculation: string;
+  points: number;
+};
+
 function money(value: unknown) {
   const n = Number(value || 0);
   return `N$${Number.isFinite(n) ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}`;
@@ -123,6 +131,86 @@ function money(value: unknown) {
 function numberValue(value: unknown) {
   const n = Number(value || 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+function rounded(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function formatPoints(value: number) {
+  const safe = rounded(numberValue(value));
+  if (safe > 0) return `+${safe.toFixed(1)}`;
+  return safe.toFixed(1);
+}
+
+function decisiveGoalValue(position: string) {
+  if (position === "GK" || position === "DEF") return 15;
+  if (position === "MID") return 12;
+  return 10;
+}
+
+function buildScoreLedger(card: CardBreakdown, captain: boolean, captainMultiplier: number): LedgerLine[] {
+  const p = card.performance || {};
+  const position = String(card.position || "MID");
+  const played = numberValue(p.minutes) > 0;
+  const decisiveTarget = numberValue(card.decisiveScore);
+  const allAroundTarget = numberValue(card.allAroundScore);
+  const lines: LedgerLine[] = [];
+
+  if (played) lines.push({ group: "Decisive", label: "Appearance base", calculation: "Played in match", points: 35 });
+  if (numberValue(p.goals)) {
+    const rate = decisiveGoalValue(position);
+    lines.push({ group: "Decisive", label: "Goals", calculation: `${numberValue(p.goals)} × ${rate}`, points: numberValue(p.goals) * rate });
+  }
+  if (numberValue(p.assists)) lines.push({ group: "Decisive", label: "Assists", calculation: `${numberValue(p.assists)} × 9`, points: numberValue(p.assists) * 9 });
+  if (p.cleanSheet) {
+    const value = position === "GK" || position === "DEF" ? 10 : position === "MID" ? 4 : 0;
+    if (value) lines.push({ group: "Decisive", label: "Clean sheet", calculation: `${position} clean sheet`, points: value });
+  }
+  if (p.penaltySave) lines.push({ group: "Decisive", label: "Penalty saved", calculation: "1 × 15", points: 15 });
+  if (p.redCard) lines.push({ group: "Decisive", label: "Red card", calculation: "1 × -15", points: -15 });
+  if (p.ownGoal) lines.push({ group: "Decisive", label: "Own goal", calculation: "1 × -8", points: -8 });
+  if (p.penaltyMiss) lines.push({ group: "Decisive", label: "Penalty missed", calculation: "1 × -8", points: -8 });
+
+  const decisiveKnown = lines.filter((line) => line.group === "Decisive").reduce((sum, line) => sum + line.points, 0);
+  const decisiveAdjustment = rounded(decisiveTarget - decisiveKnown);
+  if (Math.abs(decisiveAdjustment) >= 0.05) {
+    lines.push({ group: "Decisive", label: "Decisive cap / adjustment", calculation: "Score normalized to engine result", points: decisiveAdjustment });
+  }
+
+  const passesPoints = Math.min(8, numberValue(p.passes) / 12);
+  if (numberValue(p.passes)) lines.push({ group: "All-around", label: "Completed passes", calculation: `${numberValue(p.passes)} ÷ 12 (max 8)`, points: passesPoints });
+  if (numberValue(p.keyPasses)) lines.push({ group: "All-around", label: "Key passes", calculation: `${numberValue(p.keyPasses)} × 2.2`, points: numberValue(p.keyPasses) * 2.2 });
+  if (numberValue(p.tackles)) lines.push({ group: "All-around", label: "Tackles", calculation: `${numberValue(p.tackles)} × 1.4`, points: numberValue(p.tackles) * 1.4 });
+  if (numberValue(p.interceptions)) lines.push({ group: "All-around", label: "Interceptions", calculation: `${numberValue(p.interceptions)} × 1.6`, points: numberValue(p.interceptions) * 1.6 });
+  if (numberValue(p.duelsWon)) lines.push({ group: "All-around", label: "Duels won", calculation: `${numberValue(p.duelsWon)} × 0.65`, points: numberValue(p.duelsWon) * 0.65 });
+  if (numberValue(p.shotsOnTarget)) lines.push({ group: "All-around", label: "Shots on target", calculation: `${numberValue(p.shotsOnTarget)} × 1.5`, points: numberValue(p.shotsOnTarget) * 1.5 });
+  if (numberValue(p.saves)) lines.push({ group: "All-around", label: "Goalkeeper saves", calculation: `${numberValue(p.saves)} × 1.2`, points: numberValue(p.saves) * 1.2 });
+  if (numberValue(p.possessionLost)) lines.push({ group: "All-around", label: "Possession lost", calculation: `${numberValue(p.possessionLost)} × -0.35`, points: numberValue(p.possessionLost) * -0.35 });
+  if (p.yellowCard) lines.push({ group: "All-around", label: "Yellow card", calculation: "1 × -2", points: -2 });
+
+  const allAroundKnown = lines.filter((line) => line.group === "All-around").reduce((sum, line) => sum + line.points, 0);
+  const formQualityAdjustment = rounded(allAroundTarget - allAroundKnown);
+  if (Math.abs(formQualityAdjustment) >= 0.05) {
+    lines.push({
+      group: "All-around",
+      label: "Form, quality and match variance",
+      calculation: "Player quality + season form + controlled match variance",
+      points: formQualityAdjustment,
+    });
+  }
+
+  if (captain && captainMultiplier > 1) {
+    const official = numberValue(card.score);
+    lines.push({
+      group: "Captain",
+      label: "Captain bonus",
+      calculation: `${official.toFixed(1)} × ${(captainMultiplier - 1).toFixed(1)}`,
+      points: official * (captainMultiplier - 1),
+    });
+  }
+
+  return lines;
 }
 
 export default function AdminTestConsolePage() {
@@ -321,7 +409,7 @@ export default function AdminTestConsolePage() {
                 <div className="flex items-center gap-2 text-lg font-black">
                   <Activity className="h-5 w-5 text-emerald-200" /> Rankings before settlement
                 </div>
-                <p className="mt-1 text-xs text-white/45">Open an entry to inspect its five card scores.</p>
+                <p className="mt-1 text-xs text-white/45">Open an entry, then open Score calculation for the exact points formula.</p>
               </div>
               {selectedTournament && (
                 <Button
@@ -417,64 +505,123 @@ export default function AdminTestConsolePage() {
 
 function CardDetails({ row }: { row: Ranking }) {
   const cards = row.pointsMeta?.cardBreakdown || [];
+  const [openCardId, setOpenCardId] = useState<number | null>(cards[0]?.id || null);
   if (!cards.length) return <div className="text-sm text-white/40">No card breakdown is available for this older test entry.</div>;
 
   return (
-    <div className="grid gap-2 md:grid-cols-2">
+    <div className="grid gap-3 md:grid-cols-2">
       {cards.map((card) => {
         const captain = numberValue(card.id) === numberValue(row.captainId);
         const legacy = card.points;
         const performance = card.performance || {};
-        const officialScore = card.score ?? legacy?.total ?? 0;
+        const officialScore = numberValue(card.score ?? legacy?.total ?? 0);
         const captainMultiplier = numberValue(row.pointsMeta?.captainMultiplier) || 1;
-        const counted = numberValue(officialScore) * (captain ? captainMultiplier : 1);
+        const counted = officialScore * (captain ? captainMultiplier : 1);
+        const ledger = buildScoreLedger(card, captain, captainMultiplier);
+        const open = openCardId === card.id;
 
         return (
-          <div key={card.id} className="rounded-xl border border-white/10 bg-black/30 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <b>{card.name || "Player"}</b>
-                <div className="text-xs text-white/45">{card.team || "—"} • {card.position || "—"} • Card #{card.id}</div>
+          <div key={card.id} className="overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+            <div className="p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <b className="block truncate">{card.name || "Player"}</b>
+                  <div className="truncate text-xs text-white/45">{card.team || "—"} • {card.position || "—"} • Card #{card.id}</div>
+                </div>
+                {captain && <Badge className="shrink-0 bg-yellow-300/20 text-yellow-100">Captain ×{captainMultiplier.toFixed(1)}</Badge>}
               </div>
-              {captain && <Badge className="bg-yellow-300/20 text-yellow-100">Captain ×{captainMultiplier.toFixed(1)}</Badge>}
+
+              {legacy ? (
+                <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+                  <Point label="Minutes" value={numberValue(legacy.minutes)} />
+                  <Point label="Goal" value={numberValue(legacy.goal)} />
+                  <Point label="Assist" value={numberValue(legacy.assist)} />
+                  <Point label="Clean sheet" value={numberValue(legacy.cleanSheet)} />
+                  <Point label="Bonus" value={numberValue(legacy.bonus)} />
+                  <Point label="Cards" value={numberValue(legacy.cards)} />
+                  <Point label="Base total" value={numberValue(legacy.total)} />
+                  <Point label="Counted" value={counted} />
+                </div>
+              ) : (
+                <>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <Point label="Official score" value={officialScore} />
+                    <Point label="Decisive" value={numberValue(card.decisiveScore)} />
+                    <Point label="All-around" value={numberValue(card.allAroundScore)} />
+                    <Point label="Counted" value={counted} />
+                    <Point label="Minutes" value={numberValue(performance.minutes)} />
+                    <Point label="Goals" value={numberValue(performance.goals)} />
+                    <Point label="Assists" value={numberValue(performance.assists)} />
+                    <Point label="Key passes" value={numberValue(performance.keyPasses)} />
+                    <Point label="Tackles" value={numberValue(performance.tackles)} />
+                    <Point label="Interceptions" value={numberValue(performance.interceptions)} />
+                    <Point label="Duels won" value={numberValue(performance.duelsWon)} />
+                    <Point label="Shots on target" value={numberValue(performance.shotsOnTarget)} />
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-[10px]">
+                    {performance.cleanSheet && <Badge variant="outline">Clean sheet</Badge>}
+                    {performance.penaltySave && <Badge variant="outline">Penalty save</Badge>}
+                    {performance.yellowCard && <Badge variant="outline">Yellow card</Badge>}
+                    {performance.redCard && <Badge variant="destructive">Red card</Badge>}
+                    {performance.ownGoal && <Badge variant="destructive">Own goal</Badge>}
+                    {performance.penaltyMiss && <Badge variant="destructive">Penalty miss</Badge>}
+                  </div>
+                </>
+              )}
             </div>
 
-            {legacy ? (
-              <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
-                <Point label="Minutes" value={numberValue(legacy.minutes)} />
-                <Point label="Goal" value={numberValue(legacy.goal)} />
-                <Point label="Assist" value={numberValue(legacy.assist)} />
-                <Point label="Clean sheet" value={numberValue(legacy.cleanSheet)} />
-                <Point label="Bonus" value={numberValue(legacy.bonus)} />
-                <Point label="Cards" value={numberValue(legacy.cards)} />
-                <Point label="Base total" value={numberValue(legacy.total)} />
-                <Point label="Counted" value={counted} />
+            {!legacy && (
+              <div className="border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setOpenCardId(open ? null : card.id)}
+                  className="flex min-h-11 w-full items-center justify-between gap-3 px-3 text-left text-xs font-black uppercase tracking-[.12em] text-cyan-100 hover:bg-white/5"
+                >
+                  <span>Score calculation</span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+                </button>
+                {open && (
+                  <div className="border-t border-white/10 bg-slate-950/70 p-3">
+                    <div className="mb-3 rounded-xl border border-cyan-300/15 bg-cyan-400/10 p-3 text-xs text-cyan-50">
+                      <b>Official score = Decisive + All-around</b>
+                      <div className="mt-1 text-cyan-100/70">
+                        {numberValue(card.decisiveScore).toFixed(1)} + {numberValue(card.allAroundScore).toFixed(1)} = {officialScore.toFixed(1)}
+                        {captain && ` • Captain counted score: ${officialScore.toFixed(1)} × ${captainMultiplier.toFixed(1)} = ${counted.toFixed(1)}`}
+                      </div>
+                    </div>
+                    {(["Decisive", "All-around", "Captain"] as const).map((group) => {
+                      const groupLines = ledger.filter((line) => line.group === group);
+                      if (!groupLines.length) return null;
+                      const subtotal = groupLines.reduce((sum, line) => sum + line.points, 0);
+                      return (
+                        <div key={group} className="mb-3 last:mb-0">
+                          <div className="mb-1 flex items-center justify-between text-[10px] font-black uppercase tracking-[.14em] text-white/45">
+                            <span>{group}</span>
+                            <span>{formatPoints(subtotal)}</span>
+                          </div>
+                          <div className="overflow-hidden rounded-xl border border-white/10">
+                            {groupLines.map((line, index) => (
+                              <div key={`${group}-${line.label}-${index}`} className="grid grid-cols-[1fr_auto] gap-3 border-b border-white/10 bg-white/[.03] p-2.5 last:border-b-0">
+                                <div className="min-w-0">
+                                  <div className="text-xs font-bold text-white/85">{line.label}</div>
+                                  <div className="mt-0.5 break-words text-[10px] text-white/40">{line.calculation}</div>
+                                </div>
+                                <div className={`self-center text-sm font-black ${line.points < 0 ? "text-red-300" : "text-emerald-300"}`}>
+                                  {formatPoints(line.points)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <TotalBox label="Official player score" value={officialScore} />
+                      <TotalBox label="Counted in lineup" value={counted} highlight={captain} />
+                    </div>
+                  </div>
+                )}
               </div>
-            ) : (
-              <>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                  <Point label="Official score" value={numberValue(card.score)} />
-                  <Point label="Decisive" value={numberValue(card.decisiveScore)} />
-                  <Point label="All-around" value={numberValue(card.allAroundScore)} />
-                  <Point label="Counted" value={counted} />
-                  <Point label="Minutes" value={numberValue(performance.minutes)} />
-                  <Point label="Goals" value={numberValue(performance.goals)} />
-                  <Point label="Assists" value={numberValue(performance.assists)} />
-                  <Point label="Key passes" value={numberValue(performance.keyPasses)} />
-                  <Point label="Tackles" value={numberValue(performance.tackles)} />
-                  <Point label="Interceptions" value={numberValue(performance.interceptions)} />
-                  <Point label="Duels won" value={numberValue(performance.duelsWon)} />
-                  <Point label="Shots on target" value={numberValue(performance.shotsOnTarget)} />
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[10px]">
-                  {performance.cleanSheet && <Badge variant="outline">Clean sheet</Badge>}
-                  {performance.penaltySave && <Badge variant="outline">Penalty save</Badge>}
-                  {performance.yellowCard && <Badge variant="outline">Yellow card</Badge>}
-                  {performance.redCard && <Badge variant="destructive">Red card</Badge>}
-                  {performance.ownGoal && <Badge variant="destructive">Own goal</Badge>}
-                  {performance.penaltyMiss && <Badge variant="destructive">Penalty miss</Badge>}
-                </div>
-              </>
             )}
           </div>
         );
@@ -510,6 +657,15 @@ function Point({ label, value }: { label: string; value: number }) {
       <div className={`mt-1 font-black ${safeValue < 0 ? "text-red-300" : "text-white"}`}>
         {safeValue > 0 ? `+${Number.isInteger(safeValue) ? safeValue : safeValue.toFixed(1)}` : safeValue}
       </div>
+    </div>
+  );
+}
+
+function TotalBox({ label, value, highlight = false }: { label: string; value: number; highlight?: boolean }) {
+  return (
+    <div className={`rounded-xl border p-3 ${highlight ? "border-yellow-300/25 bg-yellow-300/10" : "border-white/10 bg-white/5"}`}>
+      <div className="text-[9px] font-black uppercase tracking-[.12em] text-white/40">{label}</div>
+      <div className={`mt-1 text-xl font-black ${highlight ? "text-yellow-100" : "text-cyan-100"}`}>{numberValue(value).toFixed(1)}</div>
     </div>
   );
 }
