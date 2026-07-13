@@ -5,6 +5,7 @@ import { registerTestSimulatorRoutes } from "./testSimulator.routes.js";
 import { registerTestSimulatorCleanupRoutes } from "./testSimulatorCleanup.routes.js";
 import { registerTestSimulatorBulkRoutes } from "./testSimulatorBulk.routes.js";
 import { registerTestSimulatorDetailsRoutes } from "./testSimulatorDetails.routes.js";
+import { registerAdminCardLookupRoutes } from "./adminCardLookup.routes.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -17,6 +18,7 @@ export function registerAdminInsightsRoutes(app: Express, deps: { requireAuth: a
   registerTestSimulatorCleanupRoutes(app, { requireAuth });
   registerTestSimulatorBulkRoutes(app, { requireAuth });
   registerTestSimulatorDetailsRoutes(app, { requireAuth });
+  registerAdminCardLookupRoutes(app, { requireAuth, isAdmin });
 
   app.get("/api/admin/users/:id/cards", requireAuth, isAdmin, async (req: any, res) => {
     try {
