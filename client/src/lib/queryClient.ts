@@ -8,18 +8,21 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+function resolveApiUrl(url: string) {
+  if (url === "/api/admin/test-console/cleanup") return "/api/admin/simulator/cleanup";
+  if (url === "/api/admin/simulator/run") return "/api/admin/simulator/run-v2";
+  if (/^\/api\/admin\/simulator\/tournament\/\d+\/rankings(?:\?|$)/.test(url)) {
+    return url.replace("/rankings", "/rankings-v2");
+  }
+  return url;
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const resolvedUrl = url === "/api/admin/test-console/cleanup"
-    ? "/api/admin/simulator/cleanup"
-    : url === "/api/admin/simulator/run"
-      ? "/api/admin/simulator/run-v2"
-      : url;
-
-  const res = await fetch(toApiUrl(resolvedUrl), {
+  const res = await fetch(toApiUrl(resolveApiUrl(url)), {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
@@ -36,7 +39,8 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(toApiUrl(queryKey.join("/") as string), {
+    const rawUrl = queryKey.join("/") as string;
+    const res = await fetch(toApiUrl(resolveApiUrl(rawUrl)), {
       credentials: "include",
     });
 
