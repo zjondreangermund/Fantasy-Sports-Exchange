@@ -86,7 +86,7 @@ export async function syncFplPremierLeaguePlayers() {
       set name = ${name},
           team = ${teamName},
           league = 'Premier League',
-          position = ${position}::app.position,
+          position = ${position}::public.position,
           nationality = coalesce(nullif(nationality, ''), 'Unknown'),
           age = case when age is null or age <= 0 then ${ageFallback(element)} else age end,
           overall = ${overall},
@@ -114,7 +114,7 @@ export async function syncFplPremierLeaguePlayers() {
 
     const insertResult: any = await db.execute(sql`
       insert into app.players (name, team, league, position, nationality, age, overall, image_url, fpl_id, code, photo, web_name, status, news, now_cost, selected_by_percent, total_points, form, synced_at)
-      values (${name}, ${teamName}, 'Premier League', ${position}::app.position, 'Unknown', ${ageFallback(element)}, ${overall}, ${imageUrl}, ${fplId}, ${code || null}, ${photo || null}, ${webName}, ${status}, ${news}, ${nowCost}, ${selectedBy}, ${totalPoints}, ${form}, now())
+      values (${name}, ${teamName}, 'Premier League', ${position}::public.position, 'Unknown', ${ageFallback(element)}, ${overall}, ${imageUrl}, ${fplId}, ${code || null}, ${photo || null}, ${webName}, ${status}, ${news}, ${nowCost}, ${selectedBy}, ${totalPoints}, ${form}, now())
       on conflict do nothing
       returning id
     `);
