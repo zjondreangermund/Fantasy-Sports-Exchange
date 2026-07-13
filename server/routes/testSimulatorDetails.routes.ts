@@ -5,6 +5,35 @@ import { getActivePrizeForEntries } from "../services/prizeEngine.js";
 
 const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 
+type DetailedCardRow = {
+  id: number;
+  playerId?: number;
+  rarity?: string;
+  name?: string;
+  team?: string;
+  position?: string;
+  imageUrl?: string | null;
+  photo?: string | null;
+  nationality?: string | null;
+  score?: number;
+  decisiveScore?: number;
+  allAroundScore?: number;
+  performance?: Record<string, unknown> | null;
+};
+
+type StoredCardBreakdown = {
+  id?: number;
+  playerId?: number;
+  name?: string;
+  team?: string;
+  position?: string;
+  score?: number;
+  decisiveScore?: number;
+  allAroundScore?: number;
+  performance?: Record<string, unknown>;
+  points?: unknown;
+};
+
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
 }
@@ -60,7 +89,7 @@ export function registerTestSimulatorDetailsRoutes(app: Express, deps: { require
         return ids.map(Number).filter(Number.isFinite);
       })));
 
-      const cards = cardIds.length ? rowsOf(await db.execute(sql`
+      const cards: DetailedCardRow[] = cardIds.length ? rowsOf(await db.execute(sql`
         select pc.id,pc.player_id as "playerId",pc.rarity::text as rarity,
           p.name,p.team,p.position::text as position,p.image_url as "imageUrl",p.photo,p.nationality,
           pgs.score::float as score,pgs.decisive_score::float as "decisiveScore",
@@ -71,17 +100,17 @@ export function registerTestSimulatorDetailsRoutes(app: Express, deps: { require
         where pc.id in (
           select value::int from jsonb_array_elements_text(${JSON.stringify(cardIds)}::jsonb)
         )
-      `)) : [];
-      const cardMap = new Map(cards.map((card: any) => [Number(card.id), card]));
+      `)) as DetailedCardRow[] : [];
+      const cardMap = new Map<number, DetailedCardRow>(cards.map((card) => [Number(card.id), card]));
 
       const enrichedRankings = rankings.map((row: any) => {
         const stored = row.pointsMeta && typeof row.pointsMeta === "object" ? row.pointsMeta : {};
-        const storedCards = Array.isArray(stored.cardBreakdown) ? stored.cardBreakdown : [];
-        const storedMap = new Map(storedCards.map((card: any) => [Number(card.id), card]));
+        const storedCards: StoredCardBreakdown[] = Array.isArray(stored.cardBreakdown) ? stored.cardBreakdown : [];
+        const storedMap = new Map<number, StoredCardBreakdown>(storedCards.map((card) => [Number(card.id), card]));
         const ids = Array.isArray(row.cardIds) ? row.cardIds.map(Number) : [];
         const cardBreakdown = ids.map((cardId: number) => {
-          const live = cardMap.get(cardId) || {};
-          const compact = storedMap.get(cardId) || {};
+          const live: DetailedCardRow = cardMap.get(cardId) || {} as DetailedCardRow;
+          const compact: StoredCardBreakdown = storedMap.get(cardId) || {};
           return {
             id: cardId,
             playerId: Number(live.playerId || compact.playerId || 0),
