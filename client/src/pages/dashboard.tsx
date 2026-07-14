@@ -22,7 +22,7 @@ function money(value: unknown) {
 }
 
 function rarityCounts(cards: PlayerCardWithPlayer[] | undefined) {
-  const counts: Record<string, number> = { common: 0, rare: 0, unique: 0, legendary: 0 };
+  const counts: Record<string, number> = { common: 0, rare: 0, unique: 0, epic: 0, legendary: 0 };
   for (const card of cards || []) {
     const rarity = String(card.rarity || "common").toLowerCase();
     counts[rarity] = (counts[rarity] || 0) + 1;
@@ -44,6 +44,7 @@ export default function DashboardPage() {
   const openTournaments = (competitions || []).filter((comp) => comp.status === "open");
   const listedCards = (cards || []).filter((card) => card.forSale);
   const counts = rarityCounts(cards);
+  const snapshotTotal = counts.common + counts.rare + counts.unique + counts.epic + counts.legendary;
   const lineupCards = lineup?.cards || [];
   const lineupScore = lineupCards.reduce((sum, card) => { const scores = Array.isArray(card.last5Scores) ? card.last5Scores as number[] : []; return sum + Number(scores[scores.length - 1] || 0); }, 0);
   const walletBalance = Number(wallet?.balance || 0);
@@ -105,7 +106,7 @@ export default function DashboardPage() {
         </PremiumPanel>
         <div className="space-y-4">
           <PremiumPanel><div className="mb-4 flex items-center gap-2"><Trophy className="h-5 w-5 text-yellow-300" /><h2 className="font-bold text-white">Active Tournaments</h2></div>{activeTournaments.length ? <div className="space-y-2">{activeTournaments.slice(0, 4).map((comp) => <CompactRow key={comp.id} title={comp.name} meta={`${String(comp.tier || "common").toUpperCase()} • ${money(comp.entryFee)}`} badge={comp.status} />)}</div> : <EmptyState title="No active entries" body="Join a public tournament or enter a private PIN cup." action="Find Tournaments" href="/competitions" compact />}</PremiumPanel>
-          <PremiumPanel><div className="mb-4 flex items-center gap-2"><LayoutGrid className="h-5 w-5 text-cyan-300" /><h2 className="font-bold text-white">Collection Snapshot</h2></div><div className="grid grid-cols-2 gap-2"><RarityPill label="Common" value={counts.common || 0} /><RarityPill label="Rare" value={counts.rare || 0} /><RarityPill label="Unique" value={counts.unique || 0} /><RarityPill label="Legendary" value={counts.legendary || 0} /></div></PremiumPanel>
+          <PremiumPanel><div className="mb-4 flex items-center justify-between gap-3"><div className="flex items-center gap-2"><LayoutGrid className="h-5 w-5 text-cyan-300" /><h2 className="font-bold text-white">Collection Snapshot</h2></div><Badge variant="outline" className="border-white/15 text-white/65">Total {snapshotTotal}</Badge></div><div className="grid grid-cols-2 gap-2 sm:grid-cols-3"><RarityPill label="Common" value={counts.common || 0} /><RarityPill label="Rare" value={counts.rare || 0} /><RarityPill label="Unique" value={counts.unique || 0} /><RarityPill label="Epic" value={counts.epic || 0} /><RarityPill label="Legendary" value={counts.legendary || 0} /><RarityPill label="All Cards" value={snapshotTotal} /></div></PremiumPanel>
         </div>
       </section>
 
