@@ -12,6 +12,16 @@ const groups = [
     ],
   },
   {
+    title: "Trust Centre",
+    links: [
+      ["System Status", "/trust/status"],
+      ["Security", "/trust/security"],
+      ["Payment Readiness", "/trust/payments"],
+      ["Release Notes", "/trust/releases"],
+      ["Roadmap", "/trust/roadmap"],
+    ],
+  },
+  {
     title: "Legal",
     links: [
       ["Terms of Service", "/legal/terms"],
@@ -36,7 +46,7 @@ const groups = [
 export default function SiteFooter() {
   return (
     <footer className="relative z-10 border-t border-white/10 bg-[#03050d]/95 px-4 py-10 text-white sm:px-6">
-      <div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[1.25fr_2fr]">
+      <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1.1fr_2.4fr]">
         <div>
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan-300/25 bg-cyan-400/10 text-cyan-200">
@@ -55,7 +65,7 @@ export default function SiteFooter() {
           </a>
         </div>
 
-        <div className="grid grid-cols-2 gap-7 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-7 sm:grid-cols-4">
           {groups.map((group) => (
             <div key={group.title}>
               <div className="mb-3 text-xs font-black uppercase tracking-[.18em] text-white/70">{group.title}</div>
