@@ -25,6 +25,7 @@ type Competition = {
   submissionClosesAt?: string;
   entryOpen?: boolean;
   tier?: string;
+  gameWeek?: number;
 };
 
 type CompetitionEntry = {
@@ -38,9 +39,32 @@ type RewardItem = {
   id?: number | string;
   claimed?: boolean;
   prizeAmount?: number;
-  prizeCard?: unknown;
+  prizeCardId?: number;
+  prizeCard?: any;
+  prizeTitle?: string;
+  prizeName?: string;
+  prizeDescription?: string;
   competitionName?: string;
+  competitionId?: number;
+  competition?: { id?: number; name?: string; tier?: string; gameWeek?: number };
   rarity?: string;
+  rank?: number;
+  totalScore?: number;
+  claimStatus?: string;
+};
+
+type VaultItem = {
+  id: string;
+  rarity: string;
+  title: string;
+  value: number;
+  tierIndex: number;
+  currentPrize?: boolean;
+  unlocked?: boolean;
+};
+
+type VaultPayload = {
+  items?: VaultItem[];
 };
 
 type RetentionSummary = {
@@ -99,15 +123,78 @@ function normalizeList<T>(value: unknown, fallbackKey?: string): T[] {
   return [];
 }
 
+function rewardRarity(reward: RewardItem) {
+  return String(reward.rarity || reward.competition?.tier || "").toLowerCase();
+}
+
+function rewardCompetitionName(reward: RewardItem) {
+  return reward.competitionName || reward.competition?.name || "Fantasy Arena tournament";
+}
+
+function resolveVaultPrize(reward: RewardItem, vaultItems: VaultItem[]) {
+  const explicitTitle = String(reward.prizeTitle || reward.prizeName || reward.prizeDescription || "").trim();
+  const rarity = rewardRarity(reward);
+  const amount = Number(reward.prizeAmount || 0);
+
+  if (explicitTitle) return { title: explicitTitle, value: amount, rarity };
+
+  const candidates = vaultItems.filter((item) => !rarity || item.rarity === rarity);
+  const exactValue = amount > 0 ? candidates.find((item) => Number(item.value) === amount) : undefined;
+  const current = candidates.find((item) => item.currentPrize);
+  const highestUnlocked = [...candidates].filter((item) => item.unlocked).sort((a, b) => b.tierIndex - a.tierIndex)[0];
+  const linked = exactValue || current || highestUnlocked;
+
+  if (linked) return { title: linked.title, value: Number(linked.value || amount), rarity: linked.rarity };
+  if (amount > 0) return { title: `N$${amount.toLocaleString()} prize`, value: amount, rarity };
+  return null;
+}
+
+function exactRewardNotification(reward: RewardItem, vaultItems: VaultItem[], index: number): SyntheticNotification | null {
+  if (reward.claimed) return null;
+
+  const competitionName = rewardCompetitionName(reward);
+  const key = reward.id || reward.competitionId || reward.competition?.id || `${competitionName}-${index}`;
+  const rank = Number(reward.rank || 0);
+  const score = Number(reward.totalScore || 0);
+  const gameWeek = Number(reward.competition?.gameWeek || 0);
+  const card = reward.prizeCard;
+
+  if (card || reward.prizeCardId) {
+    const playerName = String(card?.player?.name || card?.playerName || "").trim();
+    const rarity = String(card?.rarity || rewardRarity(reward) || "").toLowerCase();
+    const itemName = playerName ? `${playerName}${rarity ? ` ${rarity}` : ""} card` : `${rarity || "player"} card`;
+    return {
+      key: `reward-card-${key}-${reward.prizeCardId || card?.id || itemName}`,
+      title: `Item won: ${itemName}`,
+      message: `${rank ? `You finished #${rank} in ` : "From "}${competitionName}${score ? ` with ${score.toFixed(1)} points` : ""} and received ${itemName}. Open Collection to view it.`,
+      priority: "high",
+    };
+  }
+
+  const prize = resolveVaultPrize(reward, vaultItems);
+  if (!prize) return null;
+  const status = String(reward.claimStatus || "ready to claim").replace(/_/g, " ");
+  const context = [rank ? `#${rank}` : "", gameWeek ? `GW${gameWeek}` : ""].filter(Boolean).join(" • ");
+
+  return {
+    key: `reward-vault-${key}-${prize.title}-${prize.value}`,
+    title: `You won: ${prize.title}`,
+    message: `${competitionName}${context ? ` • ${context}` : ""}${score ? ` • ${score.toFixed(1)} points` : ""}. Your ${prize.rarity ? `${prize.rarity} ` : ""}Prize Vault item is ${status}${prize.value ? ` (value N$${prize.value.toLocaleString()})` : ""}.`,
+    priority: "high",
+  };
+}
+
 function buildSyntheticNotifications({
   competitions,
   entries,
   rewards,
+  vaultItems,
   retention,
 }: {
   competitions: Competition[];
   entries: CompetitionEntry[];
   rewards: RewardItem[];
+  vaultItems: VaultItem[];
   retention?: RetentionSummary;
 }): SyntheticNotification[] {
   const items: SyntheticNotification[] = [];
@@ -161,16 +248,10 @@ function buildSyntheticNotifications({
     }
   });
 
-  rewards
-    .filter((reward) => !reward.claimed && (Number(reward.prizeAmount || 0) > 0 || reward.prizeCard))
-    .forEach((reward, index) => {
-      items.push({
-        key: `reward-ready-${reward.id || reward.competitionName || index}`,
-        title: "Reward ready",
-        message: `${reward.competitionName || "Tournament"} reward is ready to claim.`,
-        priority: "high",
-      });
-    });
+  rewards.forEach((reward, index) => {
+    const notification = exactRewardNotification(reward, vaultItems, index);
+    if (notification) items.unshift(notification);
+  });
 
   retention?.watchlist?.alerts?.slice(0, 5).forEach((alert) => {
     items.push({
@@ -258,6 +339,17 @@ export default function FloatingEventNotifications() {
     refetchInterval: 30000,
   });
 
+  const { data: vault } = useQuery<VaultPayload>({
+    queryKey: ["/api/prize-vault"],
+    queryFn: async () => {
+      const res = await fetch("/api/prize-vault", { credentials: "include" });
+      if (!res.ok) return { items: [] };
+      return res.json();
+    },
+    staleTime: 60000,
+    refetchInterval: 60000,
+  });
+
   const { data: retention } = useQuery<RetentionSummary>({
     queryKey: ["/api/retention/summary"],
     queryFn: async () => {
@@ -295,6 +387,7 @@ export default function FloatingEventNotifications() {
       competitions: competitionsRaw || [],
       entries: entriesRaw || [],
       rewards: rewardsRaw || [],
+      vaultItems: Array.isArray(vault?.items) ? vault.items : [],
       retention,
     });
 
@@ -309,7 +402,7 @@ export default function FloatingEventNotifications() {
 
     seenSyntheticRef.current = seen;
     writeSeenKeys(seen);
-  }, [competitionsRaw, entriesRaw, rewardsRaw, retention, toast]);
+  }, [competitionsRaw, entriesRaw, rewardsRaw, vault, retention, toast]);
 
   return null;
 }
