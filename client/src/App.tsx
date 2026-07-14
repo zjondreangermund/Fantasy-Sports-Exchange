@@ -149,9 +149,9 @@ function AuthenticatedApp() {
             <ThemeToggle />
           </header>
           {!isInfoRoute && <LivePulseDock />}
-          <main className={`app-scroll-root relative z-10 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-auto pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0 ${isPlayRoute ? "play-route-scroll" : ""}`} data-app-scroll-root>
-            <div className="min-h-full flex-1 pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0"><AuthenticatedRouter /></div>
-            <SiteFooter />
+          <main className={`app-scroll-root relative z-10 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-auto ${isInfoRoute ? "pb-0" : "pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0"} ${isPlayRoute ? "play-route-scroll" : ""}`} data-app-scroll-root>
+            <div className={`min-h-full flex-1 ${isInfoRoute ? "pb-0" : "pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0"}`}><AuthenticatedRouter /></div>
+            {isInfoRoute && <SiteFooter />}
           </main>
           {!isInfoRoute && <MatchdayQuickDock />}
           {!isInfoRoute && <MobileNavDock />}
