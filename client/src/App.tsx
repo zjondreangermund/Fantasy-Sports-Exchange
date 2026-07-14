@@ -60,13 +60,6 @@ function RouteFallback() {
   return <div className="flex flex-1 items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
 }
 
-function PublicInformationRoutes() {
-  return <>
-    {legalInfoPaths.map((path) => <Route key={path} path={path} component={LegalCentrePage} />)}
-    {trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />)}
-  </>;
-}
-
 function AuthenticatedRouter() {
   const { data: onboarding, isLoading } = useQuery<{ completed: boolean }>({ queryKey: ["/api/onboarding/status"] });
 
@@ -76,7 +69,8 @@ function AuthenticatedRouter() {
     return (
       <React.Suspense fallback={<RouteFallback />}>
         <Switch>
-          <PublicInformationRoutes />
+          {legalInfoPaths.map((path) => <Route key={path} path={path} component={LegalCentrePage} />)}
+          {trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />)}
           <Route path="/onboarding" component={OnboardingPage} />
           <Route path="/onboarding-packs" component={OnboardingPacksScene} />
           <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
@@ -90,7 +84,8 @@ function AuthenticatedRouter() {
   return (
     <React.Suspense fallback={<RouteFallback />}>
       <Switch>
-        <PublicInformationRoutes />
+        {legalInfoPaths.map((path) => <Route key={path} path={path} component={LegalCentrePage} />)}
+        {trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />)}
         <Route path="/" component={DashboardPage} />
         <Route path="/dashboard" component={DashboardPage} />
         <Route path="/analytics" component={AnalyticsPage} />
@@ -167,7 +162,8 @@ function PublicRouter() {
   return (
     <React.Suspense fallback={<RouteFallback />}>
       <Switch>
-        <PublicInformationRoutes />
+        {legalInfoPaths.map((path) => <Route key={path} path={path} component={LegalCentrePage} />)}
+        {trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />)}
         <Route component={LandingPage} />
       </Switch>
     </React.Suspense>
