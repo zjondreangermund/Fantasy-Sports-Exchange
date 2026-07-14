@@ -25,6 +25,7 @@ import NotFound from "./pages/not-found";
 
 const LandingPage = React.lazy(() => import("./pages/landing"));
 const LegalCentrePage = React.lazy(() => import("./pages/legal-centre"));
+const TrustCentrePage = React.lazy(() => import("./pages/trust-centre"));
 const OnboardingPage = React.lazy(() => import("./pages/onboarding"));
 const OnboardingPacksScene = React.lazy(() => import("./pages/onboarding-packs"));
 const OnboardingTunnelPage = React.lazy(() => import("./pages/onboarding-tunnel"));
@@ -47,14 +48,23 @@ const AdminSeasonSimulatorPage = React.lazy(() => import("./pages/admin-season-s
 const AdminLiveDataPage = React.lazy(() => import("./pages/admin-live-data"));
 const CardLabPage = React.lazy(() => import("./pages/card-lab"));
 
-const publicInfoPaths = [
+const legalInfoPaths = [
   "/about", "/contact", "/help", "/faq",
   "/legal/terms", "/legal/privacy", "/legal/aml-kyc", "/legal/cookies", "/legal/refunds",
   "/legal/responsible-play", "/legal/fair-play", "/legal/marketplace", "/legal/prize-vault", "/legal/scoring",
 ];
+const trustInfoPaths = ["/trust/status", "/trust/security", "/trust/payments", "/trust/releases", "/trust/roadmap"];
+const publicInfoPaths = [...legalInfoPaths, ...trustInfoPaths];
 
 function RouteFallback() {
   return <div className="flex flex-1 items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
+}
+
+function PublicInformationRoutes() {
+  return <>
+    {legalInfoPaths.map((path) => <Route key={path} path={path} component={LegalCentrePage} />)}
+    {trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />)}
+  </>;
 }
 
 function AuthenticatedRouter() {
@@ -66,7 +76,7 @@ function AuthenticatedRouter() {
     return (
       <React.Suspense fallback={<RouteFallback />}>
         <Switch>
-          {publicInfoPaths.map((path) => <Route key={path} path={path} component={LegalCentrePage} />)}
+          <PublicInformationRoutes />
           <Route path="/onboarding" component={OnboardingPage} />
           <Route path="/onboarding-packs" component={OnboardingPacksScene} />
           <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
@@ -80,7 +90,7 @@ function AuthenticatedRouter() {
   return (
     <React.Suspense fallback={<RouteFallback />}>
       <Switch>
-        {publicInfoPaths.map((path) => <Route key={path} path={path} component={LegalCentrePage} />)}
+        <PublicInformationRoutes />
         <Route path="/" component={DashboardPage} />
         <Route path="/dashboard" component={DashboardPage} />
         <Route path="/analytics" component={AnalyticsPage} />
@@ -157,7 +167,7 @@ function PublicRouter() {
   return (
     <React.Suspense fallback={<RouteFallback />}>
       <Switch>
-        {publicInfoPaths.map((path) => <Route key={path} path={path} component={LegalCentrePage} />)}
+        <PublicInformationRoutes />
         <Route component={LandingPage} />
       </Switch>
     </React.Suspense>
