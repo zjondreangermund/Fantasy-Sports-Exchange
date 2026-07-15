@@ -81,10 +81,10 @@ const palettes: Record<string, Palette> = {
 };
 
 const approvedRareArtwork: Array<{ pattern: RegExp; src: string }> = [
-  { pattern: /shopping\s+voucher/i, src: "/prizes/rare/rare-shopping-voucher.webp" },
-  { pattern: /gaming\s+headset|headset\s+pro/i, src: "/prizes/rare/rare-gaming-headset-pro.webp" },
-  { pattern: /premium\s+smart\s*watch|smart\s*watch/i, src: "/prizes/rare/rare-premium-smart-watch.webp" },
-  { pattern: /jbl\s+speaker|speaker\s+jbl/i, src: "/prizes/rare/rare-jbl-speaker.webp" },
+  { pattern: /shopping\s+voucher/i, src: "/prizes/rare/rare-shopping-voucher.png" },
+  { pattern: /gaming\s+headset|headset\s+pro/i, src: "/prizes/rare/rare-gaming-headset-pro.png" },
+  { pattern: /premium\s+smart\s*watch|smart\s*watch/i, src: "/prizes/rare/rare-premium-smart-watch.png" },
+  { pattern: /jbl\s+speaker|speaker\s+jbl/i, src: "/prizes/rare/rare-jbl-speaker.png" },
 ];
 
 function approvedArtworkFor(title: string, rarity: string) {
