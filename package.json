@@ -9,8 +9,8 @@
   "scripts": {
     "dev": "NODE_ENV=development npx tsx server/index.ts",
     "build": "npm run build:client && npm run build:server",
-    "build:client": "node scripts/materialize-prize-artwork.mjs && vite build",
-    "build:web": "node scripts/materialize-prize-artwork.mjs && CAPACITOR_BUILD=true vite build",
+    "build:client": "vite build",
+    "build:web": "CAPACITOR_BUILD=true vite build",
     "build:server": "tsc --project tsconfig.server.json",
     "start": "node dist/server/server/index.js",
     "check": "tsc",
