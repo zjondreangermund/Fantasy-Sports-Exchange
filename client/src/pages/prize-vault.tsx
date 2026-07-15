@@ -132,7 +132,7 @@ export default function PrizeVaultPage() {
           <div className="relative rounded-[1.8rem] border border-white/10 p-3 sm:p-5" style={{ background: `radial-gradient(circle at 50% 100%,${theme[rarity].glow},transparent 58%),rgba(0,0,0,.28)` }}>
             <button onClick={() => scroll(-1)} className="absolute left-3 top-1/2 z-30 hidden -translate-y-1/2 rounded-full border border-white/15 bg-black/80 p-3 xl:block"><ArrowLeft className="h-5 w-5" /></button>
             <div ref={rail} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:flex xl:snap-x xl:overflow-x-auto xl:px-14 xl:pb-8 xl:pt-7">
-              {cards.map((item, index) => <PrizeSlab key={item.id} item={item} index={index} selected={selected?.id === item.id} onSelect={() => setSelectedId(item.id)} />)}
+              {cards.map((item, index) => <PrizeSlab key={item.id} item={item} index={index} total={cards.length} selected={selected?.id === item.id} onSelect={() => setSelectedId(item.id)} />)}
               {!cards.length && <Card className="border-white/10 bg-white/[.04] p-8 text-center text-white/45 sm:col-span-2">{isLoading ? "Loading vault…" : "No prizes available."}</Card>}
             </div>
             <button onClick={() => scroll(1)} className="absolute right-3 top-1/2 z-30 hidden -translate-y-1/2 rounded-full border border-white/15 bg-black/80 p-3 xl:block"><ArrowRight className="h-5 w-5" /></button>
@@ -176,22 +176,45 @@ function FeaturedPrize({ item, entryFee }: { item: VaultItem; entryFee: number }
   </section>;
 }
 
-function PrizeSlab({ item, index, selected, onSelect }: { item: VaultItem; index: number; selected: boolean; onSelect: () => void }) {
+function PrizeSlab({ item, index, total, selected, onSelect }: { item: VaultItem; index: number; total: number; selected: boolean; onSelect: () => void }) {
   const t = theme[item.rarity] || theme.common;
   const progress = pct(item);
   const open = Boolean(item.currentPrize || item.unlocked);
-  const desktopTilt = index % 2 ? "rotateY(-3deg) rotateZ(.2deg)" : "rotateY(3deg) rotateZ(-.2deg)";
+  const desktopTilt = index % 2 ? "rotateY(-2deg)" : "rotateY(2deg)";
   return (
-    <button onClick={onSelect} className="group relative mx-auto w-full max-w-[330px] text-left [perspective:1400px] xl:min-w-[270px] xl:max-w-[270px] xl:snap-start">
-      <div className="relative transition duration-500 xl:group-hover:-translate-y-3" style={{ transform: selected ? "translateY(-8px) rotateY(0deg)" : undefined }}>
-        <div className="absolute bottom-[-11px] left-[10px] right-[-12px] top-[12px] hidden rounded-[1.75rem] xl:block" style={{ background: `linear-gradient(90deg,${t.panel},#000)`, boxShadow: "16px 20px 38px rgba(0,0,0,.66)" }} />
-        <div className="relative rounded-[1.75rem] p-[3px]" style={{ transform: selected ? "none" : desktopTilt, background: `linear-gradient(135deg,white 0%,${t.edge} 14%,${t.accent} 50%,#05070d 84%)`, boxShadow: `0 0 34px ${t.glow},0 24px 44px rgba(0,0,0,.62)` }}>
-          <div className="relative min-h-[430px] overflow-hidden rounded-[1.6rem] border border-white/15 p-3.5" style={{ background: `linear-gradient(160deg,rgba(255,255,255,.10),transparent 26%),${t.panel}` }}>
-            <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-white/10 to-transparent" />
-            <div className="relative z-10 flex items-center justify-between"><span className="rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[9px] font-black">#{item.tierIndex}</span><span className="text-[9px] font-black uppercase tracking-[.2em]" style={{ color: t.accent }}>{item.rarity}</span></div>
-            <div className={`relative z-10 mt-3 h-[230px] overflow-hidden rounded-[1.25rem] border border-white/10 ${open ? "" : "brightness-[.62] saturate-[.72]"}`}><PrizeArt item={item} /></div>
-            <div className="relative z-10 mt-3"><h3 className="line-clamp-2 min-h-[44px] text-base font-black leading-tight">{item.title}</h3><div className="mt-1 flex items-center justify-between text-[10px] text-white/45"><span>{money(item.value)}</span><span>{item.currentEntries}/{item.targetEntries}</span></div></div>
-            <div className="relative z-10 mt-3"><div className="h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${progress}%`, background: open ? "#34d399" : t.accent, boxShadow: `0 0 16px ${t.glow}` }} /></div><div className="mt-2 flex justify-between text-[10px] font-black"><span>{progress}% funded</span><span style={{ color: open ? "#6ee7b7" : t.accent }}>{open ? "UNLOCKED" : "LOCKED"}</span></div></div>
+    <button onClick={onSelect} className="group relative mx-auto w-full max-w-[340px] text-left [perspective:1500px] xl:min-w-[286px] xl:max-w-[286px] xl:snap-start">
+      <div className="relative transition duration-500 xl:group-hover:-translate-y-3" style={{ transform: selected ? "translateY(-10px) rotateY(0deg)" : undefined }}>
+        <div className="relative rounded-[1.75rem] p-[2px]" style={{ transform: selected ? "none" : desktopTilt, background: `linear-gradient(135deg,rgba(255,255,255,.96),${t.edge} 18%,${t.accent} 52%,rgba(255,255,255,.55) 72%,#05070d 100%)`, boxShadow: `0 0 28px ${t.glow},0 26px 50px rgba(0,0,0,.68)` }}>
+          <div className="relative min-h-[438px] overflow-hidden rounded-[1.62rem] border border-white/25 bg-white/[.055] p-3 backdrop-blur-xl">
+            <div className="pointer-events-none absolute inset-[5px] rounded-[1.4rem] border border-white/15" />
+            <div className="pointer-events-none absolute inset-x-6 top-0 h-20 rounded-b-[50%] bg-gradient-to-b from-white/30 via-white/5 to-transparent blur-[2px]" />
+            <div className="pointer-events-none absolute -left-16 top-8 h-56 w-28 rotate-[18deg] bg-gradient-to-r from-transparent via-white/22 to-transparent blur-xl transition duration-700 group-hover:left-[78%]" />
+            <div className="relative z-10 flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-black/45 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[.15em]" style={{ color: t.accent }}><Sparkles className="h-3 w-3" />{item.rarity} prize</span>
+              <span className="rounded-xl border border-white/15 bg-black/45 px-2.5 py-1.5 text-[9px] font-black">#{String(item.tierIndex).padStart(2, "0")} OF {String(total).padStart(2, "0")}</span>
+            </div>
+
+            <div className="relative z-10 mt-3 overflow-hidden rounded-[1.3rem] border border-white/15 bg-black/30 p-2.5">
+              <div className={`relative h-[245px] overflow-hidden rounded-[1.05rem] ${open ? "" : "brightness-[.66] saturate-[.78]"}`}><PrizeArt item={item} /></div>
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,.24),transparent_24%,transparent_64%,rgba(255,255,255,.1))]" />
+            </div>
+
+            <div className="relative z-10 -mt-1 flex justify-center">
+              <div className="h-3 w-[78%] rounded-[50%] blur-md" style={{ background: t.glow }} />
+            </div>
+            <div className="relative z-10 mx-auto -mt-2 h-7 w-[78%] rounded-[50%] border border-white/10 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,.16),rgba(0,0,0,.82)_64%)] shadow-[0_12px_22px_rgba(0,0,0,.75)]" />
+
+            <div className="relative z-10 mt-2 rounded-[1.15rem] border border-white/12 bg-black/45 px-3 py-3 text-center backdrop-blur-md">
+              <div className="text-[9px] font-black uppercase tracking-[.18em]" style={{ color: t.accent }}>{item.rarity} prize</div>
+              <h3 className="mt-1 line-clamp-2 min-h-[42px] text-[15px] font-black leading-tight">{item.title}</h3>
+              <div className="mt-1 text-[10px] text-white/45">Approx. value {money(item.value)}</div>
+            </div>
+
+            <div className="relative z-10 mt-3">
+              <div className="h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${progress}%`, background: open ? "#34d399" : t.accent, boxShadow: `0 0 16px ${open ? "rgba(52,211,153,.55)" : t.glow}` }} /></div>
+              <div className="mt-2 flex justify-between text-[10px] font-black"><span>{item.currentEntries}/{item.targetEntries} entries</span><span style={{ color: open ? "#6ee7b7" : t.accent }}>{open ? "UNLOCKED" : `${progress}%`}</span></div>
+            </div>
+
             {!open && <CompactLock />}
             {open && <div className="absolute inset-x-4 bottom-4 z-30 flex items-center justify-center gap-1.5 rounded-lg border border-emerald-300/30 bg-emerald-400/15 py-1.5 text-[10px] font-black text-emerald-100"><CheckCircle2 className="h-3.5 w-3.5" />UNLOCKED</div>}
           </div>
