@@ -22,6 +22,16 @@ function fmtDate(value: unknown) {
   return Number.isFinite(date.getTime()) ? date.toLocaleString() : "Not yet";
 }
 
+function numberValue(value: unknown) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function signed(value: unknown) {
+  const number = numberValue(value);
+  return `${number > 0 ? "+" : ""}${Number.isInteger(number) ? number : number.toFixed(1)}`;
+}
+
 const syncJobs = [
   { key: "fixtures", label: "Sync Fixtures", description: "Imports upcoming and recent Premier League fixtures." },
   { key: "live", label: "Sync Live Matches", description: "Checks live matches only when a stored fixture is inside a match window." },
@@ -73,6 +83,7 @@ export default function AdminLiveDataPage() {
   const cap = Number(usage.cap || 90);
   const remaining = Number(usage.remaining ?? Math.max(0, cap - used));
   const usagePercent = cap ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+  const configured = Boolean(summary.configured ?? status.data?.configured);
 
   return (
     <main className="min-h-full overflow-x-hidden bg-slate-950 px-3 pb-32 pt-4 text-white sm:px-6 lg:px-8">
@@ -89,7 +100,7 @@ export default function AdminLiveDataPage() {
         </section>
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Metric label="Configured" value={summary.configured ?? status.data?.configured ? "Yes" : "No"} good={Boolean(summary.configured ?? status.data?.configured)} />
+          <Metric label="Configured" value={configured ? "Yes" : "No"} good={configured} />
           <Metric label="Connected" value={status.data?.connected ? "Online" : "Not checked"} good={Boolean(status.data?.connected)} />
           <Metric label="League / Season" value={`${summary.leagueId || status.data?.leagueId || 39} / ${summary.season || season}`} good />
           <Metric label="Used today" value={`${used}/${cap}`} good={remaining > 10} />
@@ -145,10 +156,38 @@ export default function AdminLiveDataPage() {
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{fixtureRows.map((row: any) => { const id = Number(row?.fixture?.id || 0); const home = row?.teams?.home; const away = row?.teams?.away; const active = selectedFixtureId === id; return <button key={id} onClick={() => setSelectedFixtureId(id)} className={`rounded-2xl border p-4 text-left transition ${active ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25 hover:border-white/25"}`}><div className="flex items-center justify-between gap-2"><Badge variant="outline">{row?.fixture?.status?.short || "NS"}</Badge><span className="text-[10px] text-white/40">Fixture #{id}</span></div><div className="mt-3 font-black">{home?.name || "Home"} vs {away?.name || "Away"}</div><div className="mt-1 text-xs text-white/45">{fmtDate(row?.fixture?.date)}</div><div className="mt-1 text-xs text-white/35">{row?.league?.round || "Round unavailable"}</div></button>; })}</div>
         </Card>
 
-        {selectedFixtureId && <Card className="min-w-0 border-white/10 bg-white/[.06] p-4 text-white sm:p-6"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex items-center gap-2 text-xl font-black"><Activity className="h-5 w-5 text-emerald-200" />Player-stat preview</div><p className="mt-1 text-sm text-white/45">{selectedFixture?.teams?.home?.name || "Home"} vs {selectedFixture?.teams?.away?.name || "Away"}</p></div><Badge className={players.data?.cached ? "bg-emerald-500/20 text-emerald-100" : "bg-cyan-500/20 text-cyan-100"}>{players.data?.cached ? "Cached stats" : "Fresh stats"}</Badge></div>{players.isFetching ? <div className="mt-5 p-8 text-center text-white/45">Loading player statistics…</div> : <div className="mt-5 grid gap-4 xl:grid-cols-2">{teams.map((team: any) => <section key={team?.team?.id || team?.team?.name} className="min-w-0 rounded-2xl border border-white/10 bg-black/25 p-4"><div className="flex items-center gap-3"><img src={team?.team?.logo || "/players/fallback.svg"} alt="" className="h-10 w-10 object-contain" /><div><div className="font-black">{team?.team?.name || "Team"}</div><div className="text-xs text-white/40">{asArray(team?.players).length} player records</div></div></div><div className="mt-4 space-y-2">{asArray(team?.players).map((row: any) => { const s = row?.statistic || {}; const p = row?.player || {}; const preview = row?.fantasyArenaPreview || {}; return <details key={p.id} className="rounded-xl border border-white/10 bg-white/[.03] p-3"><summary className="cursor-pointer list-none"><div className="flex items-center justify-between gap-3"><div className="min-w-0"><div className="truncate font-bold">{p.name || `Player ${p.id}`}</div><div className="text-xs text-white/40">{s?.games?.position || "-"} • {s?.games?.minutes || 0} min</div></div><div className="text-lg font-black text-cyan-200">{Number(preview.score || 0).toFixed(1)}</div></div></summary></details>; })}</div></section>)}</div>}</Card>}
+        {selectedFixtureId && <Card className="min-w-0 border-white/10 bg-white/[.06] p-4 text-white sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex items-center gap-2 text-xl font-black"><Activity className="h-5 w-5 text-emerald-200" />Player scoring preview</div><p className="mt-1 text-sm text-white/45">{selectedFixture?.teams?.home?.name || "Home"} vs {selectedFixture?.teams?.away?.name || "Away"} • The large number is the calculated Fantasy Arena score, not the provider rating.</p></div><Badge className={players.data?.cached ? "bg-emerald-500/20 text-emerald-100" : "bg-cyan-500/20 text-cyan-100"}>{players.data?.cached ? "Cached stats" : "Fresh stats"}</Badge></div>
+          {players.isFetching ? <div className="mt-5 p-8 text-center text-white/45">Loading player statistics…</div> : <div className="mt-5 grid gap-4 xl:grid-cols-2">{teams.map((team: any) => <section key={team?.team?.id || team?.team?.name} className="min-w-0 rounded-2xl border border-white/10 bg-black/25 p-4"><div className="flex items-center gap-3"><img src={team?.team?.logo || "/players/fallback.svg"} alt="" className="h-10 w-10 object-contain" /><div><div className="font-black">{team?.team?.name || "Team"}</div><div className="text-xs text-white/40">{asArray(team?.players).length} player records</div></div></div><div className="mt-4 space-y-2">{asArray(team?.players).map((row: any) => <PlayerScoreDetails key={row?.player?.id} row={row} />)}</div></section>)}</div>}
+        </Card>}
       </div>
     </main>
   );
+}
+
+function PlayerScoreDetails({ row }: { row: any }) {
+  const statistic = row?.statistic || {};
+  const player = row?.player || {};
+  const preview = row?.fantasyArenaPreview || {};
+  const decisive = preview?.breakdown?.decisive || {};
+  const allAround = preview?.breakdown?.allAround || {};
+  const providerRating = statistic?.games?.rating;
+  const score = numberValue(preview.score);
+
+  return <details className="rounded-xl border border-white/10 bg-white/[.03] p-3 open:border-cyan-300/30 open:bg-cyan-300/[.04]">
+    <summary className="cursor-pointer list-none">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0"><div className="truncate font-bold">{player.name || `Player ${player.id}`}</div><div className="text-xs text-white/40">{statistic?.games?.position || "-"} • {statistic?.games?.minutes || 0} min • API rating {providerRating || "-"}</div></div>
+        <div className="text-right"><div className="text-lg font-black text-cyan-200">{score.toFixed(1)}</div><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/35">FA score</div></div>
+      </div>
+    </summary>
+    <div className="mt-3 grid grid-cols-3 gap-2"><ScoreTile label="Official score" value={preview.score} /><ScoreTile label="Decisive" value={preview.decisiveScore} /><ScoreTile label="All-around" value={preview.allAroundScore} /></div>
+    <div className="mt-3 text-[10px] font-black uppercase tracking-[.14em] text-white/35">Raw match statistics</div>
+    <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4"><RawStat label="Minutes" value={statistic?.games?.minutes} /><RawStat label="Goals" value={statistic?.goals?.total} /><RawStat label="Assists" value={statistic?.goals?.assists} /><RawStat label="Shots on target" value={statistic?.shots?.on} /><RawStat label="Key passes" value={statistic?.passes?.key} /><RawStat label="Tackles" value={statistic?.tackles?.total} /><RawStat label="Interceptions" value={statistic?.tackles?.interceptions} /><RawStat label="Duels won" value={statistic?.duels?.won} /><RawStat label="Saves" value={statistic?.goals?.saves} /><RawStat label="Yellow cards" value={statistic?.cards?.yellow} /><RawStat label="Red cards" value={statistic?.cards?.red} /><RawStat label="Penalty saves" value={statistic?.penalty?.saved} /></div>
+    <div className="mt-3 text-[10px] font-black uppercase tracking-[.14em] text-white/35">Fantasy Arena point contributions</div>
+    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3"><Contribution label="Appearance" value={decisive.appearance} /><Contribution label="Goals" value={decisive.goals} /><Contribution label="Assists" value={decisive.assists} /><Contribution label="Penalty saves" value={decisive.penaltySaves} /><Contribution label="Penalty misses" value={decisive.penaltyMisses} /><Contribution label="Red cards" value={decisive.redCards} /><Contribution label="Passing" value={allAround.passes} /><Contribution label="Key passes" value={allAround.keyPasses} /><Contribution label="Tackles" value={allAround.tackles} /><Contribution label="Interceptions" value={allAround.interceptions} /><Contribution label="Duels won" value={allAround.duelsWon} /><Contribution label="Shots on target" value={allAround.shotsOnTarget} /><Contribution label="Saves" value={allAround.saves} /><Contribution label="Yellow cards" value={allAround.yellowCards} /></div>
+    <p className="mt-3 text-xs leading-5 text-white/40">The provider rating is shown only as reference. Tournament rankings use the Fantasy Arena score calculated from the stored match statistics above.</p>
+  </details>;
 }
 
 function Metric({ label, value, good }: { label: string; value: any; good: boolean }) {
@@ -167,4 +206,17 @@ function StatusBadge({ status }: { status: string }) {
   const good = status === "success";
   const failed = status === "failed";
   return <Badge className={good ? "bg-emerald-500/20 text-emerald-100" : failed ? "bg-red-500/20 text-red-100" : "bg-amber-500/20 text-amber-100"}>{status || "unknown"}</Badge>;
+}
+
+function ScoreTile({ label, value }: { label: string; value: unknown }) {
+  return <div className="rounded-lg border border-cyan-300/15 bg-cyan-300/[.05] p-2"><div className="text-[9px] font-black uppercase tracking-[.1em] text-white/35">{label}</div><div className="mt-1 font-black text-cyan-100">{numberValue(value).toFixed(1)}</div></div>;
+}
+
+function RawStat({ label, value }: { label: string; value: unknown }) {
+  return <div className="rounded-lg border border-white/10 bg-black/25 p-2"><div className="text-[9px] font-black uppercase tracking-[.1em] text-white/30">{label}</div><div className="mt-1 font-black">{numberValue(value)}</div></div>;
+}
+
+function Contribution({ label, value }: { label: string; value: unknown }) {
+  const number = numberValue(value);
+  return <div className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-2 py-2 text-xs"><span className="text-white/45">{label}</span><b className={number < 0 ? "text-red-300" : number > 0 ? "text-emerald-300" : "text-white/35"}>{signed(number)}</b></div>;
 }
