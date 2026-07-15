@@ -80,9 +80,9 @@ export default function PrizeVaultPage() {
   const activeSummary = data?.summary?.[rarity];
   const entries = Number(activeSummary?.currentEntries ?? cards[0]?.currentEntries ?? 0);
   const unlocked = Number(activeSummary?.unlocked ?? cards.filter((item) => item.currentPrize || item.unlocked).length);
-  const activePrize = cards.filter((item) => item.currentPrize || item.unlocked).sort((a, b) => b.tierIndex - a.tierIndex)[0];
+  const activePrize = cards.filter((item) => item.currentPrize || item.unlocked).sort((a, b) => b.tierIndex - a.tierIndex)[0] || cards[0];
   const activeValue = Number(activePrize?.value || 0);
-  const scroll = (dir: number) => rail.current?.scrollBy({ left: dir * 900, behavior: "smooth" });
+  const scroll = (dir: number) => rail.current?.scrollBy({ left: dir * 760, behavior: "smooth" });
   const selectRarity = (key: string) => {
     setRarity(key);
     setSelectedId("");
@@ -91,13 +91,13 @@ export default function PrizeVaultPage() {
 
   return (
     <main className="min-h-full overflow-x-hidden bg-[#02040d] pb-[calc(10rem+env(safe-area-inset-bottom,0px))] text-white">
-      <div className="mx-auto max-w-[1600px] overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(109,40,217,.32),transparent_34%),linear-gradient(180deg,#080b20,#02040d)] sm:rounded-[2rem] sm:border sm:border-white/10">
+      <div className="mx-auto max-w-[1600px] overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(109,40,217,.24),transparent_34%),linear-gradient(180deg,#080b20,#02040d)] sm:rounded-[2rem] sm:border sm:border-white/10">
         <header className="border-b border-white/10 px-4 py-5 sm:px-7 sm:py-7">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[.28em] text-purple-200/70">Fantasy Arena 2026/27</div>
               <h1 className="mt-1 bg-gradient-to-r from-white via-cyan-300 to-fuchsia-400 bg-clip-text text-4xl font-black text-transparent sm:text-6xl">PRIZE VAULT</h1>
-              <p className="mt-2 max-w-2xl text-sm text-white/55">Premium real-world rewards with clean, high-resolution artwork. Every rarity has its own fully linked ladder, tournament and floor price.</p>
+              <p className="mt-2 max-w-2xl text-sm text-white/55">One linked prize ladder per rarity. Every entry, unlock target and prize value comes from the live Prize Vault data.</p>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <TopStat icon={Users} label={`${rarity} entries`} value={String(entries)} />
@@ -105,6 +105,7 @@ export default function PrizeVaultPage() {
               <TopStat icon={Trophy} label="Current value" value={money(activeValue)} />
             </div>
           </div>
+
           <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:overflow-x-auto">
             {rarities.map((key) => {
               const t = theme[key];
@@ -116,14 +117,21 @@ export default function PrizeVaultPage() {
           </div>
         </header>
 
+        {activePrize && <FeaturedPrize item={activePrize} entryFee={Number(activeSummary?.entryFee || floorPrices[rarity])} />}
+
         <section className="px-3 py-5 sm:px-7 sm:py-7">
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div><div className="text-xs font-black uppercase tracking-[.22em]" style={{ color: theme[rarity].accent }}>{rarity} prize ladder</div><h2 className="mt-1 text-2xl font-black sm:text-3xl">One chain of prizes. One winner prize.</h2><p className="mt-1 text-xs text-white/45">Showing only the {rarity} ladder: {entries} current-gameweek entries, floor price {money(activeSummary?.entryFee || floorPrices[rarity])}, and {unlocked} unlocked reward{unlocked === 1 ? "" : "s"}.</p></div>
+            <div>
+              <div className="text-xs font-black uppercase tracking-[.22em]" style={{ color: theme[rarity].accent }}>{rarity} prize ladder</div>
+              <h2 className="mt-1 text-2xl font-black sm:text-3xl">Browse every unlock level</h2>
+              <p className="mt-1 text-xs text-white/45">{entries} current-gameweek entries • floor {money(activeSummary?.entryFee || floorPrices[rarity])} • {unlocked} unlocked reward{unlocked === 1 ? "" : "s"}.</p>
+            </div>
             <Link href={`/competitions?rarity=${rarity}`}><Button className="w-full rounded-xl font-black text-white sm:w-auto" style={{ background: theme[rarity].button, boxShadow: `0 0 24px ${theme[rarity].glow}` }}><Trophy className="mr-2 h-4 w-4" />Enter {rarity} tournament</Button></Link>
           </div>
-          <div className="relative rounded-[1.8rem] border border-white/10 p-3 sm:p-5" style={{ background: `radial-gradient(circle at 50% 100%,${theme[rarity].glow},transparent 55%),rgba(0,0,0,.28)` }}>
+
+          <div className="relative rounded-[1.8rem] border border-white/10 p-3 sm:p-5" style={{ background: `radial-gradient(circle at 50% 100%,${theme[rarity].glow},transparent 58%),rgba(0,0,0,.28)` }}>
             <button onClick={() => scroll(-1)} className="absolute left-3 top-1/2 z-30 hidden -translate-y-1/2 rounded-full border border-white/15 bg-black/80 p-3 xl:block"><ArrowLeft className="h-5 w-5" /></button>
-            <div ref={rail} className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:flex xl:snap-x xl:overflow-x-auto xl:px-14 xl:pb-12 xl:pt-10">
+            <div ref={rail} className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:flex xl:snap-x xl:overflow-x-auto xl:px-14 xl:pb-8 xl:pt-7">
               {cards.map((item, index) => <PrizeSlab key={item.id} item={item} index={index} selected={selected?.id === item.id} onSelect={() => setSelectedId(item.id)} />)}
               {!cards.length && <Card className="border-white/10 bg-white/[.04] p-8 text-center text-white/45 sm:col-span-2">{isLoading ? "Loading vault…" : "No prizes available."}</Card>}
             </div>
@@ -144,24 +152,48 @@ export default function PrizeVaultPage() {
   );
 }
 
+function FeaturedPrize({ item, entryFee }: { item: VaultItem; entryFee: number }) {
+  const t = theme[item.rarity] || theme.common;
+  const progress = pct(item);
+  const remaining = Math.max(0, Number(item.targetEntries || 0) - Number(item.currentEntries || 0));
+  return <section className="border-b border-white/10 px-3 py-5 sm:px-7 sm:py-7">
+    <div className="grid overflow-hidden rounded-[2rem] border border-white/10 bg-black/30 lg:grid-cols-[1.15fr_.85fr]" style={{ boxShadow: `0 0 55px ${t.glow}` }}>
+      <div className="relative min-h-[300px] overflow-hidden border-b border-white/10 lg:border-b-0 lg:border-r">
+        <div className="absolute inset-0 opacity-40" style={{ background: `radial-gradient(circle at 50% 60%,${t.glow},transparent 58%)` }} />
+        <PrizeArt item={item} />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent_18%,rgba(255,255,255,.16)_42%,transparent_58%)]" />
+      </div>
+      <div className="p-5 sm:p-7">
+        <div className="flex flex-wrap items-center gap-2"><BadgePill text={`${item.rarity} current prize`} color={t.accent} /><BadgePill text={`Tier ${item.tierIndex}`} color="#ffffff" /></div>
+        <h2 className="mt-4 text-3xl font-black sm:text-5xl">{item.title}</h2>
+        <p className="mt-2 text-sm text-white/50">Approximate retail value {money(item.value)}. The highest unlocked prize becomes the current winner reward.</p>
+        <div className="mt-5 grid grid-cols-3 gap-2"><Mini label="Entry fee" value={money(entryFee)} /><Mini label="Entries" value={`${item.currentEntries}/${item.targetEntries}`} /><Mini label="Remaining" value={String(remaining)} /></div>
+        <div className="mt-5 h-3 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${progress}%`, background: t.accent, boxShadow: `0 0 22px ${t.glow}` }} /></div>
+        <div className="mt-2 flex justify-between text-xs font-bold text-white/45"><span>Funding progress</span><span style={{ color: t.accent }}>{progress}%</span></div>
+        <Link href={`/competitions?rarity=${item.rarity}`}><Button className="mt-5 w-full rounded-xl font-black text-white" style={{ background: t.button, boxShadow: `0 0 22px ${t.glow}` }}><Zap className="mr-2 h-4 w-4" />Enter {item.rarity} tournament</Button></Link>
+      </div>
+    </div>
+  </section>;
+}
+
 function PrizeSlab({ item, index, selected, onSelect }: { item: VaultItem; index: number; selected: boolean; onSelect: () => void }) {
   const t = theme[item.rarity] || theme.common;
   const progress = pct(item);
   const open = Boolean(item.currentPrize || item.unlocked);
-  const desktopTilt = index % 2 ? "rotateY(-5deg) rotateZ(.35deg)" : "rotateY(5deg) rotateZ(-.35deg)";
+  const desktopTilt = index % 2 ? "rotateY(-3deg) rotateZ(.2deg)" : "rotateY(3deg) rotateZ(-.2deg)";
   return (
-    <button onClick={onSelect} className="group relative mx-auto w-full max-w-[370px] text-left [perspective:1400px] xl:min-w-[320px] xl:max-w-[320px] xl:snap-start">
-      <div className="relative transition duration-500 xl:group-hover:-translate-y-4" style={{ transform: selected ? "translateY(-12px) rotateY(0deg)" : undefined }}>
-        <div className="absolute bottom-[-20px] left-[16px] right-[-22px] top-[18px] hidden rounded-[2.3rem] xl:block" style={{ background: `linear-gradient(90deg,${t.panel},#000)`, boxShadow: "25px 28px 48px rgba(0,0,0,.72)" }} />
-        <div className="relative rounded-[2.25rem] p-[4px]" style={{ transform: selected ? "none" : desktopTilt, background: `linear-gradient(135deg,white 0%,${t.edge} 12%,${t.accent} 48%,#05070d 82%)`, boxShadow: `0 0 48px ${t.glow},0 35px 60px rgba(0,0,0,.68)` }}>
-          <div className="relative min-h-[520px] overflow-hidden rounded-[2rem] border border-white/15 p-4" style={{ background: `linear-gradient(160deg,rgba(255,255,255,.12),transparent 28%),${t.panel}` }}>
-            <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/10 to-transparent" />
-            <div className="relative z-10 flex items-center justify-between"><span className="rounded-full border border-white/15 bg-black/50 px-3 py-1 text-[10px] font-black">#{item.tierIndex}</span><span className="text-[10px] font-black uppercase tracking-[.2em]" style={{ color: t.accent }}>{item.rarity}</span></div>
-            <div className={`relative z-10 mt-4 h-[260px] overflow-hidden rounded-[1.5rem] border border-white/10 ${open ? "" : "brightness-[.62] saturate-[.72]"}`}><PrizeArt item={item} /></div>
-            <div className="relative z-10 mt-4 text-center"><h3 className="line-clamp-2 min-h-[58px] text-xl font-black leading-tight">{item.title}</h3><p className="mt-1 text-xs text-white/50">Approx. value {money(item.value)}</p></div>
-            <div className="relative z-10 mt-5"><div className="h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${progress}%`, background: open ? "#34d399" : t.accent, boxShadow: `0 0 18px ${t.glow}` }} /></div><div className="mt-2 flex justify-between text-xs font-black"><span>{item.currentEntries}/{item.targetEntries}</span><span style={{ color: open ? "#6ee7b7" : t.accent }}>{open ? "UNLOCKED" : `${progress}%`}</span></div></div>
-            {!open && <Chain />}
-            {open && <div className="absolute inset-x-5 bottom-5 z-30 flex items-center justify-center gap-2 rounded-xl border border-emerald-300/30 bg-emerald-400/15 py-2 text-xs font-black text-emerald-100"><CheckCircle2 className="h-4 w-4" />UNLOCKED</div>}
+    <button onClick={onSelect} className="group relative mx-auto w-full max-w-[330px] text-left [perspective:1400px] xl:min-w-[270px] xl:max-w-[270px] xl:snap-start">
+      <div className="relative transition duration-500 xl:group-hover:-translate-y-3" style={{ transform: selected ? "translateY(-8px) rotateY(0deg)" : undefined }}>
+        <div className="absolute bottom-[-11px] left-[10px] right-[-12px] top-[12px] hidden rounded-[1.75rem] xl:block" style={{ background: `linear-gradient(90deg,${t.panel},#000)`, boxShadow: "16px 20px 38px rgba(0,0,0,.66)" }} />
+        <div className="relative rounded-[1.75rem] p-[3px]" style={{ transform: selected ? "none" : desktopTilt, background: `linear-gradient(135deg,white 0%,${t.edge} 14%,${t.accent} 50%,#05070d 84%)`, boxShadow: `0 0 34px ${t.glow},0 24px 44px rgba(0,0,0,.62)` }}>
+          <div className="relative min-h-[430px] overflow-hidden rounded-[1.6rem] border border-white/15 p-3.5" style={{ background: `linear-gradient(160deg,rgba(255,255,255,.10),transparent 26%),${t.panel}` }}>
+            <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-white/10 to-transparent" />
+            <div className="relative z-10 flex items-center justify-between"><span className="rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[9px] font-black">#{item.tierIndex}</span><span className="text-[9px] font-black uppercase tracking-[.2em]" style={{ color: t.accent }}>{item.rarity}</span></div>
+            <div className={`relative z-10 mt-3 h-[230px] overflow-hidden rounded-[1.25rem] border border-white/10 ${open ? "" : "brightness-[.62] saturate-[.72]"}`}><PrizeArt item={item} /></div>
+            <div className="relative z-10 mt-3"><h3 className="line-clamp-2 min-h-[44px] text-base font-black leading-tight">{item.title}</h3><div className="mt-1 flex items-center justify-between text-[10px] text-white/45"><span>{money(item.value)}</span><span>{item.currentEntries}/{item.targetEntries}</span></div></div>
+            <div className="relative z-10 mt-3"><div className="h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${progress}%`, background: open ? "#34d399" : t.accent, boxShadow: `0 0 16px ${t.glow}` }} /></div><div className="mt-2 flex justify-between text-[10px] font-black"><span>{progress}% funded</span><span style={{ color: open ? "#6ee7b7" : t.accent }}>{open ? "UNLOCKED" : "LOCKED"}</span></div></div>
+            {!open && <CompactLock />}
+            {open && <div className="absolute inset-x-4 bottom-4 z-30 flex items-center justify-center gap-1.5 rounded-lg border border-emerald-300/30 bg-emerald-400/15 py-1.5 text-[10px] font-black text-emerald-100"><CheckCircle2 className="h-3.5 w-3.5" />UNLOCKED</div>}
           </div>
         </div>
       </div>
@@ -173,8 +205,8 @@ function PrizeArt({ item }: { item: VaultItem }) {
   return <PremiumPrizeArtwork title={item.title} rarity={item.rarity} category={item.category} />;
 }
 
-function Chain() {
-  return <div className="pointer-events-none absolute inset-0 z-20"><svg viewBox="0 0 360 520" className="h-full w-full"><defs><pattern id="links" width="24" height="16" patternUnits="userSpaceOnUse"><ellipse cx="12" cy="8" rx="9" ry="4.5" fill="none" stroke="#f6d47a" strokeWidth="3"/><ellipse cx="12" cy="8" rx="4" ry="2" fill="none" stroke="#5d3c12" strokeWidth="2"/></pattern></defs><path d="M-45 170 405 340" stroke="url(#links)" strokeWidth="24"/><path d="M405 170-45 340" stroke="url(#links)" strokeWidth="24"/></svg><div className="absolute left-1/2 top-[49%] -translate-x-1/2 -translate-y-1/2 rounded-2xl border-2 border-amber-100/70 bg-gradient-to-b from-amber-100 via-amber-500 to-amber-950 p-4 shadow-[0_0_42px_rgba(245,158,11,.8)]"><Lock className="h-8 w-8 text-amber-950" /></div><div className="absolute inset-x-8 top-[63%] rounded-xl border border-white/10 bg-black/80 px-3 py-2 text-center text-[10px] font-black uppercase tracking-[.16em] text-cyan-200">Locked until target reached</div></div>;
+function CompactLock() {
+  return <div className="pointer-events-none absolute inset-0 z-20"><div className="absolute inset-x-8 top-[46%] h-[2px] rotate-[24deg] bg-gradient-to-r from-transparent via-amber-300 to-transparent shadow-[0_0_16px_rgba(245,158,11,.75)]" /><div className="absolute inset-x-8 top-[46%] h-[2px] -rotate-[24deg] bg-gradient-to-r from-transparent via-amber-300 to-transparent shadow-[0_0_16px_rgba(245,158,11,.75)]" /><div className="absolute left-1/2 top-[46%] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-amber-100/60 bg-gradient-to-b from-amber-100 via-amber-500 to-amber-950 p-3 shadow-[0_0_30px_rgba(245,158,11,.65)]"><Lock className="h-6 w-6 text-amber-950" /></div></div>;
 }
 
 function Spotlight({ item }: { item: VaultItem }) {
@@ -184,6 +216,7 @@ function Spotlight({ item }: { item: VaultItem }) {
   return <section className="border-t border-white/10 bg-black/25 px-3 py-6 sm:px-7"><div className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]"><div className="grid gap-5 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[.04] p-4 sm:p-7 md:grid-cols-[1fr_.9fr] md:items-center"><div><div className="text-xs font-black uppercase tracking-[.18em]" style={{ color: t.accent }}>{item.rarity} prize</div><h3 className="mt-3 text-3xl font-black sm:text-5xl">{item.title}</h3><p className="mt-3 text-sm text-white/55">The prize is purchased only after the gameweek closes and its target has been fully funded.</p><div className="mt-5 grid grid-cols-3 gap-2"><Mini label="Value" value={money(item.value)} /><Mini label="Type" value={item.category || "Physical"} /><Mini label="Status" value={item.currentPrize || item.unlocked ? "Unlocked" : "Locked"} /></div></div><div className="relative min-h-[280px] overflow-hidden rounded-[1.5rem] border border-white/10"><PrizeArt item={item} /></div></div><div className="rounded-[2rem] border border-white/10 bg-white/[.04] p-4 sm:p-7"><div className="flex items-center gap-2 text-sm font-black"><Trophy className="h-5 w-5" style={{ color: t.accent }} />{item.rarity} vault progress</div><div className="mt-5 text-3xl font-black">{item.currentEntries} / {item.targetEntries} entries</div><div className="mt-4 h-4 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full" style={{ width: `${progress}%`, background: t.accent, boxShadow: `0 0 22px ${t.glow}` }} /></div><p className="mt-3 text-sm text-white/55">{remaining ? `Need ${remaining} more ${item.rarity} entries to unlock this reward.` : "Funding target reached."}</p><Link href={`/competitions?rarity=${item.rarity}`}><Button className="mt-5 w-full rounded-xl font-black text-white" style={{ background: t.button, boxShadow: `0 0 22px ${t.glow}` }}><Zap className="mr-2 h-4 w-4" />Enter {item.rarity} tournament</Button></Link></div></div></section>;
 }
 
+function BadgePill({ text, color }: { text: string; color: string }) { return <span className="rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[.14em]" style={{ color, borderColor: `${color}55`, background: `${color}14` }}>{text}</span>; }
 function TopStat({ icon: Icon, label, value }: { icon: any; label: string; value: string }) { return <div className="min-w-0 rounded-2xl border border-white/10 bg-black/30 p-3"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[.12em] text-white/40"><Icon className="h-3.5 w-3.5 text-purple-300" /><span className="truncate">{label}</span></div><div className="mt-2 truncate text-lg font-black">{value}</div></div>; }
 function Mini({ label, value }: { label: string; value: string }) { return <div className="min-w-0 rounded-xl border border-white/10 bg-black/25 p-3"><div className="text-[9px] font-black uppercase tracking-[.14em] text-white/35">{label}</div><div className="mt-1 truncate text-sm font-black">{value}</div></div>; }
 function Info({ icon: Icon, title, text }: { icon: any; title: string; text: string }) { return <div className="flex gap-3 rounded-2xl border border-white/10 bg-white/[.035] p-4"><div className="rounded-xl bg-purple-400/10 p-2 text-purple-200"><Icon className="h-5 w-5" /></div><div><div className="font-black">{title}</div><div className="mt-1 text-xs text-white/42">{text}</div></div></div>; }
