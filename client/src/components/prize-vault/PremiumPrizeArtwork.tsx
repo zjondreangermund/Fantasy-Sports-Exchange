@@ -80,11 +80,17 @@ const palettes: Record<string, Palette> = {
   },
 };
 
+/*
+ * The first four approved images were originally committed under the wrong
+ * filenames. Keep the files intact and map each prize to the file that really
+ * contains its artwork. This avoids another asset migration and immediately
+ * fixes production cards.
+ */
 const approvedRareArtwork: Array<{ pattern: RegExp; src: string }> = [
-  { pattern: /shopping\s+voucher/i, src: "/prizes/rare/rare-shopping-voucher.svg" },
-  { pattern: /gaming\s+headset|headset\s+pro/i, src: "/prizes/rare/rare-gaming-headset-pro.svg" },
-  { pattern: /premium\s+smart\s*watch|smart\s*watch/i, src: "/prizes/rare/rare-premium-smart-watch.svg" },
-  { pattern: /jbl\s+speaker|speaker\s+jbl/i, src: "/prizes/rare/rare-jbl-speaker.svg" },
+  { pattern: /shopping\s+voucher/i, src: "/prizes/rare/rare-jbl-speaker.svg" },
+  { pattern: /gaming\s+headset|headset\s+pro/i, src: "/prizes/rare/rare-premium-smart-watch.svg" },
+  { pattern: /premium\s+smart\s*watch|smart\s*watch/i, src: "/prizes/rare/rare-gaming-headset-pro.svg" },
+  { pattern: /jbl\s+speaker|speaker\s+jbl/i, src: "/prizes/rare/rare-shopping-voucher.svg" },
 ];
 
 function approvedArtworkFor(title: string, rarity: string) {
@@ -117,13 +123,15 @@ export function PremiumPrizeArtwork({ title, rarity, category }: Props) {
   if (approvedImage) {
     return (
       <div className="absolute inset-0 isolate overflow-hidden bg-[#010611]">
-        <img
-          src={approvedImage}
-          alt={title}
-          loading="lazy"
-          decoding="async"
-          className="absolute inset-0 h-full w-full object-cover object-center"
-        />
+        <object
+          data={approvedImage}
+          type="image/svg+xml"
+          aria-label={title}
+          tabIndex={-1}
+          className="pointer-events-none absolute inset-0 block h-full w-full border-0 object-cover"
+        >
+          <span className="sr-only">{title}</span>
+        </object>
         <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[38%] bg-[linear-gradient(115deg,rgba(255,255,255,.10),transparent_32%,transparent_72%,rgba(255,255,255,.05))]" />
       </div>
