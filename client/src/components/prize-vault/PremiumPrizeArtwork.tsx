@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   Bike,
   CarFront,
@@ -81,16 +80,11 @@ const palettes: Record<string, Palette> = {
   },
 };
 
-/*
- * These first four SVG filenames contain the opposite approved images because
- * the original upload order was mixed up. The mapping below intentionally
- * points each prize title to the file that contains the correct artwork.
- */
 const approvedRareArtwork: Array<{ pattern: RegExp; src: string }> = [
-  { pattern: /shopping\s+voucher/i, src: "/prizes/rare/rare-jbl-speaker.svg" },
-  { pattern: /gaming\s+headset|headset\s+pro/i, src: "/prizes/rare/rare-premium-smart-watch.svg" },
-  { pattern: /premium\s+smart\s*watch|smart\s*watch/i, src: "/prizes/rare/rare-gaming-headset-pro.svg" },
-  { pattern: /jbl\s+speaker|speaker\s+jbl/i, src: "/prizes/rare/rare-shopping-voucher.svg" },
+  { pattern: /shopping\s+voucher/i, src: "/prizes/rare/rare-shopping-voucher.webp" },
+  { pattern: /gaming\s+headset|headset\s+pro/i, src: "/prizes/rare/rare-gaming-headset-pro.webp" },
+  { pattern: /premium\s+smart\s*watch|smart\s*watch/i, src: "/prizes/rare/rare-premium-smart-watch.webp" },
+  { pattern: /jbl\s+speaker|speaker\s+jbl/i, src: "/prizes/rare/rare-jbl-speaker.webp" },
 ];
 
 function approvedArtworkFor(title: string, rarity: string) {
@@ -116,77 +110,6 @@ function iconFor(title: string, category = "") {
   return Gift;
 }
 
-function EmbeddedWebpArtwork({ svgSrc, title }: { svgSrc: string; title: string }) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    let generatedUrl: string | null = null;
-
-    async function decodeArtwork() {
-      try {
-        setFailed(false);
-        setBlobUrl(null);
-
-        const response = await fetch(svgSrc, { cache: "force-cache" });
-        if (!response.ok) throw new Error(`Artwork request failed: ${response.status}`);
-
-        const svg = await response.text();
-        const match = svg.match(/data:image\/webp;base64,([^"']+)/i);
-        if (!match?.[1]) throw new Error("Embedded WebP payload was not found");
-
-        const encoded = match[1].replace(/\s+/g, "");
-        const binary = window.atob(encoded);
-        const bytes = new Uint8Array(binary.length);
-        for (let index = 0; index < binary.length; index += 1) {
-          bytes[index] = binary.charCodeAt(index);
-        }
-
-        generatedUrl = URL.createObjectURL(new Blob([bytes], { type: "image/webp" }));
-        if (!cancelled) setBlobUrl(generatedUrl);
-      } catch (error) {
-        console.error(`Unable to decode prize artwork for ${title}`, error);
-        if (!cancelled) setFailed(true);
-      }
-    }
-
-    void decodeArtwork();
-
-    return () => {
-      cancelled = true;
-      if (generatedUrl) URL.revokeObjectURL(generatedUrl);
-    };
-  }, [svgSrc, title]);
-
-  if (failed) {
-    return (
-      <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(circle_at_50%_45%,rgba(22,140,255,.28),transparent_58%),#010611]">
-        <Gift className="h-16 w-16 text-blue-200/70 drop-shadow-[0_0_18px_rgba(22,140,255,.8)]" />
-      </div>
-    );
-  }
-
-  if (!blobUrl) {
-    return (
-      <div className="absolute inset-0 overflow-hidden bg-[#010611]">
-        <div className="absolute inset-0 animate-pulse bg-[radial-gradient(circle_at_50%_45%,rgba(22,140,255,.34),transparent_58%)]" />
-        <div className="absolute inset-y-0 -left-1/2 w-1/2 animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={blobUrl}
-      alt={title}
-      decoding="async"
-      className="absolute inset-0 h-full w-full object-cover object-center"
-      onError={() => setFailed(true)}
-    />
-  );
-}
-
 export function PremiumPrizeArtwork({ title, rarity, category }: Props) {
   const palette = palettes[rarity] || palettes.common;
   const approvedImage = approvedArtworkFor(title, rarity);
@@ -194,7 +117,13 @@ export function PremiumPrizeArtwork({ title, rarity, category }: Props) {
   if (approvedImage) {
     return (
       <div className="absolute inset-0 isolate overflow-hidden bg-[#010611]">
-        <EmbeddedWebpArtwork svgSrc={approvedImage} title={title} />
+        <img
+          src={approvedImage}
+          alt={title}
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover object-center"
+        />
         <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-[38%] bg-[linear-gradient(115deg,rgba(255,255,255,.10),transparent_32%,transparent_72%,rgba(255,255,255,.05))]" />
       </div>
@@ -215,16 +144,19 @@ export function PremiumPrizeArtwork({ title, rarity, category }: Props) {
       }}
     >
       <div className="absolute inset-0 opacity-50 [background-image:linear-gradient(rgba(255,255,255,.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.025)_1px,transparent_1px)] [background-size:28px_28px]" />
-
       <div className="absolute -left-14 top-6 h-44 w-44 rounded-full blur-3xl" style={{ background: palette.glowSoft }} />
       <div className="absolute -right-16 bottom-0 h-52 w-52 rounded-full blur-3xl" style={{ background: palette.glowSoft }} />
 
-      <div className="absolute inset-x-[7%] top-[7%] bottom-[8%] rounded-[1.7rem] border bg-white/[.025] backdrop-blur-[2px]" style={{ borderColor: palette.glassEdge, boxShadow: `inset 0 1px 0 rgba(255,255,255,.32), inset 0 -1px 0 ${palette.glowSoft}, 0 0 26px ${palette.glowSoft}` }} />
+      <div
+        className="absolute inset-x-[7%] top-[7%] bottom-[8%] rounded-[1.7rem] border bg-white/[.025] backdrop-blur-[2px]"
+        style={{
+          borderColor: palette.glassEdge,
+          boxShadow: `inset 0 1px 0 rgba(255,255,255,.32), inset 0 -1px 0 ${palette.glowSoft}, 0 0 26px ${palette.glowSoft}`,
+        }}
+      />
       <div className="absolute inset-x-[9%] top-[9%] bottom-[10%] rounded-[1.45rem] border border-white/10" />
-
       <div className="absolute left-[10%] top-[12%] h-[2px] w-[38%] rounded-full bg-gradient-to-r from-white/80 to-transparent" />
       <div className="absolute right-[10%] top-[12%] h-[2px] w-[18%] rounded-full" style={{ background: `linear-gradient(90deg,transparent,${palette.accent})` }} />
-
       <Sparkles className="absolute right-[12%] top-[13%] h-6 w-6 opacity-65" style={{ color: palette.accent }} />
 
       <div className="absolute left-1/2 top-[52%] h-[31%] w-[72%] -translate-x-1/2 rounded-[50%] bg-black/80 blur-md" />
