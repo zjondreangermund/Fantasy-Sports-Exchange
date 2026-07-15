@@ -7,6 +7,7 @@ import { registerTestSimulatorBulkRoutes } from "./testSimulatorBulk.routes.js";
 import { registerTestSimulatorDetailsRoutes } from "./testSimulatorDetails.routes.js";
 import { registerAdminCardLookupRoutes } from "./adminCardLookup.routes.js";
 import { registerApiFootballAdminRoutes } from "./apiFootballAdmin.routes.js";
+import { registerApiFootballSyncRoutes } from "./apiFootballSync.routes.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -21,6 +22,7 @@ export function registerAdminInsightsRoutes(app: Express, deps: { requireAuth: a
   registerTestSimulatorDetailsRoutes(app, { requireAuth });
   registerAdminCardLookupRoutes(app, { requireAuth, isAdmin });
   registerApiFootballAdminRoutes(app, { requireAuth, isAdmin });
+  registerApiFootballSyncRoutes(app, { requireAuth, isAdmin });
 
   app.get("/api/admin/users/:id/cards", requireAuth, isAdmin, async (req: any, res) => {
     try {
