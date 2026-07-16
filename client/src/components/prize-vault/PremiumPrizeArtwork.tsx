@@ -80,16 +80,39 @@ const palettes: Record<string, Palette> = {
   },
 };
 
+/**
+ * Upload approved Rare artwork to:
+ * client/public/prizes/rare/
+ *
+ * The Prize Vault automatically falls back to the generated icon artwork when
+ * an image is missing or fails to load, so partial uploads remain safe.
+ */
 const approvedRareArtwork: Array<{ pattern: RegExp; src: string }> = [
-  { pattern: /shopping\s+voucher/i, src: "/prizes/rare/rare-shopping-voucher.png" },
-  { pattern: /gaming\s+headset|headset\s+pro/i, src: "/prizes/rare/rare-gaming-headset-pro.png" },
-  { pattern: /premium\s+smart\s*watch|smart\s*watch/i, src: "/prizes/rare/rare-premium-smart-watch.png" },
-  { pattern: /jbl\s+speaker|speaker\s+jbl/i, src: "/prizes/rare/rare-jbl-speaker.png" },
+  { pattern: /^N\$500\s+Airtime\s*\/\s*Data$/i, src: "/prizes/rare/rare-01-airtime-data.png" },
+  { pattern: /^N\$1,?000\s+Shopping\s+Voucher$/i, src: "/prizes/rare/rare-02-shopping-voucher.png" },
+  { pattern: /^Gaming\s+Headset\s+Pro$/i, src: "/prizes/rare/rare-03-gaming-headset-pro.png" },
+  { pattern: /^Premium\s+Smart\s*Watch$/i, src: "/prizes/rare/rare-04-premium-smart-watch.png" },
+  { pattern: /^JBL\s+Speaker$/i, src: "/prizes/rare/rare-05-jbl-speaker.png" },
+  { pattern: /^PS5\s+Game\s+Bundle$/i, src: "/prizes/rare/rare-06-ps5-game-bundle.png" },
+  { pattern: /^Premium\s+Coffee\s+Machine$/i, src: "/prizes/rare/rare-07-premium-coffee-machine.png" },
+  { pattern: /^Tablet$/i, src: "/prizes/rare/rare-08-tablet.png" },
+  { pattern: /^Gaming\s+Monitor$/i, src: "/prizes/rare/rare-09-gaming-monitor.png" },
+  { pattern: /^Gaming\s+Chair$/i, src: "/prizes/rare/rare-10-gaming-chair.png" },
+  { pattern: /^Home\s+Soundbar$/i, src: "/prizes/rare/rare-11-home-soundbar.png" },
+  { pattern: /^55[-\s]?inch\s+Smart\s+TV$/i, src: "/prizes/rare/rare-12-55-inch-smart-tv.png" },
+  { pattern: /^Weekend\s+Getaway\s+for\s+Two$/i, src: "/prizes/rare/rare-13-weekend-getaway-for-two.png" },
+  { pattern: /^VR\s+Headset$/i, src: "/prizes/rare/rare-14-vr-headset.png" },
+  { pattern: /^PlayStation\s+5\s+Console$/i, src: "/prizes/rare/rare-15-playstation-5-console.png" },
+  { pattern: /^Xbox\s+Series\s+X$/i, src: "/prizes/rare/rare-16-xbox-series-x.png" },
+  { pattern: /^DJI\s+Mini\s+Drone(?:\s*\/\s*Equivalent)?$/i, src: "/prizes/rare/rare-17-dji-mini-drone.png" },
+  { pattern: /^Gaming\s+Laptop$/i, src: "/prizes/rare/rare-18-gaming-laptop.png" },
+  { pattern: /^Mountain\s+Bike$/i, src: "/prizes/rare/rare-19-mountain-bike.png" },
+  { pattern: /^Gaming\s+PC$/i, src: "/prizes/rare/rare-20-gaming-pc.png" },
 ];
 
 function approvedArtworkFor(title: string, rarity: string) {
   if (String(rarity).toLowerCase() !== "rare") return null;
-  return approvedRareArtwork.find((item) => item.pattern.test(title))?.src || null;
+  return approvedRareArtwork.find((item) => item.pattern.test(title.trim()))?.src || null;
 }
 
 function iconFor(title: string, category = "") {
@@ -115,21 +138,38 @@ export function PremiumPrizeArtwork({ title, rarity, category }: Props) {
   const approvedImage = approvedArtworkFor(title, rarity);
 
   if (approvedImage) {
-    return (
-      <div className="absolute inset-0 isolate overflow-hidden bg-[#010611]">
-        <img
-          src={approvedImage}
-          alt={title}
-          loading="lazy"
-          decoding="async"
-          className="absolute inset-0 h-full w-full object-cover object-center"
-        />
-        <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[38%] bg-[linear-gradient(115deg,rgba(255,255,255,.10),transparent_32%,transparent_72%,rgba(255,255,255,.05))]" />
-      </div>
-    );
+    return <ApprovedPrizeImage src={approvedImage} title={title} palette={palette} category={category} rarity={rarity} />;
   }
 
+  return <GeneratedPrizeArtwork title={title} rarity={rarity} category={category} palette={palette} />;
+}
+
+function ApprovedPrizeImage({ src, title, rarity, category, palette }: { src: string; title: string; rarity: string; category?: string; palette: Palette }) {
+  return (
+    <div className="absolute inset-0 isolate overflow-hidden bg-[#010611]">
+      <img
+        src={src}
+        alt={title}
+        loading="lazy"
+        decoding="async"
+        className="absolute inset-0 h-full w-full object-cover object-center"
+        onError={(event) => {
+          const image = event.currentTarget;
+          image.style.display = "none";
+          const fallback = image.nextElementSibling as HTMLElement | null;
+          if (fallback) fallback.style.display = "block";
+        }}
+      />
+      <div className="absolute inset-0 hidden">
+        <GeneratedPrizeArtwork title={title} rarity={rarity} category={category} palette={palette} />
+      </div>
+      <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[38%] bg-[linear-gradient(115deg,rgba(255,255,255,.10),transparent_32%,transparent_72%,rgba(255,255,255,.05))]" />
+    </div>
+  );
+}
+
+function GeneratedPrizeArtwork({ title, rarity, category, palette }: Props & { palette: Palette }) {
   const Icon = iconFor(title, category);
 
   return (
