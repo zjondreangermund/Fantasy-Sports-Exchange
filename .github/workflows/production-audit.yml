@@ -1,0 +1,47 @@
+name: Production audit validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - main
+      - agent/production-audit-repair
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: TypeScript, builds and critical flows
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Full TypeScript check
+        run: npm run check
+
+      - name: Build client
+        run: npm run build:client
+
+      - name: Build server
+        run: npm run build:server
+
+      - name: Verify critical flows
+        run: npm run test:critical-flows
