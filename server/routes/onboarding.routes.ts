@@ -291,7 +291,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
 
       const grantResult = await ensureStarterCards(userId, selected);
       await storage.updateOnboarding(userId, { selectedCards: selected, completed: true } as any);
-      res.json({ success: true, kept: 5, ...grantResult });
+      res.json({ success: true, ...grantResult, kept: 5 });
     } catch (error: any) {
       console.error("Choose cards failed:", error);
       res.status(500).json({ message: "Failed to complete onboarding" });

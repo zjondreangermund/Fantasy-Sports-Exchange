@@ -184,7 +184,7 @@ export default function CardLabPage() {
                   <div className="mx-auto md:mx-0">
                     <Metal3DCard
                       player={{
-                        id: activeOption.playerId,
+                        id: String(activeOption.playerId),
                         name: activeOption.playerName,
                         team: activeOption.team,
                         rarity: "rare",

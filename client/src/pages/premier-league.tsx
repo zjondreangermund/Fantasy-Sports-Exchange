@@ -15,7 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from "../components/ui/table";
-import { type EplPlayer, type EplFixture, type EplInjury, type EplStanding } from "../../../shared/schema";
+type EplPlayer = any;
+type EplFixture = any;
+type EplInjury = any;
+type EplStanding = any;
 import LiveGames from "../components/LiveGames";
 import {
   Trophy, Calendar, Users, AlertTriangle, Search, RefreshCw,

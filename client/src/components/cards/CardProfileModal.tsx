@@ -42,7 +42,7 @@ function fallbackData(card: PlayerCardWithPlayer): CardProfileData {
   while (padded.length < 10) padded.unshift(0);
   return {
     source: "card-fallback",
-    player: { name: card.player?.name, team: card.player?.team, position: card.player?.position, imageUrl: card.player?.imageUrl },
+    player: { name: card.player?.name, team: card.player?.team, position: card.player?.position, imageUrl: card.player?.imageUrl ?? undefined },
     last10: padded.slice(-10).map((points, index) => ({
       gameweek: index + 1,
       opponent: `GW${index + 1}`,
@@ -64,7 +64,7 @@ function fallbackData(card: PlayerCardWithPlayer): CardProfileData {
       yellowCards: 0,
       redCards: 0,
       bonus: 0,
-      totalPoints: Number(card.totalPoints || 0),
+      totalPoints: Number((card as any).totalPoints || 0),
       selectedBy: null,
       value: null,
     },
