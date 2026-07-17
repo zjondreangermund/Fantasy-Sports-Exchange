@@ -9,6 +9,7 @@ import "./prize-vault-depth.css";
 import "./marketplace-rarity.css";
 import "./mobile-native-scroll.css";
 import "./play-route-fix.css";
+import "./unified-scroll.css";
 import { patchFetchForApiBase } from "./lib/api-base";
 
 patchFetchForApiBase();
@@ -42,7 +43,7 @@ if ("serviceWorker" in navigator) {
         if ("caches" in window) {
           caches.keys().then((keys) => {
             keys
-              .filter((key) => key !== "fantasy-site-v6")
+              .filter((key) => key !== "fantasy-site-v7")
               .forEach((key) => caches.delete(key));
           });
         }
