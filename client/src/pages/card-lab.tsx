@@ -190,6 +190,7 @@ export default function CardLabPage() {
                         rarity: "rare",
                         imageUrl: activeOption.player?.imageUrl || activeOption.player?.photo || "/images/player-1.png",
                         position: activeOption.player?.position || "MID",
+                        rating: Number(activeOption.player?.overall || activeOption.player?.rating || 82),
                       }}
                       className="!w-[220px]"
                     />
