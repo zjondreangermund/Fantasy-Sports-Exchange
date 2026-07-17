@@ -1,4 +1,4 @@
-const CACHE_NAME = "fantasy-site-v6";
+const CACHE_NAME = "fantasy-site-v7";
 const APP_SHELL = ["/", "/manifest.json", "/brand/fa-premium-2026.svg"];
 
 self.addEventListener("install", (event) => {
@@ -26,6 +26,7 @@ self.addEventListener("fetch", (event) => {
 
   const reqUrl = new URL(event.request.url);
   const isSameOrigin = reqUrl.origin === self.location.origin;
+
   if (reqUrl.pathname.startsWith("/api/")) {
     event.respondWith(fetch(event.request));
     return;
@@ -44,12 +45,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (isSameOrigin && reqUrl.pathname.startsWith("/assets/")) {
+  if (
+    isSameOrigin &&
+    (reqUrl.pathname.startsWith("/assets/") || reqUrl.pathname.startsWith("/prizes/"))
+  ) {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: "no-store" })
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
           return response;
         })
         .catch(() => caches.match(event.request))
