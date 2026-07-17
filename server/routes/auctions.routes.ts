@@ -28,7 +28,7 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
 
       const { db } = await import("../db.js");
       const { auctions, auctionBids, playerCards, auditLogs } = await import("../../shared/schema.js");
-      const { desc, eq } = await import("drizzle-orm");
+      const { and, desc, eq } = await import("drizzle-orm");
 
       let responsePayload: any = null;
 
@@ -63,9 +63,15 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
 
         const winningAmount = toMoney(winningBid.amount);
         const reservePrice = toMoney(auction.reservePrice || 0);
+        const winnerId = String(winningBid.bidderUserId || "");
+        const sellerId = String(auction.sellerUserId || "");
+
+        if (!winnerId || !sellerId || winningAmount <= 0) {
+          throw new Error("Auction winner, seller, or amount is invalid");
+        }
 
         if (winningAmount < reservePrice) {
-          await refundWalletHold(tx, { userId: String(winningBid.bidderUserId || ""), amount: winningAmount });
+          await refundWalletHold(tx, { userId: winnerId, amount: winningAmount });
 
           const [endedAuction] = await tx
             .update(auctions)
@@ -76,24 +82,29 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
           await tx.insert(auditLogs).values({
             userId: req.authUserId,
             action: "auction.settle.reserve_not_met",
-            meta: { auctionId, winnerId: winningBid.bidderUserId, winningAmount, reservePrice },
+            meta: { auctionId, winnerId, winningAmount, reservePrice },
           } as any);
 
           responsePayload = { success: true, message: "Auction ended. Reserve was not met.", auction: endedAuction };
           return;
         }
 
-        await settleHeldAuctionBid(tx, {
-          buyerId: String(winningBid.bidderUserId || ""),
-          sellerId: String(auction.sellerUserId || ""),
+        const transferredCards = await tx
+          .update(playerCards)
+          .set({ ownerId: winnerId, forSale: false, price: 0 } as any)
+          .where(and(eq(playerCards.id, auction.cardId), eq(playerCards.ownerId, sellerId)))
+          .returning({ id: playerCards.id });
+        if (transferredCards.length !== 1) {
+          throw new Error("Auction card was no longer available for transfer");
+        }
+
+        const settlement = await settleHeldAuctionBid(tx, {
+          winnerId,
+          sellerId,
           amount: winningAmount,
+          cardId: auction.cardId,
           description: `Auction settlement #${auctionId}`,
         });
-
-        await tx
-          .update(playerCards)
-          .set({ ownerId: String(winningBid.bidderUserId || ""), forSale: false, price: 0 } as any)
-          .where(eq(playerCards.id, auction.cardId));
 
         const [settledAuction] = await tx
           .update(auctions)
@@ -103,8 +114,16 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
 
         await tx.insert(auditLogs).values({
           userId: req.authUserId,
-          action: "auction.settle.success",
-          meta: { auctionId, winnerId: winningBid.bidderUserId, winningAmount },
+          action: "auction.settle.completed",
+          meta: {
+            auctionId,
+            cardId: auction.cardId,
+            winnerId,
+            sellerId,
+            winningAmount,
+            fee: settlement.fee,
+            sellerReceives: settlement.sellerReceives,
+          },
         } as any);
 
         responsePayload = { success: true, message: "Auction settled", auction: settledAuction };
