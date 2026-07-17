@@ -101,7 +101,7 @@ export async function buildRealFplPointFeed(limit = 20): Promise<LiveFplPointFee
         source: "fpl-live",
       };
     })
-    .filter((item): item is LiveFplPointFeedItem => Boolean(item))
-    .sort((a, b) => Math.abs(b.totalPoints) - Math.abs(a.totalPoints) || a.playerName.localeCompare(b.playerName))
+    .filter((item: LiveFplPointFeedItem | null): item is LiveFplPointFeedItem => Boolean(item))
+    .sort((a: LiveFplPointFeedItem, b: LiveFplPointFeedItem) => Math.abs(b.totalPoints) - Math.abs(a.totalPoints) || a.playerName.localeCompare(b.playerName))
     .slice(0, safeLimit);
 }
