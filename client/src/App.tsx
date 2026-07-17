@@ -98,12 +98,14 @@ function AuthenticatedRouter() {
         <Route path="/competitions" component={CompetitionsPage} />
         <Route path="/prize-vault" component={PrizeVaultPage} />
         <Route path="/premier-league" component={PremierLeaguePage} />
+        <Route path="/leagues" component={PremierLeaguePage} />
         <Route path="/card-lab" component={CardLabPage} />
         <Route path="/collection" component={CollectionPage} />
         <Route path="/marketplace" component={MarketplacePage} />
         <Route path="/auctions" component={AuctionsPage} />
         <Route path="/wallet" component={WalletPage} />
         <Route path="/account" component={AccountPage} />
+        <Route path="/profile" component={AccountPage} />
         <Route path="/admin/test-console" component={AdminTestConsolePage} />
         <Route path="/admin/season-simulator" component={AdminSeasonSimulatorPage} />
         <Route path="/admin/live-data" component={AdminLiveDataPage} />
