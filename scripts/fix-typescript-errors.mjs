@@ -12,6 +12,15 @@ function replace(path, from, to) {
   fs.writeFileSync(path, source.replace(from, to));
 }
 
+function remove(path, value) {
+  const source = fs.readFileSync(path, "utf8");
+  if (!source.includes(value)) {
+    console.log(`Already removed: ${path}`);
+    return;
+  }
+  fs.writeFileSync(path, source.replace(value, ""));
+}
+
 replace(
   "client/src/components/Card3D.tsx",
   'import { type PlayerCardWithPlayer, type EplPlayer } from "../../../shared/schema";',
@@ -39,6 +48,10 @@ replace(
   "client/src/pages/card-lab.tsx",
   'id: activeOption.playerId,',
   'id: String(activeOption.playerId),',
+);
+remove(
+  "client/src/pages/card-lab.tsx",
+  '                        overall: activeOption.player?.overall || 82,\n',
 );
 
 for (const path of ["client/src/pages/competitions.tsx", "client/src/pages/competitions-vault.tsx"]) {
