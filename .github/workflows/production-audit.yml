@@ -9,7 +9,7 @@ on:
       - agent/production-audit-repair
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: production-audit-${{ github.ref }}
@@ -24,6 +24,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
 
       - name: Use Node.js 20
         uses: actions/setup-node@v4
@@ -31,11 +34,45 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Apply audit TypeScript repairs
+        if: github.head_ref == 'agent/typescript-ci-diagnostics'
+        run: |
+          node scripts/fix-typescript-errors.mjs
+          if git diff --quiet; then
+            echo "No TypeScript source repairs required."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add client/src server/routes
+            git commit -m "Fix remaining TypeScript errors [skip-autofix]"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
       - name: Install locked dependencies
         run: npm ci
 
       - name: Full TypeScript check
-        run: npm run check
+        id: typescript
+        shell: bash
+        run: |
+          set +e
+          npm run check 2>&1 | tee typescript-errors.log
+          status=${PIPESTATUS[0]}
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload TypeScript diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-diagnostics
+          path: typescript-errors.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Fail on TypeScript errors
+        if: steps.typescript.outputs.exit_code != '0'
+        run: exit 1
 
       - name: Build client
         run: npm run build:client
@@ -44,4 +81,24 @@ jobs:
         run: npm run build:server
 
       - name: Verify critical flows
-        run: npm run test:critical-flows
+        id: critical
+        shell: bash
+        run: |
+          set +e
+          npm run test:critical-flows 2>&1 | tee critical-flow-errors.log
+          status=${PIPESTATUS[0]}
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload critical-flow diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: critical-flow-diagnostics
+          path: critical-flow-errors.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Fail on critical-flow errors
+        if: steps.critical.outputs.exit_code != '0'
+        run: exit 1

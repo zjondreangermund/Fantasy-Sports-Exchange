@@ -92,7 +92,7 @@ export default function CompetitionsPage() {
     },
   });
   const { data: myCards } = useQuery<PlayerCardWithPlayer[]>({ queryKey: ["/api/user/cards"], queryFn: async () => { const res = await fetch("/api/user/cards", { credentials: "include" }); if (!res.ok) throw new Error("Failed to fetch my cards"); const data = await res.json(); return Array.isArray(data) ? data : data.cards || []; } });
-  const { data: savedLineup } = useQuery<{ lineup: Lineup; cards: PlayerCardWithPlayer[] }>({ queryKey: ["/api/lineup"], queryFn: async () => { const res = await fetch("/api/lineup", { credentials: "include" }); if (!res.ok) return { lineup: { cardIds: [] } as Lineup, cards: [] }; return res.json(); } });
+  const { data: savedLineup } = useQuery<{ lineup: Lineup; cards: PlayerCardWithPlayer[] }>({ queryKey: ["/api/lineup"], queryFn: async () => { const res = await fetch("/api/lineup", { credentials: "include" }); if (!res.ok) return { lineup: { id: 0, userId: "", cardIds: [], captainId: null } as Lineup, cards: [] }; return res.json(); } });
   const { data: myEntries } = useQuery<CompetitionEntry[]>({ queryKey: ["/api/competitions/my-entries"], queryFn: async () => { const res = await fetch("/api/competitions/my-entries", { credentials: "include" }); if (!res.ok) return []; return res.json(); } });
 
   const liveComps = useMemo(() => (Array.isArray(competitions) ? competitions : []).filter((c) => c.status === "open" || c.status === "active"), [competitions]);
@@ -172,8 +172,8 @@ export default function CompetitionsPage() {
   const prizePreview = Number(createForm.entryFee || 0) * 0.8;
 
   return (
-    <LivePageShell>
-      <LiveHero kicker="Fantasy Arena" title="Tournament Arena" subtitle="Premier League 2026/27 only. Each gameweek starts from zero and locks at the first kickoff." />
+    <LivePageShell tone="arena">
+      <LiveHero eyebrow="Fantasy Arena" title="Tournament Arena" description="Premier League 2026/27 only. Each gameweek starts from zero and locks at the first kickoff." />
       <section className="space-y-4">
         <div className="relative grid gap-3 md:grid-cols-4">
           <ArenaPulse label="Live stadium" value={`${liveComps.length} cups`} helper={`${upcomingComps.length} upcoming`} icon={<Flame className="h-4 w-4" />} />

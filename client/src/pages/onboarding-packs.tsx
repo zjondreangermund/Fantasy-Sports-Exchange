@@ -55,7 +55,7 @@ export default function OnboardingPacksScene() {
         const nextPacks: Pack[] = [];
         for (let i = 0; i < players.length; i += 3) {
           const packIndex = nextPacks.length;
-          const cards = players.slice(i, i + 3).map((player: any, cardIndex: number) => {
+          const cards: PlayerCardWithPlayer[] = players.slice(i, i + 3).map((player: any, cardIndex: number) => {
             const rarity = rarityForPack(packIndex, cardIndex);
             return {
               id: Number(player.id) * 10 + cardIndex + 1,
@@ -153,7 +153,7 @@ export default function OnboardingPacksScene() {
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {Rarity_ORDER.filter((rarity) => pack.rarityMix.includes(rarity)).map((rarity) => (
+                    {RARITY_ORDER.filter((rarity) => pack.rarityMix.includes(rarity)).map((rarity) => (
                       <span key={rarity} className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-white/75">{rarity}</span>
                     ))}
                   </div>

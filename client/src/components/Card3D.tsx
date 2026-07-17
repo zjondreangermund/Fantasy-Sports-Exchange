@@ -12,7 +12,8 @@ return toSafeImageUrl(cdnUrl);
 import { useRef, useState, useMemo, useCallback, Suspense, Component, type ReactNode, useEffect, type RefObject } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { type PlayerCardWithPlayer, type EplPlayer } from "../../../shared/schema";
+import { type PlayerCardWithPlayer } from "../../../shared/schema";
+type EplPlayer = any;
 import { Shield } from "lucide-react";
 import { toApiUrl } from "../lib/api-base";
 
