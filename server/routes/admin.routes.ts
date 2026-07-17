@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { db } from "../db.js";
 import { sql } from "drizzle-orm";
+import { registerAdminIntegrityRoutes } from "./adminIntegrity.routes.js";
 
 interface RegisterAdminRoutesDeps {
   requireAuth: any;
@@ -24,6 +25,7 @@ function userIdFrom(req: any) {
 
 export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps) {
   const { requireAuth, isAdmin, isAdminUser } = deps;
+  registerAdminIntegrityRoutes(app, { requireAuth, isAdmin });
 
   app.get("/api/admin/check", requireAuth, async (req: any, res) => {
     const allowed = await isAdminUser(req);
