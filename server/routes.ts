@@ -16,6 +16,7 @@ import { registerAuthModeRoutes } from "./routes/auth.routes.js";
 import { registerRetentionRoutes } from "./routes/retention.routes.js";
 import { registerTournamentCreatorRoutes } from "./routes/tournamentCreator.routes.js";
 import { registerUserTournamentRoutes } from "./routes/userTournaments.routes.js";
+import { buildRealFplPointFeed } from "./services/liveFplFeed.js";
 import { economyConfigPayload, rankCompetitionEntries } from "./services/tournamentRules.js";
 import { PRIZE_CATALOG, RARITY_MARGIN_MULTIPLIERS, getActivePrizeForEntries, getEntryFeeForRarity } from "./services/prizeEngine.js";
 
@@ -157,6 +158,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerAuctionsRoutes(app, { requireAuth });
   registerTournamentCreatorRoutes(app, { requireAuth });
   registerUserTournamentRoutes(app, { requireAuth });
+
+  app.get("/api/live/point-feed", async (req, res) => {
+    try {
+      const limit = Math.max(1, Math.min(50, Number(req.query.limit || 20) || 20));
+      res.setHeader("Cache-Control", "public, max-age=5, stale-while-revalidate=10");
+      return res.json(await buildRealFplPointFeed(limit));
+    } catch (error) {
+      console.error("Real FPL point feed failed:", error);
+      return res.json([]);
+    }
+  });
 
   const ensureRuntimeSchema = async () => {
     try {
