@@ -2,6 +2,10 @@ import fs from "node:fs";
 
 function replace(path, from, to) {
   const source = fs.readFileSync(path, "utf8");
+  if (source.includes(to)) {
+    console.log(`Already repaired: ${path}`);
+    return;
+  }
   if (!source.includes(from)) {
     throw new Error(`Expected source not found in ${path}: ${from.slice(0, 120)}`);
   }
