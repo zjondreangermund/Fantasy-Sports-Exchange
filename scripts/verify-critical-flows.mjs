@@ -57,12 +57,11 @@ const checks = [
       "repairCompetitionRewards",
       "missing_card",
       "owner_mismatch",
-      "repairCompetitionRewards",
     ],
   },
   {
     name: "admin APIs expose wallet/marketplace/card/reward repair endpoints",
-    file: "server/routes.ts",
+    file: "server/routes/adminIntegrity.routes.ts",
     patterns: [
       "/api/admin/wallet/integrity",
       "/api/admin/wallet/repair-missing",
@@ -72,6 +71,15 @@ const checks = [
       "/api/admin/cards/repair-serials",
       "/api/admin/competitions/:id/reward-integrity",
       "/api/admin/competitions/:id/repair-rewards",
+      "requireAuth, isAdmin",
+    ],
+  },
+  {
+    name: "admin router registers integrity routes",
+    file: "server/routes/admin.routes.ts",
+    patterns: [
+      "registerAdminIntegrityRoutes",
+      "registerAdminIntegrityRoutes(app, { requireAuth, isAdmin })",
     ],
   },
   {
