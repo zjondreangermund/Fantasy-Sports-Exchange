@@ -1,0 +1,29 @@
+name: Apply six-step logic audit
+
+on:
+  push:
+    branches:
+      - agent/full-logic-audit
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-six-step-audit]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-logic-audit
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/apply-six-step-logic-audit.mjs
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/index.ts client/src/App.tsx
+          git commit -m "Fix route, admin security and live-data logic [skip-six-step-audit]"
+          git push origin HEAD:agent/full-logic-audit
