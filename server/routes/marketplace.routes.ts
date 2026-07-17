@@ -1,10 +1,11 @@
 import type { Express } from "express";
 import { db } from "../db.js";
-import { auditLogs, playerCards, transactions, users, wallets } from "../../shared/schema.js";
+import { auditLogs, playerCards, transactions, users } from "../../shared/schema.js";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../shared/card-economy.js";
 import { registerTournamentCreatorRoutes } from "./tournamentCreator.routes.js";
 import { ensureTournamentSchema } from "./tournamentSchema.ensure.js";
+import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
@@ -60,14 +61,13 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
       const saleHistory = await tx.select().from(transactions).where(and(eq(transactions.type, SALE_TX_TYPE), sql`${transactions.description} ilike ${`%card:${resolvedCardId}%`}`)).orderBy(desc(transactions.createdAt)).limit(5);
       const lastSale = Number(saleHistory[0]?.grossAmount || saleHistory[0]?.amount || 0);
       if (lastSale > 0 && price > lastSale * 3) await tx.insert(auditLogs).values({ userId: buyerId, action: "risk.price_spike_trade", meta: { cardId: resolvedCardId, buyerId, sellerId, listedPrice: price, lastSale } } as any);
-      const [buyerWallet] = await tx.select().from(wallets).where(eq(wallets.userId, buyerId)).for("update"); if (!buyerWallet || toMoney(buyerWallet.balance || 0) < price) throw new Error("Insufficient balance");
-      const fee = toMoney(price * 0.08); const sellerReceives = toMoney(price - fee);
-      await tx.update(wallets).set({ balance: sql`${wallets.balance} - ${price}` } as any).where(eq(wallets.userId, buyerId));
-      await tx.update(wallets).set({ balance: sql`${wallets.balance} + ${sellerReceives}` } as any).where(eq(wallets.userId, sellerId));
-      await tx.update(playerCards).set({ ownerId: buyerId, forSale: false, price: 0 } as any).where(eq(playerCards.id, resolvedCardId));
-      await tx.insert(transactions).values({ userId: buyerId, type: BUY_TX_TYPE, amount: -price, grossAmount: price, feeAmount: 0, netAmount: -price, sourceType: "marketplace_buy", description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)}` } as any);
-      await tx.insert(transactions).values({ userId: sellerId, type: SALE_TX_TYPE, amount: sellerReceives, grossAmount: price, feeAmount: fee, netAmount: sellerReceives, sourceType: "marketplace_sale", description: `marketplace card:${resolvedCardId} buyer:${buyerId} seller:${sellerId} gross:${price.toFixed(2)} fee:${fee.toFixed(2)}` } as any);
-      await tx.insert(auditLogs).values({ userId: buyerId, action: "marketplace.purchase.completed", meta: { cardId: resolvedCardId, serialId, buyerId, sellerId, price, fee, sellerReceives } } as any);
+      const ledger = await applyMarketplaceTradeLedger(tx, { buyerId, sellerId, amount: price, cardId: resolvedCardId, feeRate: 0.08 });
+      const [transferredCard] = await tx.update(playerCards)
+        .set({ ownerId: buyerId, forSale: false, price: 0 } as any)
+        .where(and(eq(playerCards.id, resolvedCardId), eq(playerCards.ownerId, sellerId), eq(playerCards.forSale, true)))
+        .returning({ id: playerCards.id });
+      if (!transferredCard) throw new Error("Card was no longer available for transfer");
+      await tx.insert(auditLogs).values({ userId: buyerId, action: "marketplace.purchase.completed", meta: { cardId: resolvedCardId, serialId, buyerId, sellerId, price: ledger.price, fee: ledger.fee, sellerReceives: ledger.sellerReceives } } as any);
     });
     return { ok: true as const, cardId: resolvedCardId };
   } catch (error: any) { const message = String(error?.message || "Failed to buy card"); const status = message.includes("not found") || message.includes("does not exist") ? 404 : 400; try { await db.insert(auditLogs).values({ userId: buyerId, action: "marketplace.purchase.failed", meta: { cardId: resolvedCardId, serialId, message } } as any); } catch (auditError) { console.error("Failed to write marketplace purchase failure audit:", auditError); } return { ok: false as const, status, message }; }
