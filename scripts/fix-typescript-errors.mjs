@@ -53,6 +53,11 @@ remove(
   "client/src/pages/card-lab.tsx",
   '                        overall: activeOption.player?.overall || 82,\n',
 );
+replace(
+  "client/src/pages/card-lab.tsx",
+  '                        position: activeOption.player?.position || "MID",\n',
+  '                        position: activeOption.player?.position || "MID",\n                        rating: Number(activeOption.player?.overall || activeOption.player?.rating || 82),\n',
+);
 
 for (const path of ["client/src/pages/competitions.tsx", "client/src/pages/competitions-vault.tsx"]) {
   replace(
