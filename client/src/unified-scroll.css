@@ -1,0 +1,128 @@
+/*
+ * Final scroll authority.
+ * Imported after all legacy mobile/play-route styles so one predictable element
+ * owns vertical scrolling on every authenticated page.
+ */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+body {
+  touch-action: manipulation;
+}
+
+.app-shell {
+  width: 100%;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+}
+
+.app-content {
+  min-width: 0;
+  min-height: 0 !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+}
+
+.app-scroll-root,
+[data-app-scroll-root] {
+  position: relative;
+  display: flex !important;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain !important;
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch !important;
+  scroll-behavior: auto;
+  scrollbar-gutter: stable;
+}
+
+[data-app-scroll-root] > div:first-child {
+  min-width: 0;
+  min-height: max-content;
+  flex: 0 0 auto;
+}
+
+/* Page wrappers must grow naturally; the app root performs vertical scrolling. */
+[data-app-scroll-root] main,
+[data-app-scroll-root] .premium-page,
+[data-app-scroll-root] .admin-page,
+[data-app-scroll-root] .collection-page,
+[data-app-scroll-root] .marketplace-page,
+[data-app-scroll-root] .mobile-page-safe {
+  height: auto !important;
+  min-height: max-content !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  touch-action: pan-y !important;
+}
+
+/* Horizontal strips keep horizontal interaction without trapping vertical swipes. */
+[data-app-scroll-root] .overflow-x-auto,
+[data-app-scroll-root] [role="tablist"],
+[data-app-scroll-root] [data-mobile-x-scroll="true"],
+[data-app-scroll-root] .mobile-x-scroll,
+[data-app-scroll-root] .stat-x-scroll,
+[data-app-scroll-root] .player-stats-scroll,
+[data-app-scroll-root] .admin-wide-scroll {
+  touch-action: pan-x pan-y !important;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Nested vertical areas are allowed only when explicitly bounded. */
+[data-app-scroll-root] [role="dialog"],
+[data-app-scroll-root] [data-scroll-region="true"] {
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 767px) {
+  .app-shell {
+    display: flex !important;
+  }
+
+  .app-content {
+    display: flex !important;
+    flex-direction: column;
+  }
+
+  .app-scroll-root,
+  [data-app-scroll-root] {
+    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  [data-app-scroll-root] main,
+  [data-app-scroll-root] .premium-page,
+  [data-app-scroll-root] .admin-page,
+  [data-app-scroll-root] .collection-page,
+  [data-app-scroll-root] .marketplace-page,
+  [data-app-scroll-root] .mobile-page-safe {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .app-scroll-root,
+  [data-app-scroll-root] {
+    padding-bottom: 0 !important;
+  }
+}
