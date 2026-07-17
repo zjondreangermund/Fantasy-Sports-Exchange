@@ -1,5 +1,7 @@
 type ArtworkRule = { pattern: RegExp; src: string };
 
+const ARTWORK_VERSION = "2026-07-17";
+
 export const prizeArtworkCatalog: Record<string, ArtworkRule[]> = {
   rare: [
     { pattern: /^N\$500\s+Airtime\s*\/\s*Data$/i, src: "/prizes/rare/rare-01-airtime-data.png" },
@@ -69,5 +71,6 @@ export const prizeArtworkCatalog: Record<string, ArtworkRule[]> = {
 
 export function artworkForPrize(title: string, rarity: string) {
   const rules = prizeArtworkCatalog[String(rarity || "").toLowerCase()] || [];
-  return rules.find((item) => item.pattern.test(String(title || "").trim()))?.src || null;
+  const src = rules.find((item) => item.pattern.test(String(title || "").trim()))?.src;
+  return src ? `${src}?v=${ARTWORK_VERSION}` : null;
 }
