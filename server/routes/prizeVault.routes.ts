@@ -1,7 +1,6 @@
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
-import { storage } from "../storage.js";
 import {
   RARITIES,
   SEASON_KEY,
@@ -15,40 +14,42 @@ function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
 }
 
+function percentage(current: number, target: number): number {
+  if (!Number.isFinite(target) || target <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((current / target) * 100)));
+}
+
 export function registerPrizeVaultRoutes(app: Express) {
   app.get("/api/prize-vault", async (_req, res) => {
     try {
+      // Aggregate entry totals in one database query. The previous implementation
+      // loaded every competition and then issued one extra query per competition.
       const result = await db.execute(sql`
         select
           c.id,
           c.game_week as "gameWeek",
           c.tier::text as rarity,
           coalesce(c.entry_fee, 0)::float as "entryFee",
-          c.status::text as status
+          c.status::text as status,
+          (
+            select count(*)::int
+            from app.competition_entries ce
+            where ce.competition_id = c.id
+          ) as "entryCount"
         from app.competitions c
+        where lower(c.status::text) in ('open', 'active')
         order by c.game_week asc, c.id asc
       `);
 
-      const competitionRows = rowsOf(result);
-      const rows = await Promise.all(
-        competitionRows.map(async (row) => {
-          const entries = await storage.getCompetitionEntries(Number(row.id));
-          return {
-            ...row,
-            entryCount: Array.isArray(entries) ? entries.length : 0,
-          };
-        }),
-      );
-
       const activeByRarity = new Map<string, any>();
-      for (const row of rows) {
+      for (const row of rowsOf(result)) {
         const rarity = String(row.rarity || "common").toLowerCase();
-        const status = String(row.status || "").toLowerCase();
-        if (!["open", "active"].includes(status)) continue;
+        if (!RARITIES.includes(rarity as (typeof RARITIES)[number])) continue;
 
         const gameWeek = Number(row.gameWeek || 0);
         if (!Number.isFinite(gameWeek) || gameWeek <= 0) continue;
-        const entryCount = Number(row.entryCount || 0);
+
+        const entryCount = Math.max(0, Number(row.entryCount || 0));
         const previous = activeByRarity.get(rarity);
         const previousGameWeek = Number(previous?.gameWeek || 0);
 
@@ -68,10 +69,18 @@ export function registerPrizeVaultRoutes(app: Express) {
 
       for (const rarity of RARITIES) {
         const source = activeByRarity.get(rarity);
-        const currentEntries = Number(source?.entryCount || 0);
+        const currentEntries = Math.max(0, Number(source?.entryCount || 0));
         const state = getActivePrizeForEntries(rarity, currentEntries);
+        const unlockedCount = state.ladder.filter(
+          (prize) => currentEntries >= prize.requiredEntrants,
+        ).length;
+        const progressTarget =
+          state.nextPrize?.requiredEntrants || state.activePrize?.requiredEntrants || 0;
+
         const ladder = getPrizeLadder(rarity).map((prize) => {
           const unlocked = currentEntries >= prize.requiredEntrants;
+          const currentPrize = state.activePrize?.key === prize.key;
+          const nextPrize = state.nextPrize?.key === prize.key;
           const item = {
             id: `${rarity}-${prize.key}`,
             season: SEASON_KEY,
@@ -86,11 +95,12 @@ export function registerPrizeVaultRoutes(app: Express) {
             entryFee: prize.entryFee,
             marginMultiplier: prize.marginMultiplier,
             currentEntries,
+            progressPercentage: percentage(currentEntries, prize.requiredEntrants),
             unlocked,
-            active: state.activePrize?.key === prize.key || (!state.activePrize && state.nextPrize?.key === prize.key),
-            replaced: unlocked && state.activePrize?.key !== prize.key,
-            currentPrize: state.activePrize?.key === prize.key,
-            nextPrize: !state.activePrize && state.nextPrize?.key === prize.key,
+            active: currentPrize || nextPrize,
+            replaced: unlocked && !currentPrize,
+            currentPrize,
+            nextPrize,
             sponsor: null,
           };
           items.push(item);
@@ -104,20 +114,28 @@ export function registerPrizeVaultRoutes(app: Express) {
           currentEntries,
           entryFee: RARITY_ENTRY_FEES[rarity],
           marginMultiplier: RARITY_MARGIN_MULTIPLIERS[rarity],
+          unlocked: unlockedCount,
+          total: ladder.length,
+          progressPercentage: percentage(currentEntries, progressTarget),
           activePrize: state.activePrize,
+          currentPrize: state.activePrize,
           nextPrize: state.nextPrize,
           entrantsToNext: state.entrantsToNext,
           items: ladder,
         };
 
         summary[rarity] = {
-          unlocked: state.activePrize ? 1 : 0,
+          unlocked: unlockedCount,
           total: ladder.length,
           currentGameWeek: Number(source?.gameWeek || 0),
           currentEntries,
-          targetEntries: state.nextPrize?.requiredEntrants || state.activePrize?.requiredEntrants || 0,
+          targetEntries: progressTarget,
+          progressPercentage: percentage(currentEntries, progressTarget),
           activePrize: state.activePrize,
+          currentPrize: state.activePrize,
           nextPrize: state.nextPrize,
+          currentPrizeValue: Number(state.activePrize?.value || 0),
+          nextPrizeValue: Number(state.nextPrize?.value || 0),
           entrantsToNext: state.entrantsToNext,
           entryFee: RARITY_ENTRY_FEES[rarity],
           marginMultiplier: RARITY_MARGIN_MULTIPLIERS[rarity],
