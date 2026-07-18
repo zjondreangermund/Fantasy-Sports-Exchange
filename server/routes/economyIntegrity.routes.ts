@@ -9,6 +9,7 @@ interface RegisterEconomyIntegrityRoutesDeps {
 }
 
 const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
+let cardLockGuardPromise: Promise<void> | null = null;
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -18,6 +19,44 @@ function toMoney(amount: unknown): number {
   const value = Number(amount);
   if (!Number.isFinite(value)) return 0;
   return Math.round(value * 100) / 100;
+}
+
+async function ensureCardLockGuard(): Promise<void> {
+  if (!cardLockGuardPromise) {
+    cardLockGuardPromise = (async () => {
+      await db.execute(sql`
+        create or replace function app.prevent_locked_card_transfer()
+        returns trigger
+        language plpgsql
+        as $$
+        begin
+          if exists (
+            select 1
+            from app.card_locks cl
+            where cl.card_id = old.id
+              and (cl.expires_at is null or cl.expires_at > now())
+          ) and (
+            new.owner_id is distinct from old.owner_id
+            or (new.for_sale is distinct from old.for_sale and new.for_sale = true)
+          ) then
+            raise exception 'Card is locked for competition';
+          end if;
+          return new;
+        end;
+        $$
+      `);
+      await db.execute(sql`drop trigger if exists player_cards_lock_guard on app.player_cards`);
+      await db.execute(sql`
+        create trigger player_cards_lock_guard
+        before update of owner_id, for_sale on app.player_cards
+        for each row execute function app.prevent_locked_card_transfer()
+      `);
+    })().catch((error) => {
+      cardLockGuardPromise = null;
+      throw error;
+    });
+  }
+  await cardLockGuardPromise;
 }
 
 async function isAdminUser(userId: string): Promise<boolean> {
@@ -46,6 +85,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
 
   app.post("/api/competitions/join", requireAuth, async (req: any, res) => {
     try {
+      await ensureCardLockGuard();
       const userId = String(req.authUserId || "");
       const competitionId = Number(req.body?.competitionId);
       const cardIds = Array.isArray(req.body?.cardIds)
@@ -112,6 +152,15 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         const maxEntries = Number(competition.maxEntries || 0);
         if (maxEntries > 0 && Number(countRow?.count || 0) >= maxEntries) throw new Error("Tournament is full");
 
+        const lockedCard = rowsOf(await tx.execute(sql`
+          select card_id as "cardId"
+          from app.card_locks
+          where card_id = any(${cardIds}::int[])
+            and (expires_at is null or expires_at > now())
+          limit 1
+        `))[0];
+        if (lockedCard) throw new Error("One or more selected cards are already locked");
+
         const entryFee = toMoney(competition.entryFee);
         if (entryFee > 0) {
           const wallet = rowsOf(await tx.execute(sql`
@@ -130,20 +179,28 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           `);
         }
 
-        return rowsOf(await tx.execute(sql`
+        const createdEntry = rowsOf(await tx.execute(sql`
           insert into app.competition_entries
             (competition_id, user_id, lineup_card_ids, captain_id, total_score, joined_at)
           values
             (${competitionId}, ${userId}, ${JSON.stringify(cardIds)}::jsonb, ${captainId}, 0, now())
           returning *
         `))[0];
+
+        await tx.execute(sql`
+          insert into app.card_locks (card_id, user_id, reason, ref_id, created_at)
+          select card_id, ${userId}, 'competition', ${String(competitionId)}, now()
+          from unnest(${cardIds}::int[]) as card_id
+        `);
+
+        return createdEntry;
       });
 
       return res.json({ success: true, message: "Successfully joined tournament", entryId: entry.id });
     } catch (error: any) {
       const message = error?.message || "Failed to join tournament";
-      const status = ["Tournament not found"].includes(message) ? 404 :
-        ["Already entered this tournament", "Tournament is full", "Insufficient balance for entry fee", "Tournament is not open for entries", "Gameweek entries are closed"].includes(message) || message.includes("tournaments only accept") ? 400 : 500;
+      const status = message === "Tournament not found" ? 404 :
+        ["Already entered this tournament", "Tournament is full", "Insufficient balance for entry fee", "Tournament is not open for entries", "Gameweek entries are closed", "One or more selected cards are already locked"].includes(message) || message.includes("tournaments only accept") ? 400 : 500;
       if (status === 500) console.error("Failed to join competition atomically:", error);
       return res.status(status).json({ message });
     }
@@ -151,6 +208,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
 
   app.post("/api/admin/competitions/settle/:id", requireAuth, async (req: any, res) => {
     try {
+      await ensureCardLockGuard();
       const adminId = String(req.authUserId || "");
       if (!(await isAdminUser(adminId))) return res.status(403).json({ message: "Admin access required" });
       const competitionId = Number(req.params.id);
@@ -211,8 +269,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           where id = ${competitionId}
         `);
         await tx.execute(sql`
+          delete from app.card_locks
+          where reason = 'competition' and ref_id = ${String(competitionId)}
+        `);
+        await tx.execute(sql`
           insert into app.audit_logs (user_id, action, meta)
-          values (${adminId}, 'admin.tournament.settled', ${JSON.stringify({ competitionId, grossPool, platformFee, prizePool })}::jsonb)
+          values (${adminId}, 'admin.tournament.settled', ${JSON.stringify({ competitionId, grossPool, platformFee, prizePool, cardLocksReleased: true })}::jsonb)
         `).catch(() => undefined);
 
         return { grossPool, platformFee, prizePool, winnersCount: Math.min(3, ranked.length) };
