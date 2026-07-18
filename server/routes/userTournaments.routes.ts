@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { ARENA_TOURNAMENT_PRICE_PRESETS } from "../services/tournamentRules.js";
+import { registerEconomyIntegrityRoutes } from "./economyIntegrity.routes.js";
 
 interface RegisterUserTournamentRoutesDeps { requireAuth: any; }
 
@@ -47,6 +48,7 @@ function prizeFor(rarity: string, gameWeek: number) {
 
 export function registerUserTournamentRoutes(app: Express, deps: RegisterUserTournamentRoutesDeps) {
   const { requireAuth } = deps;
+  registerEconomyIntegrityRoutes(app, { requireAuth });
 
   app.get("/api/prize-vault", async (_req, res) => {
     try {
