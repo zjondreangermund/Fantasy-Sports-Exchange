@@ -3,6 +3,17 @@ import { db } from "./db.js";
 
 export async function ensureRuntimeSchema() {
   try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS app.idempotency_keys (
+        key text PRIMARY KEY,
+        user_id varchar(255) NOT NULL REFERENCES app.users(id),
+        created_at timestamp DEFAULT now(),
+        expires_at timestamp
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idempotency_keys_expires_at_idx ON app.idempotency_keys (expires_at) WHERE expires_at IS NOT NULL`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS audit_logs_marketplace_purchase_idempotency_idx ON app.audit_logs (user_id, (meta ->> 'idempotencyKey')) WHERE action = 'marketplace.purchase.completed'`);
+
     await db.execute(sql`ALTER TABLE IF EXISTS app.transactions ADD COLUMN IF NOT EXISTS gross_amount real DEFAULT 0`);
     await db.execute(sql`ALTER TABLE IF EXISTS app.transactions ADD COLUMN IF NOT EXISTS fee_amount real DEFAULT 0`);
     await db.execute(sql`ALTER TABLE IF EXISTS app.transactions ADD COLUMN IF NOT EXISTS net_amount real DEFAULT 0`);
