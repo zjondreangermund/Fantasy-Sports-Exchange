@@ -77,14 +77,23 @@ export class ScoreUpdateService {
   async updateAllActiveCompetitions() {
     try {
       const competitions = await this.storage.getCompetitions();
+      const now = Date.now();
+      for (const competition of competitions) {
+        const startTime = new Date(competition.startDate || competition.start_date || 0).getTime();
+        if (competition.status === "open" && Number.isFinite(startTime) && startTime <= now) {
+          await this.storage.updateCompetition(competition.id, { status: "active" });
+          competition.status = "active";
+          console.log(`▶️ Activated tournament ${competition.id}: ${competition.name || "Tournament"}`);
+        }
+      }
       const currentGameweek = await fplApi.getCurrentGameweek();
-      const activeComps = competitions.filter((c: any) => (c.status === "open" || c.status === "active") && Number(c.gameWeek || c.game_week || 0) === Number(currentGameweek));
-      const otherActiveComps = competitions.filter((c: any) => (c.status === "open" || c.status === "active") && Number(c.gameWeek || c.game_week || 0) !== Number(currentGameweek));
+      const activeComps = competitions.filter((c: any) => c.status === "active" && Number(c.gameWeek || c.game_week || 0) === Number(currentGameweek));
+      const otherActiveComps = competitions.filter((c: any) => c.status === "active" && Number(c.gameWeek || c.game_week || 0) !== Number(currentGameweek));
       for (const comp of otherActiveComps) {
         const entries = await this.storage.getCompetitionEntries(comp.id);
         for (const entry of entries) await this.storage.updateCompetitionEntry(entry.id, { totalScore: 0 });
       }
-      if (this.lastProcessedGameweek !== null && this.lastProcessedGameweek !== currentGameweek) await this.resetForNewGameweek(competitions.filter((c: any) => c.status === "open" || c.status === "active"));
+      if (this.lastProcessedGameweek !== null && this.lastProcessedGameweek !== currentGameweek) await this.resetForNewGameweek(competitions.filter((c: any) => c.status === "active"));
       this.lastProcessedGameweek = currentGameweek;
       if (activeComps.length === 0) { console.log(`No active competitions for Premier League GW${currentGameweek}`); return; }
       console.log(`📊 Updating ${activeComps.length} Premier League GW${currentGameweek} competitions...`);
