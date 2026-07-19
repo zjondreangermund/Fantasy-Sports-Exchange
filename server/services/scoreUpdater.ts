@@ -5,8 +5,12 @@
  * competitions whose gameWeek matches the current FPL/Premier League gameweek.
  */
 
+import { sql } from "drizzle-orm";
+import { db } from "../db.js";
 import { fplApi } from "./fplApi.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats, calculateLineupScore } from "./scoring.js";
+
+function rowsOf(result: any): any[] { return Array.isArray(result?.rows) ? result.rows : []; }
 
 export class ScoreUpdateService {
   private storage: any;
@@ -81,9 +85,26 @@ export class ScoreUpdateService {
       for (const competition of competitions) {
         const startTime = new Date(competition.startDate || competition.start_date || 0).getTime();
         if (competition.status === "open" && Number.isFinite(startTime) && startTime <= now) {
-          await this.storage.updateCompetition(competition.id, { status: "active" });
-          competition.status = "active";
-          console.log(`▶️ Activated tournament ${competition.id}: ${competition.name || "Tournament"}`);
+          const activated = rowsOf(await db.execute(sql`
+            UPDATE app.competitions
+            SET status = 'active'
+            WHERE id = ${Number(competition.id)}
+              AND status = 'open'
+              AND start_date <= now()
+            RETURNING status::text AS status
+          `))[0];
+          if (activated) {
+            competition.status = "active";
+            console.log(`▶️ Activated tournament ${competition.id}: ${competition.name || "Tournament"}`);
+          } else {
+            const current = rowsOf(await db.execute(sql`
+              SELECT status::text AS status
+              FROM app.competitions
+              WHERE id = ${Number(competition.id)}
+              LIMIT 1
+            `))[0];
+            competition.status = current?.status || competition.status;
+          }
         }
       }
       const currentGameweek = await fplApi.getCurrentGameweek();
