@@ -121,12 +121,11 @@ export function registerCompetitionCancellationRoutes(app: Express, deps: Regist
 
       const deleted = await db.transaction(async (tx) => {
         const tournament = rowsOf(await tx.execute(sql`
-          SELECT c.id, c.name, c.status::text AS status, count(ce.id)::int AS entry_count
+          SELECT c.id, c.name, c.status::text AS status,
+            (SELECT count(*)::int FROM app.competition_entries ce WHERE ce.competition_id = c.id) AS entry_count
           FROM app.competitions c
-          LEFT JOIN app.competition_entries ce ON ce.competition_id = c.id
           WHERE c.id = ${competitionId}
-          GROUP BY c.id
-          FOR UPDATE OF c
+          FOR UPDATE
         `))[0];
         if (!tournament) throw new Error("Tournament not found");
         if (Number(tournament.entry_count || 0) > 0) {
