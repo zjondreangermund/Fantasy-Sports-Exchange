@@ -26,15 +26,42 @@ const checks = [
     ],
   },
   {
-    name: "marketplace purchases use ledger + ownership guard + audit logs",
+    name: "marketplace purchases use ledger, ownership guard, idempotency and audit logs",
     file: "server/routes/marketplace.routes.ts",
     patterns: [
       "applyMarketplaceTradeLedger",
       "for(\"update\")",
       "eq(playerCards.ownerId, sellerId)",
+      "idempotencyKeys",
+      "marketplacePurchaseKey",
+      ".onConflictDoNothing({ target: idempotencyKeys.key })",
+      "meta ->> 'idempotencyKey'",
+      "duplicate: true",
+      "const BUY_TX_TYPE = \"marketplace_buy\"",
+      "const SALE_TX_TYPE = \"marketplace_sale\"",
       "marketplace.purchase.completed",
       "marketplace.purchase.failed",
       "risk.wash_trade_blocked",
+    ],
+  },
+  {
+    name: "marketplace idempotency has migration and runtime database support",
+    file: "drizzle/0003_marketplace_purchase_idempotency.sql",
+    patterns: [
+      "CREATE TABLE IF NOT EXISTS app.idempotency_keys",
+      "key text PRIMARY KEY",
+      "idempotency_keys_expires_at_idx",
+      "audit_logs_marketplace_purchase_idempotency_idx",
+      "meta ->> 'idempotencyKey'",
+    ],
+  },
+  {
+    name: "runtime schema ensures marketplace idempotency structures",
+    file: "server/runtime-schema.ts",
+    patterns: [
+      "CREATE TABLE IF NOT EXISTS app.idempotency_keys",
+      "idempotency_keys_expires_at_idx",
+      "audit_logs_marketplace_purchase_idempotency_idx",
     ],
   },
   {
