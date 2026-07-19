@@ -83,7 +83,7 @@ const checks = [
     ],
   },
   {
-    name: "competition cancellation routes prevent refund bypass and destructive deletion",
+    name: "competition cancellation routes prevent refund and lifecycle bypasses",
     file: "server/routes/competitionCancellation.routes.ts",
     patterns: [
       "/api/user-tournaments/:id/cancel",
@@ -91,6 +91,11 @@ const checks = [
       "/api/user-tournaments/:id/status",
       "requestedStatus === \"cancelled\"",
       "cancelCompetitionWithRefunds",
+      "app.patch(\"/api/admin/competitions/:id\"",
+      "Use the settlement endpoint to complete a tournament",
+      "Tier and entry fee cannot change after users have entered",
+      "Active tournaments can only be cancelled or settled",
+      "admin.tournament.updated",
       "Entered tournaments cannot be deleted",
       "FOR UPDATE",
       "preserve ledger history",
