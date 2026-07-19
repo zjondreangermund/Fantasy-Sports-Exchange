@@ -105,6 +105,17 @@ const checks = [
     ],
   },
   {
+    name: "kickoff activation cannot resurrect a cancelled tournament",
+    file: "server/services/scoreUpdater.ts",
+    patterns: [
+      "AND status = 'open'",
+      "AND start_date <= now()",
+      "RETURNING status::text AS status",
+      "SELECT status::text AS status",
+      "competition.status = current?.status || competition.status",
+    ],
+  },
+  {
     name: "competition cancellation has durable migration support",
     file: "drizzle/0004_competition_cancellation_refunds.sql",
     patterns: [
@@ -119,7 +130,7 @@ const checks = [
     ],
   },
   {
-    name: "runtime startup ensures cancellation database structures",
+    name: "runtime schema helper includes cancellation database structures",
     file: "server/runtime-schema.ts",
     patterns: [
       "ensureCompetitionCancellationSchema",
