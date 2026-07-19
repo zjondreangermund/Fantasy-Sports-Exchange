@@ -27,7 +27,6 @@ export async function ensureRuntimeSchema() {
           serial_id = concat(coalesce(nullif(ranked.initials, ''), 'PLY'), '-', pc.player_id, '-', upper(left(pc.rarity::text, 1)), '-', lpad(ranked.serial_number::text, 4, '0'))
       FROM ranked
       WHERE ranked.id = pc.id
-        AND (pc.serial_number IS NULL OR pc.serial_id IS NULL OR pc.max_supply IS NULL OR pc.max_supply = 0)
     `);
     await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS player_cards_player_rarity_serial_unique ON app.player_cards (player_id, rarity, serial_number) WHERE serial_number IS NOT NULL`);
     await db.execute(sql`
