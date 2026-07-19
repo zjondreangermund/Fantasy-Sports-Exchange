@@ -8,9 +8,22 @@ interface RegisterCompetitionCancellationRoutesDeps {
 }
 
 const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
+const ADMIN_EDITABLE_STATUSES = new Set(["open", "upcoming", "closed", "active"]);
+const RARITIES = new Set(["common", "rare", "unique", "epic", "legendary"]);
+const PRIZE_TYPES = new Set(["cash_pool", "goods", "goods_plus_cash", "packs", "sponsor_prize"]);
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : Array.isArray(result) ? result : [];
+}
+
+function toMoney(value: unknown): number {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return 0;
+  return Math.round(amount * 100) / 100;
+}
+
+function hasOwn(object: any, key: string) {
+  return Object.prototype.hasOwnProperty.call(object || {}, key);
 }
 
 async function isAdminUser(userId: string) {
@@ -95,6 +108,7 @@ export function registerCompetitionCancellationRoutes(app: Express, deps: Regist
         `))[0];
         if (!current) throw new Error("Tournament not found");
         if (["completed", "cancelled"].includes(String(current.status))) throw new Error(`Tournament is already ${current.status}`);
+        if (String(current.status) === "active" && requestedStatus !== "active") throw new Error("Active tournaments cannot be reopened or closed by the creator");
         return rowsOf(await tx.execute(sql`
           UPDATE app.competitions
           SET status = ${requestedStatus}
@@ -105,8 +119,92 @@ export function registerCompetitionCancellationRoutes(app: Express, deps: Regist
       return res.json({ success: true, tournament });
     } catch (error: any) {
       const message = String(error?.message || "Failed to update status");
-      const status = message === "Tournament not found" ? 404 : message.includes("already") ? 400 : 500;
+      const status = message === "Tournament not found" ? 404 : message.includes("already") || message.includes("cannot") ? 400 : 500;
       if (status === 500) console.error("Failed to update tournament status safely:", error);
+      return res.status(status).json({ message });
+    }
+  });
+
+  // Shadow the monolithic admin editor so terminal states and refunds cannot be bypassed.
+  app.patch("/api/admin/competitions/:id", requireAuth, async (req: any, res) => {
+    try {
+      await ensureCompetitionCancellationSchema();
+      const adminId = String(req.authUserId || "");
+      if (!(await isAdminUser(adminId))) return res.status(403).json({ message: "Admin access required" });
+      const competitionId = Number(req.params.id);
+      if (!Number.isInteger(competitionId) || competitionId <= 0) return res.status(400).json({ message: "Valid tournament required" });
+
+      const requestedStatusRaw = hasOwn(req.body, "status") ? String(req.body.status || "").toLowerCase() : "";
+      if (requestedStatusRaw === "cancelled") {
+        const result = await cancelCompetitionWithRefunds({ competitionId, actorId: adminId, allowActive: true, reason: req.body?.reason || req.body?.adminNotes });
+        return res.json({ success: true, ...result });
+      }
+      if (requestedStatusRaw === "completed") return res.status(400).json({ message: "Use the settlement endpoint to complete a tournament" });
+      if (requestedStatusRaw && !ADMIN_EDITABLE_STATUSES.has(requestedStatusRaw)) return res.status(400).json({ message: "Invalid tournament status" });
+
+      const tournament = await db.transaction(async (tx) => {
+        const current = rowsOf(await tx.execute(sql`
+          SELECT c.*,
+            (SELECT count(*)::int FROM app.competition_entries ce WHERE ce.competition_id = c.id) AS entry_count
+          FROM app.competitions c
+          WHERE c.id = ${competitionId}
+          FOR UPDATE
+        `))[0];
+        if (!current) throw new Error("Tournament not found");
+
+        const currentStatus = String(current.status || "");
+        if (["completed", "cancelled"].includes(currentStatus)) throw new Error(`Tournament is already ${currentStatus} and cannot be edited`);
+
+        const name = hasOwn(req.body, "name") ? String(req.body.name || "").trim().slice(0, 100) : String(current.name || "");
+        const tier = hasOwn(req.body, "tier") ? String(req.body.tier || "").toLowerCase() : String(current.tier || "common").toLowerCase();
+        const status = requestedStatusRaw || currentStatus;
+        const entryFee = hasOwn(req.body, "entryFee") ? toMoney(req.body.entryFee) : toMoney(current.entry_fee);
+        const gameWeekRaw = hasOwn(req.body, "gameWeek") ? Number(req.body.gameWeek) : Number(current.game_week || 1);
+        const gameWeek = Math.max(1, Math.min(38, Number.isFinite(gameWeekRaw) ? Math.trunc(gameWeekRaw) : 1));
+        const maxEntries = hasOwn(req.body, "maxEntries") ? (Number(req.body.maxEntries) > 1 ? Math.trunc(Number(req.body.maxEntries)) : null) : current.max_entries;
+        const visibility = hasOwn(req.body, "visibility") && String(req.body.visibility) === "private" ? "private" : hasOwn(req.body, "visibility") ? "public" : String(current.visibility || "public");
+        const prizeType = hasOwn(req.body, "prizeType") ? String(req.body.prizeType || "").toLowerCase() : String(current.prize_type || "goods").toLowerCase();
+        const prizeDescription = hasOwn(req.body, "prizeDescription") ? String(req.body.prizeDescription || "").trim().slice(0, 240) : current.prize_description;
+        const prizeKey = hasOwn(req.body, "prizeKey") ? String(req.body.prizeKey || "").trim().slice(0, 120) : current.prize_key;
+        const startDate = hasOwn(req.body, "startDate") ? new Date(String(req.body.startDate)) : new Date(current.start_date);
+        const endDate = hasOwn(req.body, "endDate") ? new Date(String(req.body.endDate)) : new Date(current.end_date);
+
+        if (!name) throw new Error("Tournament name required");
+        if (!RARITIES.has(tier)) throw new Error("Invalid rarity tier");
+        if (!ADMIN_EDITABLE_STATUSES.has(status)) throw new Error("Invalid tournament status");
+        if (!PRIZE_TYPES.has(prizeType)) throw new Error("Invalid prize type");
+        if (entryFee < 0) throw new Error("Entry fee cannot be negative");
+        if (!Number.isFinite(startDate.getTime()) || !Number.isFinite(endDate.getTime()) || endDate <= startDate) throw new Error("Valid start and end dates required");
+        if (currentStatus === "active" && status !== "active") throw new Error("Active tournaments can only be cancelled or settled");
+
+        const entryCount = Number(current.entry_count || 0);
+        if (entryCount > 0 && (tier !== String(current.tier).toLowerCase() || entryFee !== toMoney(current.entry_fee))) {
+          throw new Error("Tier and entry fee cannot change after users have entered");
+        }
+
+        const updated = rowsOf(await tx.execute(sql`
+          UPDATE app.competitions
+          SET name = ${name}, tier = ${tier}, entry_fee = ${entryFee}, status = ${status},
+            game_week = ${gameWeek}, start_date = ${startDate}, end_date = ${endDate},
+            prize_card_rarity = ${tier === "common" ? "rare" : tier}, visibility = ${visibility},
+            max_entries = ${maxEntries}, prize_type = ${prizeType},
+            prize_description = ${prizeDescription}, prize_key = ${prizeKey}
+          WHERE id = ${competitionId}
+          RETURNING *
+        `))[0] || null;
+
+        await tx.execute(sql`
+          INSERT INTO app.audit_logs (user_id, action, meta)
+          VALUES (${adminId}, 'admin.tournament.updated', ${JSON.stringify({ competitionId, previousStatus: currentStatus, nextStatus: status, entryCount })}::jsonb)
+        `);
+        return updated;
+      });
+
+      return res.json({ success: true, tournament });
+    } catch (error: any) {
+      const message = String(error?.message || "Failed to update tournament");
+      const status = message === "Tournament not found" ? 404 : message.includes("cannot") || message.includes("Invalid") || message.includes("required") || message.includes("Use the settlement") ? 400 : 500;
+      if (status === 500) console.error("Failed to update admin tournament safely:", error);
       return res.status(status).json({ message });
     }
   });
