@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import { auditLogs, idempotencyKeys, playerCards, transactions, users } from "../../shared/schema.js";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../shared/card-economy.js";
+import { registerCompetitionCancellationRoutes } from "./competitionCancellation.routes.js";
 import { registerTournamentCreatorRoutes } from "./tournamentCreator.routes.js";
 import { ensureTournamentSchema } from "./tournamentSchema.ensure.js";
 import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
@@ -107,6 +108,7 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
 
 export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplaceRoutesDeps) {
   const { requireAuth } = deps;
+  registerCompetitionCancellationRoutes(app, { requireAuth });
   registerTournamentCreatorRoutes(app, { requireAuth });
 
   app.post("/api/user-tournaments/create", requireAuth, async (req: any, res) => {

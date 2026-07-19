@@ -1,8 +1,11 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.js";
+import { ensureCompetitionCancellationSchema } from "./services/competitionCancellation.js";
 
 export async function ensureRuntimeSchema() {
   try {
+    await ensureCompetitionCancellationSchema();
+
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS app.idempotency_keys (
         key text PRIMARY KEY,
