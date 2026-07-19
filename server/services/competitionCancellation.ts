@@ -16,6 +16,7 @@ function toMoney(value: unknown): number {
 export async function ensureCompetitionCancellationSchema(): Promise<void> {
   if (!cancellationSchemaReady) {
     cancellationSchemaReady = (async () => {
+      await db.execute(sql`ALTER TYPE app.competition_status ADD VALUE IF NOT EXISTS 'closed'`);
       await db.execute(sql`ALTER TYPE app.competition_status ADD VALUE IF NOT EXISTS 'cancelled'`);
       await db.execute(sql`ALTER TYPE app.transaction_type ADD VALUE IF NOT EXISTS 'tournament_refund'`);
       await db.execute(sql`
@@ -29,6 +30,28 @@ export async function ensureCompetitionCancellationSchema(): Promise<void> {
         WHERE c.id = ce.competition_id
           AND coalesce(ce.entry_fee_paid, 0) = 0
           AND coalesce(c.entry_fee, 0) > 0
+      `);
+      await db.execute(sql`
+        CREATE OR REPLACE FUNCTION app.snapshot_competition_entry_fee()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $$
+        BEGIN
+          IF coalesce(NEW.entry_fee_paid, 0) = 0 THEN
+            SELECT GREATEST(coalesce(entry_fee, 0), 0)
+            INTO NEW.entry_fee_paid
+            FROM app.competitions
+            WHERE id = NEW.competition_id;
+          END IF;
+          RETURN NEW;
+        END;
+        $$
+      `);
+      await db.execute(sql`DROP TRIGGER IF EXISTS competition_entry_fee_snapshot ON app.competition_entries`);
+      await db.execute(sql`
+        CREATE TRIGGER competition_entry_fee_snapshot
+        BEFORE INSERT ON app.competition_entries
+        FOR EACH ROW EXECUTE FUNCTION app.snapshot_competition_entry_fee()
       `);
       await db.execute(sql`
         ALTER TABLE app.competitions
@@ -103,7 +126,7 @@ export async function cancelCompetitionWithRefunds(input: CancelCompetitionInput
     const currentStatus = String(competition.status || "");
     if (currentStatus === "completed") throw new Error("Completed tournaments cannot be cancelled");
     if (currentStatus === "active" && !input.allowActive) throw new Error("Active tournaments require admin cancellation");
-    if (!["open", "upcoming", "active", "cancelled"].includes(currentStatus)) {
+    if (!["open", "upcoming", "closed", "active", "cancelled"].includes(currentStatus)) {
       throw new Error(`Tournament cannot be cancelled from status ${currentStatus || "unknown"}`);
     }
 
