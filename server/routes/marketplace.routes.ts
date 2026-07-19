@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { db } from "../db.js";
-import { auditLogs, playerCards, transactions, users } from "../../shared/schema.js";
+import { auditLogs, idempotencyKeys, playerCards, transactions, users } from "../../shared/schema.js";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../shared/card-economy.js";
 import { registerTournamentCreatorRoutes } from "./tournamentCreator.routes.js";
@@ -9,8 +9,8 @@ import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
-const BUY_TX_TYPE = "purchase" as any;
-const SALE_TX_TYPE = "sale" as any;
+const BUY_TX_TYPE = "marketplace_buy" as any;
+const SALE_TX_TYPE = "marketplace_sale" as any;
 const TOURNAMENT_FEE_RATE = 0.2;
 const PIN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const TOURNAMENT_RARITIES = new Set(["common", "rare", "unique", "epic", "legendary"]);
@@ -21,6 +21,9 @@ function normalizePin(raw: unknown) { return String(raw || "").trim().toUpperCas
 function randomPin(length = 6) { let pin = ""; for (let i = 0; i < length; i += 1) pin += PIN_ALPHABET[Math.floor(Math.random() * PIN_ALPHABET.length)]; return pin; }
 async function generateUniqueTournamentPin() { await ensureTournamentSchema(); for (let i = 0; i < 25; i += 1) { const pin = randomPin(); const existing = await db.execute(sql`select id from app.competitions where join_pin = ${pin} limit 1`); const rows = Array.isArray((existing as any)?.rows) ? (existing as any).rows : []; if (rows.length === 0) return pin; } throw new Error("Could not generate tournament PIN"); }
 async function resolveCard(rawCardId: unknown, rawSerialId?: unknown) { const cardId = parseCardId(rawCardId); const serialId = String(rawSerialId ?? "").trim(); if (Number.isInteger(cardId) && cardId > 0) return { cardId, serialId }; if (serialId) { const [card] = await db.select({ id: playerCards.id }).from(playerCards).where(eq(playerCards.serialId, serialId)); if (card?.id) return { cardId: Number(card.id), serialId }; } return { cardId: Number.NaN, serialId }; }
+function marketplacePurchaseKey(buyerId: string, cardId: number, rawKey?: unknown) { const supplied = String(rawKey ?? "").trim().slice(0, 120); if (supplied) return `${buyerId}:marketplace-buy:${supplied}`; const fiveMinuteBucket = Math.floor(Date.now() / (5 * 60 * 1000)); return `${buyerId}:marketplace-buy:card:${cardId}:bucket:${fiveMinuteBucket}`; }
+function rowsFromResult(result: any): any[] { return Array.isArray(result?.rows) ? result.rows : Array.isArray(result) ? result : []; }
+function parseAuditMeta(raw: unknown): Record<string, any> { if (raw && typeof raw === "object") return raw as Record<string, any>; if (typeof raw === "string") { try { return JSON.parse(raw); } catch { return {}; } } return {}; }
 
 function distributionPreset(raw: unknown, customRules?: unknown) {
   const preset = String(raw || "winner_takes_all").toLowerCase().trim();
@@ -39,11 +42,34 @@ function distributionPreset(raw: unknown, customRules?: unknown) {
   return { distribution: safePreset, rules: presets[safePreset] };
 }
 
-async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, rawSerialId?: unknown) {
+async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, rawSerialId?: unknown, rawIdempotencyKey?: unknown) {
   const { cardId: resolvedCardId, serialId } = await resolveCard(rawCardId, rawSerialId);
+  if (!buyerId) return { ok: false as const, status: 401, message: "Authentication required" };
   if (!Number.isInteger(resolvedCardId) || resolvedCardId <= 0) return { ok: false as const, status: 400, message: "Valid cardId required" };
+  const idempotencyKey = marketplacePurchaseKey(buyerId, resolvedCardId, rawIdempotencyKey);
   try {
-    await db.transaction(async (tx) => {
+    const purchase = await db.transaction(async (tx) => {
+      const [claimedKey] = await tx.insert(idempotencyKeys)
+        .values({ key: idempotencyKey, userId: buyerId, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) } as any)
+        .onConflictDoNothing({ target: idempotencyKeys.key })
+        .returning({ key: idempotencyKeys.key });
+
+      if (!claimedKey) {
+        const existingResult = await tx.execute(sql`
+          select meta
+          from app.audit_logs
+          where user_id = ${buyerId}
+            and action = 'marketplace.purchase.completed'
+            and meta ->> 'idempotencyKey' = ${idempotencyKey}
+          order by id desc
+          limit 1
+        `);
+        const existingMeta = parseAuditMeta(rowsFromResult(existingResult)[0]?.meta);
+        if (!existingMeta.cardId) throw new Error("Marketplace purchase is already being processed");
+        if (Number(existingMeta.cardId) !== resolvedCardId) throw new Error("Idempotency key was already used for another marketplace purchase");
+        return { duplicate: true, price: toMoney(existingMeta.price), fee: toMoney(existingMeta.fee), sellerReceives: toMoney(existingMeta.sellerReceives) };
+      }
+
       const [card] = await tx.select().from(playerCards).where(eq(playerCards.id, resolvedCardId)).for("update");
       if (!card) throw new Error("Card does not exist or was already sold");
       if (!card.forSale) throw new Error("Card is not for sale");
@@ -67,10 +93,16 @@ async function processMarketplacePurchase(buyerId: string, rawCardId: unknown, r
         .where(and(eq(playerCards.id, resolvedCardId), eq(playerCards.ownerId, sellerId), eq(playerCards.forSale, true)))
         .returning({ id: playerCards.id });
       if (!transferredCard) throw new Error("Card was no longer available for transfer");
-      await tx.insert(auditLogs).values({ userId: buyerId, action: "marketplace.purchase.completed", meta: { cardId: resolvedCardId, serialId, buyerId, sellerId, price: ledger.price, fee: ledger.fee, sellerReceives: ledger.sellerReceives } } as any);
+      await tx.insert(auditLogs).values({ userId: buyerId, action: "marketplace.purchase.completed", meta: { cardId: resolvedCardId, serialId, buyerId, sellerId, price: ledger.price, fee: ledger.fee, sellerReceives: ledger.sellerReceives, idempotencyKey } } as any);
+      return { duplicate: false, price: ledger.price, fee: ledger.fee, sellerReceives: ledger.sellerReceives };
     });
-    return { ok: true as const, cardId: resolvedCardId };
-  } catch (error: any) { const message = String(error?.message || "Failed to buy card"); const status = message.includes("not found") || message.includes("does not exist") ? 404 : 400; try { await db.insert(auditLogs).values({ userId: buyerId, action: "marketplace.purchase.failed", meta: { cardId: resolvedCardId, serialId, message } } as any); } catch (auditError) { console.error("Failed to write marketplace purchase failure audit:", auditError); } return { ok: false as const, status, message }; }
+    return { ok: true as const, cardId: resolvedCardId, duplicate: purchase.duplicate };
+  } catch (error: any) {
+    const message = String(error?.message || "Failed to buy card");
+    const status = message.includes("not found") || message.includes("does not exist") ? 404 : message.includes("already being processed") || message.includes("Idempotency key") ? 409 : 400;
+    try { await db.insert(auditLogs).values({ userId: buyerId, action: "marketplace.purchase.failed", meta: { cardId: resolvedCardId, serialId, idempotencyKey, message } } as any); } catch (auditError) { console.error("Failed to write marketplace purchase failure audit:", auditError); }
+    return { ok: false as const, status, message };
+  }
 }
 
 export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplaceRoutesDeps) {
@@ -99,6 +131,6 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
     try { const result = await db.execute(sql`select pc.*, p.name as player_name, p.team as player_team, p.position as player_position, p.image_url as player_image_url from app.player_cards pc join app.players p on p.id = pc.player_id where pc.for_sale = true order by pc.price asc nulls last, pc.id desc`); const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : []; const listings = rows.map((row: any) => ({ ...row, player: { id: row.player_id, name: row.player_name, team: row.player_team, position: row.player_position, imageUrl: row.player_image_url } })); return res.json({ listings, cards: listings }); } catch (error: any) { console.error("Failed to fetch marketplace listings:", error); return res.status(500).json({ message: error?.message || "Failed to fetch marketplace" }); }
   });
 
-  app.post("/api/marketplace/buy", requireAuth, async (req: any, res) => { const result = await processMarketplacePurchase(String(req.authUserId || ""), req.body?.cardId, req.body?.serialId); if (!result.ok) return res.status(result.status).json({ message: result.message }); return res.json({ success: true, cardId: result.cardId }); });
-  app.post("/api/marketplace/buy/:cardId", requireAuth, async (req: any, res) => { const result = await processMarketplacePurchase(String(req.authUserId || ""), req.params.cardId, req.body?.serialId); if (!result.ok) return res.status(result.status).json({ message: result.message }); return res.json({ success: true, cardId: result.cardId }); });
+  app.post("/api/marketplace/buy", requireAuth, async (req: any, res) => { const result = await processMarketplacePurchase(String(req.authUserId || ""), req.body?.cardId, req.body?.serialId, req.headers?.["x-idempotency-key"] || req.body?.idempotencyKey); if (!result.ok) return res.status(result.status).json({ message: result.message }); return res.json({ success: true, cardId: result.cardId, duplicate: result.duplicate }); });
+  app.post("/api/marketplace/buy/:cardId", requireAuth, async (req: any, res) => { const result = await processMarketplacePurchase(String(req.authUserId || ""), req.params.cardId, req.body?.serialId, req.headers?.["x-idempotency-key"] || req.body?.idempotencyKey); if (!result.ok) return res.status(result.status).json({ message: result.message }); return res.json({ success: true, cardId: result.cardId, duplicate: result.duplicate }); });
 }
