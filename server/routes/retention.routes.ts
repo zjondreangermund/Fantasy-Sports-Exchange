@@ -6,10 +6,14 @@ import { auditLogs, playerCards, transactions, wallets, withdrawalRequests } fro
 import { registerEplRoutes } from "./epl.routes.js";
 import { registerPrizeVaultRoutes } from "./prizeVault.routes.js";
 import { registerReferralRoutes } from "./referrals.routes.js";
+import { registerWalletRoutes } from "./wallet.routes.js";
 import { COMMUNITY_ENTRY_FEE, PRIZE_CATALOG, PRIZE_MARGIN_MULTIPLIER, getActivePrizeForEntries } from "../services/prizeEngine.js";
 
 const COMMON_BURN_COUNT = 5;
 const COMMON_TO_RARE_BURN_FEE = 10;
+const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
+const ADMIN_USER_IDS = String(process.env.ADMIN_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean);
+const ADMIN_EMAILS = String(process.env.ADMIN_EMAILS || DEFAULT_ADMIN_EMAIL).split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
 
 function toMoney(amount: unknown): number {
   const value = Number(amount);
@@ -44,10 +48,20 @@ function normalizeCompetitionWithPrize(row: any) {
 
 export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; storage: IStorage }) {
   const { requireAuth, storage } = deps;
+  const walletAdmin = async (req: any, res: any, next: any) => {
+    const userId = String(req.authUserId || "");
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    if (ADMIN_USER_IDS.includes(userId)) return next();
+    const user = await storage.getUser(userId).catch(() => undefined);
+    const email = String(user?.email || req.user?.email || req.user?.claims?.email || "").trim().toLowerCase();
+    if (!email || !ADMIN_EMAILS.includes(email)) return res.status(403).json({ message: "Admin access required" });
+    return next();
+  };
 
   registerEplRoutes(app, { requireAuth });
   registerPrizeVaultRoutes(app);
   registerReferralRoutes(app, { requireAuth, storage });
+  registerWalletRoutes(app, { requireAuth, isAdmin: walletAdmin });
 
   app.get("/api/admin/prizes", requireAuth, async (_req: any, res) => {
     return res.json({ prizes: PRIZE_CATALOG, communityEntryFee: COMMUNITY_ENTRY_FEE, marginMultiplier: PRIZE_MARGIN_MULTIPLIER, mode: "highest_unlocked_per_gameweek" });
