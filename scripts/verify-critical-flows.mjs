@@ -65,6 +65,68 @@ const checks = [
     ],
   },
   {
+    name: "competition cancellation is row locked, atomic and exactly once",
+    file: "server/services/competitionCancellation.ts",
+    patterns: [
+      "FOR UPDATE",
+      "app.competition_entry_refunds",
+      "ON CONFLICT (entry_id) DO NOTHING",
+      "type, amount, gross_amount",
+      "'tournament_refund'",
+      "'tournament_cancellation_refund'",
+      "competition-refund:${competitionId}:entry:${entryId}",
+      "DELETE FROM app.card_locks",
+      "SET status = 'cancelled'",
+      "competition.cancellation.reconciled",
+      "entry_fee_paid",
+      "snapshot_competition_entry_fee",
+    ],
+  },
+  {
+    name: "competition cancellation routes prevent refund bypass and destructive deletion",
+    file: "server/routes/competitionCancellation.routes.ts",
+    patterns: [
+      "/api/user-tournaments/:id/cancel",
+      "/api/admin/competitions/:id/cancel",
+      "/api/user-tournaments/:id/status",
+      "requestedStatus === \"cancelled\"",
+      "cancelCompetitionWithRefunds",
+      "Entered tournaments cannot be deleted",
+      "FOR UPDATE",
+      "preserve ledger history",
+    ],
+  },
+  {
+    name: "cancellation routes are registered before legacy tournament handlers",
+    file: "server/routes/marketplace.routes.ts",
+    patterns: [
+      "registerCompetitionCancellationRoutes",
+      "registerCompetitionCancellationRoutes(app, { requireAuth });\n  registerTournamentCreatorRoutes(app, { requireAuth });",
+    ],
+  },
+  {
+    name: "competition cancellation has durable migration support",
+    file: "drizzle/0004_competition_cancellation_refunds.sql",
+    patterns: [
+      "ADD VALUE IF NOT EXISTS 'cancelled'",
+      "ADD VALUE IF NOT EXISTS 'tournament_refund'",
+      "entry_fee_paid",
+      "snapshot_competition_entry_fee",
+      "CREATE TABLE IF NOT EXISTS app.competition_entry_refunds",
+      "entry_id integer PRIMARY KEY",
+      "tournament_cancellation_refund_external_id_unique",
+      "ON DELETE RESTRICT",
+    ],
+  },
+  {
+    name: "runtime startup ensures cancellation database structures",
+    file: "server/runtime-schema.ts",
+    patterns: [
+      "ensureCompetitionCancellationSchema",
+      "await ensureCompetitionCancellationSchema()",
+    ],
+  },
+  {
     name: "auction settlement and buy-now flows are transaction guarded",
     file: "server/routes/auctions.routes.ts",
     patterns: [
