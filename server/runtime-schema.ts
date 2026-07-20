@@ -21,6 +21,13 @@ export async function ensureRuntimeSchema() {
   await ensureDepositVerificationSchema();
   await ensureWithdrawalPayoutSchema();
 
+  // Seeding runs only after this function completes. Canonicalize serials here so
+  // legacy duplicate or missing values cannot crash the seed path first.
+  const serialResult = await ensurePlayerCardSerialIntegrity();
+  if (serialResult.repairedCount > 0) {
+    console.log(`Canonicalized ${serialResult.repairedCount} player card serial records.`);
+  }
+
   try {
     await ensureCompetitionCancellationSchema();
     await ensureAuctionEscrowSchema();
@@ -37,11 +44,6 @@ export async function ensureRuntimeSchema() {
     `);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idempotency_keys_expires_at_idx ON app.idempotency_keys (expires_at) WHERE expires_at IS NOT NULL`);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS audit_logs_marketplace_purchase_idempotency_idx ON app.audit_logs (user_id, (meta ->> 'idempotencyKey')) WHERE action = 'marketplace.purchase.completed'`);
-
-    const serialResult = await ensurePlayerCardSerialIntegrity();
-    if (serialResult.repairedCount > 0) {
-      console.log(`Canonicalized ${serialResult.repairedCount} player card serial records.`);
-    }
   } catch (error) {
     console.warn("Runtime schema check failed:", error);
   }
