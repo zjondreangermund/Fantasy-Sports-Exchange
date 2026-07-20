@@ -1,138 +1,186 @@
 import type { Express } from "express";
-import { refundWalletHold, settleHeldAuctionBid } from "../services/walletLedger.js";
+import {
+  buyAuctionNow,
+  cancelAuctionWithEscrowRecovery,
+  createAuction,
+  getAuctionDetails,
+  getAuctionEscrowIntegrityReport,
+  listActiveAuctions,
+  placeAuctionBid,
+  recoverAuctionEscrow,
+  settleAuctionWithEscrowRecovery,
+} from "../services/auctionEscrow.js";
 
 interface RegisterAuctionsRoutesDeps {
   requireAuth: any;
-  isAdmin?: any;
-  storage?: any;
-  getAuction?: (auctionId: number) => Promise<any>;
-  getAuctionBids?: (auctionId: number) => Promise<any[]>;
+  isAdmin: any;
 }
 
-function toMoney(amount: unknown): number {
-  const value = Number(amount);
-  if (!Number.isFinite(value)) return 0;
-  return Math.round(value * 100) / 100;
+function errorStatus(error: any) {
+  const message = String(error?.message || "Auction operation failed");
+  if (message.includes("not found")) return 404;
+  if (message.includes("do not own") || message.includes("own auction")) return 403;
+  if (
+    message.includes("already") ||
+    message.includes("not live") ||
+    message.includes("has ended") ||
+    message.includes("requires admin recovery") ||
+    message.includes("cannot be cancelled") ||
+    message.includes("require admin cancellation") ||
+    message.includes("locked by another operation")
+  ) return 409;
+  if (
+    message.includes("Valid ") ||
+    message.includes("cannot be") ||
+    message.includes("must be") ||
+    message.includes("Insufficient") ||
+    message.includes("not available") ||
+    message.includes("has not started") ||
+    message.includes("Common cards") ||
+    message.includes("Remove the card")
+  ) return 400;
+  return 500;
 }
 
 export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoutesDeps) {
-  const { requireAuth } = deps;
-  const isAdmin = deps.isAdmin || ((_req: any, _res: any, next: any) => next());
+  const { requireAuth, isAdmin } = deps;
+  if (!isAdmin) throw new Error("Auction routes require an admin authorization middleware");
+
+  app.get("/api/auctions/active", async (_req, res) => {
+    try {
+      return res.json(await listActiveAuctions());
+    } catch (error: any) {
+      console.error("Failed to list active auctions:", error);
+      return res.status(500).json({ message: error?.message || "Failed to fetch auctions" });
+    }
+  });
+
+  app.get("/api/auctions/:id", async (req, res) => {
+    try {
+      const auctionId = Number(req.params.id);
+      if (!Number.isInteger(auctionId) || auctionId <= 0) return res.status(400).json({ message: "Valid auction required" });
+      const auction = await getAuctionDetails(auctionId);
+      if (!auction) return res.status(404).json({ message: "Auction not found" });
+      return res.json(auction);
+    } catch (error: any) {
+      console.error("Failed to fetch auction:", error);
+      return res.status(500).json({ message: error?.message || "Failed to fetch auction" });
+    }
+  });
+
+  app.post("/api/auctions/create", requireAuth, async (req: any, res) => {
+    try {
+      const auction = await createAuction({ ...req.body, sellerId: String(req.authUserId || "") });
+      return res.json({ success: true, auction });
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to create auction:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to create auction") });
+    }
+  });
+
+  app.post("/api/auctions/:id/bid", requireAuth, async (req: any, res) => {
+    try {
+      const result = await placeAuctionBid({
+        auctionId: Number(req.params.id),
+        bidderId: String(req.authUserId || ""),
+        amount: req.body?.amount,
+        idempotencyKey: req.headers?.["x-idempotency-key"] || req.body?.idempotencyKey,
+      });
+      return res.json(result);
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to place auction bid:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to place bid") });
+    }
+  });
+
+  app.post("/api/auctions/:id/buy-now", requireAuth, async (req: any, res) => {
+    try {
+      const result = await buyAuctionNow({
+        auctionId: Number(req.params.id),
+        buyerId: String(req.authUserId || ""),
+        idempotencyKey: req.headers?.["x-idempotency-key"] || req.body?.idempotencyKey,
+      });
+      if (result.success === false) return res.status(409).json(result);
+      return res.json(result);
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to buy auction now:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to buy now") });
+    }
+  });
+
+  app.post("/api/auctions/:id/cancel", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const result = await cancelAuctionWithEscrowRecovery({
+        auctionId: Number(req.params.id),
+        actorId: userId,
+        ownerId: userId,
+        allowBids: false,
+        reason: req.body?.reason,
+      });
+      return res.json(result);
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to cancel auction:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to cancel auction") });
+    }
+  });
+
+  app.post("/api/admin/auctions/:id/cancel", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const result = await cancelAuctionWithEscrowRecovery({
+        auctionId: Number(req.params.id),
+        actorId: String(req.authUserId || ""),
+        allowBids: true,
+        reason: req.body?.reason || req.body?.adminNotes,
+      });
+      return res.json(result);
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to cancel auction as admin:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to cancel auction") });
+    }
+  });
 
   app.post("/api/auctions/:id/settle", requireAuth, isAdmin, async (req: any, res) => {
     try {
-      const auctionId = parseInt(req.params.id, 10);
-      if (!Number.isInteger(auctionId) || auctionId <= 0) {
-        return res.status(400).json({ message: "Valid auction required" });
-      }
-
-      const { db } = await import("../db.js");
-      const { auctions, auctionBids, playerCards, auditLogs } = await import("../../shared/schema.js");
-      const { and, desc, eq } = await import("drizzle-orm");
-
-      let responsePayload: any = null;
-
-      await db.transaction(async (tx) => {
-        const [auction] = await tx.select().from(auctions).where(eq(auctions.id, auctionId)).for("update");
-        if (!auction) throw new Error("Auction not found");
-        if (auction.status === "settled") throw new Error("Auction already settled");
-
-        const bids = await tx
-          .select()
-          .from(auctionBids)
-          .where(eq(auctionBids.auctionId, auctionId))
-          .orderBy(desc(auctionBids.amount));
-        const winningBid = bids[0];
-
-        if (!winningBid) {
-          const [endedAuction] = await tx
-            .update(auctions)
-            .set({ status: "ended" } as any)
-            .where(eq(auctions.id, auctionId))
-            .returning();
-
-          await tx.insert(auditLogs).values({
-            userId: req.authUserId,
-            action: "auction.settle.no_bids",
-            meta: { auctionId, previousStatus: auction.status },
-          } as any);
-
-          responsePayload = { success: true, message: "Auction ended with no bids", auction: endedAuction };
-          return;
-        }
-
-        const winningAmount = toMoney(winningBid.amount);
-        const reservePrice = toMoney(auction.reservePrice || 0);
-        const winnerId = String(winningBid.bidderUserId || "");
-        const sellerId = String(auction.sellerUserId || "");
-
-        if (!winnerId || !sellerId || winningAmount <= 0) {
-          throw new Error("Auction winner, seller, or amount is invalid");
-        }
-
-        if (winningAmount < reservePrice) {
-          await refundWalletHold(tx, { userId: winnerId, amount: winningAmount });
-
-          const [endedAuction] = await tx
-            .update(auctions)
-            .set({ status: "ended" } as any)
-            .where(eq(auctions.id, auctionId))
-            .returning();
-
-          await tx.insert(auditLogs).values({
-            userId: req.authUserId,
-            action: "auction.settle.reserve_not_met",
-            meta: { auctionId, winnerId, winningAmount, reservePrice },
-          } as any);
-
-          responsePayload = { success: true, message: "Auction ended. Reserve was not met.", auction: endedAuction };
-          return;
-        }
-
-        const transferredCards = await tx
-          .update(playerCards)
-          .set({ ownerId: winnerId, forSale: false, price: 0 } as any)
-          .where(and(eq(playerCards.id, auction.cardId), eq(playerCards.ownerId, sellerId)))
-          .returning({ id: playerCards.id });
-        if (transferredCards.length !== 1) {
-          throw new Error("Auction card was no longer available for transfer");
-        }
-
-        const settlement = await settleHeldAuctionBid(tx, {
-          winnerId,
-          sellerId,
-          amount: winningAmount,
-          cardId: auction.cardId,
-          description: `Auction settlement #${auctionId}`,
-        });
-
-        const [settledAuction] = await tx
-          .update(auctions)
-          .set({ status: "settled" } as any)
-          .where(eq(auctions.id, auctionId))
-          .returning();
-
-        await tx.insert(auditLogs).values({
-          userId: req.authUserId,
-          action: "auction.settle.completed",
-          meta: {
-            auctionId,
-            cardId: auction.cardId,
-            winnerId,
-            sellerId,
-            winningAmount,
-            fee: settlement.fee,
-            sellerReceives: settlement.sellerReceives,
-          },
-        } as any);
-
-        responsePayload = { success: true, message: "Auction settled", auction: settledAuction };
+      const result = await settleAuctionWithEscrowRecovery({
+        auctionId: Number(req.params.id),
+        actorId: String(req.authUserId || ""),
       });
-
-      return res.json(responsePayload);
+      if (result.success === false) return res.status(409).json(result);
+      return res.json(result);
     } catch (error: any) {
-      console.error("Failed to settle auction:", error);
-      return res.status(500).json({ message: error?.message || "Failed to settle auction" });
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to settle auction:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to settle auction") });
+    }
+  });
+
+  app.get("/api/admin/auctions/escrow-integrity", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const auctionId = req.query?.auctionId ? Number(req.query.auctionId) : undefined;
+      return res.json(await getAuctionEscrowIntegrityReport(auctionId));
+    } catch (error: any) {
+      console.error("Failed to inspect auction escrow:", error);
+      return res.status(500).json({ message: error?.message || "Failed to inspect auction escrow" });
+    }
+  });
+
+  app.post("/api/admin/auctions/:id/recover", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const result = await recoverAuctionEscrow({
+        auctionId: Number(req.params.id),
+        actorId: String(req.authUserId || ""),
+      });
+      return res.json(result);
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to recover auction escrow:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to recover auction escrow") });
     }
   });
 }
