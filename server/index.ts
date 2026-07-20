@@ -3,6 +3,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes, requireAuth, isAdmin } from "./routes.js";
 import { registerAdminInsightsRoutes } from "./routes/adminInsights.routes.js";
+import { registerDepositVerificationRoutes } from "./routes/depositVerification.routes.js";
 import { seedDatabase } from "./seed.js";
 import { serveStatic } from "./static.js";
 import { ensureRuntimeSchema } from "./runtime-schema.js";
@@ -151,6 +152,7 @@ app.use((req, res, next) => { const start = Date.now(); const requestPath = req.
   try { await ensurePlayerImageColumns(); await ensureFplPlayerColumns(); } catch (error) { console.warn("Could not ensure player columns:", error); }
   try { await ensureApiFootballSyncSchema(); } catch (error) { console.warn("Could not prepare API-Football sync tables:", error); }
   try { await seedDatabase(); } catch (error) { console.warn("Could not auto-seed player/card data:", error); }
+  registerDepositVerificationRoutes(app, { requireAuth, isAdmin });
   await ensureRuntimeSchema();
   try { const result = await syncFplPremierLeaguePlayers(); console.log("FPL Premier League player sync complete:", result); } catch (error) { console.warn("Could not sync FPL Premier League players:", error); }
   await registerRoutes(httpServer, app);
