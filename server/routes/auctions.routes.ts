@@ -1,4 +1,6 @@
 import type { Express } from "express";
+import { sql } from "drizzle-orm";
+import { db } from "../db.js";
 import {
   buyAuctionNow,
   cancelAuctionWithEscrowRecovery,
@@ -13,7 +15,24 @@ import {
 
 interface RegisterAuctionsRoutesDeps {
   requireAuth: any;
-  isAdmin: any;
+  isAdmin?: any;
+}
+
+const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
+
+function rowsOf(result: any): any[] {
+  return Array.isArray(result?.rows) ? result.rows : Array.isArray(result) ? result : [];
+}
+
+async function secureAuctionAdmin(req: any, res: any, next: any) {
+  const userId = String(req.authUserId || "");
+  if (!userId) return res.status(401).json({ message: "Unauthorized" });
+  const configuredIds = String(process.env.ADMIN_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean);
+  if (configuredIds.includes(userId)) return next();
+  const configuredEmails = String(process.env.ADMIN_EMAILS || DEFAULT_ADMIN_EMAIL).split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const user = rowsOf(await db.execute(sql`SELECT lower(coalesce(email, '')) AS email FROM app.users WHERE id = ${userId} LIMIT 1`))[0];
+  if (user?.email && configuredEmails.includes(String(user.email).toLowerCase())) return next();
+  return res.status(403).json({ message: "Admin access required" });
 }
 
 function errorStatus(error: any) {
@@ -43,8 +62,8 @@ function errorStatus(error: any) {
 }
 
 export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoutesDeps) {
-  const { requireAuth, isAdmin } = deps;
-  if (!isAdmin) throw new Error("Auction routes require an admin authorization middleware");
+  const { requireAuth } = deps;
+  const isAdmin = deps.isAdmin || secureAuctionAdmin;
 
   app.get("/api/auctions/active", async (_req, res) => {
     try {
