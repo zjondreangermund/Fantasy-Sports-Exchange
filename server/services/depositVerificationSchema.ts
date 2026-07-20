@@ -37,14 +37,16 @@ export async function ensureDepositVerificationSchema(): Promise<void> {
             ) AS reference_rank
           FROM app.transactions t
           WHERE t.type::text = 'deposit'
-            AND t.source_type = 'deposit_verification'
+            AND t.source_type IN ('deposit_verification', 'deposit_verified', 'deposit_rejected')
             AND nullif(trim(coalesce(t.external_transaction_id, '')), '') IS NOT NULL
         )
         UPDATE app.transactions t
-        SET status = 'rejected', source_type = 'deposit_duplicate_legacy', amount = 0,
-            description = concat(coalesce(t.description, 'Deposit verification'), ' | duplicate legacy reference blocked')
+        SET status = CASE WHEN t.status::text = 'pending' THEN 'rejected' ELSE t.status END,
+            source_type = 'deposit_duplicate_legacy',
+            amount = CASE WHEN t.status::text = 'pending' THEN 0 ELSE t.amount END,
+            description = concat(coalesce(t.description, 'Deposit verification'), ' | duplicate legacy reference requires review')
         FROM ranked r
-        WHERE r.id = t.id AND r.reference_rank > 1 AND t.status::text = 'pending'
+        WHERE r.id = t.id AND r.reference_rank > 1
       `);
       await db.execute(sql`
         WITH ranked AS (
@@ -66,7 +68,7 @@ export async function ensureDepositVerificationSchema(): Promise<void> {
         SELECT r.id, r.reference_key, trim(r.external_transaction_id), r.user_id,
           greatest(coalesce(r.gross_amount, 0), 0.01),
           greatest(coalesce(r.fee_amount, 0), 0),
-          greatest(coalesce(r.net_amount, r.gross_amount, 0), 0.01),
+          greatest(coalesce(nullif(r.net_amount, 0), r.gross_amount, 0), 0.01),
           coalesce(nullif(trim(r.payment_method), ''), 'other'),
           CASE
             WHEN r.status::text = 'completed' OR r.source_type = 'deposit_verified' THEN 'approved'
