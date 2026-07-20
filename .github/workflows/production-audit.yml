@@ -87,6 +87,9 @@ jobs:
           set +e
           {
             npm run test:critical-flows &&
+            node --check scripts/prepare-runtime-startup.mjs &&
+            node --check scripts/sync-official-tournaments.mjs &&
+            node scripts/verify-runtime-boot-recovery.mjs &&
             node scripts/verify-deposit-flows.mjs &&
             node scripts/verify-withdrawal-flows.mjs &&
             node scripts/verify-wallet-reconciliation.mjs &&

@@ -14,6 +14,10 @@ function title(tier) {
   return tier.charAt(0).toUpperCase() + tier.slice(1);
 }
 
+function quoteIdentifier(value) {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
 function catTuesdayBefore(date) {
   const shifted = new Date(date.getTime() + 2 * 60 * 60 * 1000);
   const day = shifted.getUTCDay();
@@ -40,8 +44,22 @@ async function fetchJson(url) {
 }
 
 async function ensureCompetitionTierValues(client) {
+  const result = await client.query(`
+    SELECT n.nspname AS enum_schema
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'competition_tier'
+      AND t.typtype = 'e'
+    ORDER BY CASE WHEN n.nspname = 'app' THEN 0 WHEN n.nspname = 'public' THEN 1 ELSE 2 END
+    LIMIT 1
+  `);
+  const enumSchema = String(result.rows?.[0]?.enum_schema || "");
+  if (!enumSchema) {
+    throw new Error("Base schema is missing the competition_tier enum; database schema push must complete before tournament sync");
+  }
+  const qualifiedType = `${quoteIdentifier(enumSchema)}.${quoteIdentifier("competition_tier")}`;
   for (const value of ["unique", "epic", "legendary"]) {
-    await client.query(`ALTER TYPE app.competition_tier ADD VALUE IF NOT EXISTS '${value}'`);
+    await client.query(`ALTER TYPE ${qualifiedType} ADD VALUE IF NOT EXISTS '${value}'`);
   }
 }
 
@@ -55,6 +73,7 @@ async function main() {
 
   try {
     // Enum values must be committed before they can be used by later inserts.
+    // Legacy databases may keep the enum in public rather than app.
     await ensureCompetitionTierValues(client);
 
     const [fixtures, bootstrap] = await Promise.all([
