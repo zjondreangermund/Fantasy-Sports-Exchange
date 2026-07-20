@@ -54,7 +54,7 @@ const checks = [
     ],
   },
   {
-    name: "withdrawal routes shadow legacy handlers and protect admin operations",
+    name: "withdrawal routes are the authorized owners of all withdrawal endpoints",
     file: "server/routes/withdrawalPayout.routes.ts",
     patterns: [
       "app.get(\"/api/wallet/withdrawals\", requireAuth",
@@ -66,7 +66,7 @@ const checks = [
     ],
   },
   {
-    name: "early financial route registration includes withdrawals before legacy routes",
+    name: "early financial route registration includes withdrawals before application routes",
     file: "server/routes/depositVerification.routes.ts",
     patterns: [
       "registerWithdrawalPayoutRoutes",
@@ -98,10 +98,20 @@ const checks = [
     ],
   },
   {
-    name: "legacy wallet status handler remains shadowed, not used by early routes",
+    name: "generic wallet routes cannot mutate or review withdrawals",
     file: "server/routes/wallet.routes.ts",
     patterns: [
+      "app.get(\"/api/wallet\", requireAuth",
+      "app.get(\"/api/transactions\", requireAuth",
+    ],
+    forbiddenPatterns: [
+      "app.get(\"/api/wallet/withdrawals\"",
+      "app.post(\"/api/wallet/withdraw\"",
       "app.post(\"/api/admin/withdrawals/:id/status\"",
+      "withdrawalRequests",
+      "withdrawal_hold",
+      "withdrawal_settlement",
+      "withdrawal_refund",
     ],
   },
 ];
@@ -110,11 +120,13 @@ let failures = 0;
 for (const check of checks) {
   const body = read(check.file);
   const missing = check.patterns.filter((pattern) => !body.includes(pattern));
-  if (missing.length) {
+  const forbidden = (check.forbiddenPatterns || []).filter((pattern) => body.includes(pattern));
+  if (missing.length || forbidden.length) {
     failures += 1;
     console.error(`✗ ${check.name}`);
     console.error(`  ${relative(root, resolve(root, check.file))}`);
     for (const pattern of missing) console.error(`  missing: ${pattern}`);
+    for (const pattern of forbidden) console.error(`  forbidden: ${pattern}`);
   } else {
     console.log(`✓ ${check.name}`);
   }
