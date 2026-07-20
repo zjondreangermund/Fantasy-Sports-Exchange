@@ -23,7 +23,9 @@ CREATE INDEX IF NOT EXISTS deposit_verifications_status_created_idx
 CREATE INDEX IF NOT EXISTS deposit_verifications_user_created_idx
   ON app.deposit_verifications (user_id, created_at DESC, id DESC);
 
--- Preserve the earliest legacy request for each normalized reference and reject later duplicate claims.
+-- Preserve the earliest legacy request for each normalized reference. Pending duplicates are
+-- rejected automatically; already-completed duplicates remain financially unchanged but are
+-- relabelled for manual integrity review rather than silently hidden.
 WITH ranked AS (
   SELECT
     t.id,
@@ -34,18 +36,17 @@ WITH ranked AS (
     ) AS reference_rank
   FROM app.transactions t
   WHERE t.type::text = 'deposit'
-    AND t.source_type = 'deposit_verification'
+    AND t.source_type IN ('deposit_verification', 'deposit_verified', 'deposit_rejected')
     AND nullif(trim(coalesce(t.external_transaction_id, '')), '') IS NOT NULL
 )
 UPDATE app.transactions t
-SET status = 'rejected',
+SET status = CASE WHEN t.status::text = 'pending' THEN 'rejected' ELSE t.status END,
     source_type = 'deposit_duplicate_legacy',
-    amount = 0,
-    description = concat(coalesce(t.description, 'Deposit verification'), ' | duplicate legacy reference blocked')
+    amount = CASE WHEN t.status::text = 'pending' THEN 0 ELSE t.amount END,
+    description = concat(coalesce(t.description, 'Deposit verification'), ' | duplicate legacy reference requires review')
 FROM ranked r
 WHERE r.id = t.id
-  AND r.reference_rank > 1
-  AND t.status::text = 'pending';
+  AND r.reference_rank > 1;
 
 WITH ranked AS (
   SELECT
@@ -71,7 +72,7 @@ SELECT
   r.user_id,
   greatest(coalesce(r.gross_amount, 0), 0.01),
   greatest(coalesce(r.fee_amount, 0), 0),
-  greatest(coalesce(r.net_amount, r.gross_amount, 0), 0.01),
+  greatest(coalesce(nullif(r.net_amount, 0), r.gross_amount, 0), 0.01),
   coalesce(nullif(trim(r.payment_method), ''), 'other'),
   CASE
     WHEN r.status::text = 'completed' OR r.source_type = 'deposit_verified' THEN 'approved'
