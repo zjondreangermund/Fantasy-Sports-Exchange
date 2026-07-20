@@ -1,0 +1,87 @@
+import { sql } from "drizzle-orm";
+import { db } from "../db.js";
+
+let ready: Promise<void> | null = null;
+
+export async function ensureDepositVerificationSchema(): Promise<void> {
+  if (!ready) {
+    ready = (async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.deposit_verifications (
+          id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+          transaction_id integer NOT NULL UNIQUE REFERENCES app.transactions(id) ON DELETE RESTRICT,
+          reference_key text NOT NULL UNIQUE,
+          external_transaction_id text NOT NULL,
+          user_id varchar(255) NOT NULL REFERENCES app.users(id),
+          gross_amount real NOT NULL CHECK (gross_amount > 0),
+          fee_amount real NOT NULL DEFAULT 0 CHECK (fee_amount >= 0),
+          net_amount real NOT NULL CHECK (net_amount > 0),
+          payment_method text NOT NULL,
+          status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+          reviewed_by varchar(255) REFERENCES app.users(id),
+          reviewed_at timestamp,
+          review_notes text,
+          created_at timestamp NOT NULL DEFAULT now(),
+          updated_at timestamp NOT NULL DEFAULT now()
+        )
+      `);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS deposit_verifications_status_created_idx ON app.deposit_verifications (status, created_at DESC, id DESC)`);
+      await db.execute(sql`CREATE INDEX IF NOT EXISTS deposit_verifications_user_created_idx ON app.deposit_verifications (user_id, created_at DESC, id DESC)`);
+      await db.execute(sql`
+        WITH ranked AS (
+          SELECT t.id,
+            upper(regexp_replace(trim(t.external_transaction_id), '\\s+', '', 'g')) AS reference_key,
+            row_number() OVER (
+              PARTITION BY upper(regexp_replace(trim(t.external_transaction_id), '\\s+', '', 'g'))
+              ORDER BY t.created_at NULLS LAST, t.id
+            ) AS reference_rank
+          FROM app.transactions t
+          WHERE t.type::text = 'deposit'
+            AND t.source_type = 'deposit_verification'
+            AND nullif(trim(coalesce(t.external_transaction_id, '')), '') IS NOT NULL
+        )
+        UPDATE app.transactions t
+        SET status = 'rejected', source_type = 'deposit_duplicate_legacy', amount = 0,
+            description = concat(coalesce(t.description, 'Deposit verification'), ' | duplicate legacy reference blocked')
+        FROM ranked r
+        WHERE r.id = t.id AND r.reference_rank > 1 AND t.status::text = 'pending'
+      `);
+      await db.execute(sql`
+        WITH ranked AS (
+          SELECT t.*,
+            upper(regexp_replace(trim(t.external_transaction_id), '\\s+', '', 'g')) AS reference_key,
+            row_number() OVER (
+              PARTITION BY upper(regexp_replace(trim(t.external_transaction_id), '\\s+', '', 'g'))
+              ORDER BY t.created_at NULLS LAST, t.id
+            ) AS reference_rank
+          FROM app.transactions t
+          WHERE t.type::text = 'deposit'
+            AND t.source_type IN ('deposit_verification', 'deposit_verified', 'deposit_rejected')
+            AND nullif(trim(coalesce(t.external_transaction_id, '')), '') IS NOT NULL
+        )
+        INSERT INTO app.deposit_verifications (
+          transaction_id, reference_key, external_transaction_id, user_id,
+          gross_amount, fee_amount, net_amount, payment_method, status, created_at, updated_at
+        )
+        SELECT r.id, r.reference_key, trim(r.external_transaction_id), r.user_id,
+          greatest(coalesce(r.gross_amount, 0), 0.01),
+          greatest(coalesce(r.fee_amount, 0), 0),
+          greatest(coalesce(r.net_amount, r.gross_amount, 0), 0.01),
+          coalesce(nullif(trim(r.payment_method), ''), 'other'),
+          CASE
+            WHEN r.status::text = 'completed' OR r.source_type = 'deposit_verified' THEN 'approved'
+            WHEN r.status::text = 'rejected' OR r.source_type = 'deposit_rejected' THEN 'rejected'
+            ELSE 'pending'
+          END,
+          coalesce(r.created_at, now()), now()
+        FROM ranked r
+        WHERE r.reference_rank = 1
+        ON CONFLICT DO NOTHING
+      `);
+    })().catch((error) => {
+      ready = null;
+      throw error;
+    });
+  }
+  await ready;
+}
