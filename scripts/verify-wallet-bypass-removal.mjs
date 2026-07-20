@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readdirSync, readFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { resolve } from "node:path";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
 
@@ -23,9 +23,7 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-const routeFiles = listSourceFiles("server/routes");
 const serverFiles = listSourceFiles("server");
-const routeBodies = new Map(routeFiles.map((path) => [path, read(path)]));
 const serverBodies = new Map(serverFiles.map((path) => [path, read(path)]));
 
 const failures = [];
@@ -35,7 +33,7 @@ const fail = (message) => failures.push(message);
 function checkSingleRoute(method, path, owner) {
   const regex = new RegExp(`\\bapp\\.${method}\\(\\s*["']${escapeRegExp(path)}["']`, "g");
   const matches = [];
-  for (const [file, body] of routeBodies) {
+  for (const [file, body] of serverBodies) {
     const count = [...body.matchAll(regex)].length;
     for (let index = 0; index < count; index += 1) matches.push(file);
   }
