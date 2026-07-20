@@ -23,16 +23,17 @@ CREATE INDEX IF NOT EXISTS deposit_verifications_status_created_idx
 CREATE INDEX IF NOT EXISTS deposit_verifications_user_created_idx
   ON app.deposit_verifications (user_id, created_at DESC, id DESC);
 
--- Preserve the earliest legacy request for each normalized reference. Pending duplicates are
--- rejected automatically; already-completed duplicates remain financially unchanged but are
--- relabelled for manual integrity review rather than silently hidden.
+-- Prefer an already-completed payment as the canonical legacy claim. Pending duplicates are
+-- rejected automatically; additional completed duplicates remain financially unchanged but are
+-- relabelled for manual integrity review rather than silently hidden or reversed.
 WITH ranked AS (
   SELECT
     t.id,
     upper(regexp_replace(trim(t.external_transaction_id), '\s+', '', 'g')) AS reference_key,
     row_number() OVER (
       PARTITION BY upper(regexp_replace(trim(t.external_transaction_id), '\s+', '', 'g'))
-      ORDER BY t.created_at NULLS LAST, t.id
+      ORDER BY CASE WHEN t.status::text = 'completed' OR t.source_type = 'deposit_verified' THEN 0 ELSE 1 END,
+        t.created_at NULLS LAST, t.id
     ) AS reference_rank
   FROM app.transactions t
   WHERE t.type::text = 'deposit'
@@ -54,7 +55,8 @@ WITH ranked AS (
     upper(regexp_replace(trim(t.external_transaction_id), '\s+', '', 'g')) AS reference_key,
     row_number() OVER (
       PARTITION BY upper(regexp_replace(trim(t.external_transaction_id), '\s+', '', 'g'))
-      ORDER BY t.created_at NULLS LAST, t.id
+      ORDER BY CASE WHEN t.status::text = 'completed' OR t.source_type = 'deposit_verified' THEN 0 ELSE 1 END,
+        t.created_at NULLS LAST, t.id
     ) AS reference_rank
   FROM app.transactions t
   WHERE t.type::text = 'deposit'
