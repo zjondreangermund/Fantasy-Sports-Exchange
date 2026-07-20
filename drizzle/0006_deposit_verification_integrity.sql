@@ -37,7 +37,6 @@ WITH ranked AS (
     ) AS reference_rank
   FROM app.transactions t
   WHERE t.type::text = 'deposit'
-    AND t.source_type IN ('deposit_verification', 'deposit_verified', 'deposit_rejected')
     AND nullif(trim(coalesce(t.external_transaction_id, '')), '') IS NOT NULL
 )
 UPDATE app.transactions t
@@ -60,7 +59,6 @@ WITH ranked AS (
     ) AS reference_rank
   FROM app.transactions t
   WHERE t.type::text = 'deposit'
-    AND t.source_type IN ('deposit_verification', 'deposit_verified', 'deposit_rejected')
     AND nullif(trim(coalesce(t.external_transaction_id, '')), '') IS NOT NULL
 )
 INSERT INTO app.deposit_verifications (
@@ -72,12 +70,12 @@ SELECT
   r.reference_key,
   trim(r.external_transaction_id),
   r.user_id,
-  greatest(coalesce(r.gross_amount, 0), 0.01),
+  greatest(coalesce(nullif(r.gross_amount, 0), abs(r.amount), 0), 0.01),
   greatest(coalesce(r.fee_amount, 0), 0),
-  greatest(coalesce(nullif(r.net_amount, 0), r.gross_amount, 0), 0.01),
+  greatest(coalesce(nullif(r.net_amount, 0), nullif(r.gross_amount, 0), abs(r.amount), 0), 0.01),
   coalesce(nullif(trim(r.payment_method), ''), 'other'),
   CASE
-    WHEN r.status::text = 'completed' OR r.source_type = 'deposit_verified' THEN 'approved'
+    WHEN r.status::text = 'completed' OR r.source_type IN ('deposit_verified', 'deposit', 'admin_adjustment') THEN 'approved'
     WHEN r.status::text = 'rejected' OR r.source_type = 'deposit_rejected' THEN 'rejected'
     ELSE 'pending'
   END,
