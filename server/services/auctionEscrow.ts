@@ -196,7 +196,20 @@ async function transferAuctionCard(tx: any, auction: any, buyerId: string) {
   `))[0];
   if (!card || String(card.owner_id || "") !== String(auction.seller_user_id || "")) {
     const releasedLocks = await releaseAuctionCardLock(tx, Number(auction.id));
-    return { transferred: false, releasedLocks };
+    return { transferred: false, releasedLocks, failureReason: "seller_ownership_changed" };
+  }
+
+  const conflicting = rowsOf(await tx.execute(sql`
+    SELECT id, reason::text AS reason, ref_id
+    FROM app.card_locks
+    WHERE card_id = ${Number(auction.card_id)}
+      AND (expires_at IS NULL OR expires_at > now())
+      AND NOT (reason = 'transfer_pending' AND ref_id = ${auctionLockRef(Number(auction.id))})
+    LIMIT 1
+  `))[0];
+  if (conflicting) {
+    const releasedLocks = await releaseAuctionCardLock(tx, Number(auction.id));
+    return { transferred: false, releasedLocks, failureReason: "conflicting_card_lock" };
   }
 
   const releasedLocks = await releaseAuctionCardLock(tx, Number(auction.id));
@@ -206,7 +219,7 @@ async function transferAuctionCard(tx: any, auction: any, buyerId: string) {
     WHERE id = ${Number(auction.card_id)} AND owner_id = ${String(auction.seller_user_id)}
     RETURNING id
   `))[0];
-  return { transferred: Boolean(transferred), releasedLocks };
+  return { transferred: Boolean(transferred), releasedLocks, failureReason: transferred ? null : "guarded_transfer_failed" };
 }
 
 async function releaseHold(tx: any, hold: any, reason: string) {
@@ -501,6 +514,7 @@ export async function placeAuctionBid(input: any) {
     if (auction.starts_at && new Date(auction.starts_at).getTime() > Date.now()) throw new Error("Auction has not started");
     if (auction.ends_at && new Date(auction.ends_at).getTime() <= Date.now()) throw new Error("Auction has ended");
     if (String(auction.seller_user_id || "") === bidderId) throw new Error("You cannot bid on your own auction");
+    if ((await missingLegacyBidCount(tx, auctionId)) > 0) throw new Error("Auction escrow requires admin recovery before another bid");
 
     const card = rowsOf(await tx.execute(sql`SELECT id, owner_id FROM app.player_cards WHERE id = ${Number(auction.card_id)} FOR UPDATE`))[0];
     if (!card || String(card.owner_id || "") !== String(auction.seller_user_id || "")) throw new Error("Auction card is no longer owned by the seller");
@@ -557,10 +571,10 @@ export async function buyAuctionNow(input: any) {
       await tx.execute(sql`
         UPDATE app.auctions
         SET status = 'cancelled', cancelled_at = now(), cancelled_by = ${buyerId},
-          cancellation_reason = 'Card transfer failed during buy now', settlement_error = 'Card unavailable for transfer', recovery_completed_at = now()
+          cancellation_reason = 'Card transfer failed during buy now', settlement_error = ${`Card transfer failed: ${transfer.failureReason || "unknown"}`}, recovery_completed_at = now()
         WHERE id = ${auctionId}
       `);
-      const meta = { auctionId, buyerId, price, releasedLocks: transfer.releasedLocks, idempotencyKey };
+      const meta = { auctionId, buyerId, price, releasedLocks: transfer.releasedLocks, failureReason: transfer.failureReason, idempotencyKey };
       await tx.execute(sql`INSERT INTO app.audit_logs (user_id, action, meta) VALUES (${buyerId}, 'auction.buy_now.recovered_transfer_failure', ${JSON.stringify(meta)}::jsonb)`);
       return { success: false, recovered: true, auctionId, message: "Auction card was unavailable; held funds were returned" };
     }
@@ -603,7 +617,21 @@ export async function settleAuctionWithEscrowRecovery(input: any) {
       await tx.execute(sql`UPDATE app.auctions SET status = 'ended', settlement_error = NULL, recovery_completed_at = now() WHERE id = ${auctionId}`);
       const meta = { auctionId, releasedLocks, ...released };
       await tx.execute(sql`INSERT INTO app.audit_logs (user_id, action, meta) VALUES (${actorId}, 'auction.settle.no_bids', ${JSON.stringify(meta)}::jsonb)`);
-      return { success: true, auctionId, outcome: "no_bids", ...meta };
+      return { success: true, outcome: "no_bids", ...meta };
+    }
+
+    const legacyBidsWithoutHolds = await missingLegacyBidCount(tx, auctionId);
+    if (legacyBidsWithoutHolds > 0) {
+      const released = await releaseHeldHolds(tx, auctionId, "legacy_escrow_required");
+      const releasedLocks = await releaseAuctionCardLock(tx, auctionId);
+      await tx.execute(sql`
+        UPDATE app.auctions
+        SET status = 'ended', settlement_error = 'Legacy bids exist without durable escrow records', recovery_completed_at = NULL
+        WHERE id = ${auctionId}
+      `);
+      const meta = { auctionId, legacyBidsWithoutHolds, releasedLocks, ...released };
+      await tx.execute(sql`INSERT INTO app.audit_logs (user_id, action, meta) VALUES (${actorId}, 'auction.settle.legacy_escrow_required', ${JSON.stringify(meta)}::jsonb)`);
+      return { success: false, recovered: true, outcome: "legacy_escrow_required", ...meta };
     }
 
     const winningAmount = toMoney(winningBid.amount);
@@ -614,7 +642,7 @@ export async function settleAuctionWithEscrowRecovery(input: any) {
       await tx.execute(sql`UPDATE app.auctions SET status = 'ended', settlement_error = NULL, recovery_completed_at = now() WHERE id = ${auctionId}`);
       const meta = { auctionId, winningAmount, reservePrice, releasedLocks, ...released };
       await tx.execute(sql`INSERT INTO app.audit_logs (user_id, action, meta) VALUES (${actorId}, 'auction.settle.reserve_not_met', ${JSON.stringify(meta)}::jsonb)`);
-      return { success: true, auctionId, outcome: "reserve_not_met", ...meta };
+      return { success: true, outcome: "reserve_not_met", ...meta };
     }
 
     const winningHold = await getHoldForBid(tx, Number(winningBid.id));
@@ -627,7 +655,7 @@ export async function settleAuctionWithEscrowRecovery(input: any) {
       `);
       const meta = { auctionId, winningBidId: Number(winningBid.id), winningAmount, releasedLocks, ...released };
       await tx.execute(sql`INSERT INTO app.audit_logs (user_id, action, meta) VALUES (${actorId}, 'auction.settle.missing_escrow', ${JSON.stringify(meta)}::jsonb)`);
-      return { success: false, recovered: true, auctionId, outcome: "missing_winning_escrow", ...meta };
+      return { success: false, recovered: true, outcome: "missing_winning_escrow", ...meta };
     }
 
     const losingReleased = await releaseHeldHolds(tx, auctionId, "settlement_loser_release", Number(winningHold.id));
@@ -641,19 +669,19 @@ export async function settleAuctionWithEscrowRecovery(input: any) {
       await tx.execute(sql`
         UPDATE app.auctions
         SET status = 'cancelled', cancelled_at = now(), cancelled_by = ${actorId},
-          cancellation_reason = 'Card transfer failed during settlement', settlement_error = 'Card unavailable for transfer', recovery_completed_at = now()
+          cancellation_reason = 'Card transfer failed during settlement', settlement_error = ${`Card transfer failed: ${transfer.failureReason || "unknown"}`}, recovery_completed_at = now()
         WHERE id = ${auctionId}
       `);
-      const meta = { auctionId, winnerId, winningAmount, releasedLocks: transfer.releasedLocks, winnerReleased, ...losingReleased };
+      const meta = { auctionId, winnerId, winningAmount, releasedLocks: transfer.releasedLocks, failureReason: transfer.failureReason, winnerReleased, ...losingReleased };
       await tx.execute(sql`INSERT INTO app.audit_logs (user_id, action, meta) VALUES (${actorId}, 'auction.settle.recovered_transfer_failure', ${JSON.stringify(meta)}::jsonb)`);
-      return { success: false, recovered: true, auctionId, outcome: "transfer_failed", ...meta };
+      return { success: false, recovered: true, outcome: "transfer_failed", ...meta };
     }
 
     const settlement = await settleWinningHold(tx, { auction, hold: winningHold, winnerId, sellerId, amount: winningAmount });
     await tx.execute(sql`UPDATE app.auctions SET status = 'settled', settled_at = now(), settlement_error = NULL, recovery_completed_at = now() WHERE id = ${auctionId}`);
     const meta = { auctionId, cardId: Number(auction.card_id), winnerId, sellerId, winningAmount, fee: settlement.fee, sellerReceives: settlement.sellerReceives, releasedLocks: transfer.releasedLocks, ...losingReleased };
     await tx.execute(sql`INSERT INTO app.audit_logs (user_id, action, meta) VALUES (${actorId}, 'auction.settle.completed', ${JSON.stringify(meta)}::jsonb)`);
-    return { success: true, auctionId, outcome: "settled", ...meta, ...settlement };
+    return { success: true, outcome: "settled", ...meta, ...settlement };
   });
 }
 
@@ -691,7 +719,7 @@ export async function cancelAuctionWithEscrowRecovery(input: any) {
       INSERT INTO app.audit_logs (user_id, action, meta)
       VALUES (${actorId}, ${alreadyCancelled ? "auction.cancellation.reconciled" : "auction.cancelled"}, ${JSON.stringify(meta)}::jsonb)
     `);
-    return { success: true, auctionId, duplicate: alreadyCancelled && released.releasedCount === 0, ...meta };
+    return { success: true, duplicate: alreadyCancelled && released.releasedCount === 0, ...meta };
   });
 }
 
