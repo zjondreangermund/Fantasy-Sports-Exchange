@@ -31,8 +31,16 @@ CREATE INDEX IF NOT EXISTS auction_escrow_holds_auction_status_idx
 CREATE INDEX IF NOT EXISTS auction_escrow_holds_bidder_status_idx
   ON app.auction_escrow_holds (bidder_user_id, status, id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS auction_escrow_one_held_per_auction_unique
+  ON app.auction_escrow_holds (auction_id)
+  WHERE status = 'held';
+
 CREATE INDEX IF NOT EXISTS auctions_card_status_idx
   ON app.auctions (card_id, status, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS auctions_one_active_per_card_unique
+  ON app.auctions (card_id)
+  WHERE status IN ('draft', 'live');
 
 CREATE INDEX IF NOT EXISTS card_locks_auction_ref_idx
   ON app.card_locks (reason, ref_id)
