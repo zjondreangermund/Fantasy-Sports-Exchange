@@ -46,7 +46,8 @@ SET status = CASE WHEN t.status::text = 'pending' THEN 'rejected' ELSE t.status 
     description = concat(coalesce(t.description, 'Deposit verification'), ' | duplicate legacy reference requires review')
 FROM ranked r
 WHERE r.id = t.id
-  AND r.reference_rank > 1;
+  AND r.reference_rank > 1
+  AND coalesce(t.source_type, '') <> 'deposit_duplicate_legacy';
 
 WITH ranked AS (
   SELECT
