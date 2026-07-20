@@ -5,6 +5,7 @@ import {
   reviewDepositVerification,
   submitDepositForVerification,
 } from "../services/depositVerification.js";
+import { registerWithdrawalPayoutRoutes } from "./withdrawalPayout.routes.js";
 
 interface RegisterDepositVerificationRoutesDeps {
   requireAuth: any;
@@ -21,6 +22,7 @@ function errorStatus(error: any) {
 
 export function registerDepositVerificationRoutes(app: Express, deps: RegisterDepositVerificationRoutesDeps) {
   const { requireAuth, isAdmin } = deps;
+  registerWithdrawalPayoutRoutes(app, { requireAuth, isAdmin });
 
   app.post("/api/wallet/deposit", requireAuth, async (req: any, res) => {
     try {
