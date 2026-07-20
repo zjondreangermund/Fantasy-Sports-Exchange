@@ -18,8 +18,6 @@ const checks = [
       "createTrustedWithdrawal",
       "createPendingWithdrawalWithHold",
       "applyMarketplaceTradeLedger",
-      "refundWalletHold",
-      "settleHeldAuctionBid",
       "enterCompetitionWithFee",
       "getWalletIntegrityReport",
       "repairMissingWalletsFromLedger",
@@ -143,15 +141,96 @@ const checks = [
     ],
   },
   {
-    name: "auction settlement and buy-now flows are transaction guarded",
-    file: "server/routes/auctions.routes.ts",
+    name: "auction bids, buy-now and settlement use durable escrow",
+    file: "server/services/auctionEscrow.ts",
     patterns: [
-      "settleHeldAuctionBid",
-      "refundWalletHold",
-      "for(\"update\")",
+      "app.auction_escrow_holds",
+      "FOR UPDATE",
+      "ON CONFLICT (key) DO NOTHING",
+      "auction_bid_lock",
+      "auction_bid_release",
+      "releaseHold(tx, previousHold, \"outbid\")",
+      "releaseHeldHolds",
+      "transferAuctionCard",
+      "SET locked_balance = locked_balance - ${amount}",
+      "amount: 0",
+      "type: \"auction_sale\"",
+      "auction.buy_now.completed",
       "auction.settle.completed",
       "auction.settle.reserve_not_met",
-      "Auction card was no longer available for transfer",
+      "auction.settle.missing_escrow",
+      "auction.settle.recovered_transfer_failure",
+      "getAuctionEscrowIntegrityReport",
+      "recoverAuctionEscrow",
+    ],
+  },
+  {
+    name: "auction routes expose protected cancellation, settlement and recovery",
+    file: "server/routes/auctions.routes.ts",
+    patterns: [
+      "secureAuctionAdmin",
+      "deps.isAdmin || secureAuctionAdmin",
+      "/api/auctions/active",
+      "/api/auctions/create",
+      "/api/auctions/:id/bid",
+      "/api/auctions/:id/buy-now",
+      "/api/auctions/:id/cancel",
+      "/api/admin/auctions/:id/cancel",
+      "/api/auctions/:id/settle",
+      "/api/admin/auctions/escrow-integrity",
+      "/api/admin/auctions/:id/recover",
+      "requireAuth, isAdmin",
+    ],
+    forbiddenPatterns: [
+      "settleHeldAuctionBid",
+      "refundWalletHold",
+      "((_req: any, _res: any, next: any) => next())",
+    ],
+  },
+  {
+    name: "auction escrow migration has uniqueness and recovery backstops",
+    file: "drizzle/0005_auction_escrow_recovery.sql",
+    patterns: [
+      "CREATE TABLE IF NOT EXISTS app.auction_escrow_holds",
+      "bid_id integer UNIQUE",
+      "status IN ('held', 'released', 'settled')",
+      "ON DELETE RESTRICT",
+      "auction_escrow_one_held_per_auction_unique",
+      "auctions_one_active_per_card_unique",
+      "auction_escrow_transaction_external_id_unique",
+      "settlement_error",
+      "recovery_completed_at",
+    ],
+  },
+  {
+    name: "auction escrow schema is aligned in application types",
+    file: "shared/schema.ts",
+    patterns: [
+      "export const auctionEscrowHolds",
+      "settlementError: text(\"settlement_error\")",
+      "settlementAttempts: integer(\"settlement_attempts\")",
+      "recoveryCompletedAt: timestamp(\"recovery_completed_at\")",
+      "insertAuctionEscrowHoldSchema",
+      "AuctionEscrowHold",
+    ],
+  },
+  {
+    name: "runtime and server startup prepare auction integrity structures",
+    file: "server/runtime-schema.ts",
+    patterns: [
+      "ensureAuctionEscrowSchema",
+      "await ensureAuctionEscrowSchema()",
+      "auction_escrow_one_held_per_auction_unique",
+      "auctions_one_active_per_card_unique",
+    ],
+  },
+  {
+    name: "server waits for runtime integrity checks before routes",
+    file: "server/index.ts",
+    patterns: [
+      "import { ensureRuntimeSchema } from \"./runtime-schema.js\"",
+      "await ensureRuntimeSchema();\n  try { const result = await syncFplPremierLeaguePlayers()",
+      "await registerRoutes(httpServer, app);",
     ],
   },
   {
@@ -217,11 +296,13 @@ let failures = 0;
 for (const check of checks) {
   const body = read(check.file);
   const missing = check.patterns.filter((pattern) => !body.includes(pattern));
-  if (missing.length > 0) {
+  const forbidden = (check.forbiddenPatterns || []).filter((pattern) => body.includes(pattern));
+  if (missing.length > 0 || forbidden.length > 0) {
     failures += 1;
     console.error(`✗ ${check.name}`);
     console.error(`  ${relative(root, resolve(root, check.file))}`);
     for (const pattern of missing) console.error(`  missing: ${pattern}`);
+    for (const pattern of forbidden) console.error(`  forbidden: ${pattern}`);
   } else {
     console.log(`✓ ${check.name}`);
   }
