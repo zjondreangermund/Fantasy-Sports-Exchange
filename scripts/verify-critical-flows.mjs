@@ -10,17 +10,25 @@ function read(path) {
 
 const checks = [
   {
-    name: "wallet ledger exposes guarded money operations",
+    name: "shared wallet ledger exposes only the active marketplace transaction helper",
     file: "server/services/walletLedger.ts",
     patterns: [
+      "applyMarketplaceTradeLedger",
+      "marketplace_buy",
+      "marketplace_sale",
+      "Seller wallet not found",
+    ],
+    forbiddenPatterns: [
       "creditWalletWithLedger",
       "processWalletDeposit",
       "createTrustedWithdrawal",
       "createPendingWithdrawalWithHold",
-      "applyMarketplaceTradeLedger",
       "enterCompetitionWithFee",
+      "refundWalletHold",
+      "settleHeldAuctionBid",
       "getWalletIntegrityReport",
       "repairMissingWalletsFromLedger",
+      "debitWalletForHold",
     ],
   },
   {
