@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { db } from "../db.js";
 import { sql } from "drizzle-orm";
-import { getWalletIntegrityReport, repairMissingWalletsFromLedger } from "../services/walletLedger.js";
+import { getWalletReconciliationReport, repairSafeMissingWallets } from "../services/walletReconciliation.js";
 import { getCompetitionRewardIntegrity, repairCompetitionRewards } from "../services/tournamentRewards.js";
 
 interface RegisterAdminIntegrityRoutesDeps {
@@ -17,14 +17,14 @@ export function registerAdminIntegrityRoutes(app: Express, deps: RegisterAdminIn
   const { requireAuth, isAdmin } = deps;
 
   app.get("/api/admin/wallet/integrity", requireAuth, isAdmin, async (_req, res) => {
-    try { return res.json(await getWalletIntegrityReport()); }
+    try { return res.json(await getWalletReconciliationReport()); }
     catch (error: any) { return res.status(500).json({ message: error?.message || "Failed to inspect wallets" }); }
   });
 
-  app.post("/api/admin/wallet/repair-missing", requireAuth, isAdmin, async (_req, res) => {
+  app.post("/api/admin/wallet/repair-missing", requireAuth, isAdmin, async (req: any, res) => {
     try {
-      const repaired = await repairMissingWalletsFromLedger();
-      return res.json({ success: true, repairedCount: repaired.length, repaired });
+      const result = await repairSafeMissingWallets(String(req.authUserId || ""));
+      return res.json({ success: true, ...result });
     } catch (error: any) { return res.status(500).json({ message: error?.message || "Failed to repair wallets" }); }
   });
 
