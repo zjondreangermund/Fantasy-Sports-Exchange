@@ -33,7 +33,8 @@ export async function ensureDepositVerificationSchema(): Promise<void> {
             upper(regexp_replace(trim(t.external_transaction_id), '\\s+', '', 'g')) AS reference_key,
             row_number() OVER (
               PARTITION BY upper(regexp_replace(trim(t.external_transaction_id), '\\s+', '', 'g'))
-              ORDER BY t.created_at NULLS LAST, t.id
+              ORDER BY CASE WHEN t.status::text = 'completed' OR t.source_type = 'deposit_verified' THEN 0 ELSE 1 END,
+                t.created_at NULLS LAST, t.id
             ) AS reference_rank
           FROM app.transactions t
           WHERE t.type::text = 'deposit'
@@ -54,7 +55,8 @@ export async function ensureDepositVerificationSchema(): Promise<void> {
             upper(regexp_replace(trim(t.external_transaction_id), '\\s+', '', 'g')) AS reference_key,
             row_number() OVER (
               PARTITION BY upper(regexp_replace(trim(t.external_transaction_id), '\\s+', '', 'g'))
-              ORDER BY t.created_at NULLS LAST, t.id
+              ORDER BY CASE WHEN t.status::text = 'completed' OR t.source_type = 'deposit_verified' THEN 0 ELSE 1 END,
+                t.created_at NULLS LAST, t.id
             ) AS reference_rank
           FROM app.transactions t
           WHERE t.type::text = 'deposit'
