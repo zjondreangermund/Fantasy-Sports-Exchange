@@ -27,6 +27,9 @@ const checks = [
     file: "server/services/depositVerification.ts",
     patterns: [
       "currentStatus === decision",
+      "expectedTransactionStatus",
+      "Deposit terminal ledger state does not match verification decision",
+      "Deposit ledger amounts do not match verification claim",
       "Deposit is already ${currentStatus}",
       "Pending deposit already changed wallet value",
       "UPDATE app.wallets SET balance = balance + ${netAmount}",
@@ -57,6 +60,8 @@ const checks = [
       "reference_key text NOT NULL UNIQUE",
       "status IN ('pending', 'approved', 'rejected')",
       "deposit_duplicate_legacy",
+      "CASE WHEN t.status::text = 'completed' OR t.source_type = 'deposit_verified' THEN 0 ELSE 1 END",
+      "duplicate legacy reference requires review",
       "row_number() OVER",
       "ON DELETE RESTRICT",
     ],
@@ -74,7 +79,8 @@ const checks = [
     file: "server/index.ts",
     patterns: [
       "registerDepositVerificationRoutes",
-      "registerDepositVerificationRoutes(app, { requireAuth, isAdmin });",
+      "registerDepositVerificationRoutes(app, { requireAuth, isAdmin });\n  await ensureRuntimeSchema();",
+      "await ensureRuntimeSchema();\n  try { const result = await syncFplPremierLeaguePlayers()",
       "await registerRoutes(httpServer, app);",
     ],
   },
