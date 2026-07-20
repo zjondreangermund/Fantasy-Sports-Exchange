@@ -1,12 +1,33 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.js";
+import { db, pool } from "../db.js";
 
 let ready: Promise<void> | null = null;
+
+function quoteIdentifier(value: string): string {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+async function ensureWithdrawalStatusValues(): Promise<void> {
+  const result = await pool.query(`
+    SELECT n.nspname AS enum_schema
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'withdrawal_status'
+      AND t.typtype = 'e'
+    ORDER BY CASE WHEN n.nspname = 'app' THEN 0 WHEN n.nspname = 'public' THEN 1 ELSE 2 END
+    LIMIT 1
+  `);
+  const enumSchema = String(result.rows?.[0]?.enum_schema || "");
+  if (!enumSchema) {
+    throw new Error("Base schema is missing the withdrawal_status enum; database schema push must complete before startup");
+  }
+  await pool.query(`ALTER TYPE ${quoteIdentifier(enumSchema)}.${quoteIdentifier("withdrawal_status")} ADD VALUE IF NOT EXISTS 'failed'`);
+}
 
 export async function ensureWithdrawalPayoutSchema(): Promise<void> {
   if (!ready) {
     ready = (async () => {
-      await db.execute(sql`ALTER TYPE app.withdrawal_status ADD VALUE IF NOT EXISTS 'failed'`);
+      await ensureWithdrawalStatusValues();
       await db.execute(sql`
         ALTER TABLE app.withdrawal_requests
           ADD COLUMN IF NOT EXISTS hold_transaction_id integer REFERENCES app.transactions(id) ON DELETE RESTRICT,
