@@ -143,5 +143,5 @@ export async function ensurePlayerCardSerialIntegrity(): Promise<{ repairedCount
     });
   }
 
-  return serialSchemaReady;
+  return await serialSchemaReady!;
 }
