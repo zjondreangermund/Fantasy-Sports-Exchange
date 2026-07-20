@@ -183,7 +183,8 @@ export async function reviewDepositVerification(input: {
   return db.transaction(async (tx) => {
     const row = rowsOf(await tx.execute(sql`
       SELECT dv.*, t.status::text AS transaction_status, t.source_type AS transaction_source_type,
-        t.amount AS transaction_amount
+        t.amount AS transaction_amount, t.gross_amount AS transaction_gross_amount,
+        t.fee_amount AS transaction_fee_amount, t.net_amount AS transaction_net_amount
       FROM app.deposit_verifications dv
       JOIN app.transactions t ON t.id = dv.transaction_id
       WHERE dv.id = ${verificationId}
@@ -192,18 +193,37 @@ export async function reviewDepositVerification(input: {
     if (!row) throw new Error("Deposit verification not found");
 
     const currentStatus = String(row.status || "pending");
-    if (currentStatus === decision) return { verification: payload(row), duplicate: true };
-    if (["approved", "rejected"].includes(currentStatus)) throw new Error(`Deposit is already ${currentStatus}`);
-    if (String(row.transaction_status) !== "pending" || String(row.transaction_source_type) !== "deposit_verification") {
-      throw new Error("Deposit ledger state does not match pending verification");
-    }
-    if (toMoney(row.transaction_amount) !== 0) throw new Error("Pending deposit already changed wallet value");
-
     const userId = String(row.user_id || "");
     const grossAmount = toMoney(row.gross_amount);
     const feeAmount = toMoney(row.fee_amount);
     const netAmount = toMoney(row.net_amount);
     if (!userId || grossAmount <= 0 || netAmount <= 0) throw new Error("Deposit verification amounts are invalid");
+    if (
+      toMoney(row.transaction_gross_amount) !== grossAmount
+      || toMoney(row.transaction_fee_amount) !== feeAmount
+      || toMoney(row.transaction_net_amount) !== netAmount
+    ) {
+      throw new Error("Deposit ledger amounts do not match verification claim");
+    }
+
+    if (currentStatus === decision) {
+      const expectedTransactionStatus = decision === "approved" ? "completed" : "rejected";
+      const expectedSourceType = decision === "approved" ? "deposit_verified" : "deposit_rejected";
+      const expectedAmount = decision === "approved" ? netAmount : 0;
+      if (
+        String(row.transaction_status) !== expectedTransactionStatus
+        || String(row.transaction_source_type) !== expectedSourceType
+        || toMoney(row.transaction_amount) !== expectedAmount
+      ) {
+        throw new Error("Deposit terminal ledger state does not match verification decision");
+      }
+      return { verification: payload(row), duplicate: true };
+    }
+    if (["approved", "rejected"].includes(currentStatus)) throw new Error(`Deposit is already ${currentStatus}`);
+    if (String(row.transaction_status) !== "pending" || String(row.transaction_source_type) !== "deposit_verification") {
+      throw new Error("Deposit ledger state does not match pending verification");
+    }
+    if (toMoney(row.transaction_amount) !== 0) throw new Error("Pending deposit already changed wallet value");
 
     if (decision === "approved") {
       await tx.execute(sql`
