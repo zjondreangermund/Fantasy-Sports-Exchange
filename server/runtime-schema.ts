@@ -1,10 +1,14 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.js";
 import { ensureCompetitionCancellationSchema } from "./services/competitionCancellation.js";
+import { ensureAuctionEscrowSchema } from "./services/auctionEscrow.js";
 
 export async function ensureRuntimeSchema() {
   try {
     await ensureCompetitionCancellationSchema();
+    await ensureAuctionEscrowSchema();
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS auction_escrow_one_held_per_auction_unique ON app.auction_escrow_holds (auction_id) WHERE status = 'held'`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS auctions_one_active_per_card_unique ON app.auctions (card_id) WHERE status IN ('draft', 'live')`);
 
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS app.idempotency_keys (
