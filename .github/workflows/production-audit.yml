@@ -85,7 +85,10 @@ jobs:
         shell: bash
         run: |
           set +e
-          npm run test:critical-flows 2>&1 | tee critical-flow-errors.log
+          {
+            npm run test:critical-flows &&
+            node scripts/verify-deposit-flows.mjs
+          } 2>&1 | tee critical-flow-errors.log
           status=${PIPESTATUS[0]}
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit 0
