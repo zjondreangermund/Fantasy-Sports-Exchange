@@ -165,17 +165,17 @@ export async function getWalletReconciliationReport() {
 
   return {
     summary: {
-      usersChecked: allRows.length,
-      walletsChecked: walletRows.length,
-      okWallets: walletRows.filter((row) => row.status === "ok").length,
       reviewWallets: walletRows.filter((row) => row.status === "review").length,
       missingWallets: missingWallets.length,
-      negativeBalances: walletRows.filter((row) => row.flags.includes("negative_balance")).length,
-      negativeLockedBalances: walletRows.filter((row) => row.flags.includes("negative_locked_balance")).length,
       ledgerDeltas: walletRows.filter((row) => row.flags.includes("wallet_total_ledger_delta")).length,
       lockedAttributionDeltas: walletRows.filter((row) => row.flags.includes("locked_balance_attribution_delta")).length,
       orphanedLockedWallets: walletRows.filter((row) => row.flags.includes("orphaned_locked_balance")).length,
       lockedShortfallWallets: walletRows.filter((row) => row.flags.includes("locked_balance_shortfall")).length,
+      usersChecked: allRows.length,
+      walletsChecked: walletRows.length,
+      okWallets: walletRows.filter((row) => row.status === "ok").length,
+      negativeBalances: walletRows.filter((row) => row.flags.includes("negative_balance")).length,
+      negativeLockedBalances: walletRows.filter((row) => row.flags.includes("negative_locked_balance")).length,
       withdrawalHoldLedgerMismatches: allRows.reduce((sum, row) => sum + row.withdrawalLedgerMismatches, 0),
       auctionHoldLedgerMismatches: allRows.reduce((sum, row) => sum + row.auctionLedgerMismatches, 0),
       nonpostedNonzeroTransactions: allRows.reduce((sum, row) => sum + row.nonpostedNonzeroTransactions, 0),
@@ -199,19 +199,21 @@ export async function repairSafeMissingWallets(adminId: string) {
           coalesce(sum(CASE WHEN t.status::text = 'completed' THEN t.amount ELSE 0 END), 0)::float AS posted_ledger_balance,
           count(*) FILTER (
             WHERE t.status::text <> 'completed' AND abs(coalesce(t.amount, 0)) >= 0.01
-          )::int AS nonposted_nonzero_transactions
+          )::int AS nonposted_nonzero_transactions,
+          count(*) FILTER (
+            WHERE t.source_type IN (
+              'auction_bid_lock', 'auction_bid_release', 'auction_settlement',
+              'withdrawal_hold', 'withdrawal_settlement', 'withdrawal_refund'
+            )
+          )::int AS hold_ledger_history
         FROM app.transactions t
         GROUP BY t.user_id
       ),
-      active_holds AS (
-        SELECT user_id, sum(amount)::float AS locked_amount FROM (
-          SELECT wr.user_id, wr.amount
-          FROM app.withdrawal_requests wr
-          WHERE wr.status::text IN ('pending', 'approved', 'failed')
+      hold_history AS (
+        SELECT user_id, count(*)::int AS hold_records FROM (
+          SELECT wr.user_id FROM app.withdrawal_requests wr
           UNION ALL
-          SELECT h.bidder_user_id AS user_id, h.amount
-          FROM app.auction_escrow_holds h
-          WHERE h.status = 'held'
+          SELECT h.bidder_user_id AS user_id FROM app.auction_escrow_holds h
         ) holds
         GROUP BY user_id
       )
@@ -220,9 +222,10 @@ export async function repairSafeMissingWallets(adminId: string) {
       FROM ledger l
       JOIN app.users u ON u.id = l.user_id
       LEFT JOIN app.wallets w ON w.user_id = l.user_id
-      LEFT JOIN active_holds h ON h.user_id = l.user_id
+      LEFT JOIN hold_history h ON h.user_id = l.user_id
       WHERE w.user_id IS NULL
-        AND coalesce(h.locked_amount, 0) = 0
+        AND coalesce(h.hold_records, 0) = 0
+        AND l.hold_ledger_history = 0
         AND l.nonposted_nonzero_transactions = 0
         AND l.posted_ledger_balance >= 0
       ON CONFLICT (user_id) DO NOTHING
@@ -236,7 +239,7 @@ export async function repairSafeMissingWallets(adminId: string) {
           adminId,
           balance: toMoney(row.balance),
           lockedBalance: toMoney(row.locked_balance),
-          method: "completed_ledger_without_active_holds",
+          method: "completed_ledger_without_hold_history",
         })}::jsonb)
       `);
     }
