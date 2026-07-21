@@ -18,6 +18,20 @@ function quoteIdentifier(value) {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
 
+async function resolveEnumSchema(client, enumName) {
+  const result = await client.query(
+    `SELECT n.nspname AS enum_schema
+       FROM pg_type t
+       JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE t.typname = $1
+        AND t.typtype = 'e'
+      ORDER BY CASE WHEN n.nspname = 'app' THEN 0 WHEN n.nspname = 'public' THEN 1 ELSE 2 END
+      LIMIT 1`,
+    [enumName],
+  );
+  return String(result.rows?.[0]?.enum_schema || "");
+}
+
 function catTuesdayBefore(date) {
   const shifted = new Date(date.getTime() + 2 * 60 * 60 * 1000);
   const day = shifted.getUTCDay();
@@ -44,16 +58,7 @@ async function fetchJson(url) {
 }
 
 async function ensureCompetitionTierValues(client) {
-  const result = await client.query(`
-    SELECT n.nspname AS enum_schema
-    FROM pg_type t
-    JOIN pg_namespace n ON n.oid = t.typnamespace
-    WHERE t.typname = 'competition_tier'
-      AND t.typtype = 'e'
-    ORDER BY CASE WHEN n.nspname = 'app' THEN 0 WHEN n.nspname = 'public' THEN 1 ELSE 2 END
-    LIMIT 1
-  `);
-  const enumSchema = String(result.rows?.[0]?.enum_schema || "");
+  const enumSchema = await resolveEnumSchema(client, "competition_tier");
   if (!enumSchema) {
     throw new Error("Base schema is missing the competition_tier enum; database schema push must complete before tournament sync");
   }
@@ -81,6 +86,9 @@ async function main() {
 
   try {
     await ensureCompetitionTierValues(client);
+    const statusEnumSchema = await resolveEnumSchema(client, "competition_status");
+    if (!statusEnumSchema) throw new Error("Base schema is missing the competition_status enum");
+    const competitionStatusType = `${quoteIdentifier(statusEnumSchema)}.${quoteIdentifier("competition_status")}`;
 
     const [fixtures, bootstrap] = await Promise.all([
       fetchJson("https://fantasy.premierleague.com/api/fixtures/"),
@@ -174,12 +182,13 @@ async function main() {
 
         if (existing.rows.length) {
           const row = existing.rows[0];
+          const nextStatus = ["completed", "cancelled"].includes(String(row.status || "")) ? String(row.status) : status;
           preservedEntries += Number(row.entry_count || 0);
           await client.query(
             `update app.competitions
              set name = $1,
                  entry_fee = $2,
-                 status = case when status::text in ('completed','cancelled') then status else $3::text::public.competition_status end,
+                 status = $3::text::${competitionStatusType},
                  start_date = $4,
                  end_date = $5,
                  prize_card_rarity = $6,
@@ -189,7 +198,7 @@ async function main() {
                  prize_description = $7,
                  prize_key = 'ladder'
              where id = $8`,
-            [name, rarity.fee, status, window.start, window.end, rarity.prizeCardRarity, scheduleNote, Number(row.id)],
+            [name, rarity.fee, nextStatus, window.start, window.end, rarity.prizeCardRarity, scheduleNote, Number(row.id)],
           );
           updated += 1;
         } else {
