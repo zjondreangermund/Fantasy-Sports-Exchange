@@ -5,13 +5,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, SidebarHeader, useSidebar } from "./ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
-import { LayoutDashboard, ShoppingCart, Wallet, Trophy, Activity, LogOut, Shield, Swords, UserCircle, Gift, Beaker, FastForward, Wifi, BookOpenCheck, FileText, Mail, CircleHelp } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Wallet, Trophy, Activity, LogOut, Shield, Swords, UserCircle, Gift, Beaker, FastForward, Wifi, BookOpenCheck, FileText, Mail, CircleHelp, ListChecks } from "lucide-react";
 
 type NavItem = { title: string; href: string; icon: typeof LayoutDashboard; section: "Main" | "Account" | "Rules & Support" };
 
 const menuItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard, section: "Main" },
   { title: "Play", href: "/competitions", icon: Trophy, section: "Main" },
+  { title: "My Teams & Prizes", href: "/my-entries", icon: ListChecks, section: "Main" },
   { title: "Prize Vault", href: "/prize-vault", icon: Gift, section: "Main" },
   { title: "Collection", href: "/collection", icon: Swords, section: "Main" },
   { title: "Marketplace", href: "/marketplace", icon: ShoppingCart, section: "Main" },
