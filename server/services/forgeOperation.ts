@@ -147,7 +147,7 @@ async function verifyCompletedForgeOperation(tx: any, operation: any) {
   };
 }
 
-export async function executeCommonToRareForge(tx: any, input: { userId: string; cardIds: number[] }) {
+export async function executeCommonToRareForge(tx: any, input: { userId: string; cardIds: number[] }): Promise<any> {
   await ensureForgeOperationSchema();
   const userId = String(input.userId || "").trim();
   const cardIds = normalizeForgeCardIds(input.cardIds);
@@ -205,7 +205,7 @@ export async function executeCommonToRareForge(tx: any, input: { userId: string;
     postingKey: feePostingKey,
     userId,
     amount: -COMMON_TO_RARE_FORGE_FEE,
-    transactionType: "swap_fee",
+    transactionType: "swap_fee" as any,
     sourceType: "forge_burn",
     description: `Forge burn fee operation:${operationId} player:${playerId} cards:${cardIds.join(",")}`,
     reason: "Common-to-rare forge fee",
