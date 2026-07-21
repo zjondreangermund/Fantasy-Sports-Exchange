@@ -5,9 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, SidebarHeader, useSidebar } from "./ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
-import { LayoutDashboard, ShoppingCart, Wallet, Trophy, Activity, LogOut, Shield, Swords, UserCircle, Gift, Beaker, FastForward, Wifi } from "lucide-react";
+import { LayoutDashboard, ShoppingCart, Wallet, Trophy, Activity, LogOut, Shield, Swords, UserCircle, Gift, Beaker, FastForward, Wifi, BookOpenCheck, FileText, Mail, CircleHelp } from "lucide-react";
 
-type NavItem = { title: string; href: string; icon: typeof LayoutDashboard; section: "Main" | "Account" };
+type NavItem = { title: string; href: string; icon: typeof LayoutDashboard; section: "Main" | "Account" | "Rules & Support" };
 
 const menuItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard, section: "Main" },
@@ -18,9 +18,13 @@ const menuItems: NavItem[] = [
   { title: "Leagues", href: "/premier-league", icon: Activity, section: "Main" },
   { title: "Wallet", href: "/wallet", icon: Wallet, section: "Account" },
   { title: "Profile", href: "/account", icon: UserCircle, section: "Account" },
+  { title: "Game Rules", href: "/game-rules", icon: BookOpenCheck, section: "Rules & Support" },
+  { title: "Terms & Conditions", href: "/terms-and-conditions", icon: FileText, section: "Rules & Support" },
+  { title: "Help Centre", href: "/help", icon: CircleHelp, section: "Rules & Support" },
+  { title: "Contact Us", href: "/contact-us", icon: Mail, section: "Rules & Support" },
 ];
 
-const sectionOrder: NavItem["section"][] = ["Main", "Account"];
+const sectionOrder: NavItem["section"][] = ["Main", "Account", "Rules & Support"];
 function isActivePath(location: string, href: string) { if (href === "/") return location === "/" || location === "/dashboard"; return location === href; }
 
 export function AppSidebar() {
