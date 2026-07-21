@@ -144,7 +144,7 @@ async function loadCompetitions(): Promise<any[]> {
   return rowsOf(result);
 }
 function allowedTier(raw: unknown) { const tier = String(raw || "common").toLowerCase(); return ["common", "rare", "epic", "unique", "legendary"].includes(tier) ? tier : "common"; }
-function allowedStatus(raw: unknown) { const status = String(raw || "open").toLowerCase(); return ["open", "upcoming", "active", "completed"].includes(status) ? status : "open"; }
+function allowedStatus(raw: unknown) { const status = String(raw || "open").toLowerCase(); return ["open", "upcoming", "closed", "active"].includes(status) ? status : "open"; }
 function allowedPrizeType(raw: unknown) { const type = String(raw || "goods").toLowerCase(); return ["cash_pool", "goods", "goods_plus_cash", "packs", "sponsor_prize"].includes(type) ? type : "goods"; }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -197,8 +197,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const name = String(req.body?.name || "").trim();
       const gameWeek = Math.max(1, Math.min(38, Number(req.body?.gameWeek || 1)));
       if (!name) return res.status(400).json({ message: "Tournament name required" });
+      const requestedStatus = String(req.body?.status || "open").toLowerCase();
+      if (requestedStatus === "completed") return res.status(400).json({ message: "Use the settlement action to complete a tournament" });
       const tier = allowedTier(req.body?.tier);
-      const status = allowedStatus(req.body?.status);
+      const status = allowedStatus(requestedStatus);
       const entryFee = toMoney(req.body?.entryFee || getEntryFeeForRarity(tier));
       const maxEntries = Number(req.body?.maxEntries || 0) > 1 ? Number(req.body.maxEntries) : null;
       const visibility = String(req.body?.visibility || "public") === "private" ? "private" : "public";
@@ -221,8 +223,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const name = String(req.body?.name || "").trim();
       const gameWeek = Math.max(1, Math.min(38, Number(req.body?.gameWeek || 1)));
       if (!name) return res.status(400).json({ message: "Tournament name required" });
+      const requestedStatus = String(req.body?.status || "open").toLowerCase();
+      if (requestedStatus === "completed") return res.status(400).json({ message: "Use the settlement action to complete a tournament" });
       const tier = allowedTier(req.body?.tier);
-      const status = allowedStatus(req.body?.status);
+      const status = allowedStatus(requestedStatus);
       const entryFee = toMoney(req.body?.entryFee || getEntryFeeForRarity(tier));
       const maxEntries = Number(req.body?.maxEntries || 0) > 1 ? Number(req.body.maxEntries) : null;
       const visibility = String(req.body?.visibility || "public") === "private" ? "private" : "public";
@@ -261,52 +265,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/competitions/my-entries", requireAuth, async (req: any, res) => res.json(await storage.getUserCompetitions(req.authUserId)));
-  app.post("/api/competitions/join", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.authUserId;
-      const competitionId = Number(req.body?.competitionId);
-      const cardIds = Array.isArray(req.body?.cardIds) ? req.body.cardIds.map(Number).filter((id: number) => Number.isFinite(id)) : [];
-      const captainId = Number(req.body?.captainId || cardIds[0]);
-      if (!competitionId || cardIds.length !== 5 || new Set(cardIds).size !== 5) return res.status(400).json({ message: "Tournament ID and exactly 5 different card IDs required" });
-      const competition = (await loadCompetitions()).find((c: any) => Number(c.id) === competitionId) || await storage.getCompetition(competitionId);
-      if (!competition) return res.status(404).json({ message: "Tournament not found" });
-      if (competition.status !== "open") return res.status(400).json({ message: "Tournament is not open for entries" });
-      const cutoff = await getCompetitionSubmissionCloseAt(competition);
-      if (Date.now() >= cutoff.getTime()) return res.status(400).json({ message: "Gameweek entries are closed. Cutoff is the first Premier League kickoff of this 26/27 gameweek." });
-      if (await storage.getCompetitionEntry(competitionId, userId)) return res.status(400).json({ message: "Already entered this tournament" });
-      const cards = await Promise.all(cardIds.map((id: number) => storage.getPlayerCardWithPlayer(id, userId)));
-      if (cards.some((card: any) => !card || card.ownerId !== userId)) return res.status(403).json({ message: "You don't own all selected cards" });
-      const expectedRarity = String(competition.tier || "common").toLowerCase();
-      if (cards.some((card: any) => String(card?.rarity || "common").toLowerCase() !== expectedRarity)) return res.status(400).json({ message: `${competition.tier} tournaments only accept ${competition.tier} cards.` });
-      if (cards.some((card: any) => card?.forSale)) return res.status(400).json({ message: "Cannot use marketplace-listed cards." });
-      const playerIds = cards.map((card: any) => Number(card?.playerId));
-      if (new Set(playerIds).size !== playerIds.length) return res.status(400).json({ message: "Lineup must use 5 different players" });
-      const positions = cards.map((card: any) => card?.player?.position);
-      if (!positions.includes("GK") || !positions.includes("DEF") || !positions.includes("MID") || !positions.includes("FWD")) return res.status(400).json({ message: "Invalid lineup: must have 1 GK, 1 DEF, 1 MID, 1 FWD, and 1 Utility player" });
-      const entryFee = toMoney(competition.entryFee || 0);
-      const wallet = await storage.getWallet(userId);
-      if (entryFee > 0 && (!wallet || Number(wallet.balance || 0) < entryFee)) return res.status(400).json({ message: "Insufficient balance for entry fee" });
-      if (entryFee > 0) { await storage.updateWalletBalance(userId, -entryFee); await storage.createTransaction({ userId, type: "entry_fee" as any, amount: -entryFee, description: `Entered tournament: ${competition.name}` } as any); }
-      const entry = await storage.createCompetitionEntry({ competitionId, userId, lineupCardIds: cardIds, captainId, totalScore: 0 } as any);
-      return res.json({ success: true, message: "Successfully joined tournament", entryId: entry.id, cutoff });
-    } catch (error: any) { console.error("Failed to join competition:", error); return res.status(500).json({ message: error?.message || "Failed to join tournament" }); }
-  });
-
-  app.post("/api/admin/competitions/settle/:id", requireAuth, isAdmin, async (req: any, res) => {
-    try {
-      const competitionId = Number(req.params.id);
-      const competition = await storage.getCompetition(competitionId);
-      if (!competition) return res.status(404).json({ message: "Tournament not found" });
-      if (competition.status === "completed") return res.status(400).json({ message: "Tournament already settled" });
-      const entries = await storage.getCompetitionEntries(competitionId);
-      const ranked = await rankCompetitionEntries(storage, entries);
-      const totalPrizePool = toMoney(entries.length * Number(competition.entryFee || 0));
-      const payoutPercentages = [0.6, 0.3, 0.1];
-      for (let i = 0; i < ranked.length; i += 1) await storage.updateCompetitionEntry(ranked[i].id, { rank: i + 1, prizeAmount: toMoney(totalPrizePool * (payoutPercentages[i] || 0)), tiebreakMeta: ranked[i].tiebreak || {} } as any);
-      await storage.updateCompetition(competitionId, { status: "completed" } as any);
-      return res.json({ success: true, message: "Tournament settled with Arena v2 tiebreak rules", winner: ranked[0] || null, winnersCount: Math.min(3, ranked.length) });
-    } catch (error: any) { console.error("Failed to settle competition:", error); return res.status(500).json({ message: error?.message || "Failed to settle tournament" }); }
-  });
 
   console.log("🚀 Starting automatic score update service...");
   scoreUpdater.startAutoUpdates();

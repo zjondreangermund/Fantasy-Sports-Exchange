@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { registerLoanMarketRoutes } from "./loanMarket.routes.js";
+import { adminAdjustmentPostingKey, postWalletAmountExactlyOnce } from "../services/walletPosting.js";
 
 interface RegisterTournamentCreatorRoutesDeps {
   requireAuth: any;
@@ -44,6 +45,22 @@ async function getOwnedTournament(userId: string, competitionId: number) {
     limit 1
   `);
   return rowsOf(result)[0] || null;
+}
+
+async function hasTournamentWalletPostingHistory(competitionId: number): Promise<boolean> {
+  const result = await db.execute(sql`
+    select 1
+    from app.wallet_posting_claims claims
+    where claims.source_type = 'tournament_settlement'
+      and claims.metadata ->> 'competitionId' = ${String(competitionId)}
+    union all
+    select 1
+    from app.competition_entries ce
+    where ce.competition_id = ${competitionId}
+      and (ce.payout_posting_key is not null or ce.payout_transaction_id is not null)
+    limit 1
+  `);
+  return rowsOf(result).length > 0;
 }
 
 async function isAdminUser(userId: string) {
@@ -202,6 +219,9 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
 
       const tournament = rowsOf(await db.execute(sql`select id, name from app.competitions where id = ${competitionId} limit 1`))[0];
       if (!tournament) return res.status(404).json({ message: "Tournament not found" });
+      if (await hasTournamentWalletPostingHistory(competitionId)) {
+        return res.status(400).json({ message: "Settled tournaments with wallet posting history cannot be deleted" });
+      }
 
       await db.transaction(async (tx) => {
         await tx.execute(sql`delete from app.competition_entries where competition_id = ${competitionId}`);
@@ -337,7 +357,8 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
       if (!(await requireAdminUser(req, res))) return;
       const competitionId = Number(req.params.id);
       const status = String(req.body?.status || "").toLowerCase();
-      if (!["open", "active", "completed"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+      if (status === "completed") return res.status(400).json({ message: "Use the settlement action to complete a tournament" });
+      if (!["open", "active"].includes(status)) return res.status(400).json({ message: "Invalid status" });
       const result = await db.execute(sql`update app.competitions set status=${status} where id=${competitionId} and name like '[TEST]%' returning *`);
       if (!rowsOf(result)[0]) return res.status(404).json({ message: "Test tournament not found" });
       return res.json({ success: true, tournament: rowsOf(result)[0] });
@@ -351,23 +372,32 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
     try {
       const adminId = await requireAdminUser(req, res);
       if (!adminId) return;
-      const userId = String(req.body?.userId || "");
+      const userId = String(req.body?.userId || "").trim();
       const amount = Math.round(Number(req.body?.amount || 0) * 100) / 100;
+      const rawRequestKey = req.headers["idempotency-key"] || req.body?.idempotencyKey;
       if (!userId || !Number.isFinite(amount) || amount === 0) return res.status(400).json({ message: "Valid user and non-zero amount required" });
-      await db.transaction(async (tx) => {
-        await tx.execute(sql`
-          insert into app.wallets (user_id, balance, locked_balance) values (${userId}, ${amount}, 0)
-          on conflict (user_id) do update set balance=app.wallets.balance + ${amount}
-        `);
-        await tx.execute(sql`
-          insert into app.transactions (user_id, type, amount, gross_amount, fee_amount, net_amount, source_type, status, description)
-          values (${userId}, 'admin_adjustment', ${amount}, ${amount}, 0, ${amount}, 'admin_test', 'completed', ${`Test console adjustment by ${adminId}`})
-        `);
-      });
-      return res.json({ success: true });
+      if (Math.abs(amount) > 1_000_000) return res.status(400).json({ message: "Adjustment exceeds the allowed test-console limit" });
+      const postingKey = adminAdjustmentPostingKey(adminId, rawRequestKey);
+      const reason = String(req.body?.reason || "Test console wallet adjustment").trim().slice(0, 500);
+      const posting = await db.transaction((tx) => postWalletAmountExactlyOnce(tx, {
+        postingKey,
+        userId,
+        amount,
+        transactionType: "admin_adjustment",
+        sourceType: "admin_test",
+        description: `${reason} by ${adminId}`,
+        actorUserId: adminId,
+        reason,
+        metadata: { requestedBy: adminId, testConsole: true },
+        bindActor: true,
+        auditAction: "admin.wallet.adjusted",
+      }));
+      return res.json({ success: true, ...posting });
     } catch (error: any) {
-      console.error("Failed test wallet adjustment:", error);
-      return res.status(500).json({ message: error?.message || "Failed to adjust wallet" });
+      const message = String(error?.message || "Failed to adjust wallet");
+      const status = message.includes("Idempotency-Key") || message.includes("Valid user") || message.includes("Insufficient") || message.includes("reused") ? 400 : 500;
+      if (status === 500) console.error("Failed test wallet adjustment:", error);
+      return res.status(status).json({ message });
     }
   });
 
@@ -375,13 +405,18 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
     try {
       if (!(await requireAdminUser(req, res))) return;
       const ids = rowsOf(await db.execute(sql`select id from app.competitions where name like '[TEST]%'`)).map((row) => Number(row.id));
+      const protectedIds = new Set<number>();
+      for (const competitionId of ids) {
+        if (await hasTournamentWalletPostingHistory(competitionId)) protectedIds.add(competitionId);
+      }
+      const deletableIds = ids.filter((id) => !protectedIds.has(id));
       await db.transaction(async (tx) => {
-        if (ids.length) {
-          await tx.execute(sql`delete from app.competition_entries where competition_id = any(${ids}::int[])`);
-          await tx.execute(sql`delete from app.competitions where id = any(${ids}::int[])`);
+        if (deletableIds.length) {
+          await tx.execute(sql`delete from app.competition_entries where competition_id = any(${deletableIds}::int[])`);
+          await tx.execute(sql`delete from app.competitions where id = any(${deletableIds}::int[])`);
         }
       });
-      return res.json({ success: true, deletedTournaments: ids.length });
+      return res.json({ success: true, deletedTournaments: deletableIds.length, protectedSettledTournaments: protectedIds.size });
     } catch (error: any) {
       console.error("Failed to clean test data:", error);
       return res.status(500).json({ message: error?.message || "Failed to clean test data" });
