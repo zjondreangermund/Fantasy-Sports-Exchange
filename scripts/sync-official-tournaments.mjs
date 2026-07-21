@@ -18,6 +18,20 @@ function quoteIdentifier(value) {
   return `"${String(value).replace(/"/g, '""')}"`;
 }
 
+async function resolveEnumSchema(client, enumName) {
+  const result = await client.query(
+    `SELECT n.nspname AS enum_schema
+       FROM pg_type t
+       JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE t.typname = $1
+        AND t.typtype = 'e'
+      ORDER BY CASE WHEN n.nspname = 'app' THEN 0 WHEN n.nspname = 'public' THEN 1 ELSE 2 END
+      LIMIT 1`,
+    [enumName],
+  );
+  return String(result.rows?.[0]?.enum_schema || "");
+}
+
 function catTuesdayBefore(date) {
   const shifted = new Date(date.getTime() + 2 * 60 * 60 * 1000);
   const day = shifted.getUTCDay();
@@ -44,23 +58,22 @@ async function fetchJson(url) {
 }
 
 async function ensureCompetitionTierValues(client) {
-  const result = await client.query(`
-    SELECT n.nspname AS enum_schema
-    FROM pg_type t
-    JOIN pg_namespace n ON n.oid = t.typnamespace
-    WHERE t.typname = 'competition_tier'
-      AND t.typtype = 'e'
-    ORDER BY CASE WHEN n.nspname = 'app' THEN 0 WHEN n.nspname = 'public' THEN 1 ELSE 2 END
-    LIMIT 1
-  `);
-  const enumSchema = String(result.rows?.[0]?.enum_schema || "");
+  const enumSchema = await resolveEnumSchema(client, "competition_tier");
   if (!enumSchema) {
     throw new Error("Base schema is missing the competition_tier enum; database schema push must complete before tournament sync");
   }
   const qualifiedType = `${quoteIdentifier(enumSchema)}.${quoteIdentifier("competition_tier")}`;
-  for (const value of ["unique", "epic", "legendary"]) {
+  for (const value of ["common", "rare", "unique", "epic", "legendary"]) {
     await client.query(`ALTER TYPE ${qualifiedType} ADD VALUE IF NOT EXISTS '${value}'`);
   }
+}
+
+function plannedStatus({ gw, currentGw, first, last, event, now }) {
+  if (gw < currentGw) return "closed";
+  if (gw > currentGw) return "upcoming";
+  if (Boolean(event?.finished || event?.data_checked) || now.getTime() > last.getTime() + 24 * 60 * 60 * 1000) return "closed";
+  if (now.getTime() >= first.getTime()) return "active";
+  return "open";
 }
 
 async function main() {
@@ -72,9 +85,10 @@ async function main() {
   await client.connect();
 
   try {
-    // Enum values must be committed before they can be used by later inserts.
-    // Legacy databases may keep the enum in public rather than app.
     await ensureCompetitionTierValues(client);
+    const statusEnumSchema = await resolveEnumSchema(client, "competition_status");
+    if (!statusEnumSchema) throw new Error("Base schema is missing the competition_status enum");
+    const competitionStatusType = `${quoteIdentifier(statusEnumSchema)}.${quoteIdentifier("competition_status")}`;
 
     const [fixtures, bootstrap] = await Promise.all([
       fetchJson("https://fantasy.premierleague.com/api/fixtures/"),
@@ -82,6 +96,7 @@ async function main() {
     ]);
 
     const events = Array.isArray(bootstrap?.events) ? bootstrap.events : [];
+    const eventByGw = new Map(events.map((event) => [Number(event?.id), event]));
     const byGw = new Map();
     for (const fixture of Array.isArray(fixtures) ? fixtures : []) {
       const gw = Number(fixture?.event);
@@ -97,7 +112,7 @@ async function main() {
     const currentEvent =
       events.find((event) => event.is_current) ||
       events.find((event) => event.is_next) ||
-      events.find((event) => new Date(event.deadline_time).getTime() > now.getTime()) ||
+      [...events].reverse().find((event) => event.finished) ||
       events[0];
     const currentGw = Math.max(1, Math.min(38, Number(currentEvent?.id || 1)));
 
@@ -119,8 +134,11 @@ async function main() {
         : preferredEnd;
       windows.push({
         gw,
+        first,
+        last,
         start,
         end,
+        event: eventByGw.get(gw),
         adjusted: start.getTime() !== preferredStart.getTime() || end.getTime() !== preferredEnd.getTime(),
       });
     }
@@ -133,42 +151,72 @@ async function main() {
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS visibility text DEFAULT 'public'`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS max_entries integer`);
 
-    // Remove only auto-generated official rows. Never delete tournaments created
-    // manually in Admin, even when they are linked to a Prize Vault ladder.
-    const officialRows = await client.query(`
-      select id from app.competitions
-      where created_by_user_id is null
-        and (
-          name ~* '^GW[0-9]+ (Common|Rare|Unique|Epic|Legendary) (Prize )?Ladder$'
-          or name ~* '^Common Tournament - GW[0-9]+$'
-          or name ~* '^GW[0-9]+ Community Cup$'
-        )
-    `);
-    const officialIds = officialRows.rows.map((row) => Number(row.id)).filter(Number.isFinite);
-    if (officialIds.length) {
-      await client.query(`delete from app.competition_entries where competition_id = any($1::int[])`, [officialIds]);
-      await client.query(`delete from app.competitions where id = any($1::int[])`, [officialIds]);
-    }
+    let created = 0;
+    let updated = 0;
+    let preservedEntries = 0;
 
     for (const window of windows) {
-      const status = window.gw < currentGw ? "completed" : window.gw === currentGw ? "open" : "upcoming";
+      const status = plannedStatus({ ...window, currentGw, now });
       for (const rarity of RARITIES) {
         const name = `GW${window.gw} ${title(rarity.tier)} Prize Ladder`;
         const scheduleNote = window.adjusted
           ? `Fixture-adjusted ${title(rarity.tier)} Prize Vault ladder. Tuesday window shortened to avoid overlapping Premier League fixtures.`
           : `${title(rarity.tier)} Prize Vault ladder. Runs Tuesday to Tuesday; entries lock at the first Premier League kickoff.`;
-        await client.query(
-          `insert into app.competitions
-            (name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity, visibility, max_entries, prize_type, prize_description, prize_key)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,'public',100000,'goods',$9,'ladder')`,
-          [name, rarity.tier, rarity.fee, status, window.gw, window.start, window.end, rarity.prizeCardRarity, scheduleNote],
+
+        const existing = await client.query(
+          `select c.id, c.status::text as status,
+             (select count(*)::int from app.competition_entries ce where ce.competition_id = c.id) as entry_count
+           from app.competitions c
+           where c.created_by_user_id is null
+             and c.game_week = $1
+             and c.tier::text = $2
+             and (
+               c.name = $3
+               or c.name ~* ('^' || initcap($2) || ' Tournament - GW' || $1 || '$')
+               or c.name ~* ('^GW' || $1 || ' ' || initcap($2) || ' (Prize )?Ladder$')
+             )
+           order by case when c.name = $3 then 0 else 1 end, c.id asc
+           limit 1`,
+          [window.gw, rarity.tier, name],
         );
+
+        if (existing.rows.length) {
+          const row = existing.rows[0];
+          const nextStatus = ["completed", "cancelled"].includes(String(row.status || "")) ? String(row.status) : status;
+          preservedEntries += Number(row.entry_count || 0);
+          await client.query(
+            `update app.competitions
+             set name = $1,
+                 entry_fee = $2,
+                 status = $3::text::${competitionStatusType},
+                 start_date = $4,
+                 end_date = $5,
+                 prize_card_rarity = $6,
+                 visibility = 'public',
+                 max_entries = 100000,
+                 prize_type = 'goods',
+                 prize_description = $7,
+                 prize_key = 'ladder'
+             where id = $8`,
+            [name, rarity.fee, nextStatus, window.start, window.end, rarity.prizeCardRarity, scheduleNote, Number(row.id)],
+          );
+          updated += 1;
+        } else {
+          await client.query(
+            `insert into app.competitions
+              (name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity, visibility, max_entries, prize_type, prize_description, prize_key)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,'public',100000,'goods',$9,'ladder')`,
+            [name, rarity.tier, rarity.fee, status, window.gw, window.start, window.end, rarity.prizeCardRarity, scheduleNote],
+          );
+          created += 1;
+        }
       }
     }
 
     await client.query("COMMIT");
     const adjusted = windows.filter((window) => window.adjusted).map((window) => window.gw);
-    console.log(`Official tournaments synced for ${SEASON}. Current GW: ${currentGw}. Created ${38 * RARITIES.length} official rarity tournaments.`);
+    console.log(`Official tournaments synced for ${SEASON}. Current GW: ${currentGw}. Created ${created}, updated ${updated}.`);
+    console.log(`Preserved ${preservedEntries} existing official tournament entries; startup sync did not delete user teams.`);
     console.log("Admin-created tournaments were preserved and remain visible in Play.");
     console.log(adjusted.length
       ? `Fixture-overlap adjustments applied to GW: ${adjusted.join(", ")}`

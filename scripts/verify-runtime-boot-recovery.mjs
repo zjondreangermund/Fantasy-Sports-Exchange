@@ -47,15 +47,17 @@ const checks = [
     ],
   },
   {
-    name: "official tournament sync discovers competition enum schema",
+    name: "official tournament sync discovers competition enum schemas",
     file: "scripts/sync-official-tournaments.mjs",
     patterns: [
       "SELECT n.nspname AS enum_schema",
-      "t.typname = 'competition_tier'",
+      'resolveEnumSchema(client, "competition_tier")',
+      'resolveEnumSchema(client, "competition_status")',
       "const qualifiedType",
       "ALTER TYPE ${qualifiedType}",
+      "competitionStatusType",
     ],
-    forbiddenPatterns: ["ALTER TYPE app.competition_tier"],
+    forbiddenPatterns: ["ALTER TYPE app.competition_tier", "public.competition_status"],
   },
   {
     name: "withdrawal runtime schema discovers withdrawal enum schema",

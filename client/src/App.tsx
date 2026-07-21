@@ -40,6 +40,7 @@ const AuctionsPage = React.lazy(() => import("./pages/auctions"));
 const WalletPage = React.lazy(() => import("./pages/wallet"));
 const AccountPage = React.lazy(() => import("./pages/account"));
 const CompetitionsPage = React.lazy(() => import("./pages/competitions-vault"));
+const MyEntriesPage = React.lazy(() => import("./pages/my-entries"));
 const PrizeVaultPage = React.lazy(() => import("./pages/prize-vault"));
 const PremierLeaguePage = React.lazy(() => import("./pages/premier-league"));
 const AdminPage = React.lazy(() => import("./pages/admin"));
@@ -49,8 +50,9 @@ const AdminLiveDataPage = React.lazy(() => import("./pages/admin-live-data"));
 const CardLabPage = React.lazy(() => import("./pages/card-lab"));
 
 const legalInfoPaths = [
-  "/about", "/contact", "/help", "/faq",
-  "/legal/terms", "/legal/privacy", "/legal/aml-kyc", "/legal/cookies", "/legal/refunds",
+  "/about", "/contact", "/contact-us", "/help", "/faq",
+  "/terms", "/terms-and-conditions", "/privacy-policy", "/rules", "/game-rules",
+  "/legal/terms", "/legal/game-rules", "/legal/privacy", "/legal/aml-kyc", "/legal/cookies", "/legal/refunds",
   "/legal/responsible-play", "/legal/fair-play", "/legal/marketplace", "/legal/prize-vault", "/legal/scoring",
 ];
 const trustInfoPaths = ["/trust/status", "/trust/security", "/trust/payments", "/trust/releases", "/trust/roadmap"];
@@ -96,6 +98,7 @@ function AuthenticatedRouter() {
         <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
         <Route path="/card-reveal" component={CardRevealPage} />
         <Route path="/competitions" component={CompetitionsPage} />
+        <Route path="/my-entries" component={MyEntriesPage} />
         <Route path="/prize-vault" component={PrizeVaultPage} />
         <Route path="/premier-league" component={PremierLeaguePage} />
         <Route path="/leagues" component={PremierLeaguePage} />
@@ -118,7 +121,7 @@ function AuthenticatedRouter() {
 
 function AuthenticatedApp() {
   const [location] = useLocation();
-  const isPlayRoute = location.startsWith("/competitions") || location.startsWith("/prize-vault");
+  const isPlayRoute = location.startsWith("/competitions") || location.startsWith("/my-entries") || location.startsWith("/prize-vault");
   const isInfoRoute = publicInfoPaths.includes(location);
   const style = { "--sidebar-width": "16rem", "--sidebar-width-icon": "3rem" };
   const { data: user } = useQuery<{ managerTeamName?: string }>({ queryKey: ["/api/user"] });
