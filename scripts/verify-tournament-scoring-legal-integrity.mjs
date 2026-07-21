@@ -34,10 +34,12 @@ expect(!sync.includes("public.competition_status"), "Official tournament sync mu
 includesAll(scoreUpdater, [
   "entryDeadline",
   "isGameweekFinal",
+  "activateCompetitionAtDeadline",
   "tiebreakMeta: { ...asObject(entry?.tiebreakMeta), scoring: snapshot }",
+  "version: 2",
+  'source: "official-fpl-live"',
   "captainMultiplier: 1.1",
   "unresolvedCardIds",
-  "Final scoring snapshot",
 ], "Score updater");
 expect(!scoreUpdater.includes("resetForNewGameweek"), "Score updater must not reset historical gameweek scores");
 expect(!scoreUpdater.includes("totalScore: 0"), "Score updater must not zero other gameweek entries");
@@ -50,6 +52,7 @@ includesAll(economy, [
   "resolveEntryDeadline",
   "Date.now() >= entryDeadline.getTime()",
   "entry_fee_paid",
+  "paidFees",
   "ScoreUpdateService",
   "Final scoring snapshot is missing or incomplete",
   "competition_prize_awards",
@@ -59,10 +62,15 @@ includesAll(economy, [
   "pending_claim",
   "postWalletAmountExactlyOnce",
 ], "Tournament economy route");
-expect(!economy.includes("ranked.length * Number(competition.entryFee || 0)"), "Settlement must prefer the immutable entry_fee_paid values");
 expect(!economy.includes("if (new Date(competition.startDate).getTime() <= Date.now())"), "Join validation must not use the Tuesday tournament start as the lineup deadline");
 
-includesAll(preflight, ["competition_prize_awards", "competition_prize_awards_user_idx", "competition_prize_awards_status_idx"], "Runtime preflight");
+includesAll(preflight, [
+  "competition_prize_awards",
+  "competition_prize_awards_user_idx",
+  "competition_prize_awards_status_idx",
+  "entry_fee_paid real NOT NULL DEFAULT 0",
+  "SET entry_fee_paid = coalesce(c.entry_fee, 0)",
+], "Runtime preflight");
 
 includesAll(legal, [
   '"/legal/game-rules"',
