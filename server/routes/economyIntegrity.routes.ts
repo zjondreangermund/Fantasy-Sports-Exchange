@@ -3,6 +3,11 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { storage } from "../storage.js";
 import { rankCompetitionEntries } from "../services/tournamentRules.js";
+import {
+  getWalletPostingIntegrityReport,
+  postWalletAmountExactlyOnce,
+  tournamentPayoutPostingKey,
+} from "../services/walletPosting.js";
 
 interface RegisterEconomyIntegrityRoutesDeps {
   requireAuth: any;
@@ -206,6 +211,17 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
     }
   });
 
+  app.get("/api/admin/wallet-postings/integrity", requireAuth, async (req: any, res) => {
+    try {
+      const adminId = String(req.authUserId || "");
+      if (!(await isAdminUser(adminId))) return res.status(403).json({ message: "Admin access required" });
+      return res.json(await getWalletPostingIntegrityReport());
+    } catch (error: any) {
+      console.error("Failed to inspect wallet postings:", error);
+      return res.status(500).json({ message: error?.message || "Failed to inspect wallet postings" });
+    }
+  });
+
   app.post("/api/admin/competitions/settle/:id", requireAuth, async (req: any, res) => {
     try {
       await ensureCardLockGuard();
@@ -227,8 +243,25 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           for update
         `))[0];
         if (!competition) throw new Error("Tournament not found");
-        if (String(competition.status) === "completed") throw new Error("Tournament already settled");
-        if (String(competition.status) !== "active") throw new Error("Tournament must be active before settlement");
+        if (!["active", "completed"].includes(String(competition.status))) {
+          throw new Error("Tournament must be active before settlement");
+        }
+        const alreadyCompleted = String(competition.status) === "completed";
+
+        const lockedEntries = rowsOf(await tx.execute(sql`
+          select id, user_id as "userId", coalesce(total_score, 0)::float as "totalScore",
+            coalesce(prize_amount, 0)::float as "prizeAmount", payout_posting_key as "payoutPostingKey",
+            payout_transaction_id as "payoutTransactionId"
+          from app.competition_entries
+          where competition_id = ${competitionId}
+          order by id
+          for update
+        `));
+        const rankedIds = ranked.map((entry: any) => Number(entry.id)).sort((a: number, b: number) => a - b);
+        const lockedIds = lockedEntries.map((entry: any) => Number(entry.id)).sort((a: number, b: number) => a - b);
+        if (rankedIds.length !== lockedIds.length || rankedIds.some((id: number, index: number) => id !== lockedIds[index])) {
+          throw new Error("Tournament entries changed during settlement; recalculate rankings and retry");
+        }
 
         const grossPool = toMoney(ranked.length * Number(competition.entryFee || 0));
         const feeRate = Math.max(0, Math.min(1, Number(competition.platformFeeRate || 0.2)));
@@ -236,30 +269,51 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         const prizePool = toMoney(grossPool - platformFee);
         const payoutPercentages = [0.6, 0.3, 0.1];
 
+        if (alreadyCompleted) {
+          for (let index = 0; index < ranked.length; index += 1) {
+            const rankedEntry = ranked[index];
+            const lockedEntry = lockedEntries.find((entry: any) => Number(entry.id) === Number(rankedEntry.id));
+            const payout = toMoney(prizePool * (payoutPercentages[index] || 0));
+            const expectedKey = payout > 0 ? tournamentPayoutPostingKey(competitionId, Number(rankedEntry.id)) : null;
+            if (!lockedEntry || toMoney(lockedEntry.prizeAmount) !== payout || String(lockedEntry.payoutPostingKey || "") !== String(expectedKey || "")) {
+              throw new Error("Completed tournament payout state no longer matches calculated rankings");
+            }
+          }
+        }
+
+        let replayedPostings = 0;
         for (let index = 0; index < ranked.length; index += 1) {
           const rankedEntry = ranked[index];
+          const entryId = Number(rankedEntry.id);
           const payout = toMoney(prizePool * (payoutPercentages[index] || 0));
           await tx.execute(sql`
             update app.competition_entries
             set rank = ${index + 1}, prize_amount = ${payout}, tiebreak_meta = ${JSON.stringify(rankedEntry.tiebreak || {})}::jsonb
-            where id = ${Number(rankedEntry.id)} and competition_id = ${competitionId}
+            where id = ${entryId} and competition_id = ${competitionId}
           `);
           if (payout <= 0) continue;
 
           const winnerId = String(rankedEntry.userId || "");
-          const wallet = rowsOf(await tx.execute(sql`
-            update app.wallets
-            set balance = balance + ${payout}
-            where user_id = ${winnerId}
-            returning user_id
-          `))[0];
-          if (!wallet) throw new Error(`Winner wallet not found for user ${winnerId}`);
+          const postingKey = tournamentPayoutPostingKey(competitionId, entryId);
+          const posting = await postWalletAmountExactlyOnce(tx, {
+            postingKey,
+            userId: winnerId,
+            amount: payout,
+            transactionType: "tournament_payout",
+            sourceType: "tournament_settlement",
+            description: `Tournament payout competition:${competitionId} rank:${index + 1} entry:${entryId}`,
+            actorUserId: adminId,
+            reason: `Tournament ${competitionId} rank ${index + 1} cash payout`,
+            metadata: { competitionId, entryId, rank: index + 1, grossPool, platformFee, prizePool },
+            auditAction: "wallet.tournament_payout.completed",
+          });
+          if (posting.replayed) replayedPostings += 1;
           await tx.execute(sql`
-            insert into app.transactions
-              (user_id, type, amount, gross_amount, fee_amount, net_amount, source_type, status, description)
-            values
-              (${winnerId}, 'tournament_payout', ${payout}, ${payout}, 0, ${payout},
-               'tournament_settlement', 'completed', ${`Tournament payout competition:${competitionId} rank:${index + 1}`})
+            update app.competition_entries
+            set payout_posting_key = ${posting.postingKey},
+                payout_transaction_id = ${posting.transactionId},
+                payout_completed_at = coalesce(payout_completed_at, now())
+            where id = ${entryId} and competition_id = ${competitionId}
           `);
         }
 
@@ -274,15 +328,15 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         `);
         await tx.execute(sql`
           insert into app.audit_logs (user_id, action, meta)
-          values (${adminId}, 'admin.tournament.settled', ${JSON.stringify({ competitionId, grossPool, platformFee, prizePool, cardLocksReleased: true })}::jsonb)
-        `).catch(() => undefined);
+          values (${adminId}, 'admin.tournament.settled', ${JSON.stringify({ competitionId, grossPool, platformFee, prizePool, cardLocksReleased: true, replayedPostings })}::jsonb)
+        `);
 
-        return { grossPool, platformFee, prizePool, winnersCount: Math.min(3, ranked.length) };
+        return { grossPool, platformFee, prizePool, winnersCount: Math.min(3, ranked.length), replayedPostings, replayed: alreadyCompleted };
       });
 
       return res.json({
         success: true,
-        message: "Tournament settled with Arena v2 tiebreak rules",
+        message: settlement.replayed ? "Tournament settlement already completed and verified" : "Tournament settled with Arena v2 tiebreak rules",
         winner: ranked[0] || null,
         winnersCount: settlement.winnersCount,
         settlement,
@@ -290,7 +344,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
     } catch (error: any) {
       const message = error?.message || "Failed to settle tournament";
       const status = message === "Tournament not found" ? 404 :
-        ["Tournament already settled", "Tournament must be active before settlement", "Cannot settle a tournament without entries"].includes(message) ? 400 : 500;
+        ["Tournament must be active before settlement", "Cannot settle a tournament without entries", "Tournament entries changed during settlement; recalculate rankings and retry", "Completed tournament payout state no longer matches calculated rankings"].includes(message) ? 400 : 500;
       if (status === 500) console.error("Failed to settle competition atomically:", error);
       return res.status(status).json({ message });
     }
