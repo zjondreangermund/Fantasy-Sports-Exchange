@@ -6,9 +6,30 @@ const groups = [
     title: "Fantasy Arena",
     links: [
       ["About", "/about"],
-      ["Contact Us", "/contact"],
+      ["Contact Us", "/contact-us"],
       ["Help Centre", "/help"],
       ["FAQ", "/faq"],
+    ],
+  },
+  {
+    title: "Game Rules",
+    links: [
+      ["Official Game Rules", "/game-rules"],
+      ["Scoring Rules", "/legal/scoring"],
+      ["Prize Vault Rules", "/legal/prize-vault"],
+      ["Marketplace Rules", "/legal/marketplace"],
+      ["Fair Play & Anti-Cheat", "/legal/fair-play"],
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      ["Terms & Conditions", "/terms-and-conditions"],
+      ["Privacy Policy", "/privacy-policy"],
+      ["AML & Verification", "/legal/aml-kyc"],
+      ["Cookie Policy", "/legal/cookies"],
+      ["Refunds & Withdrawals", "/legal/refunds"],
+      ["Responsible Play", "/legal/responsible-play"],
     ],
   },
   {
@@ -19,26 +40,6 @@ const groups = [
       ["Payment Readiness", "/trust/payments"],
       ["Release Notes", "/trust/releases"],
       ["Roadmap", "/trust/roadmap"],
-    ],
-  },
-  {
-    title: "Legal",
-    links: [
-      ["Terms of Service", "/legal/terms"],
-      ["Privacy Policy", "/legal/privacy"],
-      ["AML & Verification", "/legal/aml-kyc"],
-      ["Cookie Policy", "/legal/cookies"],
-      ["Refunds & Withdrawals", "/legal/refunds"],
-    ],
-  },
-  {
-    title: "Play Safely",
-    links: [
-      ["Responsible Play", "/legal/responsible-play"],
-      ["Fair Play & Anti-Cheat", "/legal/fair-play"],
-      ["Marketplace Rules", "/legal/marketplace"],
-      ["Prize Vault Rules", "/legal/prize-vault"],
-      ["Scoring Rules", "/legal/scoring"],
     ],
   },
 ];
@@ -58,7 +59,7 @@ export default function SiteFooter() {
             </div>
           </div>
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/50">
-            A fantasy football platform for collecting player cards, building lineups, entering skill-based competitions and unlocking real-world rewards.
+            A fantasy football platform for collecting Premier League player cards, building lineups, entering skill-based competitions and unlocking real-world rewards.
           </p>
           <a href="mailto:support@fantasyarena.com" className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-cyan-200 hover:text-cyan-100">
             <Mail className="h-4 w-4" /> support@fantasyarena.com
@@ -83,7 +84,7 @@ export default function SiteFooter() {
 
       <div className="mx-auto mt-8 flex max-w-7xl flex-col gap-3 border-t border-white/10 pt-5 text-xs text-white/35 sm:flex-row sm:items-center sm:justify-between">
         <span>© 2026 Fantasy Arena. All rights reserved.</span>
-        <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Policies require final review before commercial launch.</span>
+        <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Policies require final Namibian legal review before commercial launch.</span>
       </div>
     </footer>
   );
