@@ -49,8 +49,9 @@ const AdminLiveDataPage = React.lazy(() => import("./pages/admin-live-data"));
 const CardLabPage = React.lazy(() => import("./pages/card-lab"));
 
 const legalInfoPaths = [
-  "/about", "/contact", "/help", "/faq",
-  "/legal/terms", "/legal/privacy", "/legal/aml-kyc", "/legal/cookies", "/legal/refunds",
+  "/about", "/contact", "/contact-us", "/help", "/faq",
+  "/terms", "/terms-and-conditions", "/privacy-policy", "/rules", "/game-rules",
+  "/legal/terms", "/legal/game-rules", "/legal/privacy", "/legal/aml-kyc", "/legal/cookies", "/legal/refunds",
   "/legal/responsible-play", "/legal/fair-play", "/legal/marketplace", "/legal/prize-vault", "/legal/scoring",
 ];
 const trustInfoPaths = ["/trust/status", "/trust/security", "/trust/payments", "/trust/releases", "/trust/roadmap"];
