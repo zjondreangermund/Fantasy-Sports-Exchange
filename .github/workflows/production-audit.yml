@@ -94,6 +94,7 @@ jobs:
             node scripts/verify-withdrawal-flows.mjs &&
             node scripts/verify-wallet-reconciliation.mjs &&
             node scripts/verify-wallet-bypass-removal.mjs &&
+            node scripts/verify-wallet-posting-integrity.mjs &&
             node scripts/verify-production-readiness.mjs
           } 2>&1 | tee critical-flow-errors.log
           status=${PIPESTATUS[0]}
