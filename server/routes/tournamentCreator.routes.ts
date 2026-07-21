@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { registerLoanMarketRoutes } from "./loanMarket.routes.js";
+import { adminAdjustmentPostingKey, postWalletAmountExactlyOnce } from "../services/walletPosting.js";
 
 interface RegisterTournamentCreatorRoutesDeps {
   requireAuth: any;
@@ -351,23 +352,32 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
     try {
       const adminId = await requireAdminUser(req, res);
       if (!adminId) return;
-      const userId = String(req.body?.userId || "");
+      const userId = String(req.body?.userId || "").trim();
       const amount = Math.round(Number(req.body?.amount || 0) * 100) / 100;
+      const rawRequestKey = req.headers["idempotency-key"] || req.body?.idempotencyKey;
       if (!userId || !Number.isFinite(amount) || amount === 0) return res.status(400).json({ message: "Valid user and non-zero amount required" });
-      await db.transaction(async (tx) => {
-        await tx.execute(sql`
-          insert into app.wallets (user_id, balance, locked_balance) values (${userId}, ${amount}, 0)
-          on conflict (user_id) do update set balance=app.wallets.balance + ${amount}
-        `);
-        await tx.execute(sql`
-          insert into app.transactions (user_id, type, amount, gross_amount, fee_amount, net_amount, source_type, status, description)
-          values (${userId}, 'admin_adjustment', ${amount}, ${amount}, 0, ${amount}, 'admin_test', 'completed', ${`Test console adjustment by ${adminId}`})
-        `);
-      });
-      return res.json({ success: true });
+      if (Math.abs(amount) > 1_000_000) return res.status(400).json({ message: "Adjustment exceeds the allowed test-console limit" });
+      const postingKey = adminAdjustmentPostingKey(adminId, rawRequestKey);
+      const reason = String(req.body?.reason || "Test console wallet adjustment").trim().slice(0, 500);
+      const posting = await db.transaction((tx) => postWalletAmountExactlyOnce(tx, {
+        postingKey,
+        userId,
+        amount,
+        transactionType: "admin_adjustment",
+        sourceType: "admin_test",
+        description: `${reason} by ${adminId}`,
+        actorUserId: adminId,
+        reason,
+        metadata: { requestedBy: adminId, testConsole: true },
+        bindActor: true,
+        auditAction: "admin.wallet.adjusted",
+      }));
+      return res.json({ success: true, ...posting });
     } catch (error: any) {
-      console.error("Failed test wallet adjustment:", error);
-      return res.status(500).json({ message: error?.message || "Failed to adjust wallet" });
+      const message = String(error?.message || "Failed to adjust wallet");
+      const status = message.includes("Idempotency-Key") || message.includes("Valid user") || message.includes("Insufficient") || message.includes("reused") ? 400 : 500;
+      if (status === 500) console.error("Failed test wallet adjustment:", error);
+      return res.status(status).json({ message });
     }
   });
 
