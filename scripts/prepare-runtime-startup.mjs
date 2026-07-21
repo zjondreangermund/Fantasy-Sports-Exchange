@@ -39,11 +39,20 @@ async function ensureCompetitionMultiEntrySchema(client) {
     return;
   }
 
+  await client.query(`ALTER TABLE app.competition_entries ADD COLUMN IF NOT EXISTS entry_fee_paid real NOT NULL DEFAULT 0`);
   await client.query(`ALTER TABLE app.competition_entries DROP CONSTRAINT IF EXISTS competition_entries_competition_user_uq`);
   await client.query(`ALTER TABLE app.competition_entries DROP CONSTRAINT IF EXISTS competition_entries_competition_id_user_id_key`);
   await client.query(`DROP INDEX IF EXISTS app.competition_entries_competition_user_uq`);
   await client.query(`DROP INDEX IF EXISTS app.competition_entries_competition_id_user_id_key`);
-  console.log("Prepared tournament entries for multiple teams per user.");
+  const backfill = await client.query(`
+    UPDATE app.competition_entries ce
+    SET entry_fee_paid = coalesce(c.entry_fee, 0)
+    FROM app.competitions c
+    WHERE c.id = ce.competition_id
+      AND coalesce(ce.entry_fee_paid, 0) = 0
+      AND coalesce(c.entry_fee, 0) > 0
+  `);
+  console.log(`Prepared tournament entries for multiple teams and backfilled ${Number(backfill.rowCount || 0)} entry-fee snapshots.`);
 }
 
 async function ensureTournamentPrizeAwards(client) {
