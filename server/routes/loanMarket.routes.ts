@@ -7,10 +7,18 @@ import {
   LOAN_DURATIONS_GAMEWEEKS,
   normalizeLoanRarity,
 } from "../../shared/loan-market.js";
+import { ensureLoanPaymentSchema } from "../services/loanPaymentSchema.js";
+import {
+  getLoanPaymentIntegrityReport,
+  postLoanPaymentExactlyOnce,
+  verifyLoanPaymentExactlyOnce,
+} from "../services/loanPayment.js";
 
 interface RegisterLoanMarketRoutesDeps {
   requireAuth: any;
 }
+
+const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -23,27 +31,16 @@ function toMoney(amount: unknown): number {
 }
 
 async function ensureLoanMarketTables() {
-  await db.execute(sql`
-    create table if not exists app.card_loans (
-      id integer generated always as identity primary key,
-      card_id integer not null references app.player_cards(id),
-      original_owner_id varchar(255) not null references app.users(id),
-      borrower_user_id varchar(255) references app.users(id),
-      status text not null default 'open',
-      price_per_gameweek real not null,
-      gameweeks integer not null,
-      gross_amount real not null default 0,
-      fee_amount real not null default 0,
-      owner_receives real not null default 0,
-      starts_at timestamp,
-      expires_at timestamp,
-      returned_at timestamp,
-      created_at timestamp default now()
-    )
-  `);
-  await db.execute(sql`create index if not exists card_loans_card_status_idx on app.card_loans(card_id, status)`);
-  await db.execute(sql`create index if not exists card_loans_borrower_status_idx on app.card_loans(borrower_user_id, status)`);
-  await db.execute(sql`create index if not exists card_loans_expiry_idx on app.card_loans(expires_at) where status = 'active'`);
+  await ensureLoanPaymentSchema();
+}
+
+async function isAdminUser(userId: string): Promise<boolean> {
+  if (!userId) return false;
+  const configuredIds = String(process.env.ADMIN_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean);
+  if (configuredIds.includes(userId)) return true;
+  const configuredEmails = String(process.env.ADMIN_EMAILS || DEFAULT_ADMIN_EMAIL).split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const user = rowsOf(await db.execute(sql`select lower(coalesce(email, '')) as email from app.users where id = ${userId} limit 1`))[0];
+  return Boolean(user?.email && configuredEmails.includes(String(user.email).toLowerCase()));
 }
 
 async function removeReturnedCardFromBorrowerLineup(tx: any, borrowerUserId: string, cardId: number) {
@@ -140,6 +137,18 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
     }
   });
 
+  app.get("/api/admin/loan-payments/integrity", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      if (!(await isAdminUser(userId))) return res.status(403).json({ message: "Admin access required" });
+      await ensureLoanPaymentSchema();
+      return res.json(await getLoanPaymentIntegrityReport());
+    } catch (error: any) {
+      console.error("Failed to load loan payment integrity report:", error);
+      return res.status(500).json({ message: error?.message || "Failed to load loan payment integrity report" });
+    }
+  });
+
   app.post("/api/marketplace/loans/list", requireAuth, async (req: any, res) => {
     try {
       await returnExpiredLoans();
@@ -210,49 +219,57 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
       if (!Number.isInteger(loanId) || loanId <= 0) return res.status(400).json({ message: "Valid loanId required" });
 
       let accepted: any = null;
+      let replayed = false;
       await db.transaction(async (tx) => {
         const loanResult = await tx.execute(sql`
           select l.*, pc.owner_id, pc.for_sale, pc.rarity
           from app.card_loans l
           join app.player_cards pc on pc.id = l.card_id
           where l.id = ${loanId}
-          for update
+          for update of l, pc
         `);
         const loan = rowsOf(loanResult)[0];
         if (!loan) throw new Error("Loan listing not found");
-        if (String(loan.status || "") !== "open") throw new Error("Loan listing is no longer available");
 
         const ownerId = String(loan.original_owner_id || "");
         const cardId = Number(loan.card_id);
         const gross = toMoney(loan.gross_amount || Number(loan.price_per_gameweek || 0) * Number(loan.gameweeks || 1));
-        const fee = toMoney(gross * 0.08);
-        const ownerReceives = toMoney(gross - fee);
+        const fee = toMoney(Number(loan.fee_amount || 0) > 0 ? loan.fee_amount : gross * 0.08);
+        const ownerReceives = toMoney(Number(loan.owner_receives || 0) > 0 ? loan.owner_receives : gross - fee);
+        const paymentDetails = { loanId, cardId, ownerId, borrowerId, gross, fee, ownerReceives };
+        const status = String(loan.status || "");
+
+        if (status !== "open") {
+          if (!["active", "returned"].includes(status) || String(loan.borrower_user_id || "") !== borrowerId) {
+            throw new Error("Loan listing is no longer available");
+          }
+          await verifyLoanPaymentExactlyOnce(tx, paymentDetails, {
+            borrowerPostingKey: loan.borrower_posting_key,
+            borrowerTransactionId: loan.borrower_transaction_id,
+            ownerPostingKey: loan.owner_posting_key,
+            ownerTransactionId: loan.owner_transaction_id,
+            paymentCompletedAt: loan.payment_completed_at,
+          });
+          accepted = loan;
+          replayed = true;
+          return;
+        }
 
         if (ownerId === borrowerId) throw new Error("You cannot loan your own card");
         if (String(loan.owner_id || "") !== ownerId) throw new Error("Card is no longer owned by the lender");
         if (loan.for_sale) throw new Error("Card is currently listed for sale");
         if (!normalizeLoanRarity(String(loan.rarity || ""))) throw new Error("This rarity cannot be loaned");
 
-        const walletResult = await tx.execute(sql`
-          update app.wallets
-          set balance = balance - ${gross}
-          where user_id = ${borrowerId}
-            and balance >= ${gross}
-          returning *
-        `);
-        if (rowsOf(walletResult).length === 0) throw new Error("Insufficient balance");
-
-        await tx.execute(sql`
-          update app.wallets
-          set balance = balance + ${ownerReceives}
-          where user_id = ${ownerId}
-        `);
-        await tx.execute(sql`
+        const payment = await postLoanPaymentExactlyOnce(tx, paymentDetails);
+        const cardUpdate = rowsOf(await tx.execute(sql`
           update app.player_cards
           set owner_id = ${borrowerId}, for_sale = false, price = 0
           where id = ${cardId}
             and owner_id = ${ownerId}
-        `);
+          returning id
+        `))[0];
+        if (!cardUpdate) throw new Error("Card ownership changed before loan acceptance completed");
+
         const updateResult = await tx.execute(sql`
           update app.card_loans
           set
@@ -261,31 +278,41 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
             gross_amount = ${gross},
             fee_amount = ${fee},
             owner_receives = ${ownerReceives},
+            borrower_posting_key = ${payment.borrower.postingKey},
+            borrower_transaction_id = ${payment.borrower.transactionId},
+            owner_posting_key = ${payment.owner.postingKey},
+            owner_transaction_id = ${payment.owner.transactionId},
+            payment_completed_at = now(),
             starts_at = now(),
             expires_at = now() + (${Number(loan.gameweeks || 1)} * interval '7 days')
-          where id = ${loanId}
+          where id = ${loanId} and status = 'open'
           returning *
         `);
         accepted = rowsOf(updateResult)[0] || null;
+        if (!accepted) throw new Error("Loan listing changed before acceptance completed");
+        replayed = payment.replayed;
 
         await tx.execute(sql`
-          insert into app.transactions (user_id, type, amount, gross_amount, fee_amount, net_amount, source_type, description)
-          values (${borrowerId}, 'purchase', ${-gross}, ${gross}, 0, ${-gross}, 'card_loan_accept', ${`loan:${loanId} card:${cardId} borrower:${borrowerId} owner:${ownerId} gross:${gross.toFixed(2)}`})
-        `);
-        await tx.execute(sql`
-          insert into app.transactions (user_id, type, amount, gross_amount, fee_amount, net_amount, source_type, description)
-          values (${ownerId}, 'sale', ${ownerReceives}, ${gross}, ${fee}, ${ownerReceives}, 'card_loan_income', ${`loan:${loanId} card:${cardId} borrower:${borrowerId} owner:${ownerId} gross:${gross.toFixed(2)} fee:${fee.toFixed(2)}`})
-        `);
-        await tx.execute(sql`
           insert into app.audit_logs (user_id, action, meta)
-          values (${borrowerId}, 'loan.accepted.paid', ${JSON.stringify({ loanId, cardId, ownerId, borrowerId, gross, fee, ownerReceives })}::jsonb)
+          values (${borrowerId}, 'loan.accepted.paid', ${JSON.stringify({
+            loanId,
+            cardId,
+            ownerId,
+            borrowerId,
+            gross,
+            fee,
+            ownerReceives,
+            borrowerTransactionId: payment.borrower.transactionId,
+            ownerTransactionId: payment.owner.transactionId,
+          })}::jsonb)
         `);
       });
 
-      return res.json({ success: true, loan: accepted });
+      return res.json({ success: true, loan: accepted, replayed });
     } catch (error: any) {
       console.error("Failed to accept loan:", error);
-      const message = String(error?.message || "Failed to accept loan");
+      const rawMessage = String(error?.message || "Failed to accept loan");
+      const message = rawMessage.includes("Insufficient available balance") ? "Insufficient balance" : rawMessage;
       return res.status(message.includes("not found") ? 404 : 400).json({ message });
     }
   });
