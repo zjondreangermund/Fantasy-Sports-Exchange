@@ -147,10 +147,28 @@ export class ScoreUpdateService {
     return Math.max(1, Number(event?.id || 1));
   }
 
-  private async setCompetitionStatus(competitionId: number, status: "open" | "active" | "closed") {
+  private async setCompetitionStatus(competitionId: number, status: "open" | "closed") {
     if (status === "open") await db.execute(sql`update app.competitions set status = 'open' where id = ${competitionId} and status::text not in ('completed','cancelled')`);
-    if (status === "active") await db.execute(sql`update app.competitions set status = 'active' where id = ${competitionId} and status::text = 'open'`);
     if (status === "closed") await db.execute(sql`update app.competitions set status = 'closed' where id = ${competitionId} and status::text in ('open','active')`);
+  }
+
+  private async activateCompetitionAtDeadline(competition: any): Promise<string> {
+    const updated = rowsOf(await db.execute(sql`
+      UPDATE app.competitions
+      SET status = 'active'
+      WHERE id = ${Number(competition.id)}
+        AND status = 'open'
+        AND start_date <= now()
+      RETURNING status::text AS status
+    `))[0];
+    const current = updated || rowsOf(await db.execute(sql`
+      SELECT status::text AS status
+      FROM app.competitions
+      WHERE id = ${Number(competition.id)}
+      LIMIT 1
+    `))[0];
+    competition.status = current?.status || competition.status;
+    return String(competition.status || "");
   }
 
   private scoringSnapshot(entry: any, cards: any[], cardScores: any[], gameWeek: number, final: boolean) {
@@ -262,8 +280,7 @@ export class ScoreUpdateService {
           status = "open";
         }
         if (status === "open" && now >= deadline.getTime()) {
-          await this.setCompetitionStatus(Number(competition.id), "active");
-          status = "active";
+          status = await this.activateCompetitionAtDeadline(competition);
         }
         if (status === "active") toScore.push({ competition: { ...competition, status }, event, final });
         if ((status === "open" || status === "upcoming") && final) await this.setCompetitionStatus(Number(competition.id), "closed");
@@ -307,8 +324,7 @@ export class ScoreUpdateService {
       return { updatedCount: 0, totalEntries: entries.length, gameWeek, final: false, complete: false, unresolvedCardIds: [], skipped: true, reason: "Tournament entries are still open" };
     }
     if (String(comp.status) === "open") {
-      await this.setCompetitionStatus(Number(comp.id), "active");
-      comp.status = "active" as any;
+      await this.activateCompetitionAtDeadline(comp);
     }
     if (!["active", "closed"].includes(String(comp.status))) throw new Error(`Competition ${competitionId} cannot be scored (status: ${comp.status})`);
 
