@@ -39,6 +39,9 @@ type RankedEntry = any & {
     totalXp: number;
     rarityPrestige: number;
     joinedAt: string | null;
+    scoringGameWeek?: number;
+    scoringFinal?: boolean;
+    scoringComplete?: boolean;
     reason: string;
   };
 };
@@ -46,6 +49,10 @@ type RankedEntry = any & {
 function toNumber(value: unknown, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function asObject(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
 }
 
 function cardPoints(card: any) {
@@ -58,7 +65,7 @@ function cardValue(card: any) {
   const explicit = toNumber(card?.price);
   if (explicit > 0) return explicit;
   const fplCost = toNumber(card?.player?.nowCost);
-  if (fplCost > 0) return fplCost / 10;
+  if (fplCost > 0) return fplCost;
   return toNumber(card?.player?.overall, 50);
 }
 
@@ -66,7 +73,28 @@ function rarityPrestige(card: any) {
   return RARITY_PRESTIGE[String(card?.rarity || "common").toLowerCase()] || RARITY_PRESTIGE.common;
 }
 
+function getScoringSnapshot(entry: any): Record<string, any> | null {
+  const snapshot = asObject(asObject(entry?.tiebreakMeta).scoring);
+  if (Number(snapshot?.version || 0) < 2) return null;
+  return snapshot;
+}
+
 export async function buildEntryTiebreak(storage: any, entry: any) {
+  const snapshot = getScoringSnapshot(entry);
+  if (snapshot) {
+    return {
+      totalScore: toNumber(entry?.totalScore, toNumber(snapshot.totalScore)),
+      captainPoints: toNumber(snapshot.captainBasePoints),
+      squadValue: toNumber(snapshot.squadValue),
+      totalXp: toNumber(snapshot.totalXp),
+      rarityPrestige: toNumber(snapshot.rarityPrestige),
+      joinedAt: entry?.joinedAt ? new Date(entry.joinedAt).toISOString() : null,
+      scoringGameWeek: toNumber(snapshot.gameWeek),
+      scoringFinal: Boolean(snapshot.final),
+      scoringComplete: Boolean(snapshot.complete),
+    };
+  }
+
   const cardIds = Array.isArray(entry?.lineupCardIds) ? entry.lineupCardIds.map(Number).filter((id: number) => Number.isFinite(id) && id > 0) : [];
   const cards = await Promise.all(cardIds.map((id: number) => storage.getPlayerCardWithPlayer(id, String(entry?.userId || ""))));
   const validCards = cards.filter(Boolean);
@@ -80,6 +108,9 @@ export async function buildEntryTiebreak(storage: any, entry: any) {
     totalXp: validCards.reduce((sum: number, card: any) => sum + toNumber(card?.xp), 0),
     rarityPrestige: validCards.reduce((sum: number, card: any) => sum + rarityPrestige(card), 0),
     joinedAt: entry?.joinedAt ? new Date(entry.joinedAt).toISOString() : null,
+    scoringGameWeek: 0,
+    scoringFinal: false,
+    scoringComplete: false,
   };
 }
 
