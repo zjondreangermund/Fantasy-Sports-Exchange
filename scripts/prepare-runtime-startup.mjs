@@ -46,6 +46,31 @@ async function ensureCompetitionMultiEntrySchema(client) {
   console.log("Prepared tournament entries for multiple teams per user.");
 }
 
+async function ensureTournamentPrizeAwards(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS app.competition_prize_awards (
+      id bigserial PRIMARY KEY,
+      competition_id integer NOT NULL,
+      entry_id integer NOT NULL,
+      user_id varchar(255) NOT NULL,
+      game_week integer NOT NULL,
+      rarity text NOT NULL,
+      prize_key text NOT NULL,
+      prize_title text NOT NULL,
+      prize_value real NOT NULL DEFAULT 0,
+      prize_category text,
+      status text NOT NULL DEFAULT 'pending_claim',
+      metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now(),
+      UNIQUE (competition_id, entry_id)
+    )
+  `);
+  await client.query(`CREATE INDEX IF NOT EXISTS competition_prize_awards_user_idx ON app.competition_prize_awards (user_id, created_at DESC)`);
+  await client.query(`CREATE INDEX IF NOT EXISTS competition_prize_awards_status_idx ON app.competition_prize_awards (status, created_at DESC)`);
+  console.log("Prepared durable tournament prize-award records.");
+}
+
 async function ensurePlayerCardSerials(client) {
   const tableResult = await client.query(`select to_regclass('app.player_cards') as table_name`);
   if (!tableResult.rows?.[0]?.table_name) {
@@ -196,6 +221,7 @@ async function main() {
     await ensureEnumValues(client, "competition_tier", ["common", "rare", "unique", "epic", "legendary"]);
     await ensureEnumValues(client, "withdrawal_status", ["pending", "approved", "paid", "rejected", "failed"]);
     await ensureCompetitionMultiEntrySchema(client);
+    await ensureTournamentPrizeAwards(client);
     const repairedCount = await ensurePlayerCardSerials(client);
     console.log(`Runtime startup preflight complete. Canonicalized ${repairedCount} player-card serial records.`);
   } finally {
