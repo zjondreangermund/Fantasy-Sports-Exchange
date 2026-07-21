@@ -14,6 +14,8 @@ interface RegisterEconomyIntegrityRoutesDeps {
 }
 
 const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
+const REQUIRED_LINEUP_POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
+const PREMIER_LEAGUE_KEYS = new Set(["premierleague", "englishpremierleague", "epl"]);
 let cardLockGuardPromise: Promise<void> | null = null;
 
 function rowsOf(result: any): any[] {
@@ -24,6 +26,14 @@ function toMoney(amount: unknown): number {
   const value = Number(amount);
   if (!Number.isFinite(value)) return 0;
   return Math.round(value * 100) / 100;
+}
+
+function normalizeLeague(value: unknown): string {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function isPremierLeague(value: unknown): boolean {
+  return PREMIER_LEAGUE_KEYS.has(normalizeLeague(value));
 }
 
 async function ensureCardLockGuard(): Promise<void> {
@@ -105,27 +115,6 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         return res.status(400).json({ message: "Captain must be one of the five selected cards" });
       }
 
-      const cards = rowsOf(await db.execute(sql`
-        select pc.id, pc.owner_id as "ownerId", pc.rarity::text as rarity,
-          pc.for_sale as "forSale", pc.player_id as "playerId", p.position::text as position
-        from app.player_cards pc
-        join app.players p on p.id = pc.player_id
-        where pc.id = any(${cardIds}::int[])
-      `));
-      if (cards.length !== 5 || cards.some((card) => String(card.ownerId) !== userId)) {
-        return res.status(403).json({ message: "You don't own all selected cards" });
-      }
-      if (cards.some((card) => Boolean(card.forSale))) {
-        return res.status(400).json({ message: "Cannot use marketplace-listed cards." });
-      }
-      if (new Set(cards.map((card) => Number(card.playerId))).size !== 5) {
-        return res.status(400).json({ message: "Lineup must use 5 different players" });
-      }
-      const positions = cards.map((card) => String(card.position));
-      if (!positions.includes("GK") || !positions.includes("DEF") || !positions.includes("MID") || !positions.includes("FWD")) {
-        return res.status(400).json({ message: "Invalid lineup: must have 1 GK, 1 DEF, 1 MID, 1 FWD, and 1 Utility player" });
-      }
-
       const entry = await db.transaction(async (tx) => {
         const competition = rowsOf(await tx.execute(sql`
           select id, name, tier::text as tier, status::text as status,
@@ -138,16 +127,62 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         if (!competition) throw new Error("Tournament not found");
         if (String(competition.status) !== "open") throw new Error("Tournament is not open for entries");
         if (new Date(competition.startDate).getTime() <= Date.now()) throw new Error("Gameweek entries are closed");
+
+        await tx.execute(sql`
+          select pg_advisory_xact_lock(87421, card_id)
+          from unnest(${cardIds}::int[]) as card_id
+          order by card_id
+        `);
+
+        const cards = rowsOf(await tx.execute(sql`
+          select pc.id, pc.owner_id as "ownerId", pc.rarity::text as rarity,
+            pc.for_sale as "forSale", pc.player_id as "playerId",
+            p.position::text as position, p.league as league
+          from app.player_cards pc
+          join app.players p on p.id = pc.player_id
+          where pc.id = any(${cardIds}::int[])
+          for update of pc
+        `));
+        const cardById = new Map(cards.map((card) => [Number(card.id), card]));
+        const orderedCards = cardIds.map((cardId: number) => cardById.get(cardId));
+
+        if (cards.length !== 5 || orderedCards.some((card) => !card) || cards.some((card) => String(card.ownerId) !== userId)) {
+          throw new Error("You don't own all selected cards");
+        }
+        if (cards.some((card) => Boolean(card.forSale))) {
+          throw new Error("Cannot use marketplace-listed cards.");
+        }
+        if (new Set(cards.map((card) => Number(card.playerId))).size !== 5) {
+          throw new Error("Lineup must use 5 different players");
+        }
+        if (cards.some((card) => !isPremierLeague(card.league))) {
+          throw new Error("Premier League tournaments only accept Premier League player cards.");
+        }
+        for (let index = 0; index < REQUIRED_LINEUP_POSITIONS.length; index += 1) {
+          if (String(orderedCards[index]?.position || "").toUpperCase() !== REQUIRED_LINEUP_POSITIONS[index]) {
+            throw new Error("Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player.");
+          }
+        }
         if (cards.some((card) => String(card.rarity).toLowerCase() !== String(competition.tier).toLowerCase())) {
           throw new Error(`${competition.tier} tournaments only accept ${competition.tier} cards.`);
         }
 
-        const existing = rowsOf(await tx.execute(sql`
-          select id from app.competition_entries
-          where competition_id = ${competitionId} and user_id = ${userId}
+        const overlappingEntry = rowsOf(await tx.execute(sql`
+          select ce.id
+          from app.competition_entries ce
+          where ce.competition_id = ${competitionId}
+            and ce.user_id = ${userId}
+            and exists (
+              select 1
+              from jsonb_array_elements_text(coalesce(ce.lineup_card_ids, '[]'::jsonb)) as used(card_id)
+              where used.card_id::int = any(${cardIds}::int[])
+            )
           limit 1
+          for update
         `))[0];
-        if (existing) throw new Error("Already entered this tournament");
+        if (overlappingEntry) {
+          throw new Error("Each tournament entry must use five different unused cards.");
+        }
 
         const countRow = rowsOf(await tx.execute(sql`
           select count(*)::int as count
@@ -164,7 +199,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             and (expires_at is null or expires_at > now())
           limit 1
         `))[0];
-        if (lockedCard) throw new Error("One or more selected cards are already locked");
+        if (lockedCard) throw new Error("One or more selected cards are already locked in a submitted team");
 
         const entryFee = toMoney(competition.entryFee);
         if (entryFee > 0) {
@@ -186,9 +221,9 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
 
         const createdEntry = rowsOf(await tx.execute(sql`
           insert into app.competition_entries
-            (competition_id, user_id, lineup_card_ids, captain_id, total_score, joined_at)
+            (competition_id, user_id, entry_fee_paid, lineup_card_ids, captain_id, total_score, joined_at)
           values
-            (${competitionId}, ${userId}, ${JSON.stringify(cardIds)}::jsonb, ${captainId}, 0, now())
+            (${competitionId}, ${userId}, ${entryFee}, ${JSON.stringify(cardIds)}::jsonb, ${captainId}, 0, now())
           returning *
         `))[0];
 
@@ -201,11 +236,24 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         return createdEntry;
       });
 
-      return res.json({ success: true, message: "Successfully joined tournament", entryId: entry.id });
+      return res.json({ success: true, message: "Successfully submitted tournament team", entryId: entry.id });
     } catch (error: any) {
       const message = error?.message || "Failed to join tournament";
+      const validationMessages = [
+        "Tournament is full",
+        "Insufficient balance for entry fee",
+        "Tournament is not open for entries",
+        "Gameweek entries are closed",
+        "One or more selected cards are already locked in a submitted team",
+        "Each tournament entry must use five different unused cards.",
+        "Premier League tournaments only accept Premier League player cards.",
+        "Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player.",
+        "Lineup must use 5 different players",
+        "Cannot use marketplace-listed cards.",
+        "You don't own all selected cards",
+      ];
       const status = message === "Tournament not found" ? 404 :
-        ["Already entered this tournament", "Tournament is full", "Insufficient balance for entry fee", "Tournament is not open for entries", "Gameweek entries are closed", "One or more selected cards are already locked"].includes(message) || message.includes("tournaments only accept") ? 400 : 500;
+        validationMessages.includes(message) || message.includes("tournaments only accept") ? 400 : 500;
       if (status === 500) console.error("Failed to join competition atomically:", error);
       return res.status(status).json({ message });
     }
