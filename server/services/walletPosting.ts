@@ -256,6 +256,33 @@ export async function getWalletPostingIntegrityReport() {
     if (flags.length) issues.push({ postingKey: expectedKey, entryId: Number(entry.entryId), competitionId: Number(entry.competitionId), userId: entry.userId, amount: toPostingMoney(entry.prizeAmount), flags });
   }
 
+  const orphanedTournamentClaims = rowsOf(await db.execute(sql`
+    SELECT claims.id AS "claimId", claims.posting_key AS "postingKey", claims.user_id AS "userId",
+      coalesce(claims.amount, 0)::float AS amount,
+      claims.metadata ->> 'competitionId' AS "competitionId",
+      claims.metadata ->> 'entryId' AS "entryId"
+    FROM app.wallet_posting_claims claims
+    LEFT JOIN app.competition_entries ce
+      ON ce.id = CASE
+        WHEN (claims.metadata ->> 'entryId') ~ '^[0-9]+$' THEN (claims.metadata ->> 'entryId')::int
+        ELSE NULL
+      END
+    WHERE claims.source_type = 'tournament_settlement'
+      AND ce.id IS NULL
+    ORDER BY claims.id DESC
+  `));
+  for (const claim of orphanedTournamentClaims) {
+    issues.push({
+      postingKey: String(claim.postingKey || ""),
+      claimId: Number(claim.claimId),
+      competitionId: Number(claim.competitionId || 0) || null,
+      entryId: Number(claim.entryId || 0) || null,
+      userId: claim.userId,
+      amount: toPostingMoney(claim.amount),
+      flags: ["orphaned_tournament_payout_claim"],
+    });
+  }
+
   const duplicateExternalReferences = rowsOf(await db.execute(sql`
     SELECT external_transaction_id AS "postingKey", count(*)::int AS count, array_agg(id ORDER BY id) AS "transactionIds"
     FROM app.transactions
@@ -282,10 +309,12 @@ export async function getWalletPostingIntegrityReport() {
       claims: claims.length,
       tournamentCashWinners: tournamentEntries.length,
       issues: issues.length,
+      orphanedTournamentClaims: orphanedTournamentClaims.length,
       duplicateExternalReferences: duplicateExternalReferences.length,
       duplicateLegacyTournamentPayouts: duplicateLegacyTournamentPayouts.length,
     },
     issues,
+    orphanedTournamentClaims,
     duplicateExternalReferences,
     duplicateLegacyTournamentPayouts,
   };
