@@ -47,6 +47,22 @@ async function getOwnedTournament(userId: string, competitionId: number) {
   return rowsOf(result)[0] || null;
 }
 
+async function hasTournamentWalletPostingHistory(competitionId: number): Promise<boolean> {
+  const result = await db.execute(sql`
+    select 1
+    from app.wallet_posting_claims claims
+    where claims.source_type = 'tournament_settlement'
+      and claims.metadata ->> 'competitionId' = ${String(competitionId)}
+    union all
+    select 1
+    from app.competition_entries ce
+    where ce.competition_id = ${competitionId}
+      and (ce.payout_posting_key is not null or ce.payout_transaction_id is not null)
+    limit 1
+  `);
+  return rowsOf(result).length > 0;
+}
+
 async function isAdminUser(userId: string) {
   if (!userId) return false;
   const configuredIds = String(process.env.ADMIN_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean);
@@ -203,6 +219,9 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
 
       const tournament = rowsOf(await db.execute(sql`select id, name from app.competitions where id = ${competitionId} limit 1`))[0];
       if (!tournament) return res.status(404).json({ message: "Tournament not found" });
+      if (await hasTournamentWalletPostingHistory(competitionId)) {
+        return res.status(400).json({ message: "Settled tournaments with wallet posting history cannot be deleted" });
+      }
 
       await db.transaction(async (tx) => {
         await tx.execute(sql`delete from app.competition_entries where competition_id = ${competitionId}`);
@@ -338,7 +357,8 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
       if (!(await requireAdminUser(req, res))) return;
       const competitionId = Number(req.params.id);
       const status = String(req.body?.status || "").toLowerCase();
-      if (!["open", "active", "completed"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+      if (status === "completed") return res.status(400).json({ message: "Use the settlement action to complete a tournament" });
+      if (!["open", "active"].includes(status)) return res.status(400).json({ message: "Invalid status" });
       const result = await db.execute(sql`update app.competitions set status=${status} where id=${competitionId} and name like '[TEST]%' returning *`);
       if (!rowsOf(result)[0]) return res.status(404).json({ message: "Test tournament not found" });
       return res.json({ success: true, tournament: rowsOf(result)[0] });
@@ -385,13 +405,18 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
     try {
       if (!(await requireAdminUser(req, res))) return;
       const ids = rowsOf(await db.execute(sql`select id from app.competitions where name like '[TEST]%'`)).map((row) => Number(row.id));
+      const protectedIds = new Set<number>();
+      for (const competitionId of ids) {
+        if (await hasTournamentWalletPostingHistory(competitionId)) protectedIds.add(competitionId);
+      }
+      const deletableIds = ids.filter((id) => !protectedIds.has(id));
       await db.transaction(async (tx) => {
-        if (ids.length) {
-          await tx.execute(sql`delete from app.competition_entries where competition_id = any(${ids}::int[])`);
-          await tx.execute(sql`delete from app.competitions where id = any(${ids}::int[])`);
+        if (deletableIds.length) {
+          await tx.execute(sql`delete from app.competition_entries where competition_id = any(${deletableIds}::int[])`);
+          await tx.execute(sql`delete from app.competitions where id = any(${deletableIds}::int[])`);
         }
       });
-      return res.json({ success: true, deletedTournaments: ids.length });
+      return res.json({ success: true, deletedTournaments: deletableIds.length, protectedSettledTournaments: protectedIds.size });
     } catch (error: any) {
       console.error("Failed to clean test data:", error);
       return res.status(500).json({ message: error?.message || "Failed to clean test data" });
