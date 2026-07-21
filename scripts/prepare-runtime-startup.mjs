@@ -32,6 +32,20 @@ async function ensureEnumValues(client, enumName, values) {
   console.log(`Prepared enum ${enumSchema}.${enumName}`);
 }
 
+async function ensureCompetitionMultiEntrySchema(client) {
+  const tableResult = await client.query(`select to_regclass('app.competition_entries') as table_name`);
+  if (!tableResult.rows?.[0]?.table_name) {
+    console.log("Tournament multi-entry preflight skipped: app.competition_entries does not exist yet.");
+    return;
+  }
+
+  await client.query(`ALTER TABLE app.competition_entries DROP CONSTRAINT IF EXISTS competition_entries_competition_user_uq`);
+  await client.query(`ALTER TABLE app.competition_entries DROP CONSTRAINT IF EXISTS competition_entries_competition_id_user_id_key`);
+  await client.query(`DROP INDEX IF EXISTS app.competition_entries_competition_user_uq`);
+  await client.query(`DROP INDEX IF EXISTS app.competition_entries_competition_id_user_id_key`);
+  console.log("Prepared tournament entries for multiple teams per user.");
+}
+
 async function ensurePlayerCardSerials(client) {
   const tableResult = await client.query(`select to_regclass('app.player_cards') as table_name`);
   if (!tableResult.rows?.[0]?.table_name) {
@@ -181,6 +195,7 @@ async function main() {
   try {
     await ensureEnumValues(client, "competition_tier", ["common", "rare", "unique", "epic", "legendary"]);
     await ensureEnumValues(client, "withdrawal_status", ["pending", "approved", "paid", "rejected", "failed"]);
+    await ensureCompetitionMultiEntrySchema(client);
     const repairedCount = await ensurePlayerCardSerials(client);
     console.log(`Runtime startup preflight complete. Canonicalized ${repairedCount} player-card serial records.`);
   } finally {
