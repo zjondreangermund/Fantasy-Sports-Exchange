@@ -54,6 +54,8 @@ requirePatterns("posting service claims and verifies exactly once", "server/serv
   "UPDATE app.wallet_posting_claims",
   "getWalletPostingIntegrityReport",
   "duplicateLegacyTournamentPayouts",
+  "orphanedTournamentClaims",
+  "orphaned_tournament_payout_claim",
 ]);
 
 requirePatterns("tournament settlement uses deterministic posting claims", "server/routes/economyIntegrity.routes.ts", [
@@ -84,6 +86,13 @@ const walletBlock = walletStart >= 0 && walletEnd > walletStart ? creator.slice(
 if (!walletBlock) fail("administrator wallet adjustment route block was not found");
 else if (walletBlock.includes("insert into app.wallets") || walletBlock.includes("insert into app.transactions")) fail("administrator wallet adjustment still mutates wallet or ledger directly");
 else pass("administrator wallet adjustment delegates all money movement to posting service");
+
+requirePatterns("paid tournament history cannot be deleted or bypass-completed", "server/routes/tournamentCreator.routes.ts", [
+  "hasTournamentWalletPostingHistory",
+  "Settled tournaments with wallet posting history cannot be deleted",
+  'if (status === "completed") return res.status(400)',
+  "protectedSettledTournaments",
+]);
 
 requirePatterns("general tournament administration cannot set completed", "server/routes.ts", [
   'if (requestedStatus === "completed") return res.status(400)',
