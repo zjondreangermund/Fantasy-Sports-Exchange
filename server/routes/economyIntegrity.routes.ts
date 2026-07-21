@@ -146,7 +146,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         const cardById = new Map(cards.map((card) => [Number(card.id), card]));
         const orderedCards = cardIds.map((cardId: number) => cardById.get(cardId));
 
-        if (cards.length !== 5 || orderedCards.some((card) => !card) || cards.some((card) => String(card.ownerId) !== userId)) {
+        if (cards.length !== 5 || orderedCards.some((card: any) => !card) || cards.some((card) => String(card.ownerId) !== userId)) {
           throw new Error("You don't own all selected cards");
         }
         if (cards.some((card) => Boolean(card.forSale))) {
