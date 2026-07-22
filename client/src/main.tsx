@@ -2,13 +2,9 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import "./premium-shell.css";
-import "./mobile-polish.css";
 import "./mobile-action-slabs.css";
-import "./mobile-scroll-fix.css";
 import "./prize-vault-depth.css";
 import "./marketplace-rarity.css";
-import "./mobile-native-scroll.css";
-import "./play-route-fix.css";
 import "./unified-scroll.css";
 import { patchFetchForApiBase } from "./lib/api-base";
 
@@ -43,7 +39,7 @@ if ("serviceWorker" in navigator) {
         if ("caches" in window) {
           caches.keys().then((keys) => {
             keys
-              .filter((key) => key !== "fantasy-site-v7")
+              .filter((key) => key !== "fantasy-site-v8")
               .forEach((key) => caches.delete(key));
           });
         }
