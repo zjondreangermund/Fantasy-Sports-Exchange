@@ -1,128 +1,229 @@
 /*
- * Final scroll authority.
- * Imported after all legacy mobile/play-route styles so one predictable element
- * owns vertical scrolling on every authenticated page.
+ * Single scrolling authority for Fantasy Arena.
+ *
+ * Public/unauthenticated pages keep normal document scrolling. Authenticated
+ * pages add html.app-scroll-locked and use only [data-app-scroll-root] for
+ * page-level vertical scrolling. Bounded dialogs and explicit scroll regions
+ * remain allowed to scroll independently.
  */
+
 html,
 body,
 #root {
   width: 100%;
-  height: 100%;
   min-height: 100%;
+  max-width: 100%;
+}
+
+html,
+body {
+  overflow-x: hidden;
+  overflow-x: clip;
+}
+
+body {
+  overscroll-behavior-y: auto;
+  touch-action: pan-y pinch-zoom;
+}
+
+html.app-scroll-locked,
+html.app-scroll-locked body,
+html.app-scroll-locked #root {
+  height: 100%;
+  min-height: 0;
   overflow: hidden !important;
   overscroll-behavior: none;
 }
 
-body {
-  touch-action: manipulation;
+/* index.css applies safe-area padding to body. The authenticated shell handles
+ * those insets itself so they must not reduce the available app viewport. */
+html.app-scroll-locked body {
+  padding: 0 !important;
 }
 
+html.app-scroll-locked [data-slot="sidebar-wrapper"],
 .app-shell {
   width: 100%;
   height: 100dvh !important;
-  min-height: 100dvh !important;
+  min-height: 0 !important;
   max-height: 100dvh !important;
   overflow: hidden !important;
 }
 
 .app-content {
+  width: 100%;
+  height: 100% !important;
   min-width: 0;
   min-height: 0 !important;
-  height: 100dvh !important;
-  max-height: 100dvh !important;
+  max-height: 100% !important;
   overflow: hidden !important;
+}
+
+html.app-scroll-locked .app-content > header {
+  padding-top: calc(0.5rem + env(safe-area-inset-top, 0px)) !important;
+  padding-right: max(0.5rem, env(safe-area-inset-right, 0px)) !important;
+  padding-left: max(0.5rem, env(safe-area-inset-left, 0px)) !important;
 }
 
 .app-scroll-root,
 [data-app-scroll-root] {
   position: relative;
   display: flex !important;
-  flex: 1 1 auto;
+  flex: 1 1 0% !important;
   flex-direction: column;
+  width: 100%;
+  height: auto !important;
   min-width: 0;
   min-height: 0 !important;
-  height: auto !important;
   max-height: none !important;
   overflow-x: hidden !important;
+  overflow-x: clip !important;
   overflow-y: auto !important;
-  overscroll-behavior-y: contain !important;
-  touch-action: pan-y !important;
-  -webkit-overflow-scrolling: touch !important;
-  scroll-behavior: auto;
-  scrollbar-gutter: stable;
-}
-
-[data-app-scroll-root] > div:first-child {
-  min-width: 0;
-  min-height: max-content;
-  flex: 0 0 auto;
-}
-
-/* Page wrappers must grow naturally; the app root performs vertical scrolling. */
-[data-app-scroll-root] main,
-[data-app-scroll-root] .premium-page,
-[data-app-scroll-root] .admin-page,
-[data-app-scroll-root] .collection-page,
-[data-app-scroll-root] .marketplace-page,
-[data-app-scroll-root] .mobile-page-safe {
-  height: auto !important;
-  min-height: max-content !important;
-  max-height: none !important;
-  overflow-x: hidden !important;
-  overflow-y: visible !important;
-  touch-action: pan-y !important;
-}
-
-/* Horizontal strips keep horizontal interaction without trapping vertical swipes. */
-[data-app-scroll-root] .overflow-x-auto,
-[data-app-scroll-root] [role="tablist"],
-[data-app-scroll-root] [data-mobile-x-scroll="true"],
-[data-app-scroll-root] .mobile-x-scroll,
-[data-app-scroll-root] .stat-x-scroll,
-[data-app-scroll-root] .player-stats-scroll,
-[data-app-scroll-root] .admin-wide-scroll {
-  touch-action: pan-x pan-y !important;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Nested vertical areas are allowed only when explicitly bounded. */
-[data-app-scroll-root] [role="dialog"],
-[data-app-scroll-root] [data-scroll-region="true"] {
-  overflow-y: auto !important;
+  overscroll-behavior-x: none;
   overscroll-behavior-y: contain;
-  touch-action: pan-y !important;
+  touch-action: pan-y pinch-zoom !important;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
+}
+
+[data-page-scroll-content] {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  max-width: 100%;
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+[data-page-scroll-content][data-fixed-docks="true"] {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+[data-page-scroll-content][data-fixed-docks="false"] {
+  padding-bottom: 0;
+}
+
+/* Route components must grow naturally. This neutralizes legacy page roots
+ * such as `flex-1 overflow-auto` without touching deliberately bounded nested
+ * lists, dialogs or carousels inside those pages. */
+[data-page-scroll-content] > :where(main, section, article, div) {
+  width: 100%;
+  height: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  max-height: none !important;
+  overflow-y: visible !important;
+  overscroll-behavior-y: auto !important;
+  touch-action: pan-y pinch-zoom !important;
+}
+
+[data-page-scroll-content] > :where(main, section, article, div).overflow-auto,
+[data-page-scroll-content] > :where(main, section, article, div).overflow-y-auto,
+[data-page-scroll-content] > :where(main, section, article, div).flex-1 {
+  flex: none !important;
+}
+
+[data-page-scroll-content][data-fixed-docks="true"] > :where(main, section, article, div),
+[data-page-scroll-content] > :where(.premium-page, .collection-page, .marketplace-page, .admin-page, .mobile-page-safe) {
+  padding-bottom: 1.5rem !important;
+}
+
+/* Flex/grid children and long identifiers must never expand the page beyond
+ * the viewport. */
+[data-app-scroll-root] :where(.flex, .grid) > *,
+[data-app-scroll-root] :where(main, section, article, div, form, fieldset) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-app-scroll-root] :where(h1, h2, h3, h4, p, li, a, span, code, pre, td, th) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+[data-app-scroll-root] :where(pre, code) {
+  white-space: pre-wrap;
+}
+
+/* Horizontal strips keep horizontal interaction but do not trap vertical
+ * touch/wheel gestures. */
+[data-app-scroll-root] :where(
+  .overflow-x-auto,
+  [role="tablist"],
+  [data-mobile-x-scroll="true"],
+  .mobile-x-scroll,
+  .stat-x-scroll,
+  .player-stats-scroll,
+  .admin-wide-scroll
+) {
+  max-width: 100%;
+  overflow-x: auto !important;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Only explicit bounded regions and portalled modal content may own a nested
+ * vertical scrollbar. */
+[data-scroll-region="true"],
+[role="dialog"] {
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+[role="dialog"] {
+  max-width: calc(100vw - 1rem) !important;
+  max-height: calc(100dvh - 1rem) !important;
+}
+
+[data-mobile-x-scroll="true"] > table,
+[data-app-scroll-root] table {
+  max-width: none;
 }
 
 @media (max-width: 767px) {
-  .app-shell {
-    display: flex !important;
+  [data-page-scroll-content][data-fixed-docks="true"] {
+    /* Clears both the bottom navigation and the Matchday quick dock. */
+    padding-bottom: calc(10.5rem + env(safe-area-inset-bottom, 0px));
   }
 
-  .app-content {
-    display: flex !important;
-    flex-direction: column;
+  [data-sidebar="sidebar"][data-mobile="true"] {
+    width: min(88vw, 21rem) !important;
+    max-width: min(88vw, 21rem) !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
   }
 
-  .app-scroll-root,
-  [data-app-scroll-root] {
-    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  [data-sonner-toaster],
+  [data-radix-toast-viewport] {
+    bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px)) !important;
   }
 
-  [data-app-scroll-root] main,
-  [data-app-scroll-root] .premium-page,
-  [data-app-scroll-root] .admin-page,
-  [data-app-scroll-root] .collection-page,
-  [data-app-scroll-root] .marketplace-page,
-  [data-app-scroll-root] .mobile-page-safe {
-    padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px)) !important;
+  [role="tablist"] {
+    flex-wrap: nowrap !important;
+    justify-content: flex-start !important;
+    scrollbar-width: none;
+  }
+
+  [role="tablist"] > * {
+    flex: 0 0 auto !important;
+  }
+
+  [role="tablist"]::-webkit-scrollbar,
+  [data-mobile-x-scroll="true"]::-webkit-scrollbar,
+  .mobile-x-scroll::-webkit-scrollbar,
+  .stat-x-scroll::-webkit-scrollbar,
+  .player-stats-scroll::-webkit-scrollbar,
+  .admin-wide-scroll::-webkit-scrollbar {
+    display: none;
   }
 }
 
 @media (min-width: 768px) {
   .app-scroll-root,
   [data-app-scroll-root] {
-    padding-bottom: 0 !important;
+    scrollbar-gutter: stable;
   }
 }
