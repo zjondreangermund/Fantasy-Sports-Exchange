@@ -92,6 +92,7 @@ jobs:
             node scripts/verify-runtime-boot-recovery.mjs &&
             node scripts/verify-tournament-lineup-integrity.mjs &&
             node scripts/verify-tournament-scoring-legal-integrity.mjs &&
+            node scripts/verify-route-ownership-integrity.mjs &&
             node scripts/verify-unified-scroll-architecture.mjs &&
             node scripts/verify-deposit-flows.mjs &&
             node scripts/verify-withdrawal-flows.mjs &&
