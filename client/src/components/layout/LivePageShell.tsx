@@ -32,7 +32,7 @@ export function LivePageShell({
   return (
     <div
       className={cn(
-        "relative flex-1 overflow-auto bg-gradient-to-br p-4 text-foreground sm:p-6 lg:p-8",
+        "live-page-shell relative min-h-full min-w-0 overflow-x-hidden bg-gradient-to-br p-4 text-foreground sm:p-6 lg:p-8",
         "before:pointer-events-none before:absolute before:inset-0 before:opacity-100",
         "after:pointer-events-none after:absolute after:inset-x-0 after:top-0 after:h-48 after:bg-gradient-to-b after:from-white/8 after:to-transparent",
         toneClasses[tone],
