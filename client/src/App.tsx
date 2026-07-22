@@ -59,13 +59,13 @@ const trustInfoPaths = ["/trust/status", "/trust/security", "/trust/payments", "
 const publicInfoPaths = [...legalInfoPaths, ...trustInfoPaths];
 
 function RouteFallback() {
-  return <div className="flex flex-1 items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
+  return <div className="flex min-h-40 flex-1 items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
 }
 
 function AuthenticatedRouter() {
   const { data: onboarding, isLoading } = useQuery<{ completed: boolean }>({ queryKey: ["/api/onboarding/status"] });
 
-  if (isLoading) return <div className="flex flex-1 items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
+  if (isLoading) return <div className="flex min-h-40 flex-1 items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
 
   if (onboarding && !onboarding.completed) {
     return (
@@ -135,22 +135,28 @@ function AuthenticatedApp() {
   }, [location]);
 
   return (
-    <SidebarProvider style={style as React.CSSProperties}>
-      <div className={`app-shell flex min-h-[100dvh] w-full overflow-x-hidden bg-black ${isPlayRoute ? "play-route-shell" : ""}`}>
+    <SidebarProvider className="h-[100dvh] min-h-0 overflow-hidden" style={style as React.CSSProperties}>
+      <div className={`app-shell flex h-full min-h-0 w-full overflow-hidden bg-black ${isPlayRoute ? "play-route-shell" : ""}`}>
         <AppSidebar />
-        <div className={`app-content relative isolate flex min-h-[100dvh] min-w-0 flex-1 flex-col overflow-x-hidden ${isPlayRoute ? "play-route-content" : ""}`}>
+        <div className={`app-content relative isolate flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${isPlayRoute ? "play-route-content" : ""}`}>
           <RouteSceneBackground pathname={location} />
           {!isPlayRoute && !isInfoRoute && <StadiumAmbientLayer teamName={teamName} />}
-          <header className="sticky top-0 z-50 flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/80 p-2">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="h-10 w-10 rounded-xl border border-white/15 bg-white/5" />
-              <span className="text-xs font-bold text-white/65">Show / hide menu</span>
+          <header className="relative z-50 flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/80 p-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <SidebarTrigger data-testid="button-sidebar-toggle" className="h-10 w-10 shrink-0 rounded-xl border border-white/15 bg-white/5" />
+              <span className="truncate text-xs font-bold text-white/65">Show / hide menu</span>
             </div>
             <ThemeToggle />
           </header>
           {!isInfoRoute && <LivePulseDock />}
-          <main className={`app-scroll-root relative z-10 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-y-auto ${isInfoRoute ? "pb-0" : "pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0"} ${isPlayRoute ? "play-route-scroll" : ""}`} data-app-scroll-root>
-            <div className={`min-h-full flex-1 ${isInfoRoute ? "pb-0" : "pb-[calc(7rem+env(safe-area-inset-bottom,0px))] md:pb-0"}`}><AuthenticatedRouter /></div>
+          <main className={`app-scroll-root relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto ${isPlayRoute ? "play-route-scroll" : ""}`} data-app-scroll-root>
+            <div
+              className="app-page-content min-w-0 flex-none"
+              data-page-scroll-content
+              data-fixed-docks={isInfoRoute ? "false" : "true"}
+            >
+              <AuthenticatedRouter />
+            </div>
             {isInfoRoute && <SiteFooter />}
           </main>
           {!isInfoRoute && <MatchdayQuickDock />}

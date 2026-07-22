@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 
 function getRoot() {
   return document.querySelector<HTMLElement>("[data-app-scroll-root]");
@@ -6,25 +6,15 @@ function getRoot() {
 
 export function useScrollRepair(routeKey?: string) {
   useEffect(() => {
-    const root = getRoot();
+    const html = document.documentElement;
+    html.classList.add("app-scroll-locked");
+    return () => html.classList.remove("app-scroll-locked");
+  }, []);
 
-    document.documentElement.style.removeProperty("overflow");
-    document.documentElement.style.removeProperty("height");
-    document.body.style.removeProperty("overflow");
-    document.body.style.removeProperty("height");
-
-    if (root) {
-      root.style.removeProperty("height");
-      root.style.removeProperty("max-height");
-      root.style.removeProperty("min-height");
-      root.style.removeProperty("overflow-y");
-      root.style.removeProperty("overflow-x");
-      root.style.removeProperty("touch-action");
-      root.style.removeProperty("overscroll-behavior-y");
-      root.style.removeProperty("-webkit-overflow-scrolling");
-      root.scrollTop = 0;
-    }
-
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  useLayoutEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      getRoot()?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [routeKey]);
 }

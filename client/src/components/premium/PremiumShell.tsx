@@ -3,9 +3,9 @@ import { ArrowRight, Sparkles } from "lucide-react";
 
 export function PremiumPage({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <main className={`premium-page relative min-h-full overflow-x-hidden overflow-y-visible px-3 pb-[calc(10rem+env(safe-area-inset-bottom,0px))] pt-4 text-white sm:px-6 lg:px-8 ${className}`}>
+    <main className={`premium-page relative min-h-full overflow-x-hidden px-3 pb-6 pt-4 text-white sm:px-6 lg:px-8 ${className}`}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(124,58,237,.24),transparent_34%),radial-gradient(circle_at_82%_8%,rgba(14,165,233,.16),transparent_32%),linear-gradient(180deg,rgba(2,6,23,.08),rgba(2,6,23,.72))]" />
-      <div className="relative mx-auto max-w-7xl space-y-5 pb-[calc(5rem+env(safe-area-inset-bottom,0px))]">{children}</div>
+      <div className="relative mx-auto max-w-7xl space-y-5">{children}</div>
     </main>
   );
 }
