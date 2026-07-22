@@ -172,11 +172,6 @@ html.app-scroll-locked .app-content > header {
   -webkit-overflow-scrolling: touch;
 }
 
-[role="dialog"] {
-  max-width: calc(100vw - 1rem) !important;
-  max-height: calc(100dvh - 1rem) !important;
-}
-
 [data-mobile-x-scroll="true"] > table,
 [data-app-scroll-root] table {
   max-width: none;
@@ -194,6 +189,12 @@ html.app-scroll-locked .app-content > header {
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: contain;
+  }
+
+  [role="dialog"] {
+    width: calc(100vw - 1rem) !important;
+    max-width: calc(100vw - 1rem) !important;
+    max-height: calc(100dvh - 1rem) !important;
   }
 
   [data-sonner-toaster],
