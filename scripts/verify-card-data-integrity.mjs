@@ -49,13 +49,14 @@ includesAll(cards, [
   "totalPoints: Number(matchedElement.total_points || 0)",
   "form = matchedElement",
   "currentPosition",
+  "const canonical = fplIndex.canonical(matchedElement)",
+  "player: { ...canonical, imageUrl: fplApi.playerPhotoUrl(matchedElement, 250)",
   "cleanSheets: Number(row.clean_sheets || 0)",
   "yellowCards: Number(row.yellow_cards || 0)",
   "redCards: Number(row.red_cards || 0)",
 ], "Card API enrichment");
 expect(!cards.includes("elementByNameTeam"), "Card API must not require a stale database team to match an FPL player");
 expect(!cards.includes("player: { ...player, overall: averageScore }"), "Card API must not replace official overall with an average of fallback scores");
-expect(!cards.includes("team: player.team, position: player.position"), "Live profile must not return stale database team and position");
 
 includesAll(adapter, [
   "player?.totalPoints",
