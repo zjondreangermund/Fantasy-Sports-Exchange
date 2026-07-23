@@ -17,6 +17,7 @@ function includesAll(source, values, label) {
 const main = read("client/src/main.tsx");
 const app = read("client/src/App.tsx");
 const unified = read("client/src/unified-scroll.css");
+const vaultDepth = read("client/src/prize-vault-depth.css");
 const hook = read("client/src/hooks/use-scroll-repair.ts");
 const liveShell = read("client/src/components/layout/LivePageShell.tsx");
 const premiumShell = read("client/src/components/premium/PremiumShell.tsx");
@@ -24,7 +25,7 @@ const table = read("client/src/components/ui/table.tsx");
 const dialog = read("client/src/components/ui/dialog.tsx");
 const serviceWorker = read("client/public/sw.js");
 
-includesAll(main, ['import "./unified-scroll.css"', '"fantasy-site-v8"'], "Client entry point");
+includesAll(main, ['import "./unified-scroll.css"', '"fantasy-site-v9"'], "Client entry point");
 for (const legacy of [
   'import "./mobile-polish.css"',
   'import "./mobile-scroll-fix.css"',
@@ -62,6 +63,13 @@ includesAll(unified, [
 expect(!/^html,\s*\nbody,\s*\n#root\s*\{[^}]*overflow:\s*hidden/im.test(unified), "Public document scrolling must not be globally locked without app-scroll-locked");
 expect(unified.includes("[data-page-scroll-content] > :where(main, section, article, div)"), "Direct page roots must be neutralized as nested vertical scrollers");
 
+includesAll(vaultDepth, [
+  ".xl\\:flex.xl\\:snap-x.xl\\:overflow-x-auto",
+  "flex: 0 0 286px !important",
+  "min-width: 286px !important",
+  "max-width: 286px !important",
+], "Prize Vault carousel width guard");
+
 includesAll(hook, [
   'classList.add("app-scroll-locked")',
   'classList.remove("app-scroll-locked")',
@@ -90,7 +98,7 @@ includesAll(dialog, [
   "overscroll-contain",
 ], "Shared dialog");
 
-expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v8"'), "Service worker cache must invalidate legacy scroll bundles");
+expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v9"'), "Service worker cache must invalidate the collapsed Prize Vault bundle");
 
 if (failures.length) {
   console.error("Unified scrolling architecture verification failed:");
@@ -98,4 +106,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Unified page scrolling, mobile dock clearance, horizontal overflow and modal scrolling verified.");
+console.log("Unified page scrolling, mobile dock clearance, Prize Vault carousel widths, horizontal overflow and modal scrolling verified.");
