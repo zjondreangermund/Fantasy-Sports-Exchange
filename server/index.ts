@@ -18,6 +18,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import pgSession from "connect-pg-simple";
 import { ensureFplPlayerColumns, syncFplPremierLeaguePlayers } from "./services/fplPlayerSync.js";
 import { ensureApiFootballSyncSchema, startApiFootballSyncScheduler } from "./services/apiFootballSync.js";
+import { appUrl, authStartupWarnings, getSessionSecret, googleAuthEnabled, googleClientId, googleClientSecret } from "./auth-config.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -36,8 +37,10 @@ const PgSession = pgSession(session);
 
 app.use(
   session({
+    name: "fantasyarena.sid",
+    proxy: true,
     store: new PgSession({ conString: process.env.DATABASE_URL, createTableIfMissing: true }),
-    secret: process.env.SESSION_SECRET || "dev_secret_change_me",
+    secret: getSessionSecret(),
     resave: false,
     saveUninitialized: false,
     cookie: { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 1000 * 60 * 60 * 24 * 7 },
@@ -49,22 +52,23 @@ app.use(passport.session());
 passport.serializeUser((user: any, done) => done(null, user));
 passport.deserializeUser((user: any, done) => done(null, user));
 
-const publicUrl = process.env.APP_URL || "http://localhost:5000";
-if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) console.warn("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET. Google auth will not work until set.");
+for (const warning of authStartupWarnings) console.warn(`[auth] ${warning}`);
 
-passport.use(new GoogleStrategy({ clientID: process.env.GOOGLE_CLIENT_ID || "", clientSecret: process.env.GOOGLE_CLIENT_SECRET || "", callbackURL: `${publicUrl}/api/auth/google/callback` }, async (_accessToken, _refreshToken, profile, done) => {
-  try {
-    const { storage } = await import("./storage.js");
-    const userId = profile.id;
-    const email = profile.emails?.[0]?.value || "";
-    const name = profile.displayName || "";
-    let user = await storage.getUser(userId);
-    if (!user) { await storage.createUser({ id: userId, email, name, avatarUrl: profile.photos?.[0]?.value }); user = await storage.getUser(userId); }
-    const wallet = await storage.getWallet(userId);
-    if (!wallet) await storage.createWallet({ userId, balance: 0, lockedBalance: 0 } as any);
-    return done(null, { id: userId, name, email, photo: profile.photos?.[0]?.value });
-  } catch (error) { console.error("Auth error:", error); return done(error as Error); }
-}));
+if (googleAuthEnabled) {
+  passport.use(new GoogleStrategy({ clientID: googleClientId, clientSecret: googleClientSecret, callbackURL: `${appUrl}/api/auth/google/callback` }, async (_accessToken, _refreshToken, profile, done) => {
+    try {
+      const { storage } = await import("./storage.js");
+      const userId = profile.id;
+      const email = profile.emails?.[0]?.value || "";
+      const name = profile.displayName || "";
+      let user = await storage.getUser(userId);
+      if (!user) { await storage.createUser({ id: userId, email, name, avatarUrl: profile.photos?.[0]?.value }); user = await storage.getUser(userId); }
+      const wallet = await storage.getWallet(userId);
+      if (!wallet) await storage.createWallet({ userId, balance: 0, lockedBalance: 0 } as any);
+      return done(null, { id: userId, name, email, photo: profile.photos?.[0]?.value });
+    } catch (error) { console.error("Auth error:", error); return done(error as Error); }
+  }));
+}
 
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: false }));
@@ -146,7 +150,18 @@ app.get("/api/image-proxy", async (req, res) => {
 
 export function log(message: string, source = "express") { const formattedTime = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "numeric", hour12: true }); console.log(`${formattedTime} [${source}] ${message}`); }
 
-app.use((req, res, next) => { const start = Date.now(); const requestPath = req.path; let capturedJsonResponse: Record<string, any> | undefined = undefined; const originalResJson = res.json; res.json = function (bodyJson, ...args) { capturedJsonResponse = bodyJson; return originalResJson.apply(res, [bodyJson, ...args]); }; res.on("finish", () => { const duration = Date.now() - start; if (requestPath.startsWith("/api")) { let logLine = `${req.method} ${requestPath} ${res.statusCode} in ${duration}ms`; if (capturedJsonResponse) logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`; log(logLine); } }); next(); });
+// API response bodies are intentionally excluded from logs because they may contain
+// wallet data, personal details, card ownership and other private account data.
+app.use((req, res, next) => {
+  const start = Date.now();
+  const requestPath = req.path;
+  res.on("finish", () => {
+    if (!requestPath.startsWith("/api")) return;
+    const duration = Date.now() - start;
+    log(`${req.method} ${requestPath} ${res.statusCode} in ${duration}ms`);
+  });
+  next();
+});
 
 (async () => {
   try { await ensurePlayerImageColumns(); await ensureFplPlayerColumns(); } catch (error) { console.warn("Could not ensure player columns:", error); }

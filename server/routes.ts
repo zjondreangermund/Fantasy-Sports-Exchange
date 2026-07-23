@@ -13,6 +13,7 @@ import { registerMarketplaceRoutes } from "./routes/marketplace.routes.js";
 import { registerAdminRoutes } from "./routes/admin.routes.js";
 import { registerAuctionsRoutes } from "./routes/auctions.routes.js";
 import { registerAuthModeRoutes } from "./routes/auth.routes.js";
+import { authConfigurationError, googleAuthEnabled, isReplit, useMockAuth } from "./auth-config.js";
 import { registerRetentionRoutes } from "./routes/retention.routes.js";
 import { registerTournamentCreatorRoutes } from "./routes/tournamentCreator.routes.js";
 import { registerUserTournamentRoutes } from "./routes/userTournaments.routes.js";
@@ -23,8 +24,6 @@ import { PRIZE_CATALOG, RARITY_MARGIN_MULTIPLIERS, getActivePrizeForEntries, get
 const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || "").split(",").filter(Boolean);
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || DEFAULT_ADMIN_EMAIL).split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
-const isReplit = Boolean(process.env.REPL_ID);
-const useMockAuth = process.env.USE_MOCK_AUTH === "true" || (!isReplit && !process.env.SESSION_SECRET);
 const scoreUpdater = new ScoreUpdateService(storage as any);
 const SEASON_KEY = "2026-27";
 const SEASON_START = Date.UTC(2026, 6, 1);
@@ -73,7 +72,8 @@ async function isAdminRequest(req: any): Promise<boolean> {
 
 export async function requireAuth(req: any, res: any, next: any) {
   if (useMockAuth) {
-    const mockUserId = process.env.MOCK_USER_ID || "test-user-1";
+    const mockUserId = String(process.env.MOCK_USER_ID || "").trim();
+    if (!mockUserId) return res.status(503).json({ message: "Mock authentication is not configured" });
     req.authUserId = mockUserId;
     if (!req.user) req.user = { id: mockUserId, claims: { sub: mockUserId }, firstName: process.env.MOCK_FIRST_NAME || "Mock", lastName: process.env.MOCK_LAST_NAME || "User", email: process.env.MOCK_EMAIL || "admin@local.test" };
     return next();
@@ -149,7 +149,7 @@ function allowedPrizeType(raw: unknown) { const type = String(raw || "goods").to
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   try { await seedCompetitions(); } catch (error) { console.warn("Could not auto-seed tournaments:", error); }
-  await registerAuthModeRoutes(app, { isReplit, useMockAuth, setupAuth, registerReplitAuthRoutes: registerAuthRoutes, passport });
+  await registerAuthModeRoutes(app, { isReplit, useMockAuth, googleAuthEnabled, authConfigurationError, setupAuth, registerReplitAuthRoutes: registerAuthRoutes, passport });
   registerCardsRoutes(app, { requireAuth, storage });
   registerOnboardingRoutes(app, { requireAuth, storage, fplApi });
   registerMarketplaceRoutes(app, { requireAuth });
