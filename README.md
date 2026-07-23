@@ -120,11 +120,11 @@ Edit `.env`:
 DATABASE_URL=postgresql://localhost:5432/fantasy_sports
 SESSION_SECRET=your_random_32_char_secret
 
-# For development (skip real auth)
+# For local development only (never enable in production)
 USE_MOCK_AUTH=true
 MOCK_USER_ID=demo-buyer-1
 
-# For production (Google OAuth)
+# For production (Google OAuth; USE_MOCK_AUTH must be false)
 GOOGLE_CLIENT_ID=your_client_id
 GOOGLE_CLIENT_SECRET=your_client_secret
 APP_URL=https://your-domain.com
@@ -173,7 +173,7 @@ The app has 3 demo accounts pre-seeded:
    - $1000 balance
    - Can access `/admin`
 
-To switch accounts, change `MOCK_USER_ID` in `.env` and restart server.
+To switch accounts, change `MOCK_USER_ID` in `.env` and restart server. Production refuses mock authentication even if `USE_MOCK_AUTH=true`; configure Google OAuth, `APP_URL`, and a 32+ character `SESSION_SECRET` instead.
 
 ### Manual Testing Checklist
 

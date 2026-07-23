@@ -4,6 +4,8 @@ import type passport from "passport";
 interface RegisterAuthRoutesDeps {
   isReplit: boolean;
   useMockAuth: boolean;
+  googleAuthEnabled: boolean;
+  authConfigurationError: string | null;
   setupAuth: (app: Express) => Promise<void>;
   registerReplitAuthRoutes: (app: Express) => void;
   passport: typeof passport;
@@ -13,6 +15,8 @@ export async function registerAuthModeRoutes(app: Express, deps: RegisterAuthRou
   const {
     isReplit,
     useMockAuth,
+    googleAuthEnabled,
+    authConfigurationError,
     setupAuth,
     registerReplitAuthRoutes,
     passport,
@@ -25,15 +29,11 @@ export async function registerAuthModeRoutes(app: Express, deps: RegisterAuthRou
   }
 
   if (useMockAuth) {
-    console.log(
-      "Using mock auth (Replit not detected; set SESSION_SECRET + Google vars for production auth).",
-    );
+    console.warn("Using explicitly enabled mock auth for local development/testing only.");
 
     app.use((req: any, _res, next) => {
-      const mockId = process.env.MOCK_USER_ID;
-      if (!mockId) {
-        throw new Error("MOCK_USER_ID is required when USE_MOCK_AUTH is enabled");
-      }
+      const mockId = String(process.env.MOCK_USER_ID || "").trim();
+      if (!mockId) throw new Error("MOCK_USER_ID is required when USE_MOCK_AUTH=true");
 
       req.isAuthenticated = () => true;
       req.user = {
@@ -43,7 +43,6 @@ export async function registerAuthModeRoutes(app: Express, deps: RegisterAuthRou
         lastName: process.env.MOCK_LAST_NAME || "User",
         email: process.env.MOCK_EMAIL || "admin@local.test",
       };
-
       req.authUserId = mockId;
       next();
     });
@@ -55,31 +54,42 @@ export async function registerAuthModeRoutes(app: Express, deps: RegisterAuthRou
     return;
   }
 
+  if (!googleAuthEnabled) {
+    const message = authConfigurationError || "Authentication is temporarily unavailable.";
+    app.get("/api/auth/user", (_req, res) => res.status(503).json({ message }));
+    app.get("/api/login", (_req, res) => res.redirect("/?auth_error=configuration"));
+    app.get("/api/auth/google", (_req, res) => res.redirect("/?auth_error=configuration"));
+    app.get("/api/auth/google/callback", (_req, res) => res.redirect("/?auth_error=configuration"));
+    app.get("/api/logout", (_req, res) => res.redirect("/"));
+    app.post("/api/auth/logout", (_req, res) => res.json({ success: true }));
+    return;
+  }
+
   app.get("/api/login", passport.authenticate("google", { scope: ["profile", "email"] }));
   app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
 
   app.get(
     "/api/auth/google/callback",
-    passport.authenticate("google", { failureRedirect: "/" }),
+    passport.authenticate("google", { failureRedirect: "/?auth_error=google" }),
     (_req, res) => res.redirect("/"),
   );
 
   app.get("/api/auth/user", (req: any, res) => {
     if (!req.user) return res.status(401).json({ message: "Unauthorized" });
-    res.json(req.user);
+    return res.json(req.user);
   });
 
   app.get("/api/logout", (req: any, res) => {
     req.logout?.(() => {});
     req.session?.destroy(() => {});
-    res.clearCookie("connect.sid");
-    res.redirect("/");
+    res.clearCookie("fantasyarena.sid");
+    return res.redirect("/");
   });
 
   app.post("/api/auth/logout", (req: any, res) => {
     req.logout?.(() => {});
     req.session?.destroy(() => {});
-    res.clearCookie("connect.sid");
-    res.json({ success: true });
+    res.clearCookie("fantasyarena.sid");
+    return res.json({ success: true });
   });
 }
