@@ -25,7 +25,7 @@ const table = read("client/src/components/ui/table.tsx");
 const dialog = read("client/src/components/ui/dialog.tsx");
 const serviceWorker = read("client/public/sw.js");
 
-includesAll(main, ['import "./unified-scroll.css"', '"fantasy-site-v9"'], "Client entry point");
+includesAll(main, ['import "./unified-scroll.css"', '"fantasy-site-v10"'], "Client entry point");
 for (const legacy of [
   'import "./mobile-polish.css"',
   'import "./mobile-scroll-fix.css"',
@@ -98,7 +98,7 @@ includesAll(dialog, [
   "overscroll-contain",
 ], "Shared dialog");
 
-expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v9"'), "Service worker cache must invalidate the collapsed Prize Vault bundle");
+expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v10"'), "Service worker cache must invalidate stale card and Prize Vault bundles");
 
 if (failures.length) {
   console.error("Unified scrolling architecture verification failed:");

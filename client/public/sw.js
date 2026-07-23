@@ -1,4 +1,4 @@
-const CACHE_NAME = "fantasy-site-v9";
+const CACHE_NAME = "fantasy-site-v10";
 const APP_SHELL = ["/", "/manifest.json", "/brand/fa-premium-2026.svg"];
 
 self.addEventListener("install", (event) => {

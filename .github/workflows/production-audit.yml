@@ -108,6 +108,7 @@ jobs:
             node scripts/verify-tournament-scoring-legal-integrity.mjs &&
             node scripts/verify-route-ownership-integrity.mjs &&
             node scripts/verify-auth-production-integrity.mjs &&
+            node scripts/verify-card-data-integrity.mjs &&
             node scripts/verify-unified-scroll-architecture.mjs &&
             node scripts/verify-deposit-flows.mjs &&
             node scripts/verify-withdrawal-flows.mjs &&
