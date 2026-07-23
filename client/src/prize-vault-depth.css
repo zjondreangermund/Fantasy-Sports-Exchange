@@ -47,6 +47,7 @@
     width: 286px !important;
     min-width: 286px !important;
     max-width: 286px !important;
+    scroll-snap-align: start;
   }
 }
 
