@@ -48,6 +48,20 @@ jobs:
             git push origin HEAD:${{ github.head_ref }}
           fi
 
+      - name: Apply production auth hardening
+        if: github.head_ref == 'agent/auth-production-hardening'
+        run: |
+          node scripts/apply-auth-production-hardening.mjs
+          if git diff --quiet; then
+            echo "Production auth hardening already applied."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .env.example README.md server scripts
+            git commit -m "Harden production authentication and API logging [skip-autofix]"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
       - name: Install locked dependencies
         run: npm ci
 
@@ -93,6 +107,7 @@ jobs:
             node scripts/verify-tournament-lineup-integrity.mjs &&
             node scripts/verify-tournament-scoring-legal-integrity.mjs &&
             node scripts/verify-route-ownership-integrity.mjs &&
+            node scripts/verify-auth-production-integrity.mjs &&
             node scripts/verify-unified-scroll-architecture.mjs &&
             node scripts/verify-deposit-flows.mjs &&
             node scripts/verify-withdrawal-flows.mjs &&
