@@ -39,7 +39,7 @@ if ("serviceWorker" in navigator) {
         if ("caches" in window) {
           caches.keys().then((keys) => {
             keys
-              .filter((key) => key !== "fantasy-site-v8")
+              .filter((key) => key !== "fantasy-site-v9")
               .forEach((key) => caches.delete(key));
           });
         }

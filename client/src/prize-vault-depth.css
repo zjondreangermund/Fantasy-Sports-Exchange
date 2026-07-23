@@ -33,6 +33,22 @@
     right: -48px;
     bottom: -38px;
   }
+
+  /*
+   * The unified scroll safety layer constrains generic flex/grid children so
+   * they cannot widen a page. Prize Vault is deliberately different: its
+   * desktop slabs form a horizontal carousel and must retain their designed
+   * width instead of shrinking every tier into the visible viewport.
+   */
+  [data-app-scroll-root]
+    .xl\:flex.xl\:snap-x.xl\:overflow-x-auto
+    > button.group {
+    flex: 0 0 286px !important;
+    width: 286px !important;
+    min-width: 286px !important;
+    max-width: 286px !important;
+    scroll-snap-align: start;
+  }
 }
 
 @media (max-width: 1279px) {
