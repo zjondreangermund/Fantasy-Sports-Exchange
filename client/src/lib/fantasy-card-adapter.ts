@@ -45,6 +45,15 @@ function uniqueStrings(values: Array<string | undefined | null>): string[] {
   return Array.from(new Set(values.filter(Boolean) as string[]));
 }
 
+function finiteNumber(...values: unknown[]): number {
+  for (const value of values) {
+    if (value === null || value === undefined || value === "") continue;
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return 0;
+}
+
 function isLowQualityFallback(src: string) {
   return (
     !src ||
@@ -112,15 +121,19 @@ export function toFantasyCardData(
 
   while (last5Scores.length < 5) last5Scores.push(0);
 
-  const totalPoints = Number(
-    (card as any).totalPoints ||
-      last5Scores.reduce((sum, value) => sum + Number(value || 0), 0),
+  const totalPoints = finiteNumber(
+    player?.totalPoints,
+    player?.total_points,
+    (card as any).totalPoints,
+    last5Scores.reduce((sum, value) => sum + Number(value || 0), 0),
   );
+  const form = finiteNumber(player?.form, player?.currentForm, (card as any).form, card.decisiveScore);
+  const rating = finiteNumber(player?.overall, card.decisiveScore);
 
   return {
     id: String(card.id),
     name: String(player?.name || "Unknown Player"),
-    rating: Number(player?.overall || card.decisiveScore || 0),
+    rating,
     position: String(player?.position || "N/A"),
     club: player?.team ? String(player.team) : undefined,
     team: player?.team ? String(player.team) : undefined,
@@ -137,7 +150,7 @@ export function toFantasyCardData(
     xpMax: Number(
       card.maxSupply && Number(card.maxSupply) > 0 ? card.maxSupply : 1000,
     ),
-    form: Number(card.decisiveScore || 0),
+    form,
     price: Number(card.price || 0),
     forSale: Boolean(card.forSale),
     status,

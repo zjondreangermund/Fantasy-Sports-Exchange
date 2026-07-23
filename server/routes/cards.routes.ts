@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { seedDatabase } from "../seed.js";
 import { fplApi } from "../services/fplApi.js";
+import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
 import {
   calculatePlayerScore,
   mapFplStatsToPlayerStats,
@@ -125,44 +126,51 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       const userId = req.authUserId;
       const cards = await ensureStarterCards(userId);
       const [bootstrap, liveData] = await Promise.all([fplApi.bootstrap().catch(() => null), fplApi.getLiveGameweek().catch(() => null)]);
-      const teams = Array.isArray((bootstrap as any)?.teams) ? (bootstrap as any).teams : [];
-      const elements = Array.isArray((bootstrap as any)?.elements) ? (bootstrap as any).elements : [];
+      const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const liveElements = Array.isArray((liveData as any)?.elements) ? (liveData as any).elements : [];
-      const teamNameById = new Map<number, string>();
-      for (const team of teams) teamNameById.set(Number(team.id), normalizeLookupText(String(team.name || team.short_name || "")));
-      const elementByNameTeam = new Map<string, any>();
-      const addElementCandidate = (name: string, teamNorm: string, element: any) => {
-        const nameNorm = normalizeLookupText(name);
-        if (!nameNorm || !teamNorm) return;
-        const key = `${nameNorm}::${teamNorm}`;
-        if (!elementByNameTeam.has(key)) elementByNameTeam.set(key, element);
-      };
-      for (const element of elements) {
-        const teamNorm = teamNameById.get(Number(element.team)) || "";
-        addElementCandidate(`${String(element.first_name || "")} ${String(element.second_name || "")}`.trim(), teamNorm, element);
-        addElementCandidate(String(element.web_name || ""), teamNorm, element);
-      }
       const liveByElementId = new Map<number, any>();
       for (const liveElement of liveElements) liveByElementId.set(Number(liveElement.id), liveElement);
+
       const enrichedCards = cards.map((card: any) => {
         const player = card.player as any;
         if (!player) return card;
-        const playerName = normalizeLookupText(String(player.name || ""));
-        const teamName = normalizeLookupText(String(player.team || ""));
-        const matchedElement = elementByNameTeam.get(`${playerName}::${teamName}`) || null;
+        const matchedElement = fplIndex.resolve(player);
+        const canonical = matchedElement ? fplIndex.canonical(matchedElement) : null;
         const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
+        const currentPosition = canonical?.position || String(player.position || "MID");
         let last5Scores = Array.isArray(card.last5Scores) ? card.last5Scores.map((value: any) => Number(value || 0)).slice(0, 5) : [];
         if (liveElement) {
           const mappedStats = mapFplStatsToPlayerStats(liveElement);
-          const calculatedScore = calculatePlayerScore(mappedStats, String(player.position || "MID"));
+          const calculatedScore = calculatePlayerScore(mappedStats, currentPosition);
           const latestLiveScore = Number(calculatedScore?.total_score || 0);
           last5Scores = [latestLiveScore, ...last5Scores];
         }
         last5Scores = last5Scores.map((value: any) => Number(value || 0)).slice(0, 5);
         while (last5Scores.length < 5) last5Scores.push(0);
-        const totalPoints = last5Scores.reduce((sum: number, value: number) => sum + Number(value || 0), 0);
-        const averageScore = last5Scores.length ? Math.round(totalPoints / last5Scores.length) : Number(player?.overall || card.decisiveScore || 0);
-        return { ...card, decisiveScore: averageScore, totalPoints, last5Scores, player: { ...player, overall: averageScore } };
+
+        const totalPoints = matchedElement
+          ? Number(matchedElement.total_points || 0)
+          : Number(player.totalPoints ?? player.total_points ?? card.totalPoints ?? 0);
+        const form = matchedElement
+          ? Number(matchedElement.form || 0)
+          : Number(player.form ?? card.decisiveScore ?? 0);
+        const overall = matchedElement
+          ? overallFromFplElement(matchedElement)
+          : Number(player.overall || card.decisiveScore || 0);
+
+        return {
+          ...card,
+          totalPoints,
+          last5Scores,
+          player: {
+            ...player,
+            ...(canonical || {}),
+            imageUrl: matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl,
+            totalPoints,
+            form,
+            overall,
+          },
+        };
       });
       return res.json({ cards: enrichedCards });
     } catch (error: any) {
@@ -230,29 +238,31 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         .limit(1);
       const lastSaleValue = Number(lastSaleTransaction?.grossAmount || lastSaleTransaction?.amount || 0) || null;
       const bootstrap = await fplApi.bootstrap();
-      const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
-      const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
-      const teamNameById = new Map<number, string>();
+      const fplIndex = buildFplPlayerIndex(bootstrap);
       const teamShortById = new Map<number, string>();
-      for (const team of teams) {
-        teamNameById.set(Number(team.id), normalizeLookupText(String(team.name || team.short_name || "")));
-        teamShortById.set(Number(team.id), String(team.short_name || team.name || `T${team.id}`));
-      }
-      const playerName = normalizeLookupText(String(player.name || ""));
-      const teamName = normalizeLookupText(String(player.team || ""));
-      const matchedElement = elements.find((element: any) => {
-        const elementTeam = teamNameById.get(Number(element.team)) || "";
-        const fullName = normalizeLookupText(`${String(element.first_name || "")} ${String(element.second_name || "")}`.trim());
-        const webName = normalizeLookupText(String(element.web_name || ""));
-        return elementTeam === teamName && (fullName === playerName || webName === playerName || fullName.includes(playerName) || playerName.includes(webName));
-      });
+      for (const team of fplIndex.teams) teamShortById.set(Number(team.id), String(team.short_name || team.name || `T${team.id}`));
+      const matchedElement = fplIndex.resolve(player);
       if (!matchedElement) {
         return res.json({ source: "card-fallback", player: { name: player.name, team: player.team, position: player.position, imageUrl: player.imageUrl }, last10: lastScoresFallback(card), stats: { matchesPlayed: 0, minutes: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, totalPoints: Number(card.totalPoints || 0), selectedBy: null, value: lastSaleValue } });
       }
       const summary = await fplApi.playerSummary(Number(matchedElement.id));
       const history = Array.isArray(summary?.history) ? summary.history : [];
-      const last10 = history.slice(-10).map((row: any) => ({ gameweek: Number(row.round || row.event || 0), opponent: teamShortById.get(Number(row.opponent_team)) || `T${row.opponent_team}`, points: Number(row.total_points || 0), minutes: Number(row.minutes || 0), goals: Number(row.goals_scored || 0), assists: Number(row.assists || 0), kickoffTime: row.kickoff_time || null, wasHome: Boolean(row.was_home) }));
-      return res.json({ source: "fpl-live", fplElementId: Number(matchedElement.id), player: { name: `${matchedElement.first_name || ""} ${matchedElement.second_name || ""}`.trim() || player.name, webName: matchedElement.web_name, team: player.team, position: player.position, imageUrl: fplApi.playerPhotoUrl(matchedElement, 250), status: matchedElement.status, news: matchedElement.news || "" }, last10: last10.length ? last10 : lastScoresFallback(card), stats: { matchesPlayed: Number(matchedElement.starts || 0), minutes: Number(matchedElement.minutes || 0), goals: Number(matchedElement.goals_scored || 0), assists: Number(matchedElement.assists || 0), cleanSheets: Number(matchedElement.clean_sheets || 0), yellowCards: Number(matchedElement.yellow_cards || 0), redCards: Number(matchedElement.red_cards || 0), bonus: Number(matchedElement.bonus || 0), totalPoints: Number(matchedElement.total_points || 0), selectedBy: matchedElement.selected_by_percent, value: lastSaleValue } });
+      const canonical = fplIndex.canonical(matchedElement);
+      const last10 = history.slice(-10).map((row: any) => ({
+        gameweek: Number(row.round || row.event || 0),
+        opponent: teamShortById.get(Number(row.opponent_team)) || `T${row.opponent_team}`,
+        points: Number(row.total_points || 0),
+        minutes: Number(row.minutes || 0),
+        goals: Number(row.goals_scored || 0),
+        assists: Number(row.assists || 0),
+        cleanSheets: Number(row.clean_sheets || 0),
+        yellowCards: Number(row.yellow_cards || 0),
+        redCards: Number(row.red_cards || 0),
+        bonus: Number(row.bonus || 0),
+        kickoffTime: row.kickoff_time || null,
+        wasHome: Boolean(row.was_home),
+      }));
+      return res.json({ source: "fpl-live", fplElementId: Number(matchedElement.id), player: { ...canonical, imageUrl: fplApi.playerPhotoUrl(matchedElement, 250), status: matchedElement.status, news: matchedElement.news || "" }, last10: last10.length ? last10 : lastScoresFallback(card), stats: { matchesPlayed: Number(matchedElement.starts || 0), minutes: Number(matchedElement.minutes || 0), goals: Number(matchedElement.goals_scored || 0), assists: Number(matchedElement.assists || 0), cleanSheets: Number(matchedElement.clean_sheets || 0), yellowCards: Number(matchedElement.yellow_cards || 0), redCards: Number(matchedElement.red_cards || 0), bonus: Number(matchedElement.bonus || 0), totalPoints: Number(matchedElement.total_points || 0), selectedBy: matchedElement.selected_by_percent, value: lastSaleValue } });
     } catch (error: any) {
       console.error("Failed to fetch card profile:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch card profile" });

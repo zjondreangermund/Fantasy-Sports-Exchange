@@ -76,13 +76,14 @@ function nameOf(player: PlayerCardData) {
   return `${parts[0]} ${parts[parts.length - 1]}`.toUpperCase();
 }
 
-function stat(player: PlayerCardData, fallback = 0) {
-  return Math.max(0, Math.round(Number(player.rating || player.form || player.totalPoints || fallback || 0)));
-}
-
 function numberStat(value: unknown, fallback = 0) {
   const n = Number(value ?? fallback);
   return Number.isFinite(n) ? Math.max(0, Math.round(n)) : fallback;
+}
+
+function decimalStat(value: unknown, fallback = 0) {
+  const n = Number(value ?? fallback);
+  return Number.isFinite(n) ? Math.max(0, n).toFixed(1) : fallback.toFixed(1);
 }
 
 function isFallbackImage(image: string) {
@@ -96,9 +97,9 @@ export default function CollectionStableCard({ player, selected = false, onClick
   const image = imageOf(player);
   const team = player.team || player.club || "Fantasy Arena";
   const price = Number(player.price || player.listedPrice || 0);
-  const ovr = stat(player);
-  const points = numberStat(player.totalPoints || player.form || player.rating || 0);
-  const form = numberStat(player.form || player.rating || 0);
+  const ovr = numberStat(player.rating);
+  const points = numberStat(player.totalPoints);
+  const form = decimalStat(player.form);
   const scale = dim.width / SIZE.sm.width;
   const fallback = isFallbackImage(image);
   const rarityLabel = RARITY_NAME[rarity] || rarity.toUpperCase();
@@ -157,7 +158,7 @@ export default function CollectionStableCard({ player, selected = false, onClick
   );
 }
 
-function StatChip({ label, value, scale, glow }: { label: string; value: number; scale: number; glow: string }) {
+function StatChip({ label, value, scale, glow }: { label: string; value: number | string; scale: number; glow: string }) {
   return (
     <div style={{ borderRadius: 8 * scale, background: "linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.04))", border: "1px solid rgba(255,255,255,.22)", boxShadow: `inset 0 1px 0 rgba(255,255,255,.18), 0 0 8px ${glow}`, padding: `${3 * scale}px 0` }}>
       <div style={{ fontSize: 5.8 * scale, fontWeight: 900, color: "rgba(255,255,255,.52)", letterSpacing: ".08em", lineHeight: 1 }}>{label}</div>
