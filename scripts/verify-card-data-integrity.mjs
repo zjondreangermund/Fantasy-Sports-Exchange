@@ -76,8 +76,8 @@ includesAll(stableCard, [
 expect(!stableCard.includes("player.totalPoints || player.form || player.rating"), "PTS must never fall back to FORM or OVR");
 expect(!stableCard.includes("player.form || player.rating"), "FORM must never fall back to OVR");
 
-expect(main.includes('"fantasy-site-v10"'), "Client cache key must be fantasy-site-v10");
-expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v10"'), "Service worker cache key must be fantasy-site-v10");
+expect(main.includes('"fantasy-site-v11"'), "Client cache key must be fantasy-site-v11");
+expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v11"'), "Service worker cache key must be fantasy-site-v11");
 
 if (failures.length) {
   console.error("Card data integrity verification failed:");
