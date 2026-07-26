@@ -49,19 +49,23 @@ includesAll(cards, [
   "totalPoints: Number(matchedElement.total_points || 0)",
   "form = matchedElement",
   "currentPosition",
-  "const canonical = fplIndex.canonical(matchedElement)",
-  "player: { ...canonical, imageUrl: fplApi.playerPhotoUrl(matchedElement, 250)",
+  "loadApiFootballPlayerDirectory",
+  "resolveApiFootballPlayer",
+  "verifiedImageUrl",
+  'stats: "Fantasy Premier League match history"',
   "cleanSheets: Number(row.clean_sheets || 0)",
   "yellowCards: Number(row.yellow_cards || 0)",
   "redCards: Number(row.red_cards || 0)",
 ], "Card API enrichment");
 expect(!cards.includes("elementByNameTeam"), "Card API must not require a stale database team to match an FPL player");
 expect(!cards.includes("player: { ...player, overall: averageScore }"), "Card API must not replace official overall with an average of fallback scores");
+expect(!cards.includes("last10: last10.length ? last10 : lastScoresFallback(card)"), "Card profiles must not substitute fabricated fallback matches for empty official history");
 
 includesAll(adapter, [
   "player?.totalPoints",
   "player?.total_points",
   "player?.form",
+  "player?.verifiedImageUrl",
   "const rating = finiteNumber(player?.overall, card.decisiveScore)",
   "rating,",
   "form,",
@@ -85,4 +89,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Card teams, positions, official season totals, form and profile stats are wired to canonical FPL data.");
+console.log("Card teams, positions, official season totals, form, verified identities and profile stats are wired to canonical providers.");
