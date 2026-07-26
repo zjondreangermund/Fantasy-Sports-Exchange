@@ -22,7 +22,6 @@ const serviceWorker = read("client/public/sw.js");
 
 includesAll(directory, [
   "app.api_football_players",
-  "players/squads",
   "normalizeApiFootballPosition",
   'return "GK"',
   'return "DEF"',
@@ -53,7 +52,7 @@ includesAll(cards, [
   "verifiedImageUrl",
   'source: "card-fallback"',
   "last10: []",
-  'identity: "API-Football current squads"',
+  'verifiedIdentity ? "API-Football current squads"',
   'stats: "Fantasy Premier League match history"',
   "saves: Number(matchedElement.saves || 0)",
 ], "Card profile provider integration");
