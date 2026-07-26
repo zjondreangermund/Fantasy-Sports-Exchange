@@ -1,12 +1,27 @@
+import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { X, Activity, BarChart3, CalendarDays, Shield, Star, TrendingUp, Clock, Award, Zap } from "lucide-react";
 import { type PlayerCardWithPlayer } from "../../../../shared/schema";
 import { toFantasyCardData } from "../../lib/fantasy-card-adapter";
+import { useSidebar } from "../ui/sidebar";
 import CollectionStableCard from "./CollectionStableCard";
 
 export type CardProfileData = {
-  source: "fpl-live" | "card-fallback";
-  player: { name?: string; webName?: string; team?: string; position?: string; imageUrl?: string; status?: string; news?: string };
+  source: "fpl-live" | "api-football" | "card-fallback";
+  season?: number | null;
+  providers?: { identity?: string; stats?: string; fantasyPoints?: string };
+  player: {
+    name?: string;
+    webName?: string;
+    team?: string;
+    position?: string;
+    imageUrl?: string;
+    status?: string;
+    news?: string;
+    nationality?: string;
+    apiFootballId?: number;
+  };
   last10: Array<{
     gameweek: number;
     opponent: string;
@@ -18,6 +33,8 @@ export type CardProfileData = {
     yellowCards?: number;
     redCards?: number;
     bonus?: number;
+    rating?: number | null;
+    saves?: number;
     kickoffTime?: string | null;
     wasHome?: boolean;
   }>;
@@ -33,28 +50,21 @@ export type CardProfileData = {
     totalPoints: number;
     selectedBy?: string | null;
     value?: number | null;
+    saves?: number;
+    averageRating?: number | null;
   };
 };
 
 function fallbackData(card: PlayerCardWithPlayer): CardProfileData {
-  const scores = Array.isArray(card.last5Scores) ? card.last5Scores.map((score) => Number(score || 0)) : [];
-  const padded = [...scores];
-  while (padded.length < 10) padded.unshift(0);
   return {
     source: "card-fallback",
-    player: { name: card.player?.name, team: card.player?.team, position: card.player?.position, imageUrl: card.player?.imageUrl ?? undefined },
-    last10: padded.slice(-10).map((points, index) => ({
-      gameweek: index + 1,
-      opponent: `GW${index + 1}`,
-      points,
-      minutes: 0,
-      goals: 0,
-      assists: 0,
-      cleanSheets: 0,
-      yellowCards: 0,
-      redCards: 0,
-      bonus: 0,
-    })),
+    player: {
+      name: card.player?.name,
+      team: card.player?.team,
+      position: card.player?.position,
+      imageUrl: card.player?.imageUrl ?? undefined,
+    },
+    last10: [],
     stats: {
       matchesPlayed: 0,
       minutes: 0,
@@ -64,9 +74,11 @@ function fallbackData(card: PlayerCardWithPlayer): CardProfileData {
       yellowCards: 0,
       redCards: 0,
       bonus: 0,
-      totalPoints: Number((card as any).totalPoints || 0),
+      totalPoints: Number((card as any).totalPoints || card.player?.totalPoints || 0),
       selectedBy: null,
       value: null,
+      saves: 0,
+      averageRating: null,
     },
   };
 }
@@ -82,11 +94,18 @@ function statNumber(value: unknown) {
 
 function money(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(Number(value)) || Number(value) <= 0) return "Not sold yet";
-  return `N${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `N$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function sourceLabel(data: CardProfileData) {
+  if (data.source === "api-football") return "API-Football verified";
+  if (data.source === "fpl-live" && data.providers?.identity?.includes("API-Football")) return "FPL + API verified";
+  if (data.source === "fpl-live") return "FPL live linked";
+  return "Awaiting official link";
 }
 
 export default function CardProfileModal({ card, onClose }: { card: PlayerCardWithPlayer; onClose: () => void }) {
-  const fantasyCard = toFantasyCardData(card, { imageWidth: 900 });
+  const { setOpen, setOpenMobile } = useSidebar();
   const fallback = fallbackData(card);
   const { data = fallback, isLoading } = useQuery<CardProfileData>({
     queryKey: ["/api/cards/profile", card.id],
@@ -97,19 +116,46 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
     },
     staleTime: 60_000,
   });
-  const history = data.last10?.length ? data.last10 : fallback.last10;
+
+  useEffect(() => {
+    setOpen(false);
+    setOpenMobile(false);
+    document.documentElement.classList.add("card-profile-open");
+    return () => document.documentElement.classList.remove("card-profile-open");
+  }, [setOpen, setOpenMobile]);
+
+  const history = Array.isArray(data.last10) ? data.last10 : [];
   const peak = maxPoints(history);
   const displayName = data.player?.name || card.player?.name || "Unknown Player";
   const team = data.player?.team || card.player?.team || "Fantasy Arena";
   const position = data.player?.position || card.player?.position || "N/A";
+  const verifiedImage = data.player?.imageUrl || card.player?.imageUrl || undefined;
+  const profileCard = {
+    ...card,
+    totalPoints: data.stats.totalPoints,
+    player: {
+      ...(card.player as any),
+      ...data.player,
+      name: displayName,
+      team,
+      position,
+      imageUrl: verifiedImage,
+      verifiedImageUrl: verifiedImage,
+      totalPoints: data.stats.totalPoints,
+      photo: verifiedImage ? null : (card.player as any)?.photo,
+      code: verifiedImage ? null : (card.player as any)?.code,
+    },
+  } as PlayerCardWithPlayer;
+  const fantasyCard = toFantasyCardData(profileCard, { imageWidth: 900 });
   const xp = statNumber((card as any).xp);
   const level = statNumber((card as any).level || 1);
   const serial = (card as any).serialNumber || (card as any).serial || (card as any).serialId || "Minted";
+  const totalPointsLabel = data.source === "fpl-live" ? "FPL Points" : data.source === "api-football" ? "Arena Score" : "Points";
 
-  return (
-    <div className="player-profile-modal fixed inset-0 z-[100] overflow-y-auto overflow-x-hidden bg-black/82 p-3 backdrop-blur-xl sm:p-6" role="dialog" aria-modal="true">
+  const modal = (
+    <div className="player-profile-modal fixed inset-0 z-[300] overflow-y-auto overflow-x-hidden bg-black/88 p-3 backdrop-blur-xl sm:p-6" role="dialog" aria-modal="true" aria-label={`${displayName} card profile`}>
       <div className="mx-auto min-h-full w-full max-w-6xl py-4 sm:py-8">
-        <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#080d1f]/95 shadow-[0_30px_100px_rgba(0,0,0,.72)]">
+        <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#080d1f]/98 shadow-[0_30px_100px_rgba(0,0,0,.82)]">
           <div className="relative flex items-center justify-between overflow-hidden border-b border-white/10 px-4 py-3 sm:px-5">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,.20),transparent_32%),radial-gradient(circle_at_80%_0%,rgba(168,85,247,.18),transparent_30%)]" />
             <div className="relative min-w-0">
@@ -129,8 +175,9 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-white/80">
                   <span className="rounded-xl bg-white/[.08] px-3 py-2">{position}</span>
                   <span className="rounded-xl bg-white/[.08] px-3 py-2">{team}</span>
-                  <span className="rounded-xl bg-cyan-400/10 px-3 py-2 text-cyan-100">{data.source === "fpl-live" ? "FPL live linked" : "Card data"}</span>
+                  <span className={`rounded-xl px-3 py-2 ${data.source === "card-fallback" ? "bg-amber-400/10 text-amber-100" : "bg-cyan-400/10 text-cyan-100"}`}>{sourceLabel(data)}</span>
                 </div>
+                {data.providers?.identity ? <p className="mt-3 text-[11px] text-white/45">Identity: {data.providers.identity}</p> : null}
                 {data.player?.news ? <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs text-amber-100">{data.player.news}</p> : null}
               </div>
 
@@ -144,29 +191,27 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
 
             <section className="min-w-0 space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <HeroStat icon={<Star className="h-4 w-4" />} label="Total Points" value={data.stats.totalPoints} />
+                <HeroStat icon={<Star className="h-4 w-4" />} label={totalPointsLabel} value={data.stats.totalPoints} />
                 <HeroStat icon={<TrendingUp className="h-4 w-4" />} label="Ownership" value={data.stats.selectedBy ? `${data.stats.selectedBy}%` : "—"} />
                 <HeroStat icon={<Zap className="h-4 w-4" />} label="Last Arena Sale" value={money(data.stats.value)} />
-                <HeroStat icon={<Award className="h-4 w-4" />} label="Bonus" value={data.stats.bonus || 0} />
+                <HeroStat icon={<Award className="h-4 w-4" />} label={data.source === "api-football" ? "Avg Rating" : "Bonus"} value={data.source === "api-football" ? (data.stats.averageRating ?? "—") : (data.stats.bonus || 0)} />
               </div>
 
               <div className="rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                  <div><h3 className="flex items-center gap-2 text-lg font-black text-white"><BarChart3 className="h-5 w-5 text-cyan-200" /> Last 10 Match Output</h3><p className="text-sm text-white/45">Swipe left/right to view all 10 games.</p></div>
-                  {isLoading ? <span className="text-xs text-white/45">Updating live FPL...</span> : null}
+                  <div><h3 className="flex items-center gap-2 text-lg font-black text-white"><BarChart3 className="h-5 w-5 text-cyan-200" /> Last 10 Match Output</h3><p className="text-sm text-white/45">Only official linked matches are shown. No placeholder games are invented.</p></div>
+                  {isLoading ? <span className="text-xs text-white/45">Checking official providers...</span> : null}
                 </div>
-                <div className="player-stats-scroll flex h-56 items-end gap-2 rounded-2xl border border-white/10 bg-black/24 px-3 pb-4 pt-6" data-mobile-x-scroll="true">
-                  {history.map((item, index) => {
-                    const height = Math.max(8, Math.round((Number(item.points || 0) / peak) * 150));
-                    return (
-                      <div key={`${item.gameweek}-${index}`} className="flex min-w-[50px] flex-col items-center justify-end gap-2">
-                        <div className="rounded-full border border-white/10 bg-white/[.08] px-2 py-1 text-[10px] font-black text-white">{item.points}</div>
-                        <div className="w-9 rounded-t-xl bg-gradient-to-t from-blue-600 via-cyan-400 to-emerald-300 shadow-[0_0_18px_rgba(34,211,238,.35)]" style={{ height }} />
-                        <div className="text-center leading-tight"><p className="text-[10px] font-black text-white/75">{item.opponent}</p><p className="text-[9px] text-white/35">GW{item.gameweek || index + 1}</p></div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {history.length ? (
+                  <div className="player-stats-scroll flex h-56 items-end gap-2 rounded-2xl border border-white/10 bg-black/24 px-3 pb-4 pt-6" data-mobile-x-scroll="true">
+                    {history.map((item, index) => {
+                      const height = Math.max(8, Math.round((Number(item.points || 0) / peak) * 150));
+                      return <div key={`${item.gameweek}-${index}`} className="flex min-w-[50px] flex-col items-center justify-end gap-2"><div className="rounded-full border border-white/10 bg-white/[.08] px-2 py-1 text-[10px] font-black text-white">{item.points}</div><div className="w-9 rounded-t-xl bg-gradient-to-t from-blue-600 via-cyan-400 to-emerald-300 shadow-[0_0_18px_rgba(34,211,238,.35)]" style={{ height }} /><div className="text-center leading-tight"><p className="text-[10px] font-black text-white/75">{item.opponent}</p><p className="text-[9px] text-white/35">GW{item.gameweek || index + 1}</p></div></div>;
+                    })}
+                  </div>
+                ) : (
+                  <div className="grid min-h-44 place-items-center rounded-2xl border border-dashed border-white/10 bg-black/20 p-6 text-center"><div><p className="font-black text-white">No verified match records yet</p><p className="mt-1 max-w-md text-sm text-white/45">This card is not securely linked to official match history yet, or the current season has not started. Zero-value placeholder games have been removed.</p></div></div>
+                )}
               </div>
 
               <div className="grid min-w-0 gap-4 xl:grid-cols-[1fr_310px]">
@@ -174,35 +219,9 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
                   <h3 className="mb-4 flex items-center gap-2 text-lg font-black text-white"><Clock className="h-5 w-5 text-cyan-200" /> Match Log</h3>
                   <div className="player-stats-scroll rounded-2xl border border-white/10 bg-black/20" data-mobile-x-scroll="true">
                     <table className="min-w-[760px] text-left text-xs">
-                      <thead className="bg-white/[.06] text-[10px] uppercase tracking-[.16em] text-white/45">
-                        <tr>
-                          <th className="px-3 py-3">GW</th>
-                          <th className="px-3 py-3">Opp</th>
-                          <th className="px-3 py-3">Pts</th>
-                          <th className="px-3 py-3">Min</th>
-                          <th className="px-3 py-3">G</th>
-                          <th className="px-3 py-3">A</th>
-                          <th className="px-3 py-3">CS</th>
-                          <th className="px-3 py-3">YC</th>
-                          <th className="px-3 py-3">RC</th>
-                          <th className="px-3 py-3">B</th>
-                        </tr>
-                      </thead>
+                      <thead className="bg-white/[.06] text-[10px] uppercase tracking-[.16em] text-white/45"><tr><th className="px-3 py-3">GW</th><th className="px-3 py-3">Opp</th><th className="px-3 py-3">Pts</th><th className="px-3 py-3">Min</th><th className="px-3 py-3">G</th><th className="px-3 py-3">A</th><th className="px-3 py-3">CS</th><th className="px-3 py-3">YC</th><th className="px-3 py-3">RC</th><th className="px-3 py-3">B</th></tr></thead>
                       <tbody className="divide-y divide-white/10 text-white/75">
-                        {history.map((item, index) => (
-                          <tr key={`row-${item.gameweek}-${index}`} className="hover:bg-white/[.04]">
-                            <td className="px-3 py-3 font-black text-white">{item.gameweek || index + 1}</td>
-                            <td className="px-3 py-3 font-bold">{item.wasHome ? "vs" : "@"} {item.opponent}</td>
-                            <td className="px-3 py-3 font-black text-cyan-100">{item.points}</td>
-                            <td className="px-3 py-3">{item.minutes}</td>
-                            <td className="px-3 py-3">{item.goals}</td>
-                            <td className="px-3 py-3">{item.assists}</td>
-                            <td className="px-3 py-3">{item.cleanSheets || 0}</td>
-                            <td className="px-3 py-3">{item.yellowCards || 0}</td>
-                            <td className="px-3 py-3">{item.redCards || 0}</td>
-                            <td className="px-3 py-3">{item.bonus || 0}</td>
-                          </tr>
-                        ))}
+                        {history.length ? history.map((item, index) => <tr key={`row-${item.gameweek}-${index}`} className="hover:bg-white/[.04]"><td className="px-3 py-3 font-black text-white">{item.gameweek || index + 1}</td><td className="px-3 py-3 font-bold">{item.wasHome ? "vs" : "@"} {item.opponent}</td><td className="px-3 py-3 font-black text-cyan-100">{item.points}</td><td className="px-3 py-3">{item.minutes}</td><td className="px-3 py-3">{item.goals}</td><td className="px-3 py-3">{item.assists}</td><td className="px-3 py-3">{item.cleanSheets || 0}</td><td className="px-3 py-3">{item.yellowCards || 0}</td><td className="px-3 py-3">{item.redCards || 0}</td><td className="px-3 py-3">{item.bonus || 0}</td></tr>) : <tr><td colSpan={10} className="px-4 py-8 text-center text-white/40">No verified match rows available.</td></tr>}
                       </tbody>
                     </table>
                   </div>
@@ -216,6 +235,7 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
                     <Stat icon={<Star className="h-4 w-4" />} label="Goals" value={data.stats.goals} />
                     <Stat icon={<Star className="h-4 w-4" />} label="Assists" value={data.stats.assists} />
                     <Stat icon={<Shield className="h-4 w-4" />} label="Clean sheets" value={data.stats.cleanSheets || 0} />
+                    {position === "GK" || Number(data.stats.saves || 0) > 0 ? <Stat icon={<Shield className="h-4 w-4" />} label="Saves" value={data.stats.saves || 0} /> : null}
                     <Stat icon={<Activity className="h-4 w-4" />} label="Yellow cards" value={data.stats.yellowCards} />
                     <Stat icon={<Activity className="h-4 w-4" />} label="Red cards" value={data.stats.redCards} />
                     <Stat icon={<Award className="h-4 w-4" />} label="Bonus" value={data.stats.bonus || 0} />
@@ -228,6 +248,8 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modal, document.body) : modal;
 }
 
 function HeroStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {

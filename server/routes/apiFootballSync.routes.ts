@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { getApiFootballSyncSummary, runApiFootballSync, type SyncJobType } from "../services/apiFootballSync.js";
 
-const allowedJobs = new Set<SyncJobType>(["fixtures", "live", "completed_stats", "standings", "teams"]);
+const allowedJobs = new Set<SyncJobType>(["fixtures", "live", "completed_stats", "standings", "teams", "players"]);
 
 export function registerApiFootballSyncRoutes(app: Express, deps: { requireAuth: any; isAdmin: any }) {
   const { requireAuth, isAdmin } = deps;

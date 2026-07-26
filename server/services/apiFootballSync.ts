@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { ensureApiFootballPlayerDirectorySchema, replaceApiFootballSquad } from "./apiFootballPlayerDirectory.js";
 
 const BASE_URL = String(process.env.API_FOOTBALL_BASE_URL || "https://v3.football.api-sports.io").replace(/\/$/, "");
 const API_KEY = String(process.env.API_FOOTBALL_KEY || "").trim();
@@ -8,7 +9,7 @@ const DAILY_CAP = Math.max(10, Math.min(90, Number(process.env.API_FOOTBALL_DAIL
 const FIXTURE_SYNC_HOURS = Math.max(4, Math.min(12, Number(process.env.API_FOOTBALL_FIXTURE_SYNC_HOURS || 6)));
 const LIVE_POLL_MINUTES = Math.max(10, Math.min(30, Number(process.env.API_FOOTBALL_LIVE_POLL_MINUTES || 15)));
 
-export type SyncJobType = "fixtures" | "live" | "completed_stats" | "standings" | "teams";
+export type SyncJobType = "fixtures" | "live" | "completed_stats" | "standings" | "teams" | "players";
 
 type Budget = { cap: number; used: number; remaining: number; day: string };
 type SyncResult = { jobType: SyncJobType; success: boolean; providerCalls: number; records: number; message: string; startedAt: string; finishedAt: string };
@@ -38,6 +39,7 @@ export function ensureApiFootballSyncSchema() {
   if (!schemaPromise) {
     schemaPromise = (async () => {
       await db.execute(sql`create schema if not exists app`);
+      await ensureApiFootballPlayerDirectorySchema();
       await db.execute(sql`
         create table if not exists app.api_football_usage (
           usage_day date primary key,
@@ -306,6 +308,43 @@ async function syncCompletedStats(): Promise<{ calls: number; records: number; d
   return { calls, records, details: { fixtures: fixtures.length } };
 }
 
+async function syncPlayers(): Promise<{ calls: number; records: number; details: any }> {
+  const recent = rowsOf(await db.execute(sql`
+    select finished_at from app.api_football_sync_runs
+    where job_type='players' and status='success' and finished_at > now()-interval '18 hours'
+    order by finished_at desc limit 1
+  `))[0];
+  if (recent) return { calls: 0, records: 0, details: { reason: "Current squad directory was refreshed within the last 18 hours" } };
+
+  const budget = await getApiFootballBudget();
+  if (budget.remaining <= 30) return { calls: 0, records: 0, details: { reason: "Player directory sync requires a 30-call safety window" } };
+
+  const season = seasonNow();
+  const teamsPayload = await providerGet("teams", { league: LEAGUE_ID, season });
+  const teamRows = Array.isArray(teamsPayload?.response) ? teamsPayload.response : [];
+  let calls = 1;
+  let records = 0;
+  let teamsProcessed = 0;
+
+  for (const teamRow of teamRows) {
+    const team = teamRow?.team || {};
+    if (!team?.id) continue;
+    const currentBudget = await getApiFootballBudget();
+    if (currentBudget.remaining <= 10) break;
+    await upsertTeam(team);
+    const squadPayload = await providerGet("players/squads", { team: Number(team.id) });
+    calls += 1;
+    const response = Array.isArray(squadPayload?.response) ? squadPayload.response : [];
+    const squad = response.find((item: any) => Number(item?.team?.id || 0) === Number(team.id)) || response[0] || {};
+    const squadTeam = squad?.team || team;
+    const players = Array.isArray(squad?.players) ? squad.players : [];
+    records += await replaceApiFootballSquad(season, squadTeam, players);
+    teamsProcessed += 1;
+  }
+
+  return { calls, records, details: { season, teamsAvailable: teamRows.length, teamsProcessed } };
+}
+
 async function syncStandings(): Promise<{ calls: number; records: number; details: any }> {
   const payload = await providerGet("standings", { league: LEAGUE_ID, season: seasonNow() });
   const groups = payload?.response?.[0]?.league?.standings;
@@ -334,6 +373,7 @@ export async function runApiFootballSync(jobType: SyncJobType): Promise<SyncResu
       if (jobType === "fixtures" || jobType === "teams") return syncFixtures();
       if (jobType === "live") return syncLive();
       if (jobType === "completed_stats") return syncCompletedStats();
+      if (jobType === "players") return syncPlayers();
       return syncStandings();
     });
     if (!result) {
@@ -357,6 +397,7 @@ export async function getApiFootballSyncSummary() {
       (select count(*)::int from app.api_football_fixtures) as fixtures,
       (select count(*)::int from app.api_football_teams) as teams,
       (select count(*)::int from app.api_football_player_match_stats) as player_stats,
+      (select count(*)::int from app.api_football_players where season=${seasonNow()} and active=true) as players,
       (select count(*)::int from app.api_football_standings where league_id=${LEAGUE_ID} and season=${seasonNow()}) as standings
   `))[0] || {};
   const lastRuns = rowsOf(await db.execute(sql`
@@ -368,7 +409,7 @@ export async function getApiFootballSyncSummary() {
   return {
     configured: Boolean(API_KEY), leagueId: LEAGUE_ID, season: seasonNow(), budget,
     schedule: { fixtureSyncHours: FIXTURE_SYNC_HOURS, livePollMinutes: LIVE_POLL_MINUTES, nextFixtureSync },
-    counts: { fixtures: Number(counts.fixtures || 0), teams: Number(counts.teams || 0), playerStats: Number(counts.player_stats || 0), standings: Number(counts.standings || 0) },
+    counts: { fixtures: Number(counts.fixtures || 0), teams: Number(counts.teams || 0), players: Number(counts.players || 0), playerStats: Number(counts.player_stats || 0), standings: Number(counts.standings || 0) },
     lastRuns,
   };
 }
@@ -386,9 +427,11 @@ export function startApiFootballSyncScheduler() {
     }
   };
   setTimeout(() => safeRun("fixtures"), 20_000);
+  setTimeout(() => safeRun("players"), 60_000);
   setInterval(() => safeRun("fixtures"), FIXTURE_SYNC_HOURS * 3600000);
   setInterval(() => safeRun("live"), LIVE_POLL_MINUTES * 60000);
   setInterval(() => safeRun("completed_stats"), 60 * 60000);
   setInterval(() => safeRun("standings"), 12 * 3600000);
-  console.log(`[api-football-sync] scheduler active: fixtures ${FIXTURE_SYNC_HOURS}h, live ${LIVE_POLL_MINUTES}m, daily cap ${DAILY_CAP}`);
+  setInterval(() => safeRun("players"), 24 * 3600000);
+  console.log(`[api-football-sync] scheduler active: fixtures ${FIXTURE_SYNC_HOURS}h, players 24h, live ${LIVE_POLL_MINUTES}m, daily cap ${DAILY_CAP}`);
 }

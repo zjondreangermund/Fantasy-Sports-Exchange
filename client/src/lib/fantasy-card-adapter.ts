@@ -86,6 +86,7 @@ export function toFantasyCardData(
   });
 
   const directCandidates = uniqueStrings([
+    safeUrl(player?.verifiedImageUrl),
     safeUrl(player?.photo),
     safeUrl(player?.imageUrl),
     safeUrl(player?.photoUrl),
