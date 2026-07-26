@@ -76,6 +76,20 @@ jobs:
             git push origin HEAD:${{ github.head_ref }}
           fi
 
+      - name: Apply collection action and sell dialog repairs
+        if: github.head_ref == 'agent/collection-actions-dialog-fix'
+        run: |
+          node scripts/apply-collection-actions-dialog-fix.mjs
+          if git diff --quiet; then
+            echo "Collection action and dialog repairs already applied."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add client/public client/src scripts
+            git commit -m "Fix Collection action widths and sell dialog [skip-autofix]"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
       - name: Install locked dependencies
         run: npm ci
 
@@ -124,6 +138,7 @@ jobs:
             node scripts/verify-auth-production-integrity.mjs &&
             node scripts/verify-card-data-integrity.mjs &&
             node scripts/verify-unified-scroll-architecture.mjs &&
+            node scripts/verify-collection-actions-dialog.mjs &&
             node scripts/verify-deposit-flows.mjs &&
             node scripts/verify-withdrawal-flows.mjs &&
             node scripts/verify-wallet-reconciliation.mjs &&
