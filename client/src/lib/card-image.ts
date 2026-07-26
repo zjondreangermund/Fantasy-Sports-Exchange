@@ -16,6 +16,7 @@ type CardLike = Partial<PlayerCardWithPlayer> & {
     photoUrl?: string | null;
     image?: string | null;
     imageUrl?: string | null;
+    verifiedImageUrl?: string | null;
     image_url?: string | null;
     officialPortraitUrl?: string | null;
     headshotUrl?: string | null;
@@ -88,6 +89,9 @@ export function buildCardImageCandidates(
   if (format) params.set("format", format);
 
   const candidates: string[] = [];
+
+  const verifiedImage = normalizeImageUrl(player?.verifiedImageUrl);
+  if (verifiedImage && !LOCAL_PLACEHOLDER_PATTERN.test(verifiedImage)) candidates.push(toSafeImageUrl(verifiedImage));
 
   // IMPORTANT: FPL element id is not the same as Premier League photo code.
   // Only use player.code or player.photo to build official PL image URLs.
