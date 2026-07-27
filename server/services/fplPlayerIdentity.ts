@@ -1,3 +1,4 @@
+// STRICT_PLAYER_IDENTITY_FIX_V2
 export type FplPosition = "GK" | "DEF" | "MID" | "FWD";
 
 export const FPL_POSITION_BY_ELEMENT_TYPE: Record<number, FplPosition> = {
@@ -54,10 +55,61 @@ function numericField(source: any, camel: string, snake: string): number {
   return Number.isFinite(value) ? value : 0;
 }
 
+function normalizedNames(player: any): string[] {
+  return Array.from(
+    new Set(
+      [player?.name, player?.webName, player?.web_name]
+        .map(normalizePlayerText)
+        .filter(Boolean),
+    ),
+  );
+}
+
+function tokens(value: string): string[] {
+  return normalizePlayerText(value)
+    .split(" ")
+    .filter((token) => token.length > 1);
+}
+
+function firstNameCompatible(left: string, right: string): boolean {
+  if (left === right) return true;
+  if (left.length < 3 || right.length < 3) return false;
+  const shorter = left.length <= right.length ? left : right;
+  const longer = left.length > right.length ? left : right;
+  return longer.startsWith(shorter);
+}
+
+export function strongPlayerNameMatch(left: unknown, right: unknown): boolean {
+  const a = normalizePlayerText(left);
+  const b = normalizePlayerText(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  const aTokens = tokens(a);
+  const bTokens = tokens(b);
+  if (aTokens.length < 2 || bTokens.length < 2) return false;
+  if (!firstNameCompatible(aTokens[0], bTokens[0])) return false;
+
+  const surnamesA = new Set(aTokens.slice(1));
+  return bTokens.slice(1).some((token) => surnamesA.has(token));
+}
+
+function playerMatchesElement(player: any, element: any): boolean {
+  const names = normalizedNames(player);
+  const elementNames = [fplPlayerFullName(element), element?.web_name]
+    .map(normalizePlayerText)
+    .filter(Boolean);
+  return names.some((name) =>
+    elementNames.some((candidate) => strongPlayerNameMatch(name, candidate)),
+  );
+}
+
 export function buildFplPlayerIndex(bootstrap: any) {
   const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
   const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
-  const teamById = new Map<number, any>(teams.map((team: any) => [Number(team.id), team]));
+  const teamById = new Map<number, any>(
+    teams.map((team: any) => [Number(team.id), team]),
+  );
   const byId = new Map<number, any>();
   const byCode = new Map<number, any>();
   const byName = new Map<string, any[]>();
@@ -66,7 +118,9 @@ export function buildFplPlayerIndex(bootstrap: any) {
     const key = normalizePlayerText(value);
     if (!key) return;
     const list = byName.get(key) || [];
-    if (!list.some((candidate) => Number(candidate.id) === Number(element.id))) list.push(element);
+    if (!list.some((candidate) => Number(candidate.id) === Number(element.id))) {
+      list.push(element);
+    }
     byName.set(key, list);
   };
 
@@ -84,28 +138,64 @@ export function buildFplPlayerIndex(bootstrap: any) {
     return String(team?.name || team?.short_name || "Premier League").trim();
   };
 
-  const resolve = (player: any) => {
-    const fplId = numericField(player, "fplId", "fpl_id");
-    if (fplId > 0 && byId.has(fplId)) return byId.get(fplId) || null;
+  const chooseCandidate = (player: any, candidates: any[]) => {
+    const unique = Array.from(
+      new Map(
+        candidates.map((candidate) => [Number(candidate.id), candidate]),
+      ).values(),
+    ) as any[];
 
-    const code = numericField(player, "code", "code");
-    if (code > 0 && byCode.has(code)) return byCode.get(code) || null;
+    if (unique.length === 1) return unique[0];
 
     const playerTeam = normalizePlayerText(player?.team);
-    const names = [player?.name, player?.webName, player?.web_name]
-      .map(normalizePlayerText)
-      .filter(Boolean);
+    const playerPosition = String(player?.position || "").toUpperCase();
 
-    for (const name of names) {
-      const candidates = byName.get(name) || [];
-      if (candidates.length === 1) return candidates[0];
-      if (playerTeam && candidates.length > 1) {
-        const teamMatch = candidates.find((candidate) => normalizePlayerText(teamNameOf(candidate)) === playerTeam);
-        if (teamMatch) return teamMatch;
-      }
+    if (playerTeam) {
+      const teamMatches = unique.filter(
+        (candidate) => normalizePlayerText(teamNameOf(candidate)) === playerTeam,
+      );
+      if (teamMatches.length === 1) return teamMatches[0];
+    }
+
+    if (playerPosition) {
+      const positionMatches = unique.filter(
+        (candidate) => fplPlayerPosition(candidate) === playerPosition,
+      );
+      if (positionMatches.length === 1) return positionMatches[0];
     }
 
     return null;
+  };
+
+  const resolve = (player: any) => {
+    const fplId = numericField(player, "fplId", "fpl_id");
+    const byStoredId = fplId > 0 ? byId.get(fplId) : null;
+    if (byStoredId && playerMatchesElement(player, byStoredId)) {
+      return byStoredId;
+    }
+
+    const code = numericField(player, "code", "code");
+    const byStoredCode = code > 0 ? byCode.get(code) : null;
+    if (byStoredCode && playerMatchesElement(player, byStoredCode)) {
+      return byStoredCode;
+    }
+
+    const exactCandidates: any[] = [];
+    for (const name of normalizedNames(player)) {
+      exactCandidates.push(...(byName.get(name) || []));
+    }
+    const exact = chooseCandidate(
+      player,
+      exactCandidates.filter((candidate) =>
+        playerMatchesElement(player, candidate),
+      ),
+    );
+    if (exact) return exact;
+
+    const strongCandidates = elements.filter((candidate: any) =>
+      playerMatchesElement(player, candidate),
+    );
+    return chooseCandidate(player, strongCandidates);
   };
 
   const canonical = (element: any) => ({
@@ -113,7 +203,6 @@ export function buildFplPlayerIndex(bootstrap: any) {
     webName: String(element?.web_name || fplPlayerFullName(element)).trim(),
     team: teamNameOf(element),
     position: fplPlayerPosition(element),
-    imageUrl: String(element?.photo || element?.code || "").trim(),
     fplId: Number(element?.id || 0),
     code: Number(element?.code || 0) || null,
     totalPoints: Number(element?.total_points || 0),
@@ -121,5 +210,15 @@ export function buildFplPlayerIndex(bootstrap: any) {
     overall: overallFromFplElement(element),
   });
 
-  return { teams, elements, teamById, byId, byCode, byName, resolve, teamNameOf, canonical };
+  return {
+    teams,
+    elements,
+    teamById,
+    byId,
+    byCode,
+    byName,
+    resolve,
+    teamNameOf,
+    canonical,
+  };
 }
