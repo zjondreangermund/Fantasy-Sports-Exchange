@@ -23,12 +23,15 @@ includesAll(identity, [
   '2: "DEF"',
   '3: "MID"',
   '4: "FWD"',
-  "byId.has(fplId)",
-  "byCode.has(code)",
-  "candidates.length === 1",
+  "strongPlayerNameMatch",
+  "playerMatchesElement(player, byStoredId)",
+  "playerMatchesElement(player, byStoredCode)",
+  "const strongCandidates = elements.filter",
   "teamNameOf",
   "canonical",
 ], "FPL player identity resolver");
+expect(!identity.includes("if (fplId > 0 && byId.has(fplId)) return"), "Stored FPL ids must not be accepted without confirming the player name");
+expect(!identity.includes("if (code > 0 && byCode.has(code)) return"), "Stored photo codes must not be accepted without confirming the player name");
 
 includesAll(sync, [
   "buildFplPlayerIndex",
@@ -52,6 +55,7 @@ includesAll(cards, [
   "loadApiFootballPlayerDirectory",
   "resolveApiFootballPlayer",
   "verifiedImageUrl",
+  "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
   'stats: "Fantasy Premier League match history"',
   "cleanSheets: Number(row.clean_sheets || 0)",
   "yellowCards: Number(row.yellow_cards || 0)",
@@ -60,12 +64,14 @@ includesAll(cards, [
 expect(!cards.includes("elementByNameTeam"), "Card API must not require a stale database team to match an FPL player");
 expect(!cards.includes("player: { ...player, overall: averageScore }"), "Card API must not replace official overall with an average of fallback scores");
 expect(!cards.includes("last10: last10.length ? last10 : lastScoresFallback(card)"), "Card profiles must not substitute fabricated fallback matches for empty official history");
+expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl"), "Unverified cards must not reuse stale stored portraits");
 
 includesAll(adapter, [
   "player?.totalPoints",
   "player?.total_points",
   "player?.form",
-  "player?.verifiedImageUrl",
+  "isVerifiedPlayerIdentity",
+  "const identityVerified = isVerifiedPlayerIdentity(player)",
   "const rating = finiteNumber(player?.overall, card.decisiveScore)",
   "rating,",
   "form,",
