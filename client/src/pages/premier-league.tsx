@@ -278,7 +278,7 @@ export default function PremierLeaguePage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-10">#</TableHead>
-                          <TableHead>Team</TableHead>
+                          <TableHead className="min-w-[10rem] sm:min-w-0">Team</TableHead>
                           <TableHead className="text-center">P</TableHead>
                           <TableHead className="text-center">W</TableHead>
                           <TableHead className="text-center">D</TableHead>
@@ -298,12 +298,12 @@ export default function PremierLeaguePage() {
                             (team.rank ?? team.position) >= 18 ? "border-l-2 border-l-red-500" : ""
                           }>
                             <TableCell className="font-medium text-muted-foreground">{team.rank ?? team.position}</TableCell>
-                            <TableCell>
+                            <TableCell className="min-w-[10rem] sm:min-w-0">
                               <div className="flex items-center gap-2">
                                 {team.teamLogo && (
                                   <img src={team.teamLogo} alt={team.teamName} className="w-6 h-6 object-contain" loading="lazy" decoding="async" />
                                 )}
-                                <span className="font-medium text-sm">{team.teamName}</span>
+                                <span className="font-medium text-sm whitespace-nowrap sm:whitespace-normal">{team.teamName}</span>
                               </div>
                             </TableCell>
                             <TableCell className="text-center text-sm">{team.played}</TableCell>
