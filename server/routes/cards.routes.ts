@@ -3,7 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { seedDatabase } from "../seed.js";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
-import { getApiFootballPlayerProfileSnapshot, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
+import { apiFootballPhotoUrl, getApiFootballPlayerProfileSnapshot, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 import {
   calculatePlayerScore,
   mapFplStatsToPlayerStats,
@@ -147,6 +147,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         const overall = matchedElement
           ? overallFromFplElement(matchedElement)
           : Number(player.overall || card.decisiveScore || 0);
+        const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl(apiFootballPlayer.apiPlayerId, apiFootballPlayer.photo) : "";
 
         return {
           ...card,
@@ -160,8 +161,8 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
             position: apiFootballPlayer?.position || canonical?.position || player.position,
             nationality: apiFootballPlayer?.nationality || player.nationality,
             apiFootballId: apiFootballPlayer?.apiPlayerId || null,
-            imageUrl: apiFootballPlayer?.photo || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
-            verifiedImageUrl: apiFootballPlayer?.photo || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
+            imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
+            verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
             identityVerified: Boolean(apiFootballPlayer || matchedElement),
             identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
             totalPoints,

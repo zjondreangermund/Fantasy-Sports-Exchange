@@ -4,6 +4,36 @@ import { normalizePlayerText } from "./fplPlayerIdentity.js";
 
 export type CanonicalPlayerPosition = "GK" | "DEF" | "MID" | "FWD";
 
+// API_FOOTBALL_IMAGE_HEALTH_V1
+const API_FOOTBALL_MEDIA_HOST = "media.api-sports.io";
+const API_FOOTBALL_PLAYER_PHOTO_PATH = /^\/football\/players\/(\d+)\.png$/i;
+
+export function apiFootballPhotoUrl(playerId: unknown, providedPhoto?: unknown): string {
+  const id = Number(playerId || 0);
+  if (!Number.isInteger(id) || id <= 0) return "";
+  const canonical = `https://${API_FOOTBALL_MEDIA_HOST}/football/players/${id}.png`;
+  const provided = String(providedPhoto || "").trim();
+  if (!provided) return canonical;
+  try {
+    const url = new URL(provided);
+    const match = url.pathname.match(API_FOOTBALL_PLAYER_PHOTO_PATH);
+    if (url.protocol === "https:" && url.hostname === API_FOOTBALL_MEDIA_HOST && Number(match?.[1] || 0) === id) return url.toString();
+  } catch {}
+  return canonical;
+}
+
+export function isApiFootballPlayerPhotoUrl(value: unknown, expectedPlayerId?: unknown): boolean {
+  try {
+    const url = new URL(String(value || ""));
+    const match = url.pathname.match(API_FOOTBALL_PLAYER_PHOTO_PATH);
+    if (url.protocol !== "https:" || url.hostname !== API_FOOTBALL_MEDIA_HOST || !match) return false;
+    const expected = Number(expectedPlayerId || 0);
+    return !expected || Number(match[1]) === expected;
+  } catch {
+    return false;
+  }
+}
+
 export type ApiFootballDirectoryPlayer = {
   apiPlayerId: number;
   season: number;
@@ -146,7 +176,7 @@ export async function replaceApiFootballSquad(season: number, team: any, players
     const firstName = String(player?.firstname || "").trim();
     const lastName = String(player?.lastname || "").trim();
     const position = normalizeApiFootballPosition(player?.position || rawPlayer?.position);
-    const photo = String(player?.photo || "").trim();
+    const photo = apiFootballPhotoUrl(apiPlayerId, player?.photo);
     const nationality = String(player?.nationality || "").trim();
     const ageNumber = Number(player?.age);
     const numberValue = Number(player?.number ?? rawPlayer?.number);

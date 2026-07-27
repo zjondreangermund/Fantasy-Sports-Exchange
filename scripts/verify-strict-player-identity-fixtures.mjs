@@ -102,8 +102,8 @@ includesAll(eplPage, [
 ], "Fixture page response guard");
 expect((eplPage.match(/function normalizeFixtureForView/g) || []).length === 1, "Fixture page must contain exactly one response normalizer");
 
-expect(main.includes('"fantasy-site-v14"'), "Client cache must be fantasy-site-v14");
-expect(sw.includes('const CACHE_NAME = "fantasy-site-v14"'), "Service worker cache must be fantasy-site-v14");
+expect(main.includes('"fantasy-site-v15"'), "Client cache must be fantasy-site-v15");
+expect(sw.includes('const CACHE_NAME = "fantasy-site-v15"'), "Service worker cache must be fantasy-site-v15");
 
 if (failures.length) {
   console.error("Strict player identity and fixtures verification failed:");

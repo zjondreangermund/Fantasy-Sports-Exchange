@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Activity, CalendarDays, CheckCircle2, Clock3, Database, History, Play, RefreshCw, Search, ServerCog, ShieldCheck, Table2, XCircle } from "lucide-react";
+import { Activity, CalendarDays, CheckCircle2, Clock3, Database, History, Image, Play, RefreshCw, Search, ServerCog, ShieldCheck, Table2, Users, XCircle } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -38,6 +38,7 @@ const syncJobs = [
   { key: "completed_stats", label: "Import Completed Stats", description: "Imports player statistics once for finished matches." },
   { key: "standings", label: "Sync Standings", description: "Refreshes the current Premier League table." },
   { key: "teams", label: "Sync Teams & Logos", description: "Refreshes team details through the fixture feed." },
+  { key: "players", label: "Sync Players & Photos", description: "Imports current Premier League squads and API-Football player portraits." },
 ] as const;
 
 export default function AdminLiveDataPage() {
@@ -49,6 +50,7 @@ export default function AdminLiveDataPage() {
 
   const syncCentre = useQuery<any>({ queryKey: ["/api/admin/live-data/sync-centre"], refetchInterval: 30_000 });
   const status = useQuery<any>({ queryKey: ["/api/admin/live-data/status"], refetchInterval: 60_000 });
+  const playerImageHealth = useQuery<any>({ queryKey: ["/api/admin/live-data/player-images"], refetchInterval: 5 * 60_000 });
   const fixtureUrl = `/api/admin/live-data/fixtures?season=${season}${date ? `&date=${encodeURIComponent(date)}` : ""}`;
   const fixtures = useQuery<any>({ queryKey: [fixtureUrl], enabled: fixtureQueryEnabled, staleTime: 5 * 60_000 });
   const playersUrl = selectedFixtureId ? `/api/admin/live-data/fixture/${selectedFixtureId}/players` : "";
@@ -65,6 +67,9 @@ export default function AdminLiveDataPage() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/admin/live-data/sync-centre"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/admin/live-data/status"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/live-data/player-images"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/my-cards"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] }),
       ]);
       toast({ title: "Sync complete", description: data?.message || data?.result?.message || "Database updated." });
     },
@@ -95,16 +100,17 @@ export default function AdminLiveDataPage() {
               <h1 className="mt-3 text-3xl font-black sm:text-5xl">API-Football Sync Centre</h1>
               <p className="mt-2 max-w-4xl text-sm text-slate-300">API-Football feeds the background sync service. Fantasy Arena pages read stored database records instead of consuming a provider request whenever a user opens a page.</p>
             </div>
-            <Button onClick={() => { syncCentre.refetch(); status.refetch(); }} variant="outline" className="border-white/15 bg-white/5 text-white"><RefreshCw className="mr-2 h-4 w-4" />Refresh dashboard</Button>
+            <Button onClick={() => { syncCentre.refetch(); status.refetch(); playerImageHealth.refetch(); }} variant="outline" className="border-white/15 bg-white/5 text-white"><RefreshCw className="mr-2 h-4 w-4" />Refresh dashboard</Button>
           </div>
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <Metric label="Configured" value={configured ? "Yes" : "No"} good={configured} />
           <Metric label="Connected" value={status.data?.connected ? "Online" : "Not checked"} good={Boolean(status.data?.connected)} />
           <Metric label="League / Season" value={`${summary.leagueId || status.data?.leagueId || 39} / ${summary.season || season}`} good />
           <Metric label="Used today" value={`${used}/${cap}`} good={remaining > 10} />
           <Metric label="Safe requests left" value={remaining} good={remaining > 0} />
+          <Metric label="Player images" value={playerImageHealth.data?.healthy ? "Working" : playerImageHealth.isLoading ? "Checking" : "Needs sync"} good={Boolean(playerImageHealth.data?.healthy)} />
         </section>
 
         <Card className="border-white/10 bg-white/[.06] p-4 text-white">
@@ -113,12 +119,22 @@ export default function AdminLiveDataPage() {
           <div className="mt-2 flex justify-between text-xs text-white/45"><span>{used} provider calls used</span><span>{remaining} available within the {cap}-request cap</span></div>
         </Card>
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <DatabaseMetric icon={CalendarDays} label="Fixtures stored" value={counts.fixtures || 0} />
           <DatabaseMetric icon={ServerCog} label="Teams stored" value={counts.teams || 0} />
+          <DatabaseMetric icon={Users} label="Players stored" value={counts.players || 0} />
+          <DatabaseMetric icon={Image} label="Player photos" value={counts.playerPhotos || 0} />
           <DatabaseMetric icon={Activity} label="Player stat rows" value={counts.playerStats || 0} />
           <DatabaseMetric icon={Table2} label="Standing rows" value={counts.standings || 0} />
         </section>
+
+        <Card className="border-white/10 bg-white/[.06] p-4 text-white sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div><div className="flex items-center gap-2 text-xl font-black"><Image className="h-5 w-5 text-fuchsia-200" />API-Football player portraits</div><p className="mt-1 text-sm text-white/45">Only exact squad matches receive a provider portrait. Unresolved cards keep the neutral silhouette.</p></div>
+            <Badge className={playerImageHealth.data?.healthy ? "bg-emerald-500/20 text-emerald-100" : "bg-amber-500/20 text-amber-100"}>{playerImageHealth.data?.healthy ? "Image feed online" : "Run Players & Photos sync"}</Badge>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-4"><Info label="Directory players" value={playerImageHealth.data?.players || counts.players || 0} /><Info label="Photos available" value={playerImageHealth.data?.photos || counts.playerPhotos || 0} /><Info label="Coverage" value={`${playerImageHealth.data?.coveragePercent ?? counts.photoCoveragePercent ?? 0}%`} /><Info label="Sample image" value={playerImageHealth.data?.imageProbe?.reachable ? `HTTP ${playerImageHealth.data?.imageProbe?.status || 200}` : "Not verified"} /></div>
+        </Card>
 
         <Card className="border-white/10 bg-white/[.06] p-4 text-white sm:p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -131,7 +147,7 @@ export default function AdminLiveDataPage() {
         <Card className="border-white/10 bg-white/[.06] p-4 text-white sm:p-6">
           <div className="flex items-center gap-2 text-xl font-black"><Play className="h-5 w-5 text-purple-200" />Manual sync controls</div>
           <p className="mt-1 text-sm text-white/45">These use the existing sync jobs. They do not create new systems or duplicate data.</p>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             {syncJobs.map((job) => <button key={job.key} onClick={() => syncMutation.mutate(job.key)} disabled={syncMutation.isPending || remaining <= 0} className="rounded-2xl border border-white/10 bg-black/25 p-4 text-left transition hover:border-cyan-300/40 hover:bg-cyan-300/5 disabled:opacity-50"><div className="font-black">{job.label}</div><div className="mt-2 text-xs leading-5 text-white/40">{job.description}</div></button>)}
           </div>
         </Card>

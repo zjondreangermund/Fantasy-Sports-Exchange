@@ -9,6 +9,7 @@ import { ensureTournamentSchema } from "./tournamentSchema.ensure.js";
 import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex } from "../services/fplPlayerIdentity.js";
+import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
@@ -133,9 +134,10 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
   app.get("/api/competitions/:id/leaderboard", requireAuth, async (req: any, res) => { try { const competitionId = Number(req.params.id); if (!Number.isInteger(competitionId) || competitionId <= 0) return res.status(400).json({ message: "Valid competition ID required" }); const viewerId = String(req.authUserId || ""); const result = await db.execute(sql`with ranked as (select ce.id as "entryId", ce.user_id as "userId", coalesce(u.manager_team_name, u.name, u.email, 'Manager') as "teamName", coalesce(ce.total_score, 0)::float as "totalScore", ce.lineup_card_ids as "lineupCardIds", ce.captain_id as "captainId", ce.joined_at as "joinedAt", rank() over (order by coalesce(ce.total_score, 0) desc, ce.joined_at asc, ce.id asc) as rank from app.competition_entries ce left join app.users u on u.id = ce.user_id where ce.competition_id = ${competitionId}) select * from ranked order by rank asc, "joinedAt" asc limit 200`); const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : []; return res.json({ leaderboard: rows, viewerEntry: rows.find((r: any) => String(r.userId) === viewerId) || null }); } catch (error: any) { console.error("Failed to fetch competition leaderboard:", error); return res.status(500).json({ message: error?.message || "Failed to fetch leaderboard" }); } });
   app.get("/api/marketplace", async (_req, res) => {
     try {
-      const [result, bootstrap] = await Promise.all([
+      const [result, bootstrap, apiFootballDirectory] = await Promise.all([
         db.execute(sql`select pc.*, p.name as player_name, p.team as player_team, p.position as player_position, p.image_url as player_image_url, p.fpl_id as player_fpl_id, p.code as player_code, p.photo as player_photo, p.web_name as player_web_name, p.nationality as player_nationality, p.league as player_league, p.overall as player_overall, p.total_points as player_total_points, p.form as player_form from app.player_cards pc join app.players p on p.id = pc.player_id where pc.for_sale = true order by pc.price asc nulls last, pc.id desc`),
         fplApi.bootstrap().catch(() => null),
+        loadApiFootballPlayerDirectory().catch(() => []),
       ]);
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : [];
@@ -143,8 +145,11 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         const storedPlayer = { id: row.player_id, name: row.player_name, team: row.player_team, position: row.player_position, imageUrl: row.player_image_url, fplId: row.player_fpl_id, code: row.player_code, photo: row.player_photo, webName: row.player_web_name, nationality: row.player_nationality, league: row.player_league, overall: row.player_overall, totalPoints: row.player_total_points, form: row.player_form };
         const matchedElement = fplIndex.resolve(storedPlayer);
         const canonical = matchedElement ? fplIndex.canonical(matchedElement) : null;
-        const verifiedImageUrl = matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null;
-        return { ...row, player: { ...storedPlayer, ...(canonical || {}), imageUrl: verifiedImageUrl, verifiedImageUrl, identityVerified: Boolean(matchedElement), identitySource: matchedElement ? "fpl" : "unverified-card-data" } };
+        const apiFootballPlayer = resolveApiFootballPlayer({ ...storedPlayer, ...(canonical || {}) }, apiFootballDirectory);
+        const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl(apiFootballPlayer.apiPlayerId, apiFootballPlayer.photo) : "";
+        const verifiedImageUrl = apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null);
+        const identityVerified = Boolean(apiFootballPlayer || matchedElement);
+        return { ...row, player: { ...storedPlayer, ...(canonical || {}), name: canonical?.name || apiFootballPlayer?.name || storedPlayer.name, team: apiFootballPlayer?.team || canonical?.team || storedPlayer.team, position: apiFootballPlayer?.position || canonical?.position || storedPlayer.position, apiFootballId: apiFootballPlayer?.apiPlayerId || null, imageUrl: verifiedImageUrl, verifiedImageUrl, identityVerified, identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data" } };
       });
       return res.json({ listings, cards: listings });
     } catch (error: any) {
