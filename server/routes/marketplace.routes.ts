@@ -9,10 +9,6 @@ import { ensureTournamentSchema } from "./tournamentSchema.ensure.js";
 import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex } from "../services/fplPlayerIdentity.js";
-import { fplApi } from "../services/fplApi.js";
-import { buildFplPlayerIndex } from "../services/fplPlayerIdentity.js";
-import { fplApi } from "../services/fplApi.js";
-import { buildFplPlayerIndex } from "../services/fplPlayerIdentity.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
