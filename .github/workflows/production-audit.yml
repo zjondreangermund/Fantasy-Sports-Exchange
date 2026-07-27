@@ -91,6 +91,20 @@ jobs:
             git push origin HEAD:${{ github.head_ref }}
           fi
 
+      - name: Apply strict player identity and fixture repairs
+        if: github.head_ref == 'agent/strict-player-identity-fixtures-repair'
+        run: |
+          node scripts/apply-strict-player-identity-fixtures.mjs
+          if git diff --quiet; then
+            echo "Strict player identity and fixture repairs already applied."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add client/public client/src server scripts
+            git commit -m "Enforce strict player links and repair fixture rendering [skip-autofix]"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
       - name: Install locked dependencies
         run: npm ci
 
@@ -141,6 +155,7 @@ jobs:
             node scripts/verify-unified-scroll-architecture.mjs &&
             node scripts/verify-collection-actions-dialog.mjs &&
             node scripts/verify-verified-player-profiles.mjs &&
+            node scripts/verify-strict-player-identity-fixtures.mjs &&
             node scripts/verify-deposit-flows.mjs &&
             node scripts/verify-withdrawal-flows.mjs &&
             node scripts/verify-wallet-reconciliation.mjs &&
