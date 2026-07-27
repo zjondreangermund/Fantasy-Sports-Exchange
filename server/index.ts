@@ -119,7 +119,9 @@ app.get("/api/image-proxy", async (req, res) => {
   if (!raw) return res.redirect(302, "/players/fallback.svg");
   let target: URL;
   try { target = new URL(raw); } catch { return res.redirect(302, "/players/fallback.svg"); }
-  if (target.hostname !== "resources.premierleague.com") return res.status(403).json({ message: "Host not allowed" });
+  const isPremierLeague = target.protocol === "https:" && target.hostname === "resources.premierleague.com";
+  const isApiFootballPlayer = target.protocol === "https:" && target.hostname === "media.api-sports.io" && /^\/football\/players\/\d+\.png$/i.test(target.pathname);
+  if (!isPremierLeague && !isApiFootballPlayer) return res.status(403).json({ message: "Host or image path not allowed" });
 
   const urlsToTry = [target.toString()];
   const codeMatch = target.pathname.match(/\/players\/(?:\d+x\d+)\/p(\d+)\.(?:png|jpg|jpeg|webp)$/i);
@@ -132,7 +134,10 @@ app.get("/api/image-proxy", async (req, res) => {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 7000);
-      const r = await fetch(url, { method: "GET", redirect: "follow", signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36", Referer: "https://www.premierleague.com/", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" } }).finally(() => clearTimeout(timeout));
+      const candidate = new URL(url);
+      const headers: Record<string, string> = { "User-Agent": "FantasyArena/1.0", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" };
+      if (candidate.hostname === "resources.premierleague.com") headers.Referer = "https://www.premierleague.com/";
+      const r = await fetch(url, { method: "GET", redirect: "follow", signal: controller.signal, headers }).finally(() => clearTimeout(timeout));
       const ct = String(r.headers.get("content-type") || "");
       if (r.ok && ct.startsWith("image/")) {
         res.setHeader("Content-Type", ct);

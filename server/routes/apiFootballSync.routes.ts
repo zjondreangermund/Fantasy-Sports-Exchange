@@ -1,10 +1,24 @@
 import type { Express } from "express";
-import { getApiFootballSyncSummary, runApiFootballSync, type SyncJobType } from "../services/apiFootballSync.js";
+import { getApiFootballPlayerImageHealth, getApiFootballSyncSummary, runApiFootballSync, type SyncJobType } from "../services/apiFootballSync.js";
 
 const allowedJobs = new Set<SyncJobType>(["fixtures", "live", "completed_stats", "standings", "teams", "players"]);
 
 export function registerApiFootballSyncRoutes(app: Express, deps: { requireAuth: any; isAdmin: any }) {
   const { requireAuth, isAdmin } = deps;
+
+  app.get("/api/health/player-images", async (_req, res) => {
+    try {
+      res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+      return res.json(await getApiFootballPlayerImageHealth({ probe: true }));
+    } catch (error: any) {
+      return res.status(503).json({ service: "api-football-player-images", healthy: false, message: error?.message || "Player image health check failed" });
+    }
+  });
+
+  app.get("/api/admin/live-data/player-images", requireAuth, isAdmin, async (_req, res) => {
+    try { return res.json(await getApiFootballPlayerImageHealth({ probe: true })); }
+    catch (error: any) { return res.status(500).json({ message: error?.message || "Could not verify player images" }); }
+  });
 
   app.get("/api/admin/live-data/sync-centre", requireAuth, isAdmin, async (_req, res) => {
     try {

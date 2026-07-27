@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
-import { ensureApiFootballPlayerDirectorySchema, replaceApiFootballSquad } from "./apiFootballPlayerDirectory.js";
+import { apiFootballPhotoUrl, ensureApiFootballPlayerDirectorySchema, replaceApiFootballSquad } from "./apiFootballPlayerDirectory.js";
 
 const BASE_URL = String(process.env.API_FOOTBALL_BASE_URL || "https://v3.football.api-sports.io").replace(/\/$/, "");
 const API_KEY = String(process.env.API_FOOTBALL_KEY || "").trim();
@@ -16,6 +16,35 @@ type SyncResult = { jobType: SyncJobType; success: boolean; providerCalls: numbe
 
 let schemaPromise: Promise<void> | null = null;
 let schedulerStarted = false;
+let playerImageProbeCache: { expiresAt: number; value: any } | null = null;
+
+async function probeApiFootballPlayerImage(force = false) {
+  if (!force && playerImageProbeCache && playerImageProbeCache.expiresAt > Date.now()) return playerImageProbeCache.value;
+  const row = rowsOf(await db.execute(sql`
+    select api_player_id as "apiPlayerId", photo
+    from app.api_football_players
+    where season=${seasonNow()} and active=true and coalesce(photo,'') <> ''
+    order by updated_at desc, api_player_id asc
+    limit 1
+  `))[0];
+  if (!row) {
+    const value = { checked: false, reachable: false, status: null, contentType: null, host: "media.api-sports.io", reason: "No stored API-Football player photo is available yet" };
+    playerImageProbeCache = { expiresAt: Date.now() + 60_000, value };
+    return value;
+  }
+  const url = apiFootballPhotoUrl(row.apiPlayerId, row.photo);
+  let value: any;
+  try {
+    const response = await fetch(url, { method: "GET", redirect: "follow", headers: { Accept: "image/avif,image/webp,image/*,*/*;q=0.8", "User-Agent": "FantasyArena/1.0" }, signal: AbortSignal.timeout(8000) });
+    const contentType = String(response.headers.get("content-type") || "");
+    value = { checked: true, reachable: response.ok && contentType.startsWith("image/"), status: response.status, contentType, host: new URL(url).hostname };
+    try { await response.body?.cancel(); } catch {}
+  } catch (error: any) {
+    value = { checked: true, reachable: false, status: null, contentType: null, host: "media.api-sports.io", reason: error?.message || "Image request failed" };
+  }
+  playerImageProbeCache = { expiresAt: Date.now() + 15 * 60_000, value };
+  return value;
+}
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -342,7 +371,12 @@ async function syncPlayers(): Promise<{ calls: number; records: number; details:
     teamsProcessed += 1;
   }
 
-  return { calls, records, details: { season, teamsAvailable: teamRows.length, teamsProcessed } };
+  const photoCounts = rowsOf(await db.execute(sql`
+    select count(*)::int as players, count(*) filter (where coalesce(photo,'') <> '')::int as photos
+    from app.api_football_players where season=${season} and active=true
+  `))[0] || {};
+  const imageProbe = await probeApiFootballPlayerImage(true);
+  return { calls, records, details: { season, teamsAvailable: teamRows.length, teamsProcessed, playersStored: Number(photoCounts.players || 0), photosStored: Number(photoCounts.photos || 0), photoCoveragePercent: Number(photoCounts.players || 0) ? Math.round((Number(photoCounts.photos || 0) / Number(photoCounts.players || 1)) * 100) : 0, imageProbe } };
 }
 
 async function syncStandings(): Promise<{ calls: number; records: number; details: any }> {
@@ -398,10 +432,11 @@ export async function getApiFootballSyncSummary() {
       (select count(*)::int from app.api_football_teams) as teams,
       (select count(*)::int from app.api_football_player_match_stats) as player_stats,
       (select count(*)::int from app.api_football_players where season=${seasonNow()} and active=true) as players,
+      (select count(*)::int from app.api_football_players where season=${seasonNow()} and active=true and coalesce(photo,'') <> '') as player_photos,
       (select count(*)::int from app.api_football_standings where league_id=${LEAGUE_ID} and season=${seasonNow()}) as standings
   `))[0] || {};
   const lastRuns = rowsOf(await db.execute(sql`
-    select id,job_type as "jobType",status,provider_calls as "providerCalls",records_processed as "recordsProcessed",message,started_at as "startedAt",finished_at as "finishedAt"
+    select id,job_type as "jobType",status,provider_calls as "providerCalls",records_processed as "recordsProcessed",message,details,started_at as "startedAt",finished_at as "finishedAt"
     from app.api_football_sync_runs order by started_at desc limit 30
   `));
   const lastFixtureRun = lastRuns.find((run) => run.jobType === "fixtures" && run.status === "success");
@@ -409,9 +444,26 @@ export async function getApiFootballSyncSummary() {
   return {
     configured: Boolean(API_KEY), leagueId: LEAGUE_ID, season: seasonNow(), budget,
     schedule: { fixtureSyncHours: FIXTURE_SYNC_HOURS, livePollMinutes: LIVE_POLL_MINUTES, nextFixtureSync },
-    counts: { fixtures: Number(counts.fixtures || 0), teams: Number(counts.teams || 0), players: Number(counts.players || 0), playerStats: Number(counts.player_stats || 0), standings: Number(counts.standings || 0) },
+    counts: { fixtures: Number(counts.fixtures || 0), teams: Number(counts.teams || 0), players: Number(counts.players || 0), playerPhotos: Number(counts.player_photos || 0), playersWithoutPhotos: Math.max(0, Number(counts.players || 0) - Number(counts.player_photos || 0)), photoCoveragePercent: Number(counts.players || 0) ? Math.round((Number(counts.player_photos || 0) / Number(counts.players || 1)) * 100) : 0, playerStats: Number(counts.player_stats || 0), standings: Number(counts.standings || 0) },
     lastRuns,
   };
+}
+
+export async function getApiFootballPlayerImageHealth(options: { probe?: boolean } = {}) {
+  await ensureApiFootballSyncSchema();
+  const season = seasonNow();
+  const counts = rowsOf(await db.execute(sql`
+    select count(*)::int as players, count(*) filter (where coalesce(photo,'') <> '')::int as photos, max(updated_at) as "lastDirectoryUpdate"
+    from app.api_football_players where season=${season} and active=true
+  `))[0] || {};
+  const lastRun = rowsOf(await db.execute(sql`
+    select status, message, details, started_at as "startedAt", finished_at as "finishedAt"
+    from app.api_football_sync_runs where job_type='players' order by started_at desc limit 1
+  `))[0] || null;
+  const players = Number(counts.players || 0);
+  const photos = Number(counts.photos || 0);
+  const imageProbe = options.probe === false ? (playerImageProbeCache?.value || null) : await probeApiFootballPlayerImage(false);
+  return { service: "api-football-player-images", configured: Boolean(API_KEY), provider: "API-Football", season, players, photos, missingPhotos: Math.max(0, players - photos), coveragePercent: players ? Math.round((photos / players) * 100) : 0, lastDirectoryUpdate: counts.lastDirectoryUpdate ? new Date(counts.lastDirectoryUpdate).toISOString() : null, lastSync: lastRun, imageProbe, healthy: Boolean(API_KEY && players > 0 && photos > 0 && imageProbe?.reachable) };
 }
 
 export function startApiFootballSyncScheduler() {
