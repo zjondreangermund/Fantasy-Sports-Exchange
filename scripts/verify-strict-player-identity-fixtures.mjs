@@ -24,12 +24,12 @@ const main = read("client/src/main.tsx");
 const sw = read("client/public/sw.js");
 
 includesAll(fplIdentity, [
-  "STRICT_PLAYER_IDENTITY_FIX_V1",
+  "STRICT_PLAYER_IDENTITY_FIX_V2",
   "strongPlayerNameMatch",
   "playerMatchesElement(player, byStoredId)",
   "playerMatchesElement(player, byStoredCode)",
   "const strongCandidates = elements.filter",
-  "surnameOverlap.length >= 1",
+  "bTokens.slice(1).some((token) => surnamesA.has(token))",
 ], "FPL strict identity resolver");
 expect(!fplIdentity.includes("if (fplId > 0 && byId.has(fplId)) return"), "Stored FPL ids must not be trusted without checking the player name");
 expect(!fplIdentity.includes("if (code > 0 && byCode.has(code)) return"), "Stored photo codes must not be trusted without checking the player name");
@@ -39,9 +39,9 @@ expect(!directory.includes("source.length === 1"), "API-Football matching must n
 includesAll(directory, ["row.nameScore >= 92", "rawPosition === row.candidate.position", "best.nameScore < 92"], "API-Football strict resolver");
 
 includesAll(cards, [
-  "const identityVerified = Boolean(apiFootballPlayer || matchedElement)",
-  "imageUrl: verifiedImageUrl",
-  "identityVerified,",
+  "imageUrl: apiFootballPlayer?.photo || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
+  "verifiedImageUrl: apiFootballPlayer?.photo || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
+  "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
   'identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football"',
   'imageUrl: null, verifiedImageUrl: null, identityVerified: false',
 ], "Collection card enrichment");
@@ -49,11 +49,12 @@ expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 2
 
 includesAll(marketplace, [
   "fplApi.bootstrap()",
-  "loadApiFootballPlayerDirectory()",
   "fplIndex.resolve(storedPlayer)",
   "verifiedImageUrl",
-  "identityVerified",
+  "identityVerified: Boolean(matchedElement)",
+  'identitySource: matchedElement ? "fpl" : "unverified-card-data"',
 ], "Marketplace card enrichment");
+expect(!marketplace.includes("imageUrl: row.player_image_url }"), "Marketplace cards must not expose raw stored portraits without verification");
 
 includesAll(images, [
   "isVerifiedPlayerIdentity",
@@ -99,6 +100,7 @@ includesAll(eplPage, [
   ".map(normalizeFixtureForView)",
   'className="relative min-h-full"',
 ], "Fixture page response guard");
+expect((eplPage.match(/function normalizeFixtureForView/g) || []).length === 1, "Fixture page must contain exactly one response normalizer");
 
 expect(main.includes('"fantasy-site-v14"'), "Client cache must be fantasy-site-v14");
 expect(sw.includes('const CACHE_NAME = "fantasy-site-v14"'), "Service worker cache must be fantasy-site-v14");
