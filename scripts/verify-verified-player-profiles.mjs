@@ -81,8 +81,8 @@ includesAll(images, [
 ], "Verified image priority");
 expect(adapter.includes("safeUrl(player?.verifiedImageUrl)"), "Fantasy card adapter must prioritize the verified provider image");
 
-expect(main.includes('"fantasy-site-v13"'), "Client cache must be fantasy-site-v13");
-expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v13"'), "Service worker cache must be fantasy-site-v13");
+expect(main.includes('"fantasy-site-v14"'), "Client cache must be fantasy-site-v14");
+expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v14"'), "Service worker cache must be fantasy-site-v14");
 
 if (failures.length) {
   console.error("Verified player profile integrity failed:");

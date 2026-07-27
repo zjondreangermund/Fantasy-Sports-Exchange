@@ -9,28 +9,24 @@ function teamLookup(bootstrap: any): Map<number, any> {
 function normalizeFixture(fixture: any, teams: Map<number, any>) {
   const home = teams.get(Number(fixture.team_h));
   const away = teams.get(Number(fixture.team_a));
+  const homeName = home?.name || `Team ${fixture.team_h}`;
+  const awayName = away?.name || `Team ${fixture.team_a}`;
+  const matchDate = fixture.kickoff_time || null;
+  const elapsed = Number(fixture.minutes || 0);
   return {
     id: fixture.id,
     event: fixture.event,
     gameweek: fixture.event,
-    date: fixture.kickoff_time,
-    kickoffTime: fixture.kickoff_time,
+    round: fixture.event ? `Gameweek ${fixture.event}` : "Premier League",
+    matchDate, date: matchDate, kickoffTime: matchDate,
     status: fixture.finished ? "FT" : fixture.started ? "LIVE" : "NS",
-    started: Boolean(fixture.started),
-    finished: Boolean(fixture.finished),
-    minutes: Number(fixture.minutes || 0),
-    homeTeam: {
-      id: fixture.team_h,
-      name: home?.name || `Team ${fixture.team_h}`,
-      shortName: home?.short_name || `T${fixture.team_h}`,
-      score: fixture.team_h_score,
-    },
-    awayTeam: {
-      id: fixture.team_a,
-      name: away?.name || `Team ${fixture.team_a}`,
-      shortName: away?.short_name || `T${fixture.team_a}`,
-      score: fixture.team_a_score,
-    },
+    started: Boolean(fixture.started), finished: Boolean(fixture.finished),
+    elapsed, minutes: elapsed, venue: fixture.venue?.name || "",
+    homeTeam: homeName, awayTeam: awayName,
+    homeTeamLogo: home?.logo || "", awayTeamLogo: away?.logo || "",
+    homeGoals: fixture.team_h_score ?? null, awayGoals: fixture.team_a_score ?? null,
+    home: { id: fixture.team_h, name: homeName, shortName: home?.short_name || `T${fixture.team_h}`, score: fixture.team_h_score },
+    away: { id: fixture.team_a, name: awayName, shortName: away?.short_name || `T${fixture.team_a}`, score: fixture.team_a_score },
   };
 }
 
@@ -149,7 +145,7 @@ export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreU
       let list = fixtures.filter((fixture: any) => Number(fixture.event) === Number(gameweek));
       if (status === "upcoming") list = list.filter((fixture: any) => !fixture.started);
       if (status === "live") list = list.filter((fixture: any) => fixture.started && !fixture.finished);
-      if (status === "completed") list = list.filter((fixture: any) => fixture.finished);
+      if (status === "completed" || status === "finished") list = list.filter((fixture: any) => fixture.finished);
       return res.json({ fixtures: list.map((fixture: any) => normalizeFixture(fixture, teams)) });
     } catch (error: any) {
       console.error("Failed to load EPL fixtures:", error);

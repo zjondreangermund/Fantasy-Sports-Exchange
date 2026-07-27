@@ -1,5 +1,5 @@
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
-import { buildCardImageCandidates, CARD_IMAGE_FALLBACK } from "./card-image";
+import { buildCardImageCandidates, CARD_IMAGE_FALLBACK, isVerifiedPlayerIdentity } from "./card-image";
 import { type PlayerCardData, type Rarity } from "../components/cards/types";
 import {
   getCardStatus,
@@ -85,13 +85,15 @@ export function toFantasyCardData(
     format: "webp",
   });
 
-  const directCandidates = uniqueStrings([
-    safeUrl(player?.verifiedImageUrl),
-    safeUrl(player?.photo),
-    safeUrl(player?.imageUrl),
-    safeUrl(player?.photoUrl),
-    safeUrl(player?.image_url),
-  ]).filter((src) => !isLowQualityFallback(src));
+  const identityVerified = isVerifiedPlayerIdentity(player);
+  const directCandidates = identityVerified
+    ? uniqueStrings([
+        safeUrl(player?.verifiedImageUrl),
+        safeUrl(player?.imageUrl),
+        safeUrl(player?.photoUrl),
+        safeUrl(player?.image_url),
+      ]).filter((src) => !isLowQualityFallback(src))
+    : [];
 
   const candidates = uniqueStrings([
     ...generatedCandidates,

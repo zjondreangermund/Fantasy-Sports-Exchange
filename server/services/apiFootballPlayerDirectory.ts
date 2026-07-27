@@ -232,7 +232,6 @@ function aliasesOf(candidate: ApiFootballDirectoryPlayer) {
   return Array.from(new Set([
     normalizePlayerText(candidate.name),
     normalizePlayerText(`${candidate.firstName} ${candidate.lastName}`),
-    normalizePlayerText(candidate.lastName),
   ].filter(Boolean)));
 }
 
@@ -258,7 +257,6 @@ function nameCompatibility(rawName: unknown, candidate: ApiFootballDirectoryPlay
   const surnameOverlap = overlap.filter((token) => token !== source[0]).length;
   if (firstMatches && surnameOverlap >= 1) return 92 + Math.min(8, surnameOverlap * 4);
   if (surnameOverlap >= 2) return 82;
-  if (source.length === 1 && candidateTokens.has(source[0]) && source[0].length >= 4) return 65;
   return 0;
 }
 
@@ -279,12 +277,12 @@ export function resolveApiFootballPlayer(player: any, directory: ApiFootballDire
     const teamScore = teamCompatibility(player?.team, candidate.team);
     const positionScore = rawPosition && rawPosition === candidate.position ? 10 : 0;
     return { candidate, score: nameScore + teamScore + positionScore, nameScore, teamScore };
-  }).filter((row) => row.nameScore >= 65).sort((a, b) => b.score - a.score);
+  }).filter((row) => row.nameScore >= 92 && (!rawPosition || rawPosition === row.candidate.position || row.nameScore >= 105)).sort((a, b) => b.score - a.score);
 
   const best = scored[0];
-  if (!best || best.score < 88) return null;
+  if (!best || best.nameScore < 92) return null;
   const second = scored[1];
-  if (second && best.nameScore < 120 && best.score - second.score < 10) return null;
+  if (second && best.nameScore < 120 && best.score - second.score < 12) return null;
   return best.candidate;
 }
 

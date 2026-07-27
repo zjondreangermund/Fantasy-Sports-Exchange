@@ -160,9 +160,10 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
             position: apiFootballPlayer?.position || canonical?.position || player.position,
             nationality: apiFootballPlayer?.nationality || player.nationality,
             apiFootballId: apiFootballPlayer?.apiPlayerId || null,
-            imageUrl: apiFootballPlayer?.photo || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl),
-            verifiedImageUrl: apiFootballPlayer?.photo || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : undefined),
-            identitySource: apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
+            imageUrl: apiFootballPlayer?.photo || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
+            verifiedImageUrl: apiFootballPlayer?.photo || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
+            identityVerified: Boolean(apiFootballPlayer || matchedElement),
+            identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
             totalPoints,
             form,
             overall,
@@ -250,7 +251,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         return res.json({
           source: "card-fallback",
           providers: { identity: "Unverified legacy card data", stats: "No official match link" },
-          player: { name: player.name, team: player.team, position: player.position, imageUrl: player.imageUrl },
+          player: { name: player.name, team: player.team, position: player.position, imageUrl: null, verifiedImageUrl: null, identityVerified: false, identitySource: "unverified-card-data" },
           last10: [],
           stats: { matchesPlayed: 0, minutes: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, bonus: 0, totalPoints: Number(card.totalPoints || player.totalPoints || 0), selectedBy: null, value: lastSaleValue, saves: 0, averageRating: null },
         });
