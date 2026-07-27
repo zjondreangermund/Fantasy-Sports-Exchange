@@ -111,7 +111,7 @@ app.get("/api/player-image/resolve", async (req, res) => {
   const cacheKey = `${normalizeSearch(name)}|${normalizeSearch(team)}`; const cached = playerImageCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) { if (cached.url) return res.redirect(302, cached.url); return res.status(404).json({ message: "No exact official player image link found" }); }
   try { const fplImage = await resolveFplPlayerImage(name, team); if (fplImage) { const proxied = `/api/image-proxy?url=${encodeURIComponent(fplImage)}`; playerImageCache.set(cacheKey, { expiresAt: Date.now() + 12 * 60 * 60 * 1000, url: proxied }); res.setHeader("Cache-Control", "public, max-age=43200"); return res.redirect(302, proxied); } } catch (error) { console.warn("FPL player image resolve failed:", error); }
-  playerImageCache.set(cacheKey, { expiresAt: Date.now() + 60 * 60 * 1000, url: null }); return res.status(404).json({ message: "No image found" });
+  playerImageCache.set(cacheKey, { expiresAt: Date.now() + 60 * 60 * 1000, url: null }); return res.status(404).json({ message: "No exact official player image link found" });
 });
 
 app.get("/api/image-proxy", async (req, res) => {
