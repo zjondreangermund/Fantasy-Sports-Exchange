@@ -17,7 +17,7 @@ includesAll([
   "discoverCurrentSquadTeams",
   'providerGet("teams", { league: LEAGUE_ID, season: FREE_PLAN_REFERENCE_SEASON })',
   'providerGet("teams", { search: requestedName })',
-  'providerGet("players/squads", { team: Number(team.id) })',
+  'providerGet("players/squads", { team: teamId })',
   "isFreePlanSeasonRestriction",
   "free plans do not have access to this season",
   "sameClub",
@@ -30,7 +30,8 @@ includesAll([
   "imageProbe",
 ], "Free-plan current squad discovery");
 
-expect(source.includes("budget.remaining <= 45"), "Player photo sync must retain enough daily budget for historical team discovery, missing-team searches and squad calls");
+expect(source.includes("budget.remaining <= 12"), "Incremental player-photo sync must start whenever requests remain above the 10-call emergency reserve");
+expect(source.includes("currentBudget.remaining <= 10"), "Every squad request must preserve the emergency API reserve");
 expect(source.includes('mode: "free-plan-reference-season-plus-team-search"'), "Fallback mode must be visible in sync diagnostics");
 expect(source.includes('"manchester united": ["man utd"]'), "Manchester United alias is required");
 expect(source.includes('"wolverhampton wanderers": ["wolverhampton", "wolves"]'), "Wolves alias is required");
@@ -43,4 +44,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("API-Football free-plan current squad discovery, exact team matching and image diagnostics are wired correctly.");
+console.log("API-Football free-plan current squad discovery, exact team matching, incremental retries and image diagnostics are wired correctly.");
