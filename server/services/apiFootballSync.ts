@@ -341,7 +341,7 @@ async function beginRun(jobType: SyncJobType) {
   return row;
 }
 
-async function finishRun(id: any, status: "success" | "failed" | "skipped", calls: number, records: number, message: string, details: any = {}) {
+async function finishRun(id: any, status: "success" | "failed" | "skipped" | "partial", calls: number, records: number, message: string, details: any = {}) {
   await db.execute(sql`
     update app.api_football_sync_runs set status=${status}, provider_calls=${calls}, records_processed=${records}, message=${message}, details=${JSON.stringify(details)}::jsonb, finished_at=now()
     where id=${id}
