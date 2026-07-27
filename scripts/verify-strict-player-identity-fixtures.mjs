@@ -36,11 +36,12 @@ expect(!fplIdentity.includes("if (code > 0 && byCode.has(code)) return"), "Store
 
 expect(!directory.includes("normalizePlayerText(candidate.lastName),"), "API-Football matching must not use surname-only aliases");
 expect(!directory.includes("source.length === 1"), "API-Football matching must not link a card from one token");
-includesAll(directory, ["row.nameScore >= 92", "rawPosition === row.candidate.position", "best.nameScore < 92"], "API-Football strict resolver");
+includesAll(directory, ["row.nameScore >= 92", "rawPosition === row.candidate.position", "best.nameScore < 92", "apiFootballPhotoUrl"], "API-Football strict resolver");
 
 includesAll(cards, [
-  "imageUrl: apiFootballPlayer?.photo || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
-  "verifiedImageUrl: apiFootballPlayer?.photo || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
+  "const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl",
+  "imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
+  "verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
   "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
   'identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football"',
   'imageUrl: null, verifiedImageUrl: null, identityVerified: false',
@@ -49,10 +50,13 @@ expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 2
 
 includesAll(marketplace, [
   "fplApi.bootstrap()",
+  "loadApiFootballPlayerDirectory()",
+  "resolveApiFootballPlayer",
+  "apiFootballPhotoUrl",
   "fplIndex.resolve(storedPlayer)",
   "verifiedImageUrl",
-  "identityVerified: Boolean(matchedElement)",
-  'identitySource: matchedElement ? "fpl" : "unverified-card-data"',
+  "const identityVerified = Boolean(apiFootballPlayer || matchedElement)",
+  'apiFootballPlayer ? "api-football-current-squad"',
 ], "Marketplace card enrichment");
 expect(!marketplace.includes("imageUrl: row.player_image_url }"), "Marketplace cards must not expose raw stored portraits without verification");
 
