@@ -91,22 +91,6 @@ jobs:
             git push origin HEAD:${{ github.head_ref }}
           fi
 
-      - name: Apply API-Football player images
-        if: github.head_ref == 'agent/api-football-player-images-health'
-        run: |
-          node scripts/apply-api-football-images-backend.mjs
-          node scripts/apply-api-football-images-routes.mjs
-          node scripts/apply-api-football-images-client.mjs
-          if git diff --quiet; then
-            echo "API-Football player image integration already applied."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add client/public client/src server scripts
-            git commit -m "Integrate and verify API-Football player images [skip-autofix]"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
-
       - name: Install locked dependencies
         run: npm ci
 
