@@ -37,6 +37,26 @@ function asArray<T>(payload: any, keys: string[] = []): T[] {
   return [];
 }
 
+function normalizeFixtureForView(fixture: any): EplFixture {
+  const homeNode = fixture?.homeTeam ?? fixture?.home;
+  const awayNode = fixture?.awayTeam ?? fixture?.away;
+  const homeTeam = typeof homeNode === "string" ? homeNode : String(homeNode?.name || "Home");
+  const awayTeam = typeof awayNode === "string" ? awayNode : String(awayNode?.name || "Away");
+  return {
+    ...fixture,
+    id: fixture?.id ?? `${homeTeam}-${awayTeam}-${fixture?.kickoffTime || fixture?.date || "fixture"}`,
+    round: fixture?.round || (fixture?.gameweek ? `Gameweek ${fixture.gameweek}` : "Premier League"),
+    matchDate: fixture?.matchDate || fixture?.kickoffTime || fixture?.date || null,
+    status: String(fixture?.status || (fixture?.finished ? "FT" : fixture?.started ? "LIVE" : "NS")),
+    homeTeam, awayTeam,
+    homeGoals: fixture?.homeGoals ?? (typeof homeNode === "object" ? homeNode?.score : fixture?.home?.score) ?? null,
+    awayGoals: fixture?.awayGoals ?? (typeof awayNode === "object" ? awayNode?.score : fixture?.away?.score) ?? null,
+    homeTeamLogo: fixture?.homeTeamLogo || homeNode?.logo || homeNode?.badge || "",
+    awayTeamLogo: fixture?.awayTeamLogo || awayNode?.logo || awayNode?.badge || "",
+    elapsed: fixture?.elapsed ?? fixture?.minutes ?? 0,
+  };
+}
+
 function assignRarity(player: EplPlayer): CardRarity {
   const rating = player.rating ? parseFloat(String(player.rating)) : 0;
   const goals = player.goals ?? 0;
@@ -88,7 +108,7 @@ export default function PremierLeaguePage() {
         const res = await fetch(`/api/epl/fixtures?status=${fixtureTab}`, { credentials: "include" });
         if (!res.ok) return [];
         const data = await res.json();
-        return asArray<EplFixture>(data, ["fixtures", "response"]);
+        return asArray<EplFixture>(data, ["fixtures", "response"]).map(normalizeFixtureForView);
       } catch {
         return [];
       }
@@ -197,7 +217,7 @@ export default function PremierLeaguePage() {
   ];
 
   return (
-    <div className="flex-1 overflow-auto relative">
+    <div className="relative min-h-full">
       <div className="p-4 sm:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-wrap items-center justify-between gap-4 mb-6">

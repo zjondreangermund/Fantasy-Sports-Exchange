@@ -141,6 +141,7 @@ jobs:
             node scripts/verify-unified-scroll-architecture.mjs &&
             node scripts/verify-collection-actions-dialog.mjs &&
             node scripts/verify-verified-player-profiles.mjs &&
+            node scripts/verify-strict-player-identity-fixtures.mjs &&
             node scripts/verify-deposit-flows.mjs &&
             node scripts/verify-withdrawal-flows.mjs &&
             node scripts/verify-wallet-reconciliation.mjs &&

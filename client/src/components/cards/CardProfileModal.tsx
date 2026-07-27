@@ -62,7 +62,7 @@ function fallbackData(card: PlayerCardWithPlayer): CardProfileData {
       name: card.player?.name,
       team: card.player?.team,
       position: card.player?.position,
-      imageUrl: card.player?.imageUrl ?? undefined,
+      imageUrl: undefined,
     },
     last10: [],
     stats: {
@@ -129,7 +129,8 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
   const displayName = data.player?.name || card.player?.name || "Unknown Player";
   const team = data.player?.team || card.player?.team || "Fantasy Arena";
   const position = data.player?.position || card.player?.position || "N/A";
-  const verifiedImage = data.player?.imageUrl || card.player?.imageUrl || undefined;
+  const identityVerified = data.source !== "card-fallback";
+  const verifiedImage = identityVerified ? data.player?.imageUrl || undefined : undefined;
   const profileCard = {
     ...card,
     totalPoints: data.stats.totalPoints,
@@ -141,9 +142,17 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
       position,
       imageUrl: verifiedImage,
       verifiedImageUrl: verifiedImage,
+      identityVerified,
+      identitySource: identityVerified ? (data.source === "api-football" ? "api-football" : "fpl") : "unverified-card-data",
       totalPoints: data.stats.totalPoints,
-      photo: verifiedImage ? null : (card.player as any)?.photo,
-      code: verifiedImage ? null : (card.player as any)?.code,
+      photo: null,
+      photoUrl: null,
+      image: null,
+      image_url: null,
+      officialPortraitUrl: null,
+      headshotUrl: null,
+      cutoutUrl: null,
+      code: identityVerified ? (card.player as any)?.code : null,
     },
   } as PlayerCardWithPlayer;
   const fantasyCard = toFantasyCardData(profileCard, { imageWidth: 900 });

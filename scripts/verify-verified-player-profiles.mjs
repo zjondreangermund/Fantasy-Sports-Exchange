@@ -48,8 +48,10 @@ includesAll(cards, [
   "loadApiFootballPlayerDirectory",
   "resolveApiFootballPlayer",
   "getApiFootballPlayerProfileSnapshot",
-  'identitySource: apiFootballPlayer ? "api-football-current-squad"',
+  'apiFootballPlayer && matchedElement ? "fpl+api-football"',
+  'apiFootballPlayer ? "api-football-current-squad"',
   "verifiedImageUrl",
+  "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
   'source: "card-fallback"',
   "last10: []",
   'verifiedIdentity ? "API-Football current squads"',
@@ -58,6 +60,7 @@ includesAll(cards, [
 ], "Card profile provider integration");
 expect(!cards.includes("opponent: `GW${index + 1}`"), "Card profiles must not fabricate ten placeholder gameweeks");
 expect(!cards.includes("last10: last10.length ? last10 : lastScoresFallback(card)"), "Official profile history must not be replaced by fake zero rows");
+expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl"), "Unverified cards must never inherit stale portraits");
 
 includesAll(modal, [
   'import { createPortal } from "react-dom"',
@@ -71,18 +74,24 @@ includesAll(modal, [
   "Zero-value placeholder games have been removed",
   'return "API-Football verified"',
   "verifiedImageUrl",
+  'const identityVerified = data.source !== "card-fallback"',
 ], "Card profile modal");
 expect(!modal.includes("while (padded.length < 10)"), "Client fallback must not fabricate ten match records");
+expect(!modal.includes("data.player?.imageUrl || card.player?.imageUrl"), "Unverified profiles must not promote stale collection images");
 
 includesAll(images, [
   "verifiedImageUrl?: string | null",
+  "isVerifiedPlayerIdentity",
   "const verifiedImage = normalizeImageUrl(player?.verifiedImageUrl)",
   "candidates.push(toSafeImageUrl(verifiedImage))",
+  "candidates.push(CARD_IMAGE_FALLBACK)",
 ], "Verified image priority");
+expect(!images.includes("playerResolverUrl"), "Fuzzy portrait lookup must not be part of the card image chain");
 expect(adapter.includes("safeUrl(player?.verifiedImageUrl)"), "Fantasy card adapter must prioritize the verified provider image");
+expect(adapter.includes("const identityVerified = isVerifiedPlayerIdentity(player)"), "Fantasy card adapter must gate direct images by verified identity");
 
-expect(main.includes('"fantasy-site-v13"'), "Client cache must be fantasy-site-v13");
-expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v13"'), "Service worker cache must be fantasy-site-v13");
+expect(main.includes('"fantasy-site-v14"'), "Client cache must be fantasy-site-v14");
+expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v14"'), "Service worker cache must be fantasy-site-v14");
 
 if (failures.length) {
   console.error("Verified player profile integrity failed:");

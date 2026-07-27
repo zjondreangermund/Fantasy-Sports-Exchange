@@ -1,8 +1,10 @@
+// STRICT_PLAYER_IDENTITY_FIX_V2
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
 export const CARD_IMAGE_FALLBACK = "/players/fallback.svg";
 
-const LOCAL_PLACEHOLDER_PATTERN = /\/(images\/player-\d+|players\/fallback)\.(png|jpg|jpeg|svg|webp)$/i;
+const LOCAL_PLACEHOLDER_PATTERN =
+  /\/(images\/player-\d+|players\/fallback)\.(png|jpg|jpeg|svg|webp)$/i;
 
 type CardLike = Partial<PlayerCardWithPlayer> & {
   player?: {
@@ -21,8 +23,10 @@ type CardLike = Partial<PlayerCardWithPlayer> & {
     officialPortraitUrl?: string | null;
     headshotUrl?: string | null;
     cutoutUrl?: string | null;
-    fallbackImageUrl?: string | null;
     imageCandidates?: string[] | null;
+    identitySource?: string | null;
+    identityVerified?: boolean | null;
+    apiFootballId?: number | string | null;
   } | null;
 };
 
@@ -34,23 +38,15 @@ export function normalizeImageUrl(url?: string | null): string | null {
   return value.startsWith("/") ? value : `/${value}`;
 }
 
-function lowercaseFilenamePath(url: string): string {
-  const [pathOnly, search = ""] = url.split("?");
-  const parts = pathOnly.split("/");
-  const fileName = parts.pop() || "";
-  const lowerFileName = fileName.toLowerCase();
-  const rebuilt = `${parts.join("/")}/${lowerFileName}`.replace(/\/+/g, "/");
-  return search ? `${rebuilt}?${search}` : rebuilt;
-}
-
 function uniqueStrings(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter(Boolean) as string[]));
 }
 
-function premierLeaguePhotoFromCode(value?: string | number | null): string | null {
+function premierLeaguePhotoFromCode(
+  value?: string | number | null,
+): string | null {
   if (value == null) return null;
-  const text = String(value).trim();
-  const match = text.match(/(\d+)/);
+  const match = String(value).trim().match(/(\d+)/);
   if (!match) return null;
   return `https://resources.premierleague.com/premierleague/photos/players/250x250/p${match[1]}.png`;
 }
@@ -59,78 +55,69 @@ export function toSafeImageUrl(url: string): string {
   if (/^https?:\/\/resources\.premierleague\.com\//i.test(url)) {
     return `/api/image-proxy?url=${encodeURIComponent(url)}`;
   }
-  if (/^https?:\/\//i.test(url)) return url;
   return url;
 }
 
-function playerResolverUrl(player: CardLike["player"]): string | null {
-  const name = String(player?.name || "").trim();
-  if (!name) return null;
-  const params = new URLSearchParams({ name });
-  const team = String(player?.team || player?.club || "").trim();
-  if (team) params.set("team", team);
-  params.set("source", "fpl");
-  return `/api/player-image/resolve?${params.toString()}`;
+export function isVerifiedPlayerIdentity(
+  player: CardLike["player"],
+): boolean {
+  if (!player) return false;
+  if (player.identityVerified === true) return true;
+  const source = String(player.identitySource || "").toLowerCase();
+  return (
+    source === "fpl" ||
+    source === "api-football-current-squad" ||
+    source === "fpl+api-football" ||
+    source === "api-football"
+  );
 }
 
 export function buildCardImageCandidates(
   card: CardLike | null | undefined,
-  options?: { thumb?: boolean; width?: number; format?: "webp" | "png" | "jpeg" },
+  _options?: {
+    thumb?: boolean;
+    width?: number;
+    format?: "webp" | "png" | "jpeg";
+  },
 ): string[] {
   const player = card?.player;
-  const playerId = Number(player?.id || card?.playerId || 0);
-  const thumb = options?.thumb ?? true;
-  const width = Number(options?.width || (thumb ? 256 : 640));
-  const format = options?.format || "webp";
-
-  const params = new URLSearchParams();
-  if (thumb) params.set("variant", "thumb");
-  if (Number.isFinite(width) && width > 0) params.set("w", String(width));
-  if (format) params.set("format", format);
-
+  const verified = isVerifiedPlayerIdentity(player);
   const candidates: string[] = [];
 
-  const verifiedImage = normalizeImageUrl(player?.verifiedImageUrl);
-  if (verifiedImage && !LOCAL_PLACEHOLDER_PATTERN.test(verifiedImage)) candidates.push(toSafeImageUrl(verifiedImage));
+  if (verified) {
+    const verifiedImage = normalizeImageUrl(player?.verifiedImageUrl);
+    if (
+      verifiedImage &&
+      !LOCAL_PLACEHOLDER_PATTERN.test(verifiedImage)
+    ) {
+      candidates.push(toSafeImageUrl(verifiedImage));
+    }
 
-  // IMPORTANT: FPL element id is not the same as Premier League photo code.
-  // Only use player.code or player.photo to build official PL image URLs.
-  for (const codeLike of [player?.code, player?.photo]) {
-    const plPhoto = premierLeaguePhotoFromCode(codeLike);
-    if (plPhoto) candidates.push(toSafeImageUrl(plPhoto));
-  }
+    for (const codeLike of [player?.code, player?.photo]) {
+      const officialPhoto = premierLeaguePhotoFromCode(codeLike);
+      if (officialPhoto) candidates.push(toSafeImageUrl(officialPhoto));
+    }
 
-  const resolver = playerResolverUrl(player);
-  if (resolver) candidates.push(resolver);
+    const rawValues = uniqueStrings([
+      player?.officialPortraitUrl,
+      player?.cutoutUrl,
+      player?.headshotUrl,
+      player?.imageUrl,
+      player?.image_url,
+      player?.image,
+      player?.photoUrl,
+      ...(Array.isArray(player?.imageCandidates)
+        ? player.imageCandidates
+        : []),
+    ]);
 
-  const rawValues = uniqueStrings([
-    player?.officialPortraitUrl,
-    player?.cutoutUrl,
-    player?.headshotUrl,
-    player?.imageUrl,
-    player?.image_url,
-    player?.image,
-    player?.photoUrl,
-    player?.fallbackImageUrl,
-    ...(Array.isArray(player?.imageCandidates) ? player?.imageCandidates || [] : []),
-  ]);
-
-  for (const raw of rawValues) {
-    const normalized = normalizeImageUrl(raw);
-    if (!normalized || LOCAL_PLACEHOLDER_PATTERN.test(normalized)) continue;
-
-    const directFpl = premierLeaguePhotoFromCode(raw);
-    if (directFpl) candidates.push(toSafeImageUrl(directFpl));
-
-    candidates.push(toSafeImageUrl(normalized));
-    if (!normalized.startsWith("data:")) candidates.push(toSafeImageUrl(lowercaseFilenamePath(normalized)));
-  }
-
-  if (playerId > 0) {
-    candidates.push(`/api/players/${playerId}/photo?${params.toString()}`);
-    candidates.push(`/api/players/${playerId}/photo`);
+    for (const raw of rawValues) {
+      const normalized = normalizeImageUrl(raw);
+      if (!normalized || LOCAL_PLACEHOLDER_PATTERN.test(normalized)) continue;
+      candidates.push(toSafeImageUrl(normalized));
+    }
   }
 
   candidates.push(CARD_IMAGE_FALLBACK);
-  return Array.from(new Set(candidates.filter(Boolean)));
+  return Array.from(new Set(candidates));
 }
