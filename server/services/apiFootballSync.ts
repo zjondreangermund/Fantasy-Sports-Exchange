@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { fplApi } from "./fplApi.js";
 import { apiFootballPhotoUrl, ensureApiFootballPlayerDirectorySchema, replaceApiFootballSquad } from "./apiFootballPlayerDirectory.js";
 
 const BASE_URL = String(process.env.API_FOOTBALL_BASE_URL || "https://v3.football.api-sports.io").replace(/\/$/, "");
@@ -8,6 +9,21 @@ const LEAGUE_ID = Math.max(1, Number(process.env.API_FOOTBALL_LEAGUE_ID || 39));
 const DAILY_CAP = Math.max(10, Math.min(90, Number(process.env.API_FOOTBALL_DAILY_CAP || 90)));
 const FIXTURE_SYNC_HOURS = Math.max(4, Math.min(12, Number(process.env.API_FOOTBALL_FIXTURE_SYNC_HOURS || 6)));
 const LIVE_POLL_MINUTES = Math.max(10, Math.min(30, Number(process.env.API_FOOTBALL_LIVE_POLL_MINUTES || 15)));
+
+// API_FOOTBALL_FREE_PLAN_SQUAD_FALLBACK_V1
+const FREE_PLAN_REFERENCE_SEASON = Math.max(2022, Math.min(2024, Number(process.env.API_FOOTBALL_FREE_PLAN_REFERENCE_SEASON || 2024)));
+const TEAM_NAME_ALIASES: Record<string, string[]> = {
+  "afc bournemouth": ["bournemouth"],
+  "brighton and hove albion": ["brighton", "brighton hove albion"],
+  "leeds united": ["leeds"],
+  "manchester city": ["man city"],
+  "manchester united": ["man utd"],
+  "newcastle united": ["newcastle"],
+  "nottingham forest": ["nottm forest", "nott m forest"],
+  "tottenham hotspur": ["tottenham", "spurs"],
+  "west ham united": ["west ham"],
+  "wolverhampton wanderers": ["wolverhampton", "wolves"],
+};
 
 export type SyncJobType = "fixtures" | "live" | "completed_stats" | "standings" | "teams" | "players";
 
@@ -53,6 +69,99 @@ function rowsOf(result: any): any[] {
 function seasonNow() {
   const now = new Date();
   return now.getUTCMonth() >= 6 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+}
+
+function normalizeClubName(value: unknown) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(?:football club|fc)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function clubKeys(value: unknown) {
+  const normalized = normalizeClubName(value);
+  if (!normalized) return new Set<string>();
+  const keys = new Set<string>([normalized]);
+  for (const alias of TEAM_NAME_ALIASES[normalized] || []) keys.add(normalizeClubName(alias));
+  for (const [canonical, aliases] of Object.entries(TEAM_NAME_ALIASES)) {
+    if (aliases.some((alias) => normalizeClubName(alias) === normalized)) {
+      keys.add(canonical);
+      for (const alias of aliases) keys.add(normalizeClubName(alias));
+    }
+  }
+  return keys;
+}
+
+function sameClub(left: unknown, right: unknown) {
+  const leftKeys = clubKeys(left);
+  const rightKeys = clubKeys(right);
+  return [...leftKeys].some((key) => rightKeys.has(key));
+}
+
+function selectExactClub(rows: any[], requestedName: unknown) {
+  const matches = rows
+    .map((row: any) => row?.team || row)
+    .filter((team: any) => team?.id && sameClub(team?.name, requestedName));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function isFreePlanSeasonRestriction(error: unknown) {
+  const message = String((error as any)?.message || error || "").toLowerCase();
+  return message.includes("free plans do not have access to this season") || message.includes("try from 2022 to 2024");
+}
+
+async function discoverCurrentSquadTeams() {
+  const bootstrap = await fplApi.bootstrap();
+  const currentFplTeams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
+  const historicalPayload = await providerGet("teams", { league: LEAGUE_ID, season: FREE_PLAN_REFERENCE_SEASON });
+  const historicalRows = Array.isArray(historicalPayload?.response) ? historicalPayload.response : [];
+  const candidates = historicalRows.map((row: any) => row?.team || row).filter((team: any) => team?.id);
+  let calls = 1;
+
+  for (const team of candidates) await upsertTeam(team);
+
+  const resolved: any[] = [];
+  const unresolvedTeams: string[] = [];
+  const usedIds = new Set<number>();
+
+  for (const fplTeam of currentFplTeams) {
+    const requestedName = String(fplTeam?.name || fplTeam?.short_name || "").trim();
+    if (!requestedName) continue;
+
+    let matched = selectExactClub(candidates, requestedName);
+    if (!matched) {
+      const searchPayload = await providerGet("teams", { search: requestedName });
+      calls += 1;
+      const searchRows = Array.isArray(searchPayload?.response) ? searchPayload.response : [];
+      matched = selectExactClub(searchRows, requestedName);
+      if (matched) {
+        candidates.push(matched);
+        await upsertTeam(matched);
+      }
+    }
+
+    const teamId = Number(matched?.id || 0);
+    if (!teamId || usedIds.has(teamId)) {
+      unresolvedTeams.push(requestedName);
+      continue;
+    }
+    usedIds.add(teamId);
+    resolved.push({ team: matched, fplTeamName: requestedName });
+  }
+
+  return {
+    teamRows: resolved,
+    calls,
+    mode: "free-plan-reference-season-plus-team-search",
+    referenceSeason: FREE_PLAN_REFERENCE_SEASON,
+    fplTeams: currentFplTeams.length,
+    unresolvedTeams,
+  };
 }
 
 function utcDay() {
@@ -346,29 +455,51 @@ async function syncPlayers(): Promise<{ calls: number; records: number; details:
   if (recent) return { calls: 0, records: 0, details: { reason: "Current squad directory was refreshed within the last 18 hours" } };
 
   const budget = await getApiFootballBudget();
-  if (budget.remaining <= 30) return { calls: 0, records: 0, details: { reason: "Player directory sync requires a 30-call safety window" } };
+  if (budget.remaining <= 45) return { calls: 0, records: 0, details: { reason: "Player directory sync requires a 45-call safety window" } };
 
   const season = seasonNow();
-  const teamsPayload = await providerGet("teams", { league: LEAGUE_ID, season });
-  const teamRows = Array.isArray(teamsPayload?.response) ? teamsPayload.response : [];
-  let calls = 1;
+  let discovery: any;
+  try {
+    const teamsPayload = await providerGet("teams", { league: LEAGUE_ID, season });
+    const currentRows = Array.isArray(teamsPayload?.response) ? teamsPayload.response : [];
+    if (!currentRows.length) throw new Error("Current-season team lookup returned no teams");
+    discovery = { teamRows: currentRows, calls: 1, mode: "current-season-league", referenceSeason: season, fplTeams: currentRows.length, unresolvedTeams: [] };
+  } catch (error: any) {
+    if (!isFreePlanSeasonRestriction(error) && !String(error?.message || "").includes("returned no teams")) throw error;
+    discovery = await discoverCurrentSquadTeams();
+    discovery.calls += 1;
+    discovery.currentSeasonError = String(error?.message || error || "Current-season lookup unavailable");
+  }
+
+  const teamRows = Array.isArray(discovery?.teamRows) ? discovery.teamRows : [];
+  let calls = Number(discovery?.calls || 0);
   let records = 0;
   let teamsProcessed = 0;
+  const squadFailures: Array<{ team: string; message: string }> = [];
 
   for (const teamRow of teamRows) {
-    const team = teamRow?.team || {};
+    const team = teamRow?.team || teamRow || {};
     if (!team?.id) continue;
     const currentBudget = await getApiFootballBudget();
     if (currentBudget.remaining <= 10) break;
-    await upsertTeam(team);
-    const squadPayload = await providerGet("players/squads", { team: Number(team.id) });
-    calls += 1;
-    const response = Array.isArray(squadPayload?.response) ? squadPayload.response : [];
-    const squad = response.find((item: any) => Number(item?.team?.id || 0) === Number(team.id)) || response[0] || {};
-    const squadTeam = squad?.team || team;
-    const players = Array.isArray(squad?.players) ? squad.players : [];
-    records += await replaceApiFootballSquad(season, squadTeam, players);
-    teamsProcessed += 1;
+    try {
+      await upsertTeam(team);
+      const squadPayload = await providerGet("players/squads", { team: Number(team.id) });
+      calls += 1;
+      const response = Array.isArray(squadPayload?.response) ? squadPayload.response : [];
+      const squad = response.find((item: any) => Number(item?.team?.id || 0) === Number(team.id)) || response[0] || {};
+      const squadTeam = squad?.team || team;
+      const players = Array.isArray(squad?.players) ? squad.players : [];
+      if (!players.length) {
+        squadFailures.push({ team: String(team.name || team.id), message: "Squad endpoint returned no players" });
+        continue;
+      }
+      records += await replaceApiFootballSquad(season, squadTeam, players);
+      teamsProcessed += 1;
+    } catch (error: any) {
+      calls += 1;
+      squadFailures.push({ team: String(team.name || team.id), message: String(error?.message || error || "Squad sync failed") });
+    }
   }
 
   const photoCounts = rowsOf(await db.execute(sql`
@@ -376,7 +507,25 @@ async function syncPlayers(): Promise<{ calls: number; records: number; details:
     from app.api_football_players where season=${season} and active=true
   `))[0] || {};
   const imageProbe = await probeApiFootballPlayerImage(true);
-  return { calls, records, details: { season, teamsAvailable: teamRows.length, teamsProcessed, playersStored: Number(photoCounts.players || 0), photosStored: Number(photoCounts.photos || 0), photoCoveragePercent: Number(photoCounts.players || 0) ? Math.round((Number(photoCounts.photos || 0) / Number(photoCounts.players || 1)) * 100) : 0, imageProbe } };
+  return {
+    calls,
+    records,
+    details: {
+      season,
+      discoveryMode: discovery?.mode || "unknown",
+      referenceSeason: discovery?.referenceSeason || null,
+      currentSeasonError: discovery?.currentSeasonError || null,
+      teamsAvailable: teamRows.length,
+      fplTeams: Number(discovery?.fplTeams || teamRows.length),
+      unresolvedTeams: discovery?.unresolvedTeams || [],
+      teamsProcessed,
+      squadFailures,
+      playersStored: Number(photoCounts.players || 0),
+      photosStored: Number(photoCounts.photos || 0),
+      photoCoveragePercent: Number(photoCounts.players || 0) ? Math.round((Number(photoCounts.photos || 0) / Number(photoCounts.players || 1)) * 100) : 0,
+      imageProbe,
+    },
+  };
 }
 
 async function syncStandings(): Promise<{ calls: number; records: number; details: any }> {
