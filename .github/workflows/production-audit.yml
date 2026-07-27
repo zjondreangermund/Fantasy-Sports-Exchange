@@ -94,7 +94,7 @@ jobs:
       - name: Apply strict player identity and fixture repairs
         if: github.head_ref == 'agent/strict-player-identity-fixtures-repair'
         run: |
-          node scripts/apply-strict-player-identity-fixtures.mjs
+          node scripts/apply-strict-remaining.mjs
           if git diff --quiet; then
             echo "Strict player identity and fixture repairs already applied."
           else
