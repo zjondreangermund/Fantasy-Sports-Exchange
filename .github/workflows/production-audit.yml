@@ -91,6 +91,20 @@ jobs:
             git push origin HEAD:${{ github.head_ref }}
           fi
 
+      - name: Apply API-Football free-plan squad fallback
+        if: github.head_ref == 'agent/api-football-free-plan-squad-fallback'
+        run: |
+          node scripts/apply-api-football-free-plan-fallback.mjs
+          if git diff --quiet; then
+            echo "API-Football free-plan squad fallback already applied."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add server/services scripts
+            git commit -m "Support current player photos on API-Football free plan [skip-autofix]"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
       - name: Install locked dependencies
         run: npm ci
 
@@ -143,6 +157,7 @@ jobs:
             node scripts/verify-verified-player-profiles.mjs &&
             node scripts/verify-strict-player-identity-fixtures.mjs &&
             node scripts/verify-api-football-player-images.mjs &&
+            node scripts/verify-api-football-free-plan-fallback.mjs &&
             node scripts/verify-deposit-flows.mjs &&
             node scripts/verify-withdrawal-flows.mjs &&
             node scripts/verify-wallet-reconciliation.mjs &&
