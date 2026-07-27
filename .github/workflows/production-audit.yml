@@ -105,6 +105,20 @@ jobs:
             git push origin HEAD:${{ github.head_ref }}
           fi
 
+      - name: Apply complete current-squad photo sync
+        if: github.head_ref == 'agent/complete-current-squad-photos'
+        run: |
+          node scripts/apply-complete-current-squad-photos.mjs
+          if git diff --quiet; then
+            echo "Complete current-squad photo sync already applied."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add server/services scripts
+            git commit -m "Complete current Premier League squad photo sync [skip-autofix]"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
       - name: Install locked dependencies
         run: npm ci
 
@@ -158,6 +172,7 @@ jobs:
             node scripts/verify-strict-player-identity-fixtures.mjs &&
             node scripts/verify-api-football-player-images.mjs &&
             node scripts/verify-api-football-free-plan-fallback.mjs &&
+            node scripts/verify-complete-current-squad-photos.mjs &&
             node scripts/verify-deposit-flows.mjs &&
             node scripts/verify-withdrawal-flows.mjs &&
             node scripts/verify-wallet-reconciliation.mjs &&
