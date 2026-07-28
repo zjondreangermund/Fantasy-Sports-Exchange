@@ -1,17 +1,24 @@
+import {
+  CARD_SUPPLY_CAP_BY_RARITY,
+  MARKETPLACE_FLOOR_BY_RARITY,
+  RARITY_ORDER,
+  TOURNAMENT_ENTRY_BY_RARITY,
+} from "../../shared/card-economy.js";
+
 export const RARITY_PRESTIGE: Record<string, number> = {
   common: 1,
   rare: 3,
-  epic: 7,
-  unique: 15,
+  unique: 7,
+  epic: 15,
   legendary: 30,
 };
 
 export const ARENA_TOURNAMENT_PRICE_PRESETS = {
   common: [0, 10, 20],
   rare: [50, 75, 100],
-  epic: [150, 250, 300],
-  unique: [500, 750, 1000],
-  legendary: [1000, 2500, 5000],
+  unique: [100, 150, 200],
+  epic: [250, 300, 500],
+  legendary: [500, 1000, 2500],
 };
 
 export const ARENA_PACK_PRICE_PRESETS = [
@@ -25,10 +32,10 @@ export const ARENA_PACK_PRICE_PRESETS = [
 
 export const ARENA_OFFICIAL_TIERS = [
   { key: "community", name: "Community Cup", rarity: "common", entryFees: [0, 10, 20], prizeTheme: "Packs, badges, XP, small sponsored goods" },
-  { key: "bronze", name: "Bronze Cup", rarity: "rare", entryFees: [50, 75, 100], prizeTheme: "Games, gift cards, headsets, controllers" },
-  { key: "gold", name: "Gold Masters", rarity: "epic", entryFees: [150, 250, 300], prizeTheme: "PS5, Xbox, monitors, gaming chairs" },
-  { key: "diamond", name: "Diamond Invitational", rarity: "unique", entryFees: [500, 750, 1000], prizeTheme: "TVs, gaming PCs, phones, holidays" },
-  { key: "legendary", name: "Legendary Arena", rarity: "legendary", entryFees: [1000, 2500, 5000], prizeTheme: "VIP finals, grand prize electronics, vehicle/holiday campaigns" },
+  { key: "bronze", name: "Rare Cup", rarity: "rare", entryFees: [50, 75, 100], prizeTheme: "Games, gift cards, headsets, controllers" },
+  { key: "unique", name: "Unique Invitational", rarity: "unique", entryFees: [100, 150, 200], prizeTheme: "Premium electronics, vouchers and getaways" },
+  { key: "epic", name: "Epic Masters", rarity: "epic", entryFees: [250, 300, 500], prizeTheme: "High-value electronics, holidays and headline prizes" },
+  { key: "legendary", name: "Legendary Arena", rarity: "legendary", entryFees: [500, 1000, 2500], prizeTheme: "VIP finals and flagship grand-prize campaigns" },
 ];
 
 type RankedEntry = any & {
@@ -160,6 +167,10 @@ export function economyConfigPayload() {
     tournamentPricePresets: ARENA_TOURNAMENT_PRICE_PRESETS,
     packPricePresets: ARENA_PACK_PRICE_PRESETS,
     officialTiers: ARENA_OFFICIAL_TIERS,
+    rarityOrder: RARITY_ORDER,
+    rarityEntryFees: TOURNAMENT_ENTRY_BY_RARITY,
+    raritySupplyCaps: CARD_SUPPLY_CAP_BY_RARITY,
+    marketplaceFloors: MARKETPLACE_FLOOR_BY_RARITY,
     tiebreakRules: [
       "Fantasy points",
       "Captain points",
