@@ -33,20 +33,20 @@ const RARITY_PALETTE: Record<string, { glow: string; edge: string; slab: string;
     ink: "#020617",
   },
   rare: {
-    glow: "rgba(244,63,94,.66)",
-    edge: "linear-gradient(135deg,#fff1f2 0%,#fb7185 14%,#ffffff 32%,#7f1d1d 54%,#fecaca 78%,#fff1f2 100%)",
-    slab: "linear-gradient(145deg,#fff1f2 0%,#f43f5e 16%,#7f1d1d 38%,#fecaca 53%,#2b0606 77%,#fff1f2 100%)",
-    plate: "linear-gradient(145deg,#fecaca 0%,#ef4444 24%,#7f1d1d 62%,#fff1f2 100%)",
-    accent: "#fecaca",
-    ink: "#fff1f2",
-  },
-  epic: {
     glow: "rgba(59,130,246,.78)",
     edge: "linear-gradient(135deg,#eff6ff 0%,#60a5fa 14%,#ffffff 32%,#1d4ed8 54%,#bfdbfe 78%,#eff6ff 100%)",
     slab: "linear-gradient(145deg,#eff6ff 0%,#3b82f6 16%,#1d4ed8 38%,#dbeafe 53%,#172554 77%,#eff6ff 100%)",
     plate: "linear-gradient(145deg,#dbeafe 0%,#2563eb 25%,#172554 62%,#eff6ff 100%)",
     accent: "#bfdbfe",
     ink: "#eff6ff",
+  },
+  epic: {
+    glow: "rgba(244,63,94,.66)",
+    edge: "linear-gradient(135deg,#fff1f2 0%,#fb7185 14%,#ffffff 32%,#7f1d1d 54%,#fecaca 78%,#fff1f2 100%)",
+    slab: "linear-gradient(145deg,#fff1f2 0%,#f43f5e 16%,#7f1d1d 38%,#fecaca 53%,#2b0606 77%,#fff1f2 100%)",
+    plate: "linear-gradient(145deg,#fecaca 0%,#ef4444 24%,#7f1d1d 62%,#fff1f2 100%)",
+    accent: "#fecaca",
+    ink: "#fff1f2",
   },
   unique: {
     glow: "rgba(217,70,239,.94)",
@@ -100,6 +100,9 @@ export default function CollectionStableCard({ player, selected = false, onClick
   const ovr = numberStat(player.rating);
   const points = numberStat(player.totalPoints);
   const form = decimalStat(player.form);
+  const serial = numberStat(player.serial);
+  const maxSupply = numberStat(player.maxSupply);
+  const serialText = serial > 0 && maxSupply > 0 ? `${serial}/${maxSupply}` : "SERIAL PENDING";
   const scale = dim.width / SIZE.sm.width;
   const fallback = isFallbackImage(image);
   const rarityLabel = RARITY_NAME[rarity] || rarity.toUpperCase();
@@ -135,7 +138,7 @@ export default function CollectionStableCard({ player, selected = false, onClick
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(255,255,255,.16),transparent 36%,rgba(0,0,0,.34)), radial-gradient(circle at 50% 0%, rgba(255,255,255,.52), transparent 26%)" }} />
         </div>
 
-        <div style={{ position: "absolute", top: 13 * scale, left: 13 * scale, fontSize: 8 * scale, fontWeight: 950, lineHeight: 1.05, textShadow: "0 2px 5px rgba(0,0,0,.88)" }}>{player.serial || 1}/{player.maxSupply || 100}</div>
+        <div style={{ position: "absolute", top: 13 * scale, left: 13 * scale, fontSize: 8 * scale, fontWeight: 950, lineHeight: 1.05, textShadow: "0 2px 5px rgba(0,0,0,.88)" }}>{serialText}</div>
         <div style={{ position: "absolute", top: 13 * scale, right: 13 * scale, fontSize: 8 * scale, fontWeight: 950, textAlign: "right", lineHeight: 1.05, textShadow: "0 2px 5px rgba(0,0,0,.88)" }}>{String(team).slice(0, 3).toUpperCase()}</div>
 
         <div style={{ position: "absolute", left: "50%", top: 118 * scale, transform: "translateX(-50%)", borderRadius: 999, background: `linear-gradient(180deg, rgba(255,255,255,.26), rgba(0,0,0,.25)), ${palette.plate}`, border: "1px solid rgba(255,255,255,.48)", padding: `${3 * scale}px ${9 * scale}px`, fontSize: 7.5 * scale, fontWeight: 950, letterSpacing: ".14em", whiteSpace: "nowrap", color: palette.ink, textShadow: rarity === "common" ? "0 1px 1px rgba(255,255,255,.55)" : "0 2px 4px rgba(0,0,0,.65)", boxShadow: `0 0 18px ${palette.glow}, inset 0 1px 0 rgba(255,255,255,.35)` }}>{rarityLabel}</div>
