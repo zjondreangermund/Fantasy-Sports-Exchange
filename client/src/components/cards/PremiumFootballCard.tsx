@@ -65,7 +65,9 @@ function PremiumFootballCardBase({
   const team = player.team || player.club || "Fantasy Arena";
   const rating = Math.max(0, Math.round(Number(player.rating || player.form || playerPoints(player) || 0)));
   const price = Number(player.price || player.listedPrice || 0);
-  const serial = player.serial && player.maxSupply ? `${player.serial}/${player.maxSupply}` : player.maxSupply ? `1/${player.maxSupply}` : "1/100";
+  const serialNumber = Number(player.serial || 0);
+  const maxSupply = Number(player.maxSupply || 0);
+  const serial = serialNumber > 0 && maxSupply > 0 ? `${serialNumber}/${maxSupply}` : "SERIAL PENDING";
   const disabled = !interactive && !onClick;
 
   useEffect(() => {
