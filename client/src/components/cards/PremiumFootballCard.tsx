@@ -157,7 +157,7 @@ function PremiumFootballCardBase({
               onError={onImageError}
               loading="lazy"
               draggable={false}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top", transform: "scale(1.13)", filter: "saturate(1.18) contrast(1.1) brightness(.98)", transformOrigin: "center top" }}
+              style={{ position: "absolute", left: "5%", top: "6%", width: "90%", height: "86%", objectFit: "contain", objectPosition: "center top", filter: "saturate(1.18) contrast(1.1) brightness(.98)", transformOrigin: "center top" }}
             />
           ) : (
             <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "rgba(255,255,255,.22)", fontSize: font(scale, 56), fontWeight: 950 }}>
