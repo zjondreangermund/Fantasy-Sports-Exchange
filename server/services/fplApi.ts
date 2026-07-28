@@ -48,7 +48,8 @@ export const fplApi = {
     const fromCodeField = String(player?.code || "").replace(/[^0-9]/g, "");
     const id = fromPhotoField || fromCodeField;
     if (!id) return "/images/player-1.png";
-    return `https://resources.premierleague.com/premierleague/photos/players/${size}x${size}/p${id}.png`;
+    const dimensions = size === 110 ? "110x140" : "250x250";
+    return `https://resources.premierleague.com/premierleague/photos/players/${dimensions}/p${id}.png`;
   },
 
   async bootstrap() { return cached("bootstrap", CACHE_TTL.bootstrap, () => fetchJson<any>("/bootstrap-static/")); },
