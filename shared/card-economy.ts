@@ -1,6 +1,23 @@
 export type CardStatus = "active" | "legacy" | "uncovered_league";
-export type RarityTier = "common" | "rare" | "unique" | "legendary";
+export type RarityTier = "common" | "rare" | "unique" | "epic" | "legendary";
 export type ScarcityBand = "abundant" | "balanced" | "tight" | "critical";
+
+export const RARITY_ORDER: Record<RarityTier, number> = {
+  common: 1,
+  rare: 2,
+  unique: 3,
+  epic: 4,
+  legendary: 5,
+};
+
+// Maximum mint supply is enforced per player and per rarity by the database serial trigger.
+export const CARD_SUPPLY_CAP_BY_RARITY: Record<RarityTier, number> = {
+  common: 1000,
+  rare: 100,
+  unique: 10,
+  epic: 3,
+  legendary: 1,
+};
 
 export const MARKETPLACE_FEE_RATE = 0.08;
 export const TOURNAMENT_PLATFORM_FEE_RATE = 0.2;
@@ -13,15 +30,18 @@ export const DEPOSIT_FEE_POLICY_TEXT = `Deposits under N$${DEPOSIT_FEE_FREE_THRE
 export const WITHDRAWAL_FEE_POLICY_TEXT = `Withdrawals are charged ${(WITHDRAWAL_FEE_RATE * 100).toFixed(1)}% with a minimum withdrawal amount of N$${MIN_WITHDRAWAL_AMOUNT.toFixed(0)}.`;
 
 export const TOURNAMENT_ENTRY_BY_RARITY: Record<RarityTier, number> = {
+  common: 10,
+  rare: 50,
+  unique: 100,
+  epic: 250,
+  legendary: 500,
+};
+
+export const MARKETPLACE_FLOOR_BY_RARITY: Record<RarityTier, number> = {
   common: 0,
   rare: 20,
   unique: 50,
-  legendary: 100,
-};
-
-export const MARKETPLACE_FLOOR_BY_RARITY: Partial<Record<RarityTier, number>> = {
-  rare: 100,
-  unique: 250,
+  epic: 250,
   legendary: 500,
 };
 
@@ -30,15 +50,21 @@ const RARITY_WEIGHTS: Record<RarityTier, number> = {
   common: 1,
   rare: 1.6,
   unique: 2.4,
+  epic: 3.2,
   legendary: 4.1,
 };
 
 export function normalizeRarityTier(rarity: string): RarityTier {
   const value = String(rarity || "common").toLowerCase();
   if (value === "legendary") return "legendary";
-  if (value === "unique" || value === "epic") return "unique";
+  if (value === "epic") return "epic";
+  if (value === "unique") return "unique";
   if (value === "rare") return "rare";
   return "common";
+}
+
+export function getCardSupplyCap(rarity: string): number {
+  return CARD_SUPPLY_CAP_BY_RARITY[normalizeRarityTier(rarity)];
 }
 
 export function getMarketplaceFloorPrice(rarity: string): number {
