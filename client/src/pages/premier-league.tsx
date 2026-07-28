@@ -274,10 +274,10 @@ export default function PremierLeaguePage() {
               ) : standings && standings.length > 0 ? (
                 <Card className="overflow-hidden bg-background/80 backdrop-blur-sm border-border/50">
                   <div className="overflow-x-auto">
-                    <Table>
+                    <Table className="min-w-[44rem] sm:min-w-full">
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-10">#</TableHead>
+                          <TableHead className="w-12 min-w-12 text-center whitespace-nowrap">#</TableHead>
                           <TableHead className="min-w-[10rem] sm:min-w-0">Team</TableHead>
                           <TableHead className="text-center">P</TableHead>
                           <TableHead className="text-center">W</TableHead>
@@ -297,7 +297,7 @@ export default function PremierLeaguePage() {
                             (team.rank ?? team.position) === 5 ? "border-l-2 border-l-orange-500" :
                             (team.rank ?? team.position) >= 18 ? "border-l-2 border-l-red-500" : ""
                           }>
-                            <TableCell className="font-medium text-muted-foreground">{team.rank ?? team.position}</TableCell>
+                            <TableCell className="w-12 min-w-12 text-center font-medium text-muted-foreground whitespace-nowrap">{team.rank ?? team.position}</TableCell>
                             <TableCell className="min-w-[10rem] sm:min-w-0">
                               <div className="flex items-center gap-2">
                                 {team.teamLogo && (
@@ -433,35 +433,47 @@ export default function PremierLeaguePage() {
               ) : injuries && injuries.length > 0 ? (
                 <Card className="overflow-hidden bg-background/80 backdrop-blur-sm border-border/50">
                   <div className="overflow-x-auto">
-                    <Table>
+                    <Table className="min-w-[42rem] sm:min-w-full">
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Player</TableHead>
-                          <TableHead>Team</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Reason</TableHead>
+                          <TableHead className="min-w-[11rem]">Player</TableHead>
+                          <TableHead className="min-w-[9rem]">Team</TableHead>
+                          <TableHead className="min-w-[7rem]">Type</TableHead>
+                          <TableHead className="min-w-[14rem]">Reason</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {injuries.map((inj) => (
                           <TableRow key={inj.id || inj.playerId}>
-                            <TableCell>
+                            <TableCell className="min-w-[11rem]">
                               <div className="flex items-center gap-2">
-                                {inj.playerPhoto && (
-                                  <img src={inj.playerPhoto} alt="" className="w-8 h-8 rounded-full object-cover" loading="lazy" decoding="async" />
-                                )}
-                                <span className="font-medium text-sm">{inj.playerName}</span>
+                                <img
+                                  src={inj.playerPhoto || inj.imageUrl || "/images/player-1.png"}
+                                  alt={inj.playerName || inj.name || "Player"}
+                                  className="w-8 h-8 shrink-0 rounded-full object-cover"
+                                  loading="lazy"
+                                  decoding="async"
+                                  onError={(event) => {
+                                    const image = event.currentTarget;
+                                    if (!image.src.endsWith("/images/player-1.png")) {
+                                      image.src = "/images/player-1.png";
+                                    }
+                                  }}
+                                />
+                                <span className="font-medium text-sm whitespace-nowrap sm:whitespace-normal">
+                                  {inj.playerName || inj.name || "Unknown Player"}
+                                </span>
                               </div>
                             </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1">
-                                <span className="text-sm">{"Team"}</span>
-                              </div>
+                            <TableCell className="min-w-[9rem]">
+                              <span className="text-sm whitespace-nowrap sm:whitespace-normal">
+                                {inj.teamName || inj.team || "Unknown Team"}
+                              </span>
                             </TableCell>
-                            <TableCell>
-                              <Badge variant="destructive" className="text-xs">{inj.status || "Unknown"}</Badge>
+                            <TableCell className="min-w-[7rem]">
+                              <Badge variant="destructive" className="text-xs whitespace-nowrap">{inj.status || "Unknown"}</Badge>
                             </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">{inj.expectedReturn || "N/A"}</TableCell>
+                            <TableCell className="min-w-[14rem] text-sm text-muted-foreground">{inj.expectedReturn || "N/A"}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
