@@ -146,8 +146,8 @@ export function toFantasyCardData(
     imageCandidates: candidates,
     nationality: normalizeNationality(player),
     rarity: normalizeRarity(card.rarity),
-    serial: Number(card.serialNumber || 1),
-    maxSupply: Number(card.maxSupply || 100),
+    serial: Number(card.serialNumber || 0),
+    maxSupply: Number(card.maxSupply || 0),
     level: Number(card.level || 1),
     xp: Number(card.xp || 0),
     xpMax: Number(
