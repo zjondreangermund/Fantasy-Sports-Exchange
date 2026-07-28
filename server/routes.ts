@@ -18,6 +18,7 @@ import { registerRetentionRoutes } from "./routes/retention.routes.js";
 import { registerTournamentCreatorRoutes } from "./routes/tournamentCreator.routes.js";
 import { registerUserTournamentRoutes } from "./routes/userTournaments.routes.js";
 import { buildRealFplPointFeed } from "./services/liveFplFeed.js";
+import { enrichPlayerCards } from "./services/playerCardEnrichment.js";
 import { economyConfigPayload, rankCompetitionEntries } from "./services/tournamentRules.js";
 import { PRIZE_CATALOG, RARITY_MARGIN_MULTIPLIERS, getActivePrizeForEntries, getEntryFeeForRarity } from "./services/prizeEngine.js";
 
@@ -143,7 +144,7 @@ async function loadCompetitions(): Promise<any[]> {
   `);
   return rowsOf(result);
 }
-function allowedTier(raw: unknown) { const tier = String(raw || "common").toLowerCase(); return ["common", "rare", "epic", "unique", "legendary"].includes(tier) ? tier : "common"; }
+function allowedTier(raw: unknown) { const tier = String(raw || "common").toLowerCase(); return ["common", "rare", "unique", "epic", "legendary"].includes(tier) ? tier : "common"; }
 function allowedStatus(raw: unknown) { const status = String(raw || "open").toLowerCase(); return ["open", "upcoming", "closed", "active"].includes(status) ? status : "open"; }
 function allowedPrizeType(raw: unknown) { const type = String(raw || "goods").toLowerCase(); return ["cash_pool", "goods", "goods_plus_cash", "packs", "sponsor_prize"].includes(type) ? type : "goods"; }
 
@@ -242,7 +243,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/user", requireAuth, async (req: any, res) => { const user = await storage.getUser(req.authUserId); if (!user) return res.status(404).json({ message: "User not found" }); return res.json(user); });
   app.get("/api/wallet", requireAuth, async (req: any, res) => { let wallet = await storage.getWallet(req.authUserId); if (!wallet) wallet = await storage.createWallet({ userId: req.authUserId, balance: 0, lockedBalance: 0 } as any); return res.json(wallet); });
-  app.get("/api/lineup", requireAuth, async (req: any, res) => { const lineup = await storage.getLineup(req.authUserId); const cards = await Promise.all((Array.isArray(lineup?.cardIds) ? lineup!.cardIds : []).map((id: number) => storage.getPlayerCardWithPlayer(Number(id), req.authUserId))); return res.json({ lineup: lineup || { cardIds: [] }, cards: cards.filter(Boolean) }); });
+  app.get("/api/lineup", requireAuth, async (req: any, res) => {
+    try {
+      const lineup = await storage.getLineup(req.authUserId);
+      const cards = await Promise.all(
+        (Array.isArray(lineup?.cardIds) ? lineup!.cardIds : []).map((id: number) =>
+          storage.getPlayerCardWithPlayer(Number(id), req.authUserId),
+        ),
+      );
+      const enrichedCards = await enrichPlayerCards(cards.filter(Boolean));
+      return res.json({ lineup: lineup || { cardIds: [] }, cards: enrichedCards });
+    } catch (error: any) {
+      console.error("Failed to fetch enriched lineup:", error);
+      return res.status(500).json({ message: error?.message || "Failed to fetch lineup" });
+    }
+  });
   app.post("/api/lineup", requireAuth, async (req: any, res) => { const ids = Array.isArray(req.body?.cardIds) ? req.body.cardIds.map(Number).filter((id: number) => Number.isFinite(id)) : []; if (ids.length !== 5) return res.status(400).json({ message: "Exactly 5 cards required" }); const captainId = Number(req.body?.captainId || ids[0]); return res.json(await storage.createOrUpdateLineup(req.authUserId, ids, captainId)); });
 
   app.get("/api/competitions", async (req, res) => {
