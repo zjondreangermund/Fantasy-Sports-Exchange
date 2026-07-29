@@ -41,26 +41,36 @@ export function registerPrizeVaultRoutes(app: Express) {
         order by c.game_week asc, c.id asc
       `);
 
-      const activeByRarity = new Map<string, any>();
-      for (const row of rowsOf(result)) {
-        const rarity = String(row.rarity || "common").toLowerCase();
-        if (!RARITIES.includes(rarity as (typeof RARITIES)[number])) continue;
-
+      const activeRows = rowsOf(result).filter((row) => {
         const gameWeek = Number(row.gameWeek || 0);
-        if (!Number.isFinite(gameWeek) || gameWeek <= 0) continue;
+        const rarity = String(row.rarity || "common").toLowerCase();
+        return Number.isFinite(gameWeek)
+          && gameWeek > 0
+          && RARITIES.includes(rarity as (typeof RARITIES)[number]);
+      });
 
+      // Competitions defines the current gameweek as the earliest open/active
+      // gameweek. Prize Vault must use the same definition. Selecting the latest
+      // open gameweek caused future zero-entry tournaments to hide live entries.
+      const currentGameWeek = activeRows.length
+        ? Math.min(...activeRows.map((row) => Number(row.gameWeek)))
+        : 0;
+
+      const activeByRarity = new Map<string, any>();
+      for (const row of activeRows) {
+        const gameWeek = Number(row.gameWeek);
+        if (gameWeek !== currentGameWeek) continue;
+
+        const rarity = String(row.rarity || "common").toLowerCase();
         const entryCount = Math.max(0, Number(row.entryCount || 0));
         const previous = activeByRarity.get(rarity);
-        const previousGameWeek = Number(previous?.gameWeek || 0);
 
-        if (!previous || gameWeek > previousGameWeek) {
-          activeByRarity.set(rarity, { ...row, rarity, gameWeek, entryCount });
-        } else if (gameWeek === previousGameWeek) {
-          activeByRarity.set(rarity, {
-            ...previous,
-            entryCount: Number(previous.entryCount || 0) + entryCount,
-          });
-        }
+        activeByRarity.set(rarity, {
+          ...(previous || row),
+          rarity,
+          gameWeek: currentGameWeek,
+          entryCount: Number(previous?.entryCount || 0) + entryCount,
+        });
       }
 
       const ladders: Record<string, any> = {};
@@ -110,7 +120,7 @@ export function registerPrizeVaultRoutes(app: Express) {
         ladders[rarity] = {
           rarity,
           season: SEASON_KEY,
-          currentGameWeek: Number(source?.gameWeek || 0),
+          currentGameWeek,
           currentEntries,
           entryFee: RARITY_ENTRY_FEES[rarity],
           marginMultiplier: RARITY_MARGIN_MULTIPLIERS[rarity],
@@ -127,7 +137,7 @@ export function registerPrizeVaultRoutes(app: Express) {
         summary[rarity] = {
           unlocked: unlockedCount,
           total: ladder.length,
-          currentGameWeek: Number(source?.gameWeek || 0),
+          currentGameWeek,
           currentEntries,
           targetEntries: progressTarget,
           progressPercentage: percentage(currentEntries, progressTarget),
@@ -145,6 +155,7 @@ export function registerPrizeVaultRoutes(app: Express) {
       return res.json({
         season: SEASON_KEY,
         mode: "rarity_ladder_current_gameweek",
+        currentGameWeek,
         ladders,
         items,
         summary,
