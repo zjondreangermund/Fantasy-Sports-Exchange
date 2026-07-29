@@ -1,0 +1,9 @@
+/* Keep verified player portraits fully visible inside the unified card artwork. */
+[data-card-engine="premium-football-card"] img {
+  left: 10% !important;
+  top: 9% !important;
+  width: 80% !important;
+  height: 76% !important;
+  object-fit: contain !important;
+  object-position: center top !important;
+}
