@@ -14,6 +14,7 @@ import FloatingSupportWidget from "./components/FloatingSupportWidget";
 import FloatingEventNotifications from "./components/FloatingEventNotifications";
 import LivePulseDock from "./components/LivePulseDock";
 import MatchdayQuickDock from "./components/MatchdayQuickDock";
+import MarketplaceFloorNotice from "./components/MarketplaceFloorNotice";
 import MobileNavDock from "./components/MobileNavDock";
 import SiteFooter from "./components/SiteFooter";
 import PageScene, { routeToPageSceneVariant } from "./components/PageScene";
@@ -123,6 +124,7 @@ function AuthenticatedApp() {
   const [location] = useLocation();
   const isPlayRoute = location.startsWith("/competitions") || location.startsWith("/my-entries") || location.startsWith("/prize-vault");
   const isInfoRoute = publicInfoPaths.includes(location);
+  const showMarketplaceFloors = location.startsWith("/collection") || location.startsWith("/marketplace");
   const style = { "--sidebar-width": "16rem", "--sidebar-width-icon": "3rem" };
   const { data: user } = useQuery<{ managerTeamName?: string }>({ queryKey: ["/api/user"] });
   const teamName = user?.managerTeamName || "Your Stadium";
@@ -149,6 +151,7 @@ function AuthenticatedApp() {
             <ThemeToggle />
           </header>
           {!isInfoRoute && <LivePulseDock />}
+          {showMarketplaceFloors && <MarketplaceFloorNotice />}
           <main className={`app-scroll-root relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto ${isPlayRoute ? "play-route-scroll" : ""}`} data-app-scroll-root>
             <div
               className="app-page-content min-w-0 flex-none"
