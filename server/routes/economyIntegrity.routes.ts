@@ -178,6 +178,11 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         return res.status(400).json({ message: "Captain must be one of the five selected cards" });
       }
 
+      // A JavaScript array interpolated directly by Drizzle becomes a SQL record,
+      // which PostgreSQL cannot cast to integer[]. JSONB expansion produces a
+      // parameterized integer set without unsafe string interpolation.
+      const cardIdsJson = JSON.stringify(cardIds);
+
       const preview = rowsOf(await db.execute(sql`
         select id, game_week as "gameWeek", start_date as "startDate"
         from app.competitions
@@ -202,9 +207,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         if (Date.now() >= entryDeadline.getTime()) throw new Error("Gameweek entries are closed");
 
         await tx.execute(sql`
-          select pg_advisory_xact_lock(87421, card_id)
-          from unnest(${cardIds}::int[]) as card_id
-          order by card_id
+          select pg_advisory_xact_lock(87421, selected.card_id)
+          from (
+            select value::int as card_id
+            from jsonb_array_elements_text(${cardIdsJson}::jsonb)
+          ) selected
+          order by selected.card_id
         `);
 
         const cards = rowsOf(await tx.execute(sql`
@@ -213,7 +221,10 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             p.position::text as position, p.league as league
           from app.player_cards pc
           join app.players p on p.id = pc.player_id
-          where pc.id = any(${cardIds}::int[])
+          where pc.id in (
+            select value::int
+            from jsonb_array_elements_text(${cardIdsJson}::jsonb)
+          )
           for update of pc
         `));
         const cardById = new Map(cards.map((card) => [Number(card.id), card]));
@@ -248,7 +259,10 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             and exists (
               select 1
               from jsonb_array_elements_text(coalesce(ce.lineup_card_ids, '[]'::jsonb)) as used(card_id)
-              where used.card_id::int = any(${cardIds}::int[])
+              where used.card_id::int in (
+                select value::int
+                from jsonb_array_elements_text(${cardIdsJson}::jsonb)
+              )
             )
           limit 1
           for update
@@ -268,7 +282,10 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         const lockedCard = rowsOf(await tx.execute(sql`
           select card_id as "cardId"
           from app.card_locks
-          where card_id = any(${cardIds}::int[])
+          where card_id in (
+            select value::int
+            from jsonb_array_elements_text(${cardIdsJson}::jsonb)
+          )
             and (expires_at is null or expires_at > now())
           limit 1
         `))[0];
@@ -296,14 +313,17 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           insert into app.competition_entries
             (competition_id, user_id, entry_fee_paid, lineup_card_ids, captain_id, total_score, joined_at)
           values
-            (${competitionId}, ${userId}, ${entryFee}, ${JSON.stringify(cardIds)}::jsonb, ${captainId}, 0, now())
+            (${competitionId}, ${userId}, ${entryFee}, ${cardIdsJson}::jsonb, ${captainId}, 0, now())
           returning *
         `))[0];
 
         await tx.execute(sql`
           insert into app.card_locks (card_id, user_id, reason, ref_id, created_at)
-          select card_id, ${userId}, 'competition', ${String(competitionId)}, now()
-          from unnest(${cardIds}::int[]) as card_id
+          select selected.card_id, ${userId}, 'competition', ${String(competitionId)}, now()
+          from (
+            select value::int as card_id
+            from jsonb_array_elements_text(${cardIdsJson}::jsonb)
+          ) selected
         `);
 
         return createdEntry;
