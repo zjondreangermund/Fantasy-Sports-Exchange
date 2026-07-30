@@ -18,6 +18,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import pgSession from "connect-pg-simple";
 import { ensureFplPlayerColumns, syncFplPremierLeaguePlayers } from "./services/fplPlayerSync.js";
 import { ensureApiFootballSyncSchema, startApiFootballSyncScheduler } from "./services/apiFootballSync.js";
+import { cleanPlayerPortrait } from "./services/playerPortraitProcessing.js";
 import { appUrl, authStartupWarnings, getSessionSecret, googleAuthEnabled, googleClientId, googleClientSecret } from "./auth-config.js";
 
 const app = express();
@@ -110,12 +111,13 @@ app.get("/api/player-image/resolve", async (req, res) => {
   if (!name || name.length < 2) return res.status(404).json({ message: "Missing player name" });
   const cacheKey = `${normalizeSearch(name)}|${normalizeSearch(team)}`; const cached = playerImageCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) { if (cached.url) return res.redirect(302, cached.url); return res.status(404).json({ message: "No exact official player image link found" }); }
-  try { const fplImage = await resolveFplPlayerImage(name, team); if (fplImage) { const proxied = `/api/image-proxy?url=${encodeURIComponent(fplImage)}`; playerImageCache.set(cacheKey, { expiresAt: Date.now() + 12 * 60 * 60 * 1000, url: proxied }); res.setHeader("Cache-Control", "public, max-age=43200"); return res.redirect(302, proxied); } } catch (error) { console.warn("FPL player image resolve failed:", error); }
+  try { const fplImage = await resolveFplPlayerImage(name, team); if (fplImage) { const proxied = `/api/image-proxy?clean=1&url=${encodeURIComponent(fplImage)}`; playerImageCache.set(cacheKey, { expiresAt: Date.now() + 12 * 60 * 60 * 1000, url: proxied }); res.setHeader("Cache-Control", "public, max-age=43200"); return res.redirect(302, proxied); } } catch (error) { console.warn("FPL player image resolve failed:", error); }
   playerImageCache.set(cacheKey, { expiresAt: Date.now() + 60 * 60 * 1000, url: null }); return res.status(404).json({ message: "No exact official player image link found" });
 });
 
 app.get("/api/image-proxy", async (req, res) => {
   const raw = String(req.query.url || "");
+  const clean = String(req.query.clean || "") === "1";
   if (!raw) return res.redirect(302, "/players/fallback.svg");
   let target: URL;
   try { target = new URL(raw); } catch { return res.redirect(302, "/players/fallback.svg"); }
@@ -137,15 +139,27 @@ app.get("/api/image-proxy", async (req, res) => {
       const candidate = new URL(url);
       const headers: Record<string, string> = { "User-Agent": "FantasyArena/1.0", Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8" };
       if (candidate.hostname === "resources.premierleague.com") headers.Referer = "https://www.premierleague.com/";
-      const r = await fetch(url, { method: "GET", redirect: "follow", signal: controller.signal, headers }).finally(() => clearTimeout(timeout));
-      const ct = String(r.headers.get("content-type") || "");
-      if (r.ok && ct.startsWith("image/")) {
-        res.setHeader("Content-Type", ct);
+      const response = await fetch(url, { method: "GET", redirect: "follow", signal: controller.signal, headers }).finally(() => clearTimeout(timeout));
+      const contentType = String(response.headers.get("content-type") || "");
+      if (response.ok && contentType.startsWith("image/")) {
+        const original = Buffer.from(await response.arrayBuffer());
+        if (clean) {
+          try {
+            const cleaned = await cleanPlayerPortrait(original);
+            res.setHeader("Content-Type", "image/png");
+            res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+            res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+            return res.send(cleaned);
+          } catch (error: any) {
+            console.warn("player portrait cleanup failed; serving original image", url, error?.message || error);
+          }
+        }
+        res.setHeader("Content-Type", contentType);
         res.setHeader("Cache-Control", "public, max-age=86400");
         res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-        return res.send(Buffer.from(await r.arrayBuffer()));
+        return res.send(original);
       }
-    } catch (e: any) { console.warn("image-proxy candidate failed", url, e?.message || e); }
+    } catch (error: any) { console.warn("image-proxy candidate failed", url, error?.message || error); }
   }
 
   res.setHeader("Cache-Control", "public, max-age=300");
