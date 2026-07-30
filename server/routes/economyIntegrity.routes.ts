@@ -6,6 +6,8 @@ import { fplApi } from "../services/fplApi.js";
 import { ScoreUpdateService } from "../services/scoreUpdater.js";
 import { rankCompetitionEntries } from "../services/tournamentRules.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
+import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
+import { TOURNAMENT_REQUIRED_POSITIONS, validateTournamentRarityLineup } from "../../shared/game-rules.js";
 import {
   getWalletPostingIntegrityReport,
   postWalletAmountExactlyOnce,
@@ -17,7 +19,6 @@ interface RegisterEconomyIntegrityRoutesDeps {
 }
 
 const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
-const REQUIRED_LINEUP_POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
 const PREMIER_LEAGUE_KEYS = new Set(["premierleague", "englishpremierleague", "epl"]);
 let cardLockGuardPromise: Promise<void> | null = null;
 let prizeAwardSchemaPromise: Promise<void> | null = null;
@@ -178,9 +179,6 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         return res.status(400).json({ message: "Captain must be one of the five selected cards" });
       }
 
-      // A JavaScript array interpolated directly by Drizzle becomes a SQL record,
-      // which PostgreSQL cannot cast to integer[]. JSONB expansion produces a
-      // parameterized integer set without unsafe string interpolation.
       const cardIdsJson = JSON.stringify(cardIds);
 
       const preview = rowsOf(await db.execute(sql`
@@ -242,14 +240,13 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         if (cards.some((card) => !isPremierLeague(card.league))) {
           throw new Error("Premier League tournaments only accept Premier League player cards.");
         }
-        for (let index = 0; index < REQUIRED_LINEUP_POSITIONS.length; index += 1) {
-          if (String(orderedCards[index]?.position || "").toUpperCase() !== REQUIRED_LINEUP_POSITIONS[index]) {
+        for (let index = 0; index < TOURNAMENT_REQUIRED_POSITIONS.length; index += 1) {
+          if (String(orderedCards[index]?.position || "").toUpperCase() !== TOURNAMENT_REQUIRED_POSITIONS[index]) {
             throw new Error("Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player.");
           }
         }
-        if (cards.some((card) => String(card.rarity).toLowerCase() !== String(competition.tier).toLowerCase())) {
-          throw new Error(`${competition.tier} tournaments only accept ${competition.tier} cards.`);
-        }
+        const rarityValidation = validateTournamentRarityLineup(cards.map((card) => card.rarity), competition.tier);
+        if (!rarityValidation.valid) throw new Error(rarityValidation.message);
 
         const overlappingEntry = rowsOf(await tx.execute(sql`
           select ce.id
@@ -348,7 +345,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         "Unable to verify the Premier League entry deadline",
       ];
       const status = message === "Tournament not found" ? 404 :
-        validationMessages.includes(message) || message.includes("tournaments only accept") ? 400 : 500;
+        validationMessages.includes(message) || message.includes("tournaments require") || message.includes("tournaments may only use") ? 400 : 500;
       if (status === 500) console.error("Failed to join competition atomically:", error);
       return res.status(status).json({ message });
     }
@@ -369,6 +366,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
     try {
       await ensureCardLockGuard();
       await ensurePrizeAwardSchema();
+      await ensureNotificationsSchema();
       const adminId = String(req.authUserId || "");
       if (!(await isAdminUser(adminId))) return res.status(403).json({ message: "Admin access required" });
       const competitionId = Number(req.params.id);
@@ -525,6 +523,13 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
                 payout_completed_at = coalesce(payout_completed_at, now())
             where id = ${entryId} and competition_id = ${competitionId}
           `);
+          await createNotificationOnce(tx, {
+            userId: winnerId,
+            type: index === 0 ? "win" : "runner_up",
+            title: `Congratulations — #${index + 1} in ${competition.name}`,
+            message: `Congratulations from the Fantasy Arena Team! You finished #${index + 1} in ${competition.name} with ${toMoney(rankedEntry.totalScore).toFixed(1)} points. N$${payout.toFixed(2)} has been credited to your Fantasy Arena wallet.`,
+            dedupeKey: `competition:${competitionId}:entry:${entryId}:cash-congratulations`,
+          });
         }
 
         let awardRecord: any = null;
@@ -553,6 +558,15 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           if (!awardRecord || String(awardRecord.prizeKey) !== String(prizeAward.key || "prize") || toMoney(awardRecord.prizeValue) !== toMoney(prizeAward.value || 0)) {
             throw new Error("Prize Vault award state no longer matches the unlocked prize");
           }
+
+          const valuedAt = toMoney(awardRecord.prizeValue) > 0 ? `, valued at N$${toMoney(awardRecord.prizeValue).toFixed(2)}` : "";
+          await createNotificationOnce(tx, {
+            userId: winnerUserId,
+            type: "win",
+            title: `Congratulations — you won ${awardRecord.prizeTitle}`,
+            message: `Congratulations from the Fantasy Arena Team! You won ${competition.name} with ${toMoney(winner.totalScore).toFixed(1)} points and earned ${awardRecord.prizeTitle}${valuedAt}. Next steps: open My Teams & Prizes and start the prize claim; confirm your contact and delivery details; complete any required identity and age verification; then wait for Fantasy Arena to confirm prize availability and fulfilment. If the advertised prize is unavailable, an equivalent prize or approved equivalent value may be offered, subject to availability.`,
+            dedupeKey: `competition:${competitionId}:entry:${winnerEntryId}:prize-congratulations`,
+          });
         }
 
         await tx.execute(sql`
