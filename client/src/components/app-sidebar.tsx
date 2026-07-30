@@ -5,20 +5,21 @@ import { useQuery } from "@tanstack/react-query";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, SidebarHeader, useSidebar } from "./ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
+import UnreadNotificationDot from "./UnreadNotificationDot";
 import { LayoutDashboard, ShoppingCart, Wallet, Trophy, Activity, LogOut, Shield, Swords, UserCircle, Gift, Beaker, FastForward, Wifi, BookOpenCheck, FileText, Mail, CircleHelp, ListChecks } from "lucide-react";
 
-type NavItem = { title: string; href: string; icon: typeof LayoutDashboard; section: "Main" | "Account" | "Rules & Support" };
+type NavItem = { title: string; href: string; icon: typeof LayoutDashboard; section: "Main" | "Account" | "Rules & Support"; showUnread?: boolean };
 
 const menuItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard, section: "Main" },
   { title: "Play", href: "/competitions", icon: Trophy, section: "Main" },
-  { title: "My Teams & Prizes", href: "/my-entries", icon: ListChecks, section: "Main" },
+  { title: "My Teams & Prizes", href: "/my-entries", icon: ListChecks, section: "Main", showUnread: true },
   { title: "Prize Vault", href: "/prize-vault", icon: Gift, section: "Main" },
   { title: "Collection", href: "/collection", icon: Swords, section: "Main" },
   { title: "Marketplace", href: "/marketplace", icon: ShoppingCart, section: "Main" },
   { title: "Leagues", href: "/premier-league", icon: Activity, section: "Main" },
   { title: "Wallet", href: "/wallet", icon: Wallet, section: "Account" },
-  { title: "Profile", href: "/account", icon: UserCircle, section: "Account" },
+  { title: "Profile", href: "/account", icon: UserCircle, section: "Account", showUnread: true },
   { title: "Game Rules", href: "/game-rules", icon: BookOpenCheck, section: "Rules & Support" },
   { title: "Terms & Conditions", href: "/terms-and-conditions", icon: FileText, section: "Rules & Support" },
   { title: "Help Centre", href: "/help", icon: CircleHelp, section: "Rules & Support" },
@@ -54,7 +55,7 @@ export function AppSidebar() {
           if (!items.length) return null;
           return <SidebarGroup key={section}><p className="px-3 pb-2 pt-3 text-[10px] font-black uppercase tracking-[0.22em] text-slate-600">{section}</p><SidebarGroupContent><SidebarMenu className="space-y-1.5">{items.map((item) => {
             const active = isActivePath(location, item.href);
-            return <SidebarMenuItem key={item.title}><SidebarMenuButton asChild isActive={active}><Link href={item.href} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`} onClick={closeMobileDrawer} className={["group flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm font-semibold transition-all", active ? "border-cyan-300/35 bg-cyan-400/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08),0_0_24px_rgba(34,211,238,.08)]" : "border-transparent text-slate-400 hover:border-slate-700/80 hover:bg-slate-900/75 hover:text-slate-100"].join(" ")}><item.icon className={active ? "h-4 w-4 text-cyan-300" : "h-4 w-4 text-slate-500 group-hover:text-cyan-200"} /><span>{item.title}</span></Link></SidebarMenuButton></SidebarMenuItem>;
+            return <SidebarMenuItem key={item.title}><SidebarMenuButton asChild isActive={active}><Link href={item.href} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`} onClick={closeMobileDrawer} className={["group flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm font-semibold transition-all", active ? "border-cyan-300/35 bg-cyan-400/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.08),0_0_24px_rgba(34,211,238,.08)]" : "border-transparent text-slate-400 hover:border-slate-700/80 hover:bg-slate-900/75 hover:text-slate-100"].join(" ")}><item.icon className={active ? "h-4 w-4 text-cyan-300" : "h-4 w-4 text-slate-500 group-hover:text-cyan-200"} /><span className="min-w-0 flex-1 truncate">{item.title}</span>{item.showUnread ? <UnreadNotificationDot /> : null}</Link></SidebarMenuButton></SidebarMenuItem>;
           })}</SidebarMenu></SidebarGroupContent></SidebarGroup>;
         })}
       </SidebarContent>
