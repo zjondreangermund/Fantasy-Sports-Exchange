@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
 import { Gem, Home, ShoppingCart, Trophy, UserCircle } from "lucide-react";
 import { Link } from "wouter";
+import UnreadNotificationDot from "./UnreadNotificationDot";
 
 type MobileNavItem = {
   title: string;
@@ -8,6 +9,7 @@ type MobileNavItem = {
   icon: typeof Home;
   accent: string;
   glow: string;
+  showUnread?: boolean;
 };
 
 const items: MobileNavItem[] = [
@@ -15,7 +17,7 @@ const items: MobileNavItem[] = [
   { title: "Play", href: "/competitions", icon: Trophy, accent: "from-amber-200 via-orange-300 to-rose-400", glow: "rgba(251,191,36,.50)" },
   { title: "Cards", href: "/collection", icon: Gem, accent: "from-violet-200 via-fuchsia-300 to-purple-500", glow: "rgba(168,85,247,.58)" },
   { title: "Market", href: "/marketplace", icon: ShoppingCart, accent: "from-emerald-200 via-cyan-300 to-teal-500", glow: "rgba(45,212,191,.50)" },
-  { title: "Profile", href: "/account", icon: UserCircle, accent: "from-slate-100 via-indigo-200 to-purple-400", glow: "rgba(199,210,254,.42)" },
+  { title: "Profile", href: "/account", icon: UserCircle, accent: "from-slate-100 via-indigo-200 to-purple-400", glow: "rgba(199,210,254,.42)", showUnread: true },
 ];
 
 function isActivePath(location: string, href: string) {
@@ -51,6 +53,7 @@ export default function MobileNavDock() {
                 {active ? <div className="absolute bottom-1 left-1/2 h-8 w-10 -translate-x-1/2 rounded-full blur-xl min-[390px]:w-12" style={{ background: item.glow }} /> : null}
                 <div className={active ? `relative grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br ${item.accent} shadow-[0_10px_28px_rgba(0,0,0,.38)] min-[390px]:h-10 min-[390px]:w-10 min-[390px]:rounded-2xl` : "relative grid h-9 w-9 place-items-center rounded-xl bg-white/[.04] min-[390px]:h-10 min-[390px]:w-10 min-[390px]:rounded-2xl"}>
                   <Icon className={active ? "h-4.5 w-4.5 text-white drop-shadow min-[390px]:h-5 min-[390px]:w-5" : "h-4.5 w-4.5 text-slate-500 group-hover:text-cyan-200 min-[390px]:h-5 min-[390px]:w-5"} />
+                  {item.showUnread ? <UnreadNotificationDot className="absolute -right-0.5 -top-0.5" /> : null}
                 </div>
                 <span className="relative max-w-full truncate leading-none">{item.title}</span>
               </Link>
