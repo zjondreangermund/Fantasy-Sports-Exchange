@@ -1,10 +1,18 @@
 import { Link, useLocation } from "wouter";
 import { AlertTriangle, CheckCircle2, FileText, Mail, Scale, ShieldCheck } from "lucide-react";
 
-const updated = "21 July 2026";
+const updated = "30 July 2026";
 
 type Section = { title: string; paragraphs?: string[]; bullets?: string[] };
 type Document = { title: string; intro: string; sections: Section[] };
+
+const rarityEntryRules = [
+  "Common: all five cards must be Common.",
+  "Rare: at least four Rare cards; the fifth may be Common or Rare.",
+  "Unique: at least three Unique cards; the other two may be Common, Rare or Unique.",
+  "Epic: at least two Epic cards; the other three may be Common, Rare, Unique or Epic.",
+  "Legendary: at least one Legendary card; the other four may be any rarity.",
+];
 
 const documents: Record<string, Document> = {
   "/legal/terms": {
@@ -12,11 +20,11 @@ const documents: Record<string, Document> = {
     intro: "These terms govern access to Fantasy Arena, including accounts, digital player cards, competitions, the marketplace, wallets and Prize Vault rewards.",
     sections: [
       { title: "Eligibility and accounts", bullets: ["Users must be at least 18 years old unless a different minimum age is approved for a specific market.", "One account per person. Account information must be accurate and kept secure.", "Fantasy Arena may restrict, suspend or close accounts linked to fraud, abuse, prohibited automation or unlawful activity."] },
-      { title: "Competition entries", bullets: ["Submitting a team confirms the displayed entry fee, lineup, captain, deadline and applicable rules.", "A submitted team is final and cannot be edited after confirmation.", "A user may submit more than one team where the tournament allows it, but every team must use five different cards that are not already locked in another submitted team for that tournament."] },
+      { title: "Competition entries", bullets: ["Submitting a team confirms the displayed entry fee, rarity requirement, lineup, captain, deadline and applicable rules.", "A submitted team is final and cannot be edited after confirmation.", "A user may submit more than one team where the tournament allows it, but every team must use five different cards that are not already locked in another unresolved entry."] },
       { title: "Skill-based competitions", bullets: ["Competition results are determined by the published Fantasy Arena scoring rules and official Premier League match data.", "Statistics may be corrected after a match. Rankings may be recalculated before settlement.", "Fantasy Arena may postpone, cancel or amend a competition where fixtures, data feeds, technical failures or integrity concerns make fair settlement impossible."] },
       { title: "Digital player cards", bullets: ["Cards are licensed digital platform items used inside Fantasy Arena. They are not shares, securities, cryptocurrency or legal ownership of a football player.", "Card availability, rarity, floor prices and utility may change as the platform evolves.", "Users may buy, sell or loan cards only through supported Fantasy Arena features."] },
-      { title: "Wallets, payments and withdrawals", bullets: ["Deposits and withdrawals may be processed by third-party payment providers.", "Fantasy Arena may request verification before withdrawals, refunds, high-risk transactions or where required by a provider or law.", "Chargebacks, payment reversals, duplicate credits and fraud may result in wallet adjustments or account restrictions."] },
-      { title: "Prizes", bullets: ["Winners may be required to verify identity, age and delivery details before a prize is released.", "Where a physical prize is unavailable, Fantasy Arena may offer a comparable replacement or approved cash equivalent.", "Delivery times, taxes, duties and regional availability may vary."] },
+      { title: "Wallets, payments and withdrawals", bullets: ["A deposit remains pending until Fantasy Arena verifies the payment reference. The wallet is credited only after approval.", "Deposits below N$200 carry a 2% fee; deposits of N$200 or more are fee-free.", "A withdrawal has a N$50 minimum and a 3.5% fee. The requested gross amount is moved from available balance to locked balance while it is reviewed.", "Paid withdrawals remove the held amount and send the displayed net amount. Rejected withdrawals return the full held amount to available balance.", "Fantasy Arena may request verification before withdrawals, refunds, high-risk transactions or where required by a provider or law."] },
+      { title: "Prizes", bullets: ["Winners may be required to verify identity, age, contact and delivery details before a prize is released.", "Prize images and stated values are descriptive. Cards should display ‘Valued at’ followed by the stated value.", "Prize fulfilment is subject to availability. Where the advertised prize is unavailable, Fantasy Arena may offer an equivalent prize or approved equivalent value.", "Delivery times, taxes, duties and regional availability may vary."] },
       { title: "Liability and service availability", bullets: ["Fantasy Arena does not guarantee uninterrupted access or error-free third-party data.", "To the maximum extent permitted, liability is limited to direct losses caused by Fantasy Arena and excludes indirect or speculative loss.", "Nothing in these terms removes rights that cannot lawfully be excluded."] },
     ],
   },
@@ -24,13 +32,14 @@ const documents: Record<string, Document> = {
     title: "Official Game Rules",
     intro: "These are the controlling rules for Fantasy Arena Premier League rarity tournaments and submitted five-card teams.",
     sections: [
-      { title: "Eligible cards", bullets: ["Only Premier League player cards may be used in Premier League tournaments.", "Every card must match the tournament rarity: Common, Rare, Unique, Epic or Legendary.", "Cards listed for sale, already locked in another submitted team or not owned by the entrant cannot be used.", "A lineup must contain five different football players."] },
-      { title: "Team formation", bullets: ["Select one Goalkeeper first, then one Defender, one Midfielder and one Forward.", "The fifth Utility position may be filled by a Goalkeeper, Defender, Midfielder or Forward.", "Choose one of the five submitted cards as captain before confirming the team."] },
-      { title: "Multiple entries", bullets: ["A user may enter the same tournament more than once.", "Each entry is a separate team and is charged the displayed entry fee separately.", "Cards used in one submitted team cannot be reused in another team for the same tournament.", "After submission, the lineup and captain are final. Cards remain locked until the tournament is settled or cancelled."] },
+      { title: "Eligible cards", bullets: ["Only Premier League player cards may be used in Premier League tournaments.", ...rarityEntryRules, "Cards listed for sale, already locked in another unresolved tournament entry or not owned by the entrant cannot be used.", "A lineup must contain five different football players."] },
+      { title: "Team formation", bullets: ["Every entry uses five cards.", "Select one Goalkeeper first, then one Defender, one Midfielder and one Forward.", "The fifth Utility position may be filled by a Goalkeeper, Defender, Midfielder or Forward.", "Choose one of the five submitted cards as captain before confirming the team."] },
+      { title: "Multiple entries", bullets: ["A user may enter the same tournament more than once.", "Each entry is a separate team and is charged the displayed entry fee separately.", "Cards used in one unresolved submitted team cannot be reused in another entry.", "After submission, the lineup and captain are final. Cards remain locked until the tournament is settled or cancelled."] },
       { title: "Deadlines", bullets: ["Entries close at the official FPL deadline or the first Premier League kickoff for that gameweek.", "The date shown in the tournament is the controlling deadline. Late entries are rejected by the server even if a screen remained open.", "Fixture changes may move the deadline. Fantasy Arena may update the displayed cutoff to match official fixture data."] },
       { title: "Scoring", bullets: ["Each card is scored from official Premier League match statistics for the tournament gameweek only.", "Card rarity does not increase football points.", "The captain receives a 10% bonus in the lineup total. The captain's own card score is not changed.", "Live scores are provisional until the gameweek is final and official data checks are complete."] },
       { title: "Ranking and tiebreaks", bullets: ["Teams rank by total fantasy points.", "Ties are resolved by captain points, then lower squad value, higher card XP, rarity prestige, earlier submission time and finally entry ID.", "Each submitted team is ranked independently, including multiple teams from the same user."] },
-      { title: "Prize Vault rewards", bullets: ["Official public tournaments of the same rarity and gameweek contribute to the shared Prize Vault entry total.", "The highest fully unlocked prize is the active reward for that rarity and gameweek.", "Prize Vault rewards create a winner claim and are not automatically converted into a wallet credit unless the published prize specifically allows it.", "Identity, age, contact and delivery verification may be required before release."] },
+      { title: "Settlement and winner messages", bullets: ["After final scoring and settlement, winning users receive a congratulations message from the Fantasy Arena Team in their inbox.", "Cash tournament payouts are credited to the Fantasy Arena wallet during settlement.", "Unread notifications are marked with a purple indicator. The indicator disappears when the notification is read or all notifications are marked read."] },
+      { title: "Prize Vault rewards", bullets: ["Official public tournaments of the same rarity and gameweek contribute to the shared Prize Vault entry total.", "The highest fully unlocked prize is the active reward for that rarity and gameweek.", "Prize Vault rewards create a winner claim and are not automatically converted into a wallet credit unless the published prize specifically allows it.", "The main winner must open My Teams & Prizes, start the claim, confirm contact and delivery details, complete required identity and age checks, and wait for fulfilment confirmation.", "Fulfilment is subject to prize availability. An equivalent prize or approved equivalent value may be offered when the advertised item is unavailable."] },
     ],
   },
   "/legal/privacy": {
@@ -63,12 +72,12 @@ const documents: Record<string, Document> = {
   },
   "/legal/refunds": {
     title: "Refunds & Withdrawals",
-    intro: "This policy explains how failed payments, cancelled competitions, withdrawals and chargebacks are handled.",
+    intro: "This policy explains how deposits, failed payments, cancelled competitions, withdrawals and chargebacks are handled.",
     sections: [
-      { title: "Deposits", bullets: ["Successful wallet deposits are generally final once credited, except for duplicate charges, technical errors or legal rights that apply.", "Failed or pending transactions remain subject to the payment provider's processing time."] },
+      { title: "Deposits", bullets: ["Enter the amount, payment method and unique external payment reference, then submit the deposit for verification.", "The deposit stays pending and does not increase available balance until an authorised review approves it.", "Deposits below N$200 carry a 2% fee. Deposits of N$200 or more are fee-free.", "After approval, the net amount is credited. A rejected deposit is not credited.", "A payment reference cannot be claimed twice or reused with different details."] },
       { title: "Marketplace purchases", bullets: ["Completed card purchases are normally final because ownership transfers immediately.", "Fantasy Arena may reverse transactions caused by platform errors, fraud, duplicate processing or unauthorised access."] },
       { title: "Competition refunds", bullets: ["Entry amounts may be returned when Fantasy Arena cancels a competition before settlement.", "No refund is normally due where a user selected an invalid lineup, missed a deadline or lost based on valid scoring."] },
-      { title: "Withdrawals", bullets: ["Withdrawals are subject to available balance, payment-provider support, fraud screening and any required verification.", "Processing times vary by payment method.", "Fantasy Arena may pause a withdrawal while investigating chargebacks, suspicious activity or account ownership."] },
+      { title: "Withdrawals", bullets: ["The minimum withdrawal is N$50 and the fee is 3.5% of the requested gross amount.", "When submitted, the full gross amount moves from available balance to locked balance so it cannot be spent twice.", "The request is reviewed and may require identity, ownership or fraud checks.", "Once approved and paid, the net amount is sent to the selected bank, eWallet or supported destination and a payout reference is recorded.", "If rejected, the full held gross amount returns to available balance. A failed payout remains held for an authorised retry or refund."] },
     ],
   },
   "/legal/responsible-play": {
@@ -101,7 +110,8 @@ const documents: Record<string, Document> = {
     intro: "Prize Vault rewards are linked to rarity-specific entry counts and funding targets.",
     sections: [
       { title: "Unlocking", bullets: ["Each rarity has a separate ladder, entry value and gameweek count.", "Only the highest fully unlocked prize for that rarity and gameweek is awarded unless a promotion states otherwise.", "Progress may reset each gameweek while the season prize catalogue remains visible."] },
-      { title: "Claim and substitution", bullets: ["The winner must complete any required identity, age, contact and delivery checks.", "A physical prize may be replaced with a comparable item or approved cash equivalent where supply, location or delivery makes the original impractical.", "Unclaimed prizes may expire after the claim period stated in the winner notification."] },
+      { title: "Winner claim steps", bullets: ["Open My Teams & Prizes and select Start prize claim.", "Confirm your contact, delivery address and preferred communication details.", "Complete any required identity, age, eligibility and delivery verification.", "Keep the competition and entry reference in all support communication.", "Wait for the Fantasy Arena Team to confirm availability, delivery or collection arrangements."] },
+      { title: "Availability and value", bullets: ["Prize displays state ‘Valued at’ followed by the published value.", "Prize fulfilment is subject to availability, location and delivery constraints.", "Where the advertised prize is unavailable, Fantasy Arena may offer an equivalent prize or approved equivalent value.", "Unclaimed prizes may expire after the claim period stated in the winner notification."] },
     ],
   },
   "/legal/scoring": {
@@ -115,113 +125,19 @@ const documents: Record<string, Document> = {
 };
 
 const generalPages: Record<string, Document> = {
-  "/about": {
-    title: "About Fantasy Arena",
-    intro: "Fantasy Arena combines fantasy football, collectible player cards, a live marketplace, rarity tournaments and real-world Prize Vault rewards.",
-    sections: [
-      { title: "Our mission", paragraphs: ["We are building a premium football experience where knowledge, collection strategy and matchday performance matter."] },
-      { title: "How it works", bullets: ["Collect and trade digital player cards.", "Build five-card lineups.", "Compete using real match statistics.", "Climb rankings and unlock rewards."] },
-    ],
-  },
-  "/contact": {
-    title: "Contact Us",
-    intro: "Choose the support channel that best matches your request. Never include passwords, one-time codes or full payment credentials.",
-    sections: [
-      { title: "Support channels", bullets: ["General help: support@fantasyarena.com", "Payments and withdrawals: payments@fantasyarena.com", "Privacy requests: privacy@fantasyarena.com", "Legal enquiries: legal@fantasyarena.com", "Partnerships: partners@fantasyarena.com", "Media: media@fantasyarena.com"] },
-      { title: "What to include", bullets: ["Your account email or manager name.", "The relevant transaction, tournament, entry or card reference.", "A clear description of what happened and when.", "Screenshots where useful, without exposing passwords or payment credentials."] },
-      { title: "Support process", bullets: ["Account-security and payment issues are prioritised.", "Prize claims may require identity, age and delivery verification.", "Keep the same email subject when replying so the support history stays together."] },
-    ],
-  },
-  "/help": {
-    title: "Help Centre",
-    intro: "Find guidance for accounts, cards, competitions, payments, the marketplace and Prize Vault.",
-    sections: [
-      { title: "Accounts", bullets: ["Signing in and account recovery.", "Profile and security settings.", "Verification requests and account restrictions."] },
-      { title: "Cards and marketplace", bullets: ["Buying, selling, loaning and card ownership.", "Rarity floor prices and failed transactions."] },
-      { title: "Competitions and prizes", bullets: ["Lineup requirements, captain selection and deadlines.", "Live scoring, ranking corrections, settlement and prize claims.", "Multiple entries and card-lock rules."] },
-      { title: "Payments", bullets: ["Deposits, pending payments, withdrawals, refunds and chargebacks."] },
-    ],
-  },
-  "/faq": {
-    title: "Frequently Asked Questions",
-    intro: "Quick answers to common Fantasy Arena questions.",
-    sections: [
-      { title: "Do I need to verify immediately?", paragraphs: ["Not normally. Fantasy Arena uses tiered, risk-based verification and may request documents for withdrawals, prize claims, higher-risk activity or provider requirements."] },
-      { title: "How many cards are used?", paragraphs: ["A standard lineup uses five eligible cards: GK, DEF, MID, FWD and one Utility card."] },
-      { title: "Can I enter more than once?", paragraphs: ["Yes, where the tournament allows multiple entries. Every team is charged separately and must use five cards that were not used in your other submitted teams for that tournament."] },
-      { title: "How are points calculated?", paragraphs: ["Points come from real Premier League match statistics. The captain receives a 10% lineup bonus. Live points are provisional and can change after official corrections."] },
-      { title: "Can I sell my cards?", paragraphs: ["Eligible cards can be listed through the marketplace, subject to rarity floors, status and platform rules. Cards locked in a submitted tournament team cannot be listed until release."] },
-      { title: "How do Prize Vault rewards unlock?", paragraphs: ["Each rarity ladder uses its own entry count and funding target. The highest fully unlocked reward becomes the active prize for that gameweek."] },
-    ],
-  },
+  "/about": { title: "About Fantasy Arena", intro: "Fantasy Arena combines fantasy football, collectible player cards, a live marketplace, rarity tournaments and real-world Prize Vault rewards.", sections: [{ title: "Our mission", paragraphs: ["We are building a premium football experience where knowledge, collection strategy and matchday performance matter."] }, { title: "How it works", bullets: ["Collect and trade digital player cards.", "Build five-card lineups using the displayed rarity requirement.", "Compete using real match statistics.", "Climb rankings and unlock rewards."] }] },
+  "/contact": { title: "Contact Us", intro: "Choose the support channel that best matches your request. Never include passwords, one-time codes or full payment credentials.", sections: [{ title: "Support channels", bullets: ["General help: support@fantasyarena.com", "Payments and withdrawals: payments@fantasyarena.com", "Privacy requests: privacy@fantasyarena.com", "Legal enquiries: legal@fantasyarena.com", "Partnerships: partners@fantasyarena.com", "Media: media@fantasyarena.com"] }, { title: "What to include", bullets: ["Your account email or manager name.", "The relevant transaction, tournament, entry or card reference.", "A clear description of what happened and when.", "Screenshots where useful, without exposing passwords or payment credentials."] }, { title: "Support process", bullets: ["Account-security and payment issues are prioritised.", "Prize claims may require identity, age and delivery verification.", "Keep the same email subject when replying so the support history stays together."] }] },
+  "/help": { title: "Help Centre", intro: "Find guidance for accounts, cards, competitions, payments, the marketplace and Prize Vault.", sections: [{ title: "Accounts", bullets: ["Signing in and account recovery.", "Profile and security settings.", "Verification requests and account restrictions."] }, { title: "Cards and marketplace", bullets: ["Buying, selling, loaning and card ownership.", "Rarity floor prices and failed transactions."] }, { title: "Competitions and prizes", bullets: ["Five-card rarity requirements, captain selection and deadlines.", "Live scoring, settlement, winner inbox messages and prize claims.", "Multiple entries and card-lock rules."] }, { title: "Payments", bullets: ["Pending deposit verification, fees, withdrawal holds, payouts, refunds and chargebacks."] }] },
+  "/faq": { title: "Frequently Asked Questions", intro: "Quick answers to common Fantasy Arena questions.", sections: [{ title: "Do I need to verify immediately?", paragraphs: ["Not normally. Fantasy Arena uses tiered, risk-based verification and may request documents for withdrawals, prize claims, higher-risk activity or provider requirements."] }, { title: "How many cards do I need?", bullets: rarityEntryRules }, { title: "Can I enter more than once?", paragraphs: ["Yes, where the tournament allows multiple entries. Every team is charged separately and must use five different, unused cards."] }, { title: "How are points calculated?", paragraphs: ["Points come from real Premier League match statistics. The captain receives a 10% lineup bonus. Live points are provisional and can change after official corrections."] }, { title: "How do deposits and withdrawals work?", paragraphs: ["Deposits are verified before wallet credit. Withdrawals move the gross amount to locked balance during review, apply a 3.5% fee and pay the displayed net amount after approval."] }, { title: "How do Prize Vault rewards unlock?", paragraphs: ["Each rarity ladder uses its own entry count and funding target. The highest fully unlocked reward becomes the active prize for that gameweek."] }] },
 };
 
-const routeAliases: Record<string, string> = {
-  "/terms": "/legal/terms",
-  "/terms-and-conditions": "/legal/terms",
-  "/privacy-policy": "/legal/privacy",
-  "/rules": "/legal/game-rules",
-  "/game-rules": "/legal/game-rules",
-  "/contact-us": "/contact",
-};
-
-const navigation = [
-  ["Terms", "/legal/terms"], ["Game Rules", "/legal/game-rules"], ["Scoring", "/legal/scoring"], ["Prize Vault", "/legal/prize-vault"],
-  ["Privacy", "/legal/privacy"], ["AML & Verification", "/legal/aml-kyc"], ["Responsible Play", "/legal/responsible-play"],
-  ["Fair Play", "/legal/fair-play"], ["Marketplace", "/legal/marketplace"], ["Refunds", "/legal/refunds"], ["Cookies", "/legal/cookies"],
-];
+const routeAliases: Record<string, string> = { "/terms": "/legal/terms", "/terms-and-conditions": "/legal/terms", "/privacy-policy": "/legal/privacy", "/rules": "/legal/game-rules", "/game-rules": "/legal/game-rules", "/contact-us": "/contact" };
+const navigation = [["Terms", "/legal/terms"], ["Game Rules", "/legal/game-rules"], ["Scoring", "/legal/scoring"], ["Prize Vault", "/legal/prize-vault"], ["Privacy", "/legal/privacy"], ["AML & Verification", "/legal/aml-kyc"], ["Responsible Play", "/legal/responsible-play"], ["Fair Play", "/legal/fair-play"], ["Marketplace", "/legal/marketplace"], ["Refunds", "/legal/refunds"], ["Cookies", "/legal/cookies"]];
 
 export default function LegalCentrePage() {
   const [location] = useLocation();
   const canonicalLocation = routeAliases[location] || location;
   const doc = documents[canonicalLocation] || generalPages[canonicalLocation] || generalPages["/help"];
   const isLegal = canonicalLocation.startsWith("/legal/");
-
-  return (
-    <main className="min-h-screen bg-[#02040c] px-4 py-8 text-white sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <Link href="/" className="inline-flex items-center gap-2 font-black text-white"><ShieldCheck className="h-5 w-5 text-cyan-300" />Fantasy Arena</Link>
-          <div className="flex flex-wrap gap-2 text-sm">
-            <Link href="/about" className="rounded-full border border-white/10 px-3 py-1.5 text-white/60 hover:text-white">About</Link>
-            <Link href="/help" className="rounded-full border border-white/10 px-3 py-1.5 text-white/60 hover:text-white">Help</Link>
-            <Link href="/contact" className="rounded-full border border-white/10 px-3 py-1.5 text-white/60 hover:text-white">Contact</Link>
-          </div>
-        </div>
-
-        <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_85%_0%,rgba(34,211,238,.16),transparent_35%),linear-gradient(145deg,#0b1020,#050711)] p-5 sm:p-8">
-          <div className="flex items-start gap-4">
-            <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-3 text-cyan-200">{isLegal ? <Scale className="h-6 w-6" /> : <FileText className="h-6 w-6" />}</div>
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200/70">Fantasy Arena Trust Centre</div>
-              <h1 className="mt-2 text-3xl font-black sm:text-5xl">{doc.title}</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">{doc.intro}</p>
-              <div className="mt-3 text-xs text-white/35">Last updated: {updated}</div>
-            </div>
-          </div>
-        </section>
-
-        {isLegal && <nav className="mt-5 flex gap-2 overflow-x-auto pb-2">{navigation.map(([label, href]) => <Link key={href} href={href} className={`whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-bold ${canonicalLocation === href ? "border-cyan-300/50 bg-cyan-400/10 text-cyan-100" : "border-white/10 bg-white/[.03] text-white/45 hover:text-white"}`}>{label}</Link>)}</nav>}
-
-        <div className="mt-5 grid gap-4">
-          {doc.sections.map((section) => (
-            <section key={section.title} className="rounded-2xl border border-white/10 bg-white/[.035] p-5 sm:p-6">
-              <h2 className="text-lg font-black">{section.title}</h2>
-              {section.paragraphs?.map((paragraph) => <p key={paragraph} className="mt-3 text-sm leading-6 text-white/55">{paragraph}</p>)}
-              {section.bullets && <ul className="mt-3 space-y-3">{section.bullets.map((bullet) => <li key={bullet} className="flex gap-3 text-sm leading-6 text-white/55"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-cyan-300" /><span>{bullet}</span></li>)}</ul>}
-            </section>
-          ))}
-        </div>
-
-        <div className="mt-5 rounded-2xl border border-amber-300/20 bg-amber-400/[.07] p-5 text-sm text-amber-100/75">
-          <div className="flex gap-3"><AlertTriangle className="h-5 w-5 shrink-0" /><p>These pages are operational platform rules and draft legal policies. They must be reviewed by a qualified Namibian legal and compliance professional before paid public launch.</p></div>
-        </div>
-
-        <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/30 p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div><div className="font-black">Need help with this policy?</div><div className="mt-1 text-sm text-white/45">Contact the Fantasy Arena support team.</div></div>
-          <a href="mailto:support@fantasyarena.com" className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-black text-black"><Mail className="h-4 w-4" />Email support</a>
-        </div>
-      </div>
-    </main>
-  );
+  return <main className="min-h-screen bg-[#02040c] px-4 py-8 text-white sm:px-6 lg:px-8"><div className="mx-auto max-w-6xl"><div className="mb-6 flex flex-wrap items-center justify-between gap-3"><Link href="/" className="inline-flex items-center gap-2 font-black text-white"><ShieldCheck className="h-5 w-5 text-cyan-300" />Fantasy Arena</Link><div className="flex flex-wrap gap-2 text-sm"><Link href="/about" className="rounded-full border border-white/10 px-3 py-1.5 text-white/60 hover:text-white">About</Link><Link href="/help" className="rounded-full border border-white/10 px-3 py-1.5 text-white/60 hover:text-white">Help</Link><Link href="/contact" className="rounded-full border border-white/10 px-3 py-1.5 text-white/60 hover:text-white">Contact</Link></div></div><section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_85%_0%,rgba(34,211,238,.16),transparent_35%),linear-gradient(145deg,#0b1020,#050711)] p-5 sm:p-8"><div className="flex items-start gap-4"><div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-3 text-cyan-200">{isLegal ? <Scale className="h-6 w-6" /> : <FileText className="h-6 w-6" />}</div><div><div className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200/70">Fantasy Arena Trust Centre</div><h1 className="mt-2 text-3xl font-black sm:text-5xl">{doc.title}</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">{doc.intro}</p><div className="mt-3 text-xs text-white/35">Last updated: {updated}</div></div></div></section>{isLegal && <nav className="mt-5 flex gap-2 overflow-x-auto pb-2">{navigation.map(([label, href]) => <Link key={href} href={href} className={`whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-bold ${canonicalLocation === href ? "border-cyan-300/50 bg-cyan-400/10 text-cyan-100" : "border-white/10 bg-white/[.03] text-white/45 hover:text-white"}`}>{label}</Link>)}</nav>}<div className="mt-5 grid gap-4">{doc.sections.map((section) => <section key={section.title} className="rounded-2xl border border-white/10 bg-white/[.035] p-5 sm:p-6"><h2 className="text-lg font-black">{section.title}</h2>{section.paragraphs?.map((paragraph) => <p key={paragraph} className="mt-3 text-sm leading-6 text-white/55">{paragraph}</p>)}{section.bullets && <ul className="mt-3 space-y-3">{section.bullets.map((bullet) => <li key={bullet} className="flex gap-3 text-sm leading-6 text-white/55"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-cyan-300" /><span>{bullet}</span></li>)}</ul>}</section>)}</div><div className="mt-5 rounded-2xl border border-amber-300/20 bg-amber-400/[.07] p-5 text-sm text-amber-100/75"><div className="flex gap-3"><AlertTriangle className="h-5 w-5 shrink-0" /><p>These pages are operational platform rules and draft legal policies. They must be reviewed by a qualified Namibian legal and compliance professional before paid public launch.</p></div></div><div className="mt-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/30 p-5 sm:flex-row sm:items-center sm:justify-between"><div><div className="font-black">Need help with this policy?</div><div className="mt-1 text-sm text-white/45">Contact the Fantasy Arena support team.</div></div><a href="mailto:support@fantasyarena.com" className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-black text-black"><Mail className="h-4 w-4" />Email support</a></div></div></main>;
 }
