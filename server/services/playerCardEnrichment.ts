@@ -67,7 +67,15 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
       ? apiFootballPhotoUrl(apiFootballPlayer.apiPlayerId, apiFootballPlayer.photo)
       : "";
     const fplImage = matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : "";
-    const verifiedImageUrl = apiFootballImage || fplImage || player.verifiedImageUrl || player.imageUrl || null;
+    const existingImages = [
+      player.verifiedImageUrl,
+      player.officialPortraitUrl,
+      player.cutoutUrl,
+      player.headshotUrl,
+      player.imageUrl,
+    ].filter(Boolean);
+    const imageCandidates = Array.from(new Set([fplImage, apiFootballImage, ...existingImages].filter(Boolean)));
+    const verifiedImageUrl = imageCandidates[0] || null;
 
     return {
       ...card,
@@ -81,6 +89,9 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
         position: currentPosition,
         nationality: apiFootballPlayer?.nationality || player.nationality,
         apiFootballId: apiFootballPlayer?.apiPlayerId || player.apiFootballId || null,
+        officialPortraitUrl: fplImage || player.officialPortraitUrl || null,
+        cutoutUrl: apiFootballImage || player.cutoutUrl || null,
+        imageCandidates,
         imageUrl: verifiedImageUrl,
         verifiedImageUrl,
         identityVerified: Boolean(apiFootballPlayer || matchedElement),
