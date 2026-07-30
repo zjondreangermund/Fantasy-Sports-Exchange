@@ -53,7 +53,7 @@ function premierLeaguePhotoFromCode(
 
 export function toSafeImageUrl(url: string): string {
   if (/^https?:\/\/(resources\.premierleague\.com|media\.api-sports\.io)\//i.test(url)) {
-    return `/api/image-proxy?url=${encodeURIComponent(url)}`;
+    return `/api/image-proxy?clean=1&url=${encodeURIComponent(url)}`;
   }
   return url;
 }
