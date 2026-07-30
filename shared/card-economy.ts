@@ -23,11 +23,11 @@ export const MARKETPLACE_FEE_RATE = 0.08;
 export const TOURNAMENT_PLATFORM_FEE_RATE = 0.2;
 export const DEPOSIT_FEE_FREE_THRESHOLD = 200;
 export const SMALL_DEPOSIT_FEE_RATE = 0.02;
-export const WITHDRAWAL_FEE_RATE = 0.035;
-export const MIN_WITHDRAWAL_AMOUNT = 50;
+export const WITHDRAWAL_FEE_RATE = 0;
+export const MIN_WITHDRAWAL_AMOUNT = 20;
 export const WITHDRAWAL_PAYOUT_SLA_TEXT = "Withdrawals are usually processed within 24–72 hours.";
 export const DEPOSIT_FEE_POLICY_TEXT = `Deposits under N$${DEPOSIT_FEE_FREE_THRESHOLD.toFixed(0)} are charged ${(SMALL_DEPOSIT_FEE_RATE * 100).toFixed(0)}%. Deposits at or above N$${DEPOSIT_FEE_FREE_THRESHOLD.toFixed(0)} are free.`;
-export const WITHDRAWAL_FEE_POLICY_TEXT = `Withdrawals are charged ${(WITHDRAWAL_FEE_RATE * 100).toFixed(1)}% with a minimum withdrawal amount of N$${MIN_WITHDRAWAL_AMOUNT.toFixed(0)}.`;
+export const WITHDRAWAL_FEE_POLICY_TEXT = `Fantasy Arena charges no withdrawal fee. The minimum withdrawal amount is N$${MIN_WITHDRAWAL_AMOUNT.toFixed(0)}. Your bank, eWallet or payment gateway may apply its own processing fee.`;
 
 export const TOURNAMENT_ENTRY_BY_RARITY: Record<RarityTier, number> = {
   common: 10,
