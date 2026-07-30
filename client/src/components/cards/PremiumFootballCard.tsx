@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
+import { cleanPlayerPortraitUrl } from "../../lib/card-image";
 import { type PlayerCardData } from "./types";
 import { CARD_SIZE, CARD_THEMES, normalizeRarity, teamCode, type PremiumCardSize } from "./cardTheme";
 
@@ -59,9 +60,11 @@ function PremiumFootballCardBase({
   const imageKey = candidates.join("|");
   const [imageIndex, setImageIndex] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
+  const [cleanedImage, setCleanedImage] = useState("");
   const [motion, setMotion] = useState<MotionStyle>({ "--mx": "50%", "--my": "24%", "--rx": "0deg", "--ry": "0deg", "--shine": "0" });
   const image = candidates[imageIndex];
-  const hasImage = Boolean(image) && !imageFailed;
+  const displayedImage = cleanedImage || image;
+  const hasImage = Boolean(displayedImage) && !imageFailed;
   const team = player.team || player.club || "Fantasy Arena";
   const rating = Math.max(0, Math.round(Number(player.rating || player.form || playerPoints(player) || 0)));
   const price = Number(player.price || player.listedPrice || 0);
@@ -73,9 +76,21 @@ function PremiumFootballCardBase({
   useEffect(() => {
     setImageIndex(0);
     setImageFailed(false);
+    setCleanedImage("");
   }, [player.id, imageKey]);
 
+  useEffect(() => {
+    let active = true;
+    setCleanedImage("");
+    if (!image) return () => { active = false; };
+    cleanPlayerPortraitUrl(image).then((source) => {
+      if (active) setCleanedImage(source);
+    });
+    return () => { active = false; };
+  }, [image]);
+
   const onImageError = () => {
+    setCleanedImage("");
     if (imageIndex < candidates.length - 1) setImageIndex((value) => value + 1);
     else setImageFailed(true);
   };
@@ -152,7 +167,7 @@ function PremiumFootballCardBase({
         <div style={{ position: "absolute", inset: "4.8%", zIndex: 8, borderRadius: dim.radius - 7, overflow: "hidden", background: `radial-gradient(circle at 50% 16%, rgba(${theme.glowRgb},.42), transparent 60%), linear-gradient(180deg, rgba(0,0,0,.06), rgba(0,0,0,.88))`, boxShadow: "inset 0 0 30px rgba(0,0,0,.56), inset 0 1px 0 rgba(255,255,255,.35)" }}>
           {hasImage ? (
             <img
-              src={image}
+              src={displayedImage}
               alt={player.name}
               onError={onImageError}
               loading="lazy"
