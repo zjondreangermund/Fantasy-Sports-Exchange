@@ -25,7 +25,7 @@ async function syncGameweekNotifications(userId: string) {
     where c.status::text in ('open', 'upcoming', 'active')
       and (
         c.status::text = 'active'
-        or c.start_date between now() - interval '3 days' and now() + interval '14 days'
+        or c.start_date between now() - interval '3 days' and now() + interval '30 days'
       )
       and (
         coalesce(c.visibility, 'public') = 'public'
