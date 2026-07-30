@@ -17,10 +17,13 @@ import {
 } from "lucide-react";
 import { artworkForPrize } from "./prizeArtworkCatalog";
 
+type ArtworkMode = "card" | "hero" | "spotlight";
+
 type Props = {
   title: string;
   rarity: string;
   category?: string;
+  mode?: ArtworkMode;
 };
 
 type Palette = {
@@ -59,39 +62,54 @@ function iconFor(title: string, category = "") {
   return Gift;
 }
 
-export function PremiumPrizeArtwork({ title, rarity, category }: Props) {
+export function PremiumPrizeArtwork({ title, rarity, category, mode = "card" }: Props) {
   const normalizedRarity = String(rarity || "common").toLowerCase();
   const palette = palettes[normalizedRarity] || palettes.common;
   const approvedImage = artworkForPrize(title, normalizedRarity);
 
   if (approvedImage) {
-    return <ApprovedPrizeImage src={approvedImage} title={title} palette={palette} category={category} rarity={normalizedRarity} />;
+    return <ApprovedPrizeImage src={approvedImage} title={title} palette={palette} category={category} rarity={normalizedRarity} mode={mode} />;
   }
 
-  return <GeneratedPrizeArtwork title={title} rarity={normalizedRarity} category={category} palette={palette} />;
+  return <GeneratedPrizeArtwork title={title} rarity={normalizedRarity} category={category} palette={palette} mode={mode} />;
 }
 
-function ApprovedPrizeImage({ src, title, rarity, category, palette }: { src: string; title: string; rarity: string; category?: string; palette: Palette }) {
+function ApprovedPrizeImage({ src, title, rarity, category, palette, mode }: { src: string; title: string; rarity: string; category?: string; palette: Palette; mode: ArtworkMode }) {
+  const padding = mode === "hero" ? "p-3 sm:p-5" : mode === "spotlight" ? "p-3 sm:p-4" : "p-1.5";
+
   return (
-    <div className="absolute inset-0 isolate overflow-hidden bg-[#010611]">
+    <div
+      className="absolute inset-0 isolate overflow-hidden bg-[#010611]"
+      style={{ background: `radial-gradient(circle at 50% 48%,${palette.glowSoft},transparent 58%),linear-gradient(145deg,${palette.surface},${palette.surfaceDeep})` }}
+    >
+      <img
+        src={src}
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        decoding="async"
+        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-xl"
+      />
       <img
         src={src}
         alt={title}
         loading="lazy"
         decoding="async"
-        className="absolute inset-0 h-full w-full object-cover object-center"
+        className={`absolute inset-0 z-10 h-full w-full object-contain object-center ${padding}`}
         onError={(event) => {
           const image = event.currentTarget;
           image.style.display = "none";
+          const backdrop = image.previousElementSibling as HTMLImageElement | null;
+          if (backdrop) backdrop.style.display = "none";
           const fallback = image.nextElementSibling as HTMLElement | null;
           if (fallback) fallback.style.display = "block";
         }}
       />
       <div className="absolute inset-0 hidden">
-        <GeneratedPrizeArtwork title={title} rarity={rarity} category={category} palette={palette} />
+        <GeneratedPrizeArtwork title={title} rarity={rarity} category={category} palette={palette} mode={mode} />
       </div>
-      <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[38%] bg-[linear-gradient(115deg,rgba(255,255,255,.10),transparent_32%,transparent_72%,rgba(255,255,255,.05))]" />
+      <div className="pointer-events-none absolute inset-0 z-20 ring-1 ring-inset ring-white/10" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[32%] bg-[linear-gradient(115deg,rgba(255,255,255,.09),transparent_32%,transparent_72%,rgba(255,255,255,.04))]" />
     </div>
   );
 }
@@ -110,8 +128,8 @@ function GeneratedPrizeArtwork({ title, rarity, category, palette }: Props & { p
       <div className="absolute -left-14 top-6 h-44 w-44 rounded-full blur-3xl" style={{ background: palette.glowSoft }} />
       <div className="absolute -right-16 bottom-0 h-52 w-52 rounded-full blur-3xl" style={{ background: palette.glowSoft }} />
 
-      <div className="absolute inset-x-[7%] top-[7%] bottom-[8%] rounded-[1.7rem] border bg-white/[.025] backdrop-blur-[2px]" style={{ borderColor: palette.glassEdge, boxShadow: `inset 0 1px 0 rgba(255,255,255,.32), inset 0 -1px 0 ${palette.glowSoft}, 0 0 26px ${palette.glowSoft}` }} />
-      <div className="absolute inset-x-[9%] top-[9%] bottom-[10%] rounded-[1.45rem] border border-white/10" />
+      <div className="absolute inset-x-[7%] bottom-[8%] top-[7%] rounded-[1.7rem] border bg-white/[.025] backdrop-blur-[2px]" style={{ borderColor: palette.glassEdge, boxShadow: `inset 0 1px 0 rgba(255,255,255,.32), inset 0 -1px 0 ${palette.glowSoft}, 0 0 26px ${palette.glowSoft}` }} />
+      <div className="absolute inset-x-[9%] bottom-[10%] top-[9%] rounded-[1.45rem] border border-white/10" />
       <div className="absolute left-[10%] top-[12%] h-[2px] w-[38%] rounded-full bg-gradient-to-r from-white/80 to-transparent" />
       <div className="absolute right-[10%] top-[12%] h-[2px] w-[18%] rounded-full" style={{ background: `linear-gradient(90deg,transparent,${palette.accent})` }} />
       <Sparkles className="absolute right-[12%] top-[13%] h-6 w-6 opacity-65" style={{ color: palette.accent }} />
