@@ -11,6 +11,96 @@ export const SUBMITTED_LINEUPS_ARE_FINAL = true;
 export const MULTIPLE_ENTRIES_ALLOWED = true;
 export const REUSE_CARDS_WITHIN_TOURNAMENT = false;
 
+export type TournamentRarity = "common" | "rare" | "unique" | "epic" | "legendary";
+
+export const TOURNAMENT_RARITY_ORDER: Record<TournamentRarity, number> = {
+  common: 1,
+  rare: 2,
+  unique: 3,
+  epic: 4,
+  legendary: 5,
+};
+
+export const TOURNAMENT_RARITY_REQUIREMENTS: Record<TournamentRarity, {
+  requiredTournamentRarityCards: number;
+  allowedRarities: TournamentRarity[];
+  shortLabel: string;
+  description: string;
+}> = {
+  common: {
+    requiredTournamentRarityCards: 5,
+    allowedRarities: ["common"],
+    shortLabel: "5 Common cards",
+    description: "A Common tournament requires five Common cards.",
+  },
+  rare: {
+    requiredTournamentRarityCards: 4,
+    allowedRarities: ["common", "rare"],
+    shortLabel: "4 Rare + 1 Common/Rare",
+    description: "A Rare tournament requires at least four Rare cards. The fifth card may be Common or Rare.",
+  },
+  unique: {
+    requiredTournamentRarityCards: 3,
+    allowedRarities: ["common", "rare", "unique"],
+    shortLabel: "3 Unique + 2 lower/Unique",
+    description: "A Unique tournament requires at least three Unique cards. The other two may be Common, Rare or Unique.",
+  },
+  epic: {
+    requiredTournamentRarityCards: 2,
+    allowedRarities: ["common", "rare", "unique", "epic"],
+    shortLabel: "2 Epic + 3 lower/Epic",
+    description: "An Epic tournament requires at least two Epic cards. The other three may be Common, Rare, Unique or Epic.",
+  },
+  legendary: {
+    requiredTournamentRarityCards: 1,
+    allowedRarities: ["common", "rare", "unique", "epic", "legendary"],
+    shortLabel: "1 Legendary + any 4",
+    description: "A Legendary tournament requires at least one Legendary card. The other four may be any rarity.",
+  },
+};
+
+export function normalizeTournamentRarity(value: unknown): TournamentRarity {
+  const rarity = String(value || "common").toLowerCase();
+  if (rarity === "legendary") return "legendary";
+  if (rarity === "epic") return "epic";
+  if (rarity === "unique") return "unique";
+  if (rarity === "rare") return "rare";
+  return "common";
+}
+
+export function getTournamentRarityRequirement(value: unknown) {
+  return TOURNAMENT_RARITY_REQUIREMENTS[normalizeTournamentRarity(value)];
+}
+
+export function isCardRarityAllowedInTournament(cardRarity: unknown, tournamentRarity: unknown): boolean {
+  const requirement = getTournamentRarityRequirement(tournamentRarity);
+  return requirement.allowedRarities.includes(normalizeTournamentRarity(cardRarity));
+}
+
+export function validateTournamentRarityLineup(cardRarities: unknown[], tournamentRarity: unknown) {
+  const tier = normalizeTournamentRarity(tournamentRarity);
+  const requirement = TOURNAMENT_RARITY_REQUIREMENTS[tier];
+  const normalized = (Array.isArray(cardRarities) ? cardRarities : []).map(normalizeTournamentRarity);
+  if (normalized.length !== TOURNAMENT_CARD_COUNT) {
+    return { valid: false, message: `Exactly ${TOURNAMENT_CARD_COUNT} cards are required.` };
+  }
+  const disallowed = normalized.find((rarity) => !requirement.allowedRarities.includes(rarity));
+  if (disallowed) {
+    return {
+      valid: false,
+      message: `${tier} tournaments may only use ${requirement.allowedRarities.join(", ")} cards.`,
+    };
+  }
+  const exactTierCount = normalized.filter((rarity) => rarity === tier).length;
+  if (exactTierCount < requirement.requiredTournamentRarityCards) {
+    return {
+      valid: false,
+      message: `${tier} tournaments require at least ${requirement.requiredTournamentRarityCards} ${tier} card${requirement.requiredTournamentRarityCards === 1 ? "" : "s"}.`,
+    };
+  }
+  return { valid: true, message: requirement.description };
+}
+
 export const RARITY_FOOTBALL_POINT_MULTIPLIERS = {
   common: 1,
   rare: 1,
