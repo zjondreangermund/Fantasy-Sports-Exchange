@@ -10,6 +10,9 @@ import { LayoutDashboard, ShoppingCart, Wallet, Trophy, Activity, LogOut, Shield
 
 type NavItem = { title: string; href: string; icon: typeof LayoutDashboard; section: "Main" | "Account" | "Rules & Support"; showUnread?: boolean };
 
+const ADMIN_TEST_TOOLS_ENABLED =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_TEST_TOOLS === "true";
+
 const menuItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard, section: "Main" },
   { title: "Play", href: "/competitions", icon: Trophy, section: "Main" },
@@ -27,7 +30,10 @@ const menuItems: NavItem[] = [
 ];
 
 const sectionOrder: NavItem["section"][] = ["Main", "Account", "Rules & Support"];
-function isActivePath(location: string, href: string) { if (href === "/") return location === "/" || location === "/dashboard"; return location === href; }
+function isActivePath(location: string, href: string) {
+  if (href === "/") return location === "/" || location === "/dashboard";
+  return location === href || location.startsWith(`${href}/`);
+}
 
 export function AppSidebar() {
   const [location] = useLocation();
@@ -35,14 +41,21 @@ export function AppSidebar() {
   const { isMobile, setOpenMobile } = useSidebar();
   useEffect(() => { if (isMobile) setOpenMobile(false); }, [isMobile, location, setOpenMobile]);
   const closeMobileDrawer = () => { if (isMobile) setOpenMobile(false); };
-  const { data: adminCheck } = useQuery<{ isAdmin: boolean }>({ queryKey: ["/api/admin/check"] });
-  const allItems: NavItem[] = adminCheck?.isAdmin ? [
-    ...menuItems,
+  const { data: adminCheck } = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/admin/check"],
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  const adminItems: NavItem[] = adminCheck?.isAdmin ? [
     { title: "Admin", href: "/admin", icon: Shield, section: "Account" },
     { title: "Live Data", href: "/admin/live-data", icon: Wifi, section: "Account" },
-    { title: "Test Console", href: "/admin/test-console", icon: Beaker, section: "Account" },
-    { title: "Season Simulator", href: "/admin/season-simulator", icon: FastForward, section: "Account" },
-  ] : menuItems;
+    ...(ADMIN_TEST_TOOLS_ENABLED ? [
+      { title: "Test Console", href: "/admin/test-console", icon: Beaker, section: "Account" as const },
+      { title: "Season Simulator", href: "/admin/season-simulator", icon: FastForward, section: "Account" as const },
+    ] : []),
+  ] : [];
+  const allItems: NavItem[] = [...menuItems, ...adminItems];
 
   return (
     <Sidebar className="border-r border-slate-800/80 bg-[#050812] text-slate-300">
