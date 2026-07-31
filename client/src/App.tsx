@@ -50,6 +50,9 @@ const AdminSeasonSimulatorPage = React.lazy(() => import("./pages/admin-season-s
 const AdminLiveDataPage = React.lazy(() => import("./pages/admin-live-data"));
 const CardLabPage = React.lazy(() => import("./pages/card-lab"));
 
+const ADMIN_TEST_TOOLS_ENABLED =
+  import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_TEST_TOOLS === "true";
+
 const legalInfoPaths = [
   "/about", "/contact", "/contact-us", "/help", "/faq",
   "/terms", "/terms-and-conditions", "/privacy-policy", "/rules", "/game-rules",
@@ -61,6 +64,50 @@ const publicInfoPaths = [...legalInfoPaths, ...trustInfoPaths];
 
 function RouteFallback() {
   return <div className="flex min-h-40 flex-1 items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
+}
+
+function AdminGate({ children }: { children: React.ReactNode }) {
+  const { data, isLoading } = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/admin/check"],
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  if (isLoading) return <RouteFallback />;
+  if (!data?.isAdmin) {
+    return (
+      <main className="flex min-h-[60vh] items-center justify-center px-4 text-white">
+        <div className="w-full max-w-lg rounded-[2rem] border border-red-300/20 bg-slate-950/90 p-8 text-center shadow-2xl">
+          <p className="text-xs font-black uppercase tracking-[.2em] text-red-200">Restricted area</p>
+          <h1 className="mt-3 text-3xl font-black">Admin access required</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-400">This page is available only to authorised Fantasy Arena administrators.</p>
+          <a href="/" className="mt-6 inline-flex rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950">Return to dashboard</a>
+        </div>
+      </main>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+function AdminDashboardRoute() {
+  return <AdminGate><AdminPage /></AdminGate>;
+}
+
+function AdminLiveDataRoute() {
+  return <AdminGate><AdminLiveDataPage /></AdminGate>;
+}
+
+function AdminTestConsoleRoute() {
+  return <AdminGate><AdminTestConsolePage /></AdminGate>;
+}
+
+function AdminSeasonSimulatorRoute() {
+  return <AdminGate><AdminSeasonSimulatorPage /></AdminGate>;
+}
+
+function CardLabRoute() {
+  return <AdminGate><CardLabPage /></AdminGate>;
 }
 
 function AuthenticatedRouter() {
@@ -103,17 +150,17 @@ function AuthenticatedRouter() {
         <Route path="/prize-vault" component={PrizeVaultPage} />
         <Route path="/premier-league" component={PremierLeaguePage} />
         <Route path="/leagues" component={PremierLeaguePage} />
-        <Route path="/card-lab" component={CardLabPage} />
+        {ADMIN_TEST_TOOLS_ENABLED ? <Route path="/card-lab" component={CardLabRoute} /> : null}
         <Route path="/collection" component={CollectionPage} />
         <Route path="/marketplace" component={MarketplacePage} />
         <Route path="/auctions" component={AuctionsPage} />
         <Route path="/wallet" component={WalletPage} />
         <Route path="/account" component={AccountPage} />
         <Route path="/profile" component={AccountPage} />
-        <Route path="/admin/test-console" component={AdminTestConsolePage} />
-        <Route path="/admin/season-simulator" component={AdminSeasonSimulatorPage} />
-        <Route path="/admin/live-data" component={AdminLiveDataPage} />
-        <Route path="/admin" component={AdminPage} />
+        {ADMIN_TEST_TOOLS_ENABLED ? <Route path="/admin/test-console" component={AdminTestConsoleRoute} /> : null}
+        {ADMIN_TEST_TOOLS_ENABLED ? <Route path="/admin/season-simulator" component={AdminSeasonSimulatorRoute} /> : null}
+        <Route path="/admin/live-data" component={AdminLiveDataRoute} />
+        <Route path="/admin" component={AdminDashboardRoute} />
         <Route component={NotFound} />
       </Switch>
     </React.Suspense>
