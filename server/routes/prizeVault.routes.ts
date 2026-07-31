@@ -22,8 +22,8 @@ function percentage(current: number, target: number): number {
 export function registerPrizeVaultRoutes(app: Express) {
   app.get("/api/prize-vault", async (_req, res) => {
     try {
-      // Aggregate entry totals in one database query. The previous implementation
-      // loaded every competition and then issued one extra query per competition.
+      // Test/simulator competitions are never allowed to fund or unlock the live
+      // Prize Vault, even if old test records remain in the production database.
       const result = await db.execute(sql`
         select
           c.id,
@@ -35,9 +35,11 @@ export function registerPrizeVaultRoutes(app: Express) {
             select count(*)::int
             from app.competition_entries ce
             where ce.competition_id = c.id
+              and ce.user_id not like 'test-bot-%'
           ) as "entryCount"
         from app.competitions c
         where lower(c.status::text) in ('open', 'active')
+          and c.name not like '[TEST]%'
         order by c.game_week asc, c.id asc
       `);
 
