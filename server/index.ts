@@ -152,7 +152,7 @@ app.get("/api/image-proxy", async (req, res) => {
   return res.redirect(302, "/players/fallback.svg");
 });
 
-export function log(message: string, source = "express") { const formattedTime = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: 2-digit, second: 2-digit, hour12: true }); console.log(`${formattedTime} [${source}] ${message}`); }
+export function log(message: string, source = "express") { const formattedTime = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true }); console.log(`${formattedTime} [${source}] ${message}`); }
 
 // API response bodies are intentionally excluded from logs because they may contain
 // wallet data, personal details, card ownership and other private account data.
