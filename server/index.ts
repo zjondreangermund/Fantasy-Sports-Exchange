@@ -18,6 +18,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import pgSession from "connect-pg-simple";
 import { ensureFplPlayerColumns, syncFplPremierLeaguePlayers } from "./services/fplPlayerSync.js";
 import { ensureApiFootballSyncSchema, startApiFootballSyncScheduler } from "./services/apiFootballSync.js";
+import { registerProductionResponseFilters } from "./services/productionResponseFilter.js";
 import { appUrl, authStartupWarnings, getSessionSecret, googleAuthEnabled, googleClientId, googleClientSecret } from "./auth-config.js";
 
 const app = express();
@@ -72,6 +73,7 @@ if (googleAuthEnabled) {
 
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: false }));
+registerProductionResponseFilters(app);
 
 async function ensurePlayerImageColumns() {
   if (!process.env.DATABASE_URL) return;
