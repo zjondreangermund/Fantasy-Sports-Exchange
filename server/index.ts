@@ -18,7 +18,6 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import pgSession from "connect-pg-simple";
 import { ensureFplPlayerColumns, syncFplPremierLeaguePlayers } from "./services/fplPlayerSync.js";
 import { ensureApiFootballSyncSchema, startApiFootballSyncScheduler } from "./services/apiFootballSync.js";
-import { cleanPlayerPortrait } from "./services/playerPortraitProcessing.js";
 import { appUrl, authStartupWarnings, getSessionSecret, googleAuthEnabled, googleClientId, googleClientSecret } from "./auth-config.js";
 
 const app = express();
@@ -90,7 +89,6 @@ async function ensurePlayerImageColumns() {
 function stripXml(value: string) { return String(value || "").replace(/<!\[CDATA\[(.*?)\]\]>/gs, "$1").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim(); }
 function normalizeSearch(value: string) { return String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim(); }
 function normalizeSportsDbEvent(event: any) { const hasScore = event?.intHomeScore !== null && event?.intHomeScore !== undefined && event?.intAwayScore !== null && event?.intAwayScore !== undefined; const rawStatus = String(event?.strStatus || event?.strProgress || "").toUpperCase(); const finished = hasScore || ["FT", "AET", "PEN", "MATCH FINISHED"].includes(rawStatus); return { id: event?.idEvent || `${event?.strHomeTeam}-${event?.strAwayTeam}-${event?.dateEvent}`, date: event?.strTimestamp || `${event?.dateEvent || ""}T${event?.strTime || "15:00:00"}Z`, status: finished ? "FT" : rawStatus || "NS", venue: event?.strVenue || "", homeTeam: { name: event?.strHomeTeam || "TBD", badge: event?.strHomeTeamBadge || "", score: event?.intHomeScore ?? null }, awayTeam: { name: event?.strAwayTeam || "TBD", badge: event?.strAwayTeamBadge || "", score: event?.intAwayScore ?? null } }; }
-function bestSportsDbPlayerImage(players: any[], requestedTeam: string) { const normalizedTeam = normalizeSearch(requestedTeam); const scored = players.map((player) => { const image = player?.strCutout || player?.strRender || player?.strThumb || player?.strFanart1 || ""; const team = normalizeSearch(player?.strTeam || ""); const sport = normalizeSearch(player?.strSport || ""); let score = 0; if (image) score += 20; if (sport.includes("soccer")) score += 10; if (normalizedTeam && team && (team.includes(normalizedTeam) || normalizedTeam.includes(team))) score += 12; if (player?.strCutout) score += 6; if (player?.strRender) score += 4; return { image, score }; }).filter((item) => item.image); scored.sort((a, b) => b.score - a.score); return scored[0]?.image || null; }
 async function resolveFplPlayerImage(name: string, team: string) { const [{ fplApi }, { buildFplPlayerIndex }] = await Promise.all([import("./services/fplApi.js"), import("./services/fplPlayerIdentity.js")]); const bootstrap = await fplApi.bootstrap(); const element = buildFplPlayerIndex(bootstrap).resolve({ name, team }); if (!element) return null; return fplApi.playerPhotoUrl(element, 250); }
 
 app.get("/api/matchday/epl", async (_req, res) => {
@@ -111,13 +109,12 @@ app.get("/api/player-image/resolve", async (req, res) => {
   if (!name || name.length < 2) return res.status(404).json({ message: "Missing player name" });
   const cacheKey = `${normalizeSearch(name)}|${normalizeSearch(team)}`; const cached = playerImageCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) { if (cached.url) return res.redirect(302, cached.url); return res.status(404).json({ message: "No exact official player image link found" }); }
-  try { const fplImage = await resolveFplPlayerImage(name, team); if (fplImage) { const proxied = `/api/image-proxy?clean=1&url=${encodeURIComponent(fplImage)}`; playerImageCache.set(cacheKey, { expiresAt: Date.now() + 12 * 60 * 60 * 1000, url: proxied }); res.setHeader("Cache-Control", "public, max-age=43200"); return res.redirect(302, proxied); } } catch (error) { console.warn("FPL player image resolve failed:", error); }
+  try { const fplImage = await resolveFplPlayerImage(name, team); if (fplImage) { const proxied = `/api/image-proxy?url=${encodeURIComponent(fplImage)}`; playerImageCache.set(cacheKey, { expiresAt: Date.now() + 12 * 60 * 60 * 1000, url: proxied }); res.setHeader("Cache-Control", "public, max-age=43200"); return res.redirect(302, proxied); } } catch (error) { console.warn("FPL player image resolve failed:", error); }
   playerImageCache.set(cacheKey, { expiresAt: Date.now() + 60 * 60 * 1000, url: null }); return res.status(404).json({ message: "No exact official player image link found" });
 });
 
 app.get("/api/image-proxy", async (req, res) => {
   const raw = String(req.query.url || "");
-  const clean = String(req.query.clean || "") === "1";
   if (!raw) return res.redirect(302, "/players/fallback.svg");
   let target: URL;
   try { target = new URL(raw); } catch { return res.redirect(302, "/players/fallback.svg"); }
@@ -143,17 +140,6 @@ app.get("/api/image-proxy", async (req, res) => {
       const contentType = String(response.headers.get("content-type") || "");
       if (response.ok && contentType.startsWith("image/")) {
         const original = Buffer.from(await response.arrayBuffer());
-        if (clean) {
-          try {
-            const cleaned = await cleanPlayerPortrait(original);
-            res.setHeader("Content-Type", "image/png");
-            res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
-            res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-            return res.send(cleaned);
-          } catch (error: any) {
-            console.warn("player portrait cleanup failed; serving original image", url, error?.message || error);
-          }
-        }
         res.setHeader("Content-Type", contentType);
         res.setHeader("Cache-Control", "public, max-age=86400");
         res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
@@ -166,7 +152,7 @@ app.get("/api/image-proxy", async (req, res) => {
   return res.redirect(302, "/players/fallback.svg");
 });
 
-export function log(message: string, source = "express") { const formattedTime = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "numeric", hour12: true }); console.log(`${formattedTime} [${source}] ${message}`); }
+export function log(message: string, source = "express") { const formattedTime = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: 2-digit, second: 2-digit, hour12: true }); console.log(`${formattedTime} [${source}] ${message}`); }
 
 // API response bodies are intentionally excluded from logs because they may contain
 // wallet data, personal details, card ownership and other private account data.
