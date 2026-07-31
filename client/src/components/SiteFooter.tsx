@@ -61,9 +61,9 @@ export default function SiteFooter() {
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/50">
             A fantasy football platform for collecting Premier League player cards, building lineups, entering skill-based competitions and unlocking real-world rewards.
           </p>
-          <a href="mailto:support@fantasyarena.com" className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-cyan-200 hover:text-cyan-100">
-            <Mail className="h-4 w-4" /> support@fantasyarena.com
-          </a>
+          <Link href="/contact-us" className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-cyan-200 hover:text-cyan-100">
+            <Mail className="h-4 w-4" /> Contact Fantasy Arena Support
+          </Link>
         </div>
 
         <div className="grid grid-cols-2 gap-7 sm:grid-cols-4">
