@@ -13,13 +13,22 @@ function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
 }
 
+function adminTestToolsEnabled() {
+  return process.env.NODE_ENV !== "production" || process.env.ENABLE_ADMIN_TEST_TOOLS === "true";
+}
+
 export function registerAdminInsightsRoutes(app: Express, deps: { requireAuth: any; isAdmin: any }) {
   const { requireAuth, isAdmin } = deps;
 
-  registerTestSimulatorRoutes(app, { requireAuth });
-  registerTestSimulatorCleanupRoutes(app, { requireAuth });
-  registerTestSimulatorBulkRoutes(app, { requireAuth });
-  registerTestSimulatorDetailsRoutes(app, { requireAuth });
+  // Simulator routes create bot users, cards, entries and test tournaments. Keep
+  // them unavailable in production unless an operator explicitly enables them.
+  if (adminTestToolsEnabled()) {
+    registerTestSimulatorRoutes(app, { requireAuth });
+    registerTestSimulatorCleanupRoutes(app, { requireAuth });
+    registerTestSimulatorBulkRoutes(app, { requireAuth });
+    registerTestSimulatorDetailsRoutes(app, { requireAuth });
+  }
+
   registerAdminCardLookupRoutes(app, { requireAuth, isAdmin });
   registerApiFootballAdminRoutes(app, { requireAuth, isAdmin });
   registerApiFootballSyncRoutes(app, { requireAuth, isAdmin });
