@@ -1,7 +1,6 @@
 import { Link } from "wouter";
 import { Mail, ShieldCheck } from "lucide-react";
-
-const BRAND_ICON = "/brand/fantasy-arena-icon.svg?v=lion-2026-08";
+import { FANTASY_ARENA_LOGO_DATA_URL } from "../lib/brand-logo";
 
 const groups = [
   {
@@ -53,7 +52,11 @@ export default function SiteFooter() {
         <div>
           <div className="flex items-center gap-3">
             <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-fuchsia-300/25 bg-black shadow-[0_0_28px_rgba(168,85,247,.25)]">
-              <img src={BRAND_ICON} alt="Fantasy Arena crowned lion" className="h-full w-full object-contain" />
+              <img
+                src={FANTASY_ARENA_LOGO_DATA_URL}
+                alt="Fantasy Arena crowned lion"
+                className="h-full w-full object-cover"
+              />
             </div>
             <div>
               <div className="font-black">Fantasy Arena</div>
