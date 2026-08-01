@@ -13,7 +13,7 @@ export function mapMarketplaceListingToCard(card: PlayerCardWithPlayer) {
     id: cardId as any,
     cardId,
     price: Number(card.price || mapped.price || 0),
-    seller: card.ownerUsername || card.ownerName || "FantasyFC",
+    seller: card.ownerUsername || card.ownerName || "Fantasy Arena",
     rawCard: card,
   };
 }
