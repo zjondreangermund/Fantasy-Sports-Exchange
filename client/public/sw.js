@@ -1,9 +1,8 @@
-const CACHE_NAME = "fantasy-site-v17-lion-fix";
+const CACHE_NAME = "fantasy-site-v18-lion-jpg";
 const APP_SHELL = [
   "/",
-  "/manifest.json?v=lion-2026-08b",
-  "/brand/fantasy-arena-icon.svg?v=lion-2026-08b",
-  "/brand/fa-premium-2026.svg?v=lion-2026-08b",
+  "/manifest.json?v=lion-jpg-2026-08",
+  "/brand/fantasy-arena-logo.jpg?v=lion-jpg-2026-08",
 ];
 
 self.addEventListener("install", (event) => {
