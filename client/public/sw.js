@@ -1,5 +1,10 @@
-const CACHE_NAME = "fantasy-site-v15";
-const APP_SHELL = ["/", "/manifest.json", "/brand/fa-premium-2026.svg"];
+const CACHE_NAME = "fantasy-site-v16-lion";
+const APP_SHELL = [
+  "/",
+  "/manifest.json?v=lion-2026-08",
+  "/brand/fantasy-arena-icon.svg?v=lion-2026-08",
+  "/brand/fa-premium-2026.svg?v=lion-2026-08",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -47,7 +52,9 @@ self.addEventListener("fetch", (event) => {
 
   if (
     isSameOrigin &&
-    (reqUrl.pathname.startsWith("/assets/") || reqUrl.pathname.startsWith("/prizes/"))
+    (reqUrl.pathname.startsWith("/assets/") ||
+      reqUrl.pathname.startsWith("/prizes/") ||
+      reqUrl.pathname.startsWith("/brand/"))
   ) {
     event.respondWith(
       fetch(event.request, { cache: "no-store" })
