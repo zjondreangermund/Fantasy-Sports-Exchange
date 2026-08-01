@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "../hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
-import { FANTASY_ARENA_LOGO_DATA_URL } from "../lib/brand-logo";
 import {
   Sidebar,
   SidebarContent,
@@ -47,6 +46,7 @@ type NavItem = {
   showUnread?: boolean;
 };
 
+const BRAND_LOGO = "/brand/fantasy-arena-logo.jpg?v=lion-jpg-2026-08";
 const ADMIN_TEST_TOOLS_ENABLED =
   import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_TEST_TOOLS === "true";
 
@@ -118,7 +118,7 @@ export function AppSidebar() {
           >
             <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-fuchsia-300/30 bg-black shadow-[0_0_28px_rgba(168,85,247,0.28)]">
               <img
-                src={FANTASY_ARENA_LOGO_DATA_URL}
+                src={BRAND_LOGO}
                 alt="Fantasy Arena crowned lion"
                 className="h-full w-full object-cover"
               />
