@@ -59,8 +59,19 @@ export function AppSidebar() {
 
   return (
     <Sidebar className="border-r border-slate-800/80 bg-[#050812] text-slate-300">
-      <SidebarHeader className="border-b border-slate-800/80 p-4">
-        <Link href="/"><div className="group flex cursor-pointer items-center gap-3" data-testid="link-home" onClick={closeMobileDrawer}><div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/30 bg-slate-950 shadow-[0_0_28px_rgba(34,211,238,0.22)]"><img src="/brand/fantasy-arena-icon.svg" alt="Fantasy Arena" className="h-11 w-11 object-contain" /><div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.22),transparent_35%)]" /></div><div className="min-w-0"><p className="truncate text-sm font-black tracking-wide text-white">Fantasy Arena</p><p className="truncate text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-200/60">Play • Compete • Win</p></div></div></Link>
+      <SidebarHeader className="border-b border-slate-800/80 px-3 py-3">
+        <Link href="/">
+          <div className="group flex cursor-pointer items-center gap-3" data-testid="link-home" onClick={closeMobileDrawer}>
+            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-fuchsia-300/30 bg-black shadow-[0_0_28px_rgba(168,85,247,0.28)]">
+              <img src="/brand/fantasy-arena-icon.svg?v=lion-2026-08" alt="Fantasy Arena crowned lion" className="h-full w-full object-contain" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.18),transparent_35%)]" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black tracking-wide text-white">Fantasy Arena</p>
+              <p className="truncate text-[9px] font-semibold uppercase tracking-[0.22em] text-cyan-200/65">Play • Compete • Win</p>
+            </div>
+          </div>
+        </Link>
       </SidebarHeader>
       <SidebarContent className="bg-[#050812] px-2 py-4">
         {sectionOrder.map((section) => {
