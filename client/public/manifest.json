@@ -1,17 +1,17 @@
 {
   "name": "Fantasy Arena",
   "short_name": "Fantasy Arena",
-  "start_url": "/?app=lion-2026-08",
+  "start_url": "/?app=lion-jpg-2026-08",
   "display": "standalone",
   "background_color": "#020617",
   "theme_color": "#020617",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/brand/fantasy-arena-icon.svg?v=lion-2026-08",
-      "sizes": "128x128",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/brand/fantasy-arena-logo.jpg?v=lion-jpg-2026-08",
+      "sizes": "160x160",
+      "type": "image/jpeg",
+      "purpose": "any"
     }
   ]
 }
