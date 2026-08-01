@@ -1,11 +1,9 @@
 import { useState } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { FANTASY_ARENA_LOGO_DATA_URL } from "../lib/brand-logo";
 import { Users, TrendingUp, Star, Shield, Zap, CheckCircle2, BarChart3, Clock3 } from "lucide-react";
 import { motion } from "framer-motion";
-
-const BRAND_ICON = "/brand/fantasy-arena-icon.svg?v=lion-2026-08";
-const BRAND_LOGO = "/brand/fa-premium-2026.svg?v=lion-2026-08";
 
 export default function LandingPage() {
   const [heroVideoError, setHeroVideoError] = useState(false);
@@ -31,7 +29,7 @@ export default function LandingPage() {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="h-12 w-12 overflow-hidden rounded-2xl border border-fuchsia-300/30 bg-black shadow-[0_0_25px_rgba(168,85,247,.3)]">
-              <img src={BRAND_ICON} alt="Fantasy Arena crowned lion" className="h-full w-full object-contain" />
+              <img src={FANTASY_ARENA_LOGO_DATA_URL} alt="Fantasy Arena crowned lion" className="h-full w-full object-cover" />
             </div>
             <div>
               <div className="text-lg font-black leading-none text-foreground">Fantasy Arena</div>
@@ -123,7 +121,7 @@ export default function LandingPage() {
           </div>
 
           <motion.div initial={{ opacity: 0, scale: .94 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: .1, duration: .55 }} className="hidden justify-center lg:flex">
-            <img src={BRAND_LOGO} alt="Fantasy Arena crowned lion logo" className="max-h-[480px] w-full object-contain drop-shadow-[0_0_45px_rgba(124,58,237,.45)]" />
+            <img src={FANTASY_ARENA_LOGO_DATA_URL} alt="Fantasy Arena crowned lion logo" className="max-h-[430px] w-full rounded-[2rem] object-contain drop-shadow-[0_0_45px_rgba(124,58,237,.45)]" />
           </motion.div>
         </div>
       </section>
@@ -166,7 +164,7 @@ export default function LandingPage() {
       <footer className="border-t border-border py-8">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <img src={BRAND_ICON} alt="" className="h-9 w-9 rounded-xl object-contain" />
+            <img src={FANTASY_ARENA_LOGO_DATA_URL} alt="" className="h-9 w-9 rounded-xl object-cover" />
             <span>Fantasy Arena &copy; 2026</span>
           </div>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
