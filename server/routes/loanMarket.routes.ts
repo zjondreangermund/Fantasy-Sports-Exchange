@@ -118,6 +118,7 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
           p.team,
           p.position,
           p.overall,
+          p.image_url,
           pc.rarity,
           pc.serial_id,
           pc.serial_number,
