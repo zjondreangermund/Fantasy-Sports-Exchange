@@ -19,6 +19,11 @@ import {
   placePackAuctionBid,
   settlePackAuction,
 } from "../services/packAuctionEscrow.js";
+import {
+  cancelPackAuction,
+  ensurePackAuctionRuntimeSchema,
+  updatePackAuction,
+} from "../services/packAuctionAdmin.js";
 
 interface RegisterAuctionsRoutesDeps {
   requireAuth: any;
@@ -53,6 +58,9 @@ function errorStatus(error: any) {
     message.includes("requires admin recovery") ||
     message.includes("requires admin review") ||
     message.includes("cannot be cancelled") ||
+    message.includes("cannot be deleted") ||
+    message.includes("Only live") ||
+    message.includes("Only duration") ||
     message.includes("require admin cancellation") ||
     message.includes("locked by another operation")
   ) return 409;
@@ -67,7 +75,11 @@ function errorStatus(error: any) {
     message.includes("Common cards") ||
     message.includes("Remove the card") ||
     message.includes("You need 5 available") ||
-    message.includes("Bid must be at least")
+    message.includes("Bid must be at least") ||
+    message.includes("duration") ||
+    message.includes("price") ||
+    message.includes("increment") ||
+    message.includes("end time")
   ) return 400;
   return 500;
 }
@@ -85,9 +97,10 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
     }
   });
 
-  // Pack routes must stay above /api/auctions/:id so "packs" is never treated as an auction id.
+  // Pack routes stay above /api/auctions/:id so "packs" is never treated as an auction id.
   app.get("/api/auctions/packs/active", async (_req, res) => {
     try {
+      await ensurePackAuctionRuntimeSchema();
       return res.json(await listActivePackAuctions());
     } catch (error: any) {
       console.error("Failed to list active pack auctions:", error);
@@ -97,6 +110,7 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
 
   app.post("/api/auctions/packs/create", requireAuth, isAdmin, async (req: any, res) => {
     try {
+      await ensurePackAuctionRuntimeSchema();
       const auction = await createPackAuction({
         ...req.body,
         sellerId: String(req.authUserId || ""),
@@ -111,6 +125,7 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
 
   app.post("/api/auctions/packs/:id/bid", requireAuth, async (req: any, res) => {
     try {
+      await ensurePackAuctionRuntimeSchema();
       const result = await placePackAuctionBid({
         auctionId: Number(req.params.id),
         bidderId: String(req.authUserId || ""),
@@ -126,6 +141,7 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
 
   app.post("/api/auctions/packs/:id/buy-now", requireAuth, async (req: any, res) => {
     try {
+      await ensurePackAuctionRuntimeSchema();
       const result = await buyPackAuctionNow({
         auctionId: Number(req.params.id),
         buyerId: String(req.authUserId || ""),
@@ -139,8 +155,39 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
     }
   });
 
+  app.patch("/api/admin/auctions/packs/:id", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const result = await updatePackAuction({
+        ...req.body,
+        auctionId: Number(req.params.id),
+        actorId: String(req.authUserId || ""),
+      });
+      return res.json(result);
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to update pack auction:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to update pack auction") });
+    }
+  });
+
+  app.delete("/api/admin/auctions/packs/:id", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const result = await cancelPackAuction({
+        auctionId: Number(req.params.id),
+        actorId: String(req.authUserId || ""),
+        reason: req.body?.reason,
+      });
+      return res.json(result);
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to delete pack auction:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to delete pack auction") });
+    }
+  });
+
   app.post("/api/admin/auctions/packs/:id/settle", requireAuth, isAdmin, async (req: any, res) => {
     try {
+      await ensurePackAuctionRuntimeSchema();
       const result = await settlePackAuction({
         auctionId: Number(req.params.id),
         actorId: String(req.authUserId || ""),
