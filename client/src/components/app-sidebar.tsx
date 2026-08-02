@@ -36,6 +36,7 @@ import {
   Mail,
   CircleHelp,
   ListChecks,
+  Gavel,
 } from "lucide-react";
 
 type NavItem = {
@@ -57,6 +58,7 @@ const menuItems: NavItem[] = [
   { title: "Prize Vault", href: "/prize-vault", icon: Gift, section: "Main" },
   { title: "Collection", href: "/collection", icon: Swords, section: "Main" },
   { title: "Marketplace", href: "/marketplace", icon: ShoppingCart, section: "Main" },
+  { title: "Auctions", href: "/auctions", icon: Gavel, section: "Main" },
   { title: "Leagues", href: "/premier-league", icon: Activity, section: "Main" },
   { title: "Wallet", href: "/wallet", icon: Wallet, section: "Account" },
   { title: "Profile", href: "/account", icon: UserCircle, section: "Account", showUnread: true },
