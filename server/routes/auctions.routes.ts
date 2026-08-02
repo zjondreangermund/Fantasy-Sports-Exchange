@@ -12,6 +12,13 @@ import {
   recoverAuctionEscrow,
   settleAuctionWithEscrowRecovery,
 } from "../services/auctionEscrow.js";
+import {
+  buyPackAuctionNow,
+  createPackAuction,
+  listActivePackAuctions,
+  placePackAuctionBid,
+  settlePackAuction,
+} from "../services/packAuctionEscrow.js";
 
 interface RegisterAuctionsRoutesDeps {
   requireAuth: any;
@@ -44,6 +51,7 @@ function errorStatus(error: any) {
     message.includes("not live") ||
     message.includes("has ended") ||
     message.includes("requires admin recovery") ||
+    message.includes("requires admin review") ||
     message.includes("cannot be cancelled") ||
     message.includes("require admin cancellation") ||
     message.includes("locked by another operation")
@@ -55,8 +63,11 @@ function errorStatus(error: any) {
     message.includes("Insufficient") ||
     message.includes("not available") ||
     message.includes("has not started") ||
+    message.includes("has not ended") ||
     message.includes("Common cards") ||
-    message.includes("Remove the card")
+    message.includes("Remove the card") ||
+    message.includes("You need 5 available") ||
+    message.includes("Bid must be at least")
   ) return 400;
   return 500;
 }
@@ -71,6 +82,75 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
     } catch (error: any) {
       console.error("Failed to list active auctions:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch auctions" });
+    }
+  });
+
+  // Pack routes must stay above /api/auctions/:id so "packs" is never treated as an auction id.
+  app.get("/api/auctions/packs/active", async (_req, res) => {
+    try {
+      return res.json(await listActivePackAuctions());
+    } catch (error: any) {
+      console.error("Failed to list active pack auctions:", error);
+      return res.status(500).json({ message: error?.message || "Failed to fetch pack auctions" });
+    }
+  });
+
+  app.post("/api/auctions/packs/create", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const auction = await createPackAuction({
+        ...req.body,
+        sellerId: String(req.authUserId || ""),
+      });
+      return res.json({ success: true, auction });
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to create pack auction:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to create pack auction") });
+    }
+  });
+
+  app.post("/api/auctions/packs/:id/bid", requireAuth, async (req: any, res) => {
+    try {
+      const result = await placePackAuctionBid({
+        auctionId: Number(req.params.id),
+        bidderId: String(req.authUserId || ""),
+        amount: req.body?.amount,
+      });
+      return res.json(result);
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to place pack auction bid:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to place pack bid") });
+    }
+  });
+
+  app.post("/api/auctions/packs/:id/buy-now", requireAuth, async (req: any, res) => {
+    try {
+      const result = await buyPackAuctionNow({
+        auctionId: Number(req.params.id),
+        buyerId: String(req.authUserId || ""),
+      });
+      if (result.success === false) return res.status(409).json(result);
+      return res.json(result);
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to buy pack auction now:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to buy pack") });
+    }
+  });
+
+  app.post("/api/admin/auctions/packs/:id/settle", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      const result = await settlePackAuction({
+        auctionId: Number(req.params.id),
+        actorId: String(req.authUserId || ""),
+      });
+      if (result.success === false) return res.status(409).json(result);
+      return res.json(result);
+    } catch (error: any) {
+      const status = errorStatus(error);
+      if (status === 500) console.error("Failed to settle pack auction:", error);
+      return res.status(status).json({ message: String(error?.message || "Failed to settle pack auction") });
     }
   });
 
