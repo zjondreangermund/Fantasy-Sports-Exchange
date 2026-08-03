@@ -2,6 +2,7 @@ import pg from "pg";
 
 const { Client } = pg;
 const SEASON = "2026-27";
+const CAT_OFFSET_MS = 2 * 60 * 60 * 1000;
 const RARITIES = [
   { tier: "common", fee: 10, prizeCardRarity: "rare" },
   { tier: "rare", fee: 50, prizeCardRarity: "rare" },
@@ -33,22 +34,22 @@ async function resolveEnumSchema(client, enumName) {
 }
 
 function catTuesdayBefore(date) {
-  const shifted = new Date(date.getTime() + 2 * 60 * 60 * 1000);
+  const shifted = new Date(date.getTime() + CAT_OFFSET_MS);
   const day = shifted.getUTCDay();
   const daysBack = (day - 2 + 7) % 7;
   shifted.setUTCDate(shifted.getUTCDate() - daysBack);
   shifted.setUTCHours(0, 0, 0, 0);
-  return new Date(shifted.getTime() - 2 * 60 * 60 * 1000);
+  return new Date(shifted.getTime() - CAT_OFFSET_MS);
 }
 
-function catTuesdayAfter(date) {
-  const shifted = new Date(date.getTime() + 2 * 60 * 60 * 1000);
+function catTuesdaySettlementAfter(firstKickoff) {
+  const shifted = new Date(firstKickoff.getTime() + CAT_OFFSET_MS);
   const day = shifted.getUTCDay();
   let daysForward = (2 - day + 7) % 7;
   if (daysForward === 0) daysForward = 7;
   shifted.setUTCDate(shifted.getUTCDate() + daysForward);
-  shifted.setUTCHours(0, 0, 0, 0);
-  return new Date(shifted.getTime() - 2 * 60 * 60 * 1000);
+  shifted.setUTCHours(23, 59, 0, 0);
+  return new Date(shifted.getTime() - CAT_OFFSET_MS);
 }
 
 async function fetchJson(url) {
@@ -68,12 +69,11 @@ async function ensureCompetitionTierValues(client) {
   }
 }
 
-function plannedStatus({ gw, currentGw, first, last, event, now }) {
-  if (gw < currentGw) return "closed";
-  if (gw > currentGw) return "upcoming";
-  if (Boolean(event?.finished || event?.data_checked) || now.getTime() > last.getTime() + 24 * 60 * 60 * 1000) return "closed";
+function plannedStatus({ first, start, settlement, now }) {
+  if (now.getTime() >= settlement.getTime()) return "closed";
   if (now.getTime() >= first.getTime()) return "active";
-  return "open";
+  if (now.getTime() >= start.getTime()) return "open";
+  return "upcoming";
 }
 
 async function main() {
@@ -96,7 +96,6 @@ async function main() {
     ]);
 
     const events = Array.isArray(bootstrap?.events) ? bootstrap.events : [];
-    const eventByGw = new Map(events.map((event) => [Number(event?.id), event]));
     const byGw = new Map();
     for (const fixture of Array.isArray(fixtures) ? fixtures : []) {
       const gw = Number(fixture?.event);
@@ -120,27 +119,9 @@ async function main() {
     for (let gw = 1; gw <= 38; gw += 1) {
       const kickoffs = [...(byGw.get(gw) || [])].sort((a, b) => a.getTime() - b.getTime());
       const first = kickoffs[0] || new Date(Date.UTC(2026, 7, 21 + (gw - 1) * 7, 17, 0, 0));
-      const last = kickoffs[kickoffs.length - 1] || new Date(first.getTime() + 3 * 24 * 60 * 60 * 1000);
-      const previousLast = gw > 1 ? [...(byGw.get(gw - 1) || [])].sort((a, b) => a.getTime() - b.getTime()).at(-1) : null;
-      const nextFirst = gw < 38 ? [...(byGw.get(gw + 1) || [])].sort((a, b) => a.getTime() - b.getTime())[0] : null;
-
-      const preferredStart = catTuesdayBefore(first);
-      const preferredEnd = catTuesdayAfter(last);
-      const start = previousLast && previousLast.getTime() >= preferredStart.getTime()
-        ? new Date(previousLast.getTime() + 60 * 1000)
-        : preferredStart;
-      const end = nextFirst && nextFirst.getTime() < preferredEnd.getTime()
-        ? new Date(nextFirst.getTime() - 60 * 1000)
-        : preferredEnd;
-      windows.push({
-        gw,
-        first,
-        last,
-        start,
-        end,
-        event: eventByGw.get(gw),
-        adjusted: start.getTime() !== preferredStart.getTime() || end.getTime() !== preferredEnd.getTime(),
-      });
+      const start = catTuesdayBefore(first);
+      const settlement = catTuesdaySettlementAfter(first);
+      windows.push({ gw, first, start, settlement });
     }
 
     await client.query("BEGIN");
@@ -156,12 +137,10 @@ async function main() {
     let preservedEntries = 0;
 
     for (const window of windows) {
-      const status = plannedStatus({ ...window, currentGw, now });
+      const status = plannedStatus({ ...window, now });
       for (const rarity of RARITIES) {
         const name = `GW${window.gw} ${title(rarity.tier)} Prize Ladder`;
-        const scheduleNote = window.adjusted
-          ? `Fixture-adjusted ${title(rarity.tier)} Prize Vault ladder. Tuesday window shortened to avoid overlapping Premier League fixtures.`
-          : `${title(rarity.tier)} Prize Vault ladder. Runs Tuesday to Tuesday; entries lock at the first Premier League kickoff.`;
+        const scheduleNote = `${title(rarity.tier)} Prize Vault ladder. Entries lock at the first Premier League kickoff. Scores freeze at 23:59 CAT on the following Tuesday; FA Cup matches and Premier League fixtures played after that cutoff do not count.`;
 
         const existing = await client.query(
           `select c.id, c.status::text as status,
@@ -198,7 +177,7 @@ async function main() {
                  prize_description = $7,
                  prize_key = 'ladder'
              where id = $8`,
-            [name, rarity.fee, nextStatus, window.start, window.end, rarity.prizeCardRarity, scheduleNote, Number(row.id)],
+            [name, rarity.fee, nextStatus, window.start, window.settlement, rarity.prizeCardRarity, scheduleNote, Number(row.id)],
           );
           updated += 1;
         } else {
@@ -206,7 +185,7 @@ async function main() {
             `insert into app.competitions
               (name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity, visibility, max_entries, prize_type, prize_description, prize_key)
              values ($1,$2,$3,$4,$5,$6,$7,$8,'public',100000,'goods',$9,'ladder')`,
-            [name, rarity.tier, rarity.fee, status, window.gw, window.start, window.end, rarity.prizeCardRarity, scheduleNote],
+            [name, rarity.tier, rarity.fee, status, window.gw, window.start, window.settlement, rarity.prizeCardRarity, scheduleNote],
           );
           created += 1;
         }
@@ -214,13 +193,10 @@ async function main() {
     }
 
     await client.query("COMMIT");
-    const adjusted = windows.filter((window) => window.adjusted).map((window) => window.gw);
     console.log(`Official tournaments synced for ${SEASON}. Current GW: ${currentGw}. Created ${created}, updated ${updated}.`);
     console.log(`Preserved ${preservedEntries} existing official tournament entries; startup sync did not delete user teams.`);
     console.log("Admin-created tournaments were preserved and remain visible in Play.");
-    console.log(adjusted.length
-      ? `Fixture-overlap adjustments applied to GW: ${adjusted.join(", ")}`
-      : "No Tuesday-window overlaps required adjustment.");
+    console.log("Official scores freeze at 23:59 CAT on the Tuesday after each gameweek begins. Cup matches and later fixtures are excluded.");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;
