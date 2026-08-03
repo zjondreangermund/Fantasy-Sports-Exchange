@@ -24,23 +24,41 @@ const app = read("client/src/App.tsx");
 const sidebar = read("client/src/components/app-sidebar.tsx");
 const footer = read("client/src/components/SiteFooter.tsx");
 const myEntries = read("client/src/pages/my-entries.tsx");
+const competitions = read("client/src/pages/competitions.tsx");
+const adminTournaments = read("client/src/components/admin/AdminTournamentManager.tsx");
 const sharedRules = read("shared/game-rules.ts");
 
 expect(!/delete\s+from\s+app\.competition_entries/i.test(sync), "Official tournament sync must never delete submitted tournament entries");
 expect(!/delete\s+from\s+app\.competitions/i.test(sync), "Official tournament sync must update rows rather than delete/recreate them");
-includesAll(sync, ["Preserved ${preservedEntries}", "resolveEnumSchema", "competition_status", "created_by_user_id is null"], "Official tournament sync");
+includesAll(sync, [
+  "Preserved ${preservedEntries}",
+  "resolveEnumSchema",
+  "competition_status",
+  "created_by_user_id is null",
+  "catTuesdaySettlementAfter",
+  "23:59 CAT",
+  "FA Cup matches",
+  "later fixtures are excluded",
+], "Official tournament sync");
 expect(!sync.includes("public.competition_status"), "Official tournament sync must not hard-code the public enum namespace");
+expect(!sync.includes("Runs Tuesday to Tuesday"), "Official tournament sync must not describe settlement as a Tuesday-to-Tuesday scoring window");
+expect(!sync.includes("Tuesday window shortened"), "Official tournament sync must not use the old fixture-overlap window model");
 
 includesAll(scoreUpdater, [
   "entryDeadline",
-  "isGameweekFinal",
+  "settlementDeadline",
+  "isSettlementFinal",
   "activateCompetitionAtDeadline",
   "tiebreakMeta: { ...asObject(entry?.tiebreakMeta), scoring: snapshot }",
-  "version: 2",
+  "version: 3",
   'source: "official-fpl-live"',
+  'competition: "premier-league-only"',
+  "fixturePolicy",
+  "immutableFinal",
   "captainMultiplier: 1.1",
   "unresolvedCardIds",
 ], "Score updater");
+expect(!scoreUpdater.includes("isGameweekFinal"), "Tournament finalization must use the Tuesday settlement cutoff, not the FPL event-finished flag");
 expect(!scoreUpdater.includes("resetForNewGameweek"), "Score updater must not reset historical gameweek scores");
 expect(!scoreUpdater.includes("totalScore: 0"), "Score updater must not zero other gameweek entries");
 expect(!scoreUpdater.includes("otherActiveComps"), "Score updater must not clear non-current active competitions");
@@ -62,7 +80,7 @@ includesAll(economy, [
   "pending_claim",
   "postWalletAmountExactlyOnce",
 ], "Tournament economy route");
-expect(!economy.includes("if (new Date(competition.startDate).getTime() <= Date.now())"), "Join validation must not use the Tuesday tournament start as the lineup deadline");
+expect(!economy.includes("if (new Date(competition.startDate).getTime() <= Date.now())"), "Join validation must not use the tournament start as the lineup deadline");
 
 includesAll(preflight, [
   "competition_prize_awards",
@@ -71,6 +89,20 @@ includesAll(preflight, [
   "entry_fee_paid real NOT NULL DEFAULT 0",
   "SET entry_fee_paid = coalesce(c.entry_fee, 0)",
 ], "Runtime preflight");
+
+includesAll(competitions, [
+  "tournamentSettlementLabel",
+  "Tuesday 23:59 CAT",
+  "FA Cup",
+  "later rescheduled fixtures",
+  "submissionClosesAt",
+], "Tournament page");
+includesAll(adminTournaments, [
+  "Tuesday settlement cutoff",
+  "Settle Tuesday Results",
+  "/api/admin/competitions/settle/",
+  "FA Cup matches",
+], "Admin tournament manager");
 
 includesAll(legal, [
   '"/legal/game-rules"',
@@ -87,7 +119,17 @@ includesAll(sidebar, ["My Teams & Prizes", "Game Rules", "Terms & Conditions", "
 includesAll(footer, ["Official Game Rules", "Terms & Conditions", "Contact Us", "Privacy Policy"], "Site footer");
 includesAll(myEntries, ["My Teams & Prizes", "Submitted lineup", "Prize claim pending", "Final scoring snapshot stored"], "Submitted teams page");
 
-includesAll(sharedRules, ["CAPTAIN_MULTIPLIER = 1.1", "RARITY_FOOTBALL_POINT_MULTIPLIERS", "common: 1", "legendary: 1", "SUBMITTED_LINEUPS_ARE_FINAL = true"], "Shared game rules");
+includesAll(sharedRules, [
+  "CAPTAIN_MULTIPLIER = 1.1",
+  "RARITY_FOOTBALL_POINT_MULTIPLIERS",
+  "common: 1",
+  "legendary: 1",
+  "SUBMITTED_LINEUPS_ARE_FINAL = true",
+  'TOURNAMENT_SETTLEMENT_DAY = "Tuesday"',
+  'TOURNAMENT_SETTLEMENT_TIME_CAT = "23:59"',
+  "CUP_FIXTURES_COUNT = false",
+  "POST_SETTLEMENT_FIXTURES_COUNT = false",
+], "Shared game rules");
 expect(!/Common:\s*1\.0|Rare:\s*1\.1|Unique:\s*1\.2|Epic:\s*1\.35|Legendary:\s*1\.5/.test(sharedRules), "Shared rules must not contain obsolete rarity football-point multipliers");
 
 if (failures.length) {
@@ -96,4 +138,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Tournament scoring, settlement, submitted-team records and restored legal/support navigation verified.");
+console.log("Tournament entry lock, Tuesday settlement freeze, Premier League-only scoring, submitted-team records and legal/support navigation verified.");
