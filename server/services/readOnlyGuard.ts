@@ -42,6 +42,13 @@ function matchesAny(path: string, fragments: string[]): boolean {
   return fragments.some((fragment) => lower.includes(fragment));
 }
 
+function isMarketplaceMutationPath(path: string): boolean {
+  const lower = path.toLowerCase();
+  return matchesAny(lower, ["/marketplace", "/loan-market", "/loans", "/loan-listing", "/loan-offer"])
+    || /\/api\/cards\/[^/]+\/(?:list|sell|buy|purchase|unlist|loan|cancel-listing)(?:\/|$)/.test(lower)
+    || /\/api\/user\/cards\/[^/]+\/(?:list|sell|unlist|loan)(?:\/|$)/.test(lower);
+}
+
 function emergencyReason(settings: SecuritySettings, method: string, path: string): string | null {
   if (isRecoveryRoute(method, path)) return null;
 
@@ -52,16 +59,7 @@ function emergencyReason(settings: SecuritySettings, method: string, path: strin
     if (settings.emergency.depositsPaused && matchesAny(path, ["/deposit", "/deposits"])) return "deposits_paused";
     if (settings.emergency.withdrawalsPaused && matchesAny(path, ["/withdraw", "/withdrawal", "/withdrawals"])) return "withdrawals_paused";
     if (settings.emergency.auctionsPaused && matchesAny(path, ["/auction", "/auctions"])) return "auctions_paused";
-    if (settings.emergency.marketplacePaused && matchesAny(path, [
-      "/marketplace",
-      "/loan-market",
-      "/loans",
-      "/cards/list",
-      "/cards/sell",
-      "/cards/buy",
-      "/cards/purchase",
-      "/cards/unlist",
-    ])) return "marketplace_paused";
+    if (settings.emergency.marketplacePaused && isMarketplaceMutationPath(path)) return "marketplace_paused";
   }
 
   return null;
@@ -97,9 +95,6 @@ export const strictReadOnlyGuard: RequestHandler = async (req: any, res, next) =
   try {
     const record = await getSecuritySettings(true);
 
-    // A null timestamp means the security table could not be read. Never fail
-    // open for a write request: users may continue viewing, but no state change
-    // is allowed until the control plane is available again.
     if (!record.updatedAt && stateChanging && !isRecoveryRoute(method, path)) {
       res.setHeader("Cache-Control", "no-store");
       return res.status(503).json({
