@@ -10,6 +10,11 @@ if [ -z "${DATABASE_URL:-}" ]; then
   exit 1
 fi
 
+# Fail the deployment if the read-only guard, admin security links, tournament
+# settlement route or marketplace/auction routes drift out of alignment.
+echo "Verifying read-only and route contracts..."
+node scripts/verify-read-only-route-integrity.mjs
+
 # Attempt the declarative schema push and always preserve its diagnostics. Older
 # production databases may report conflicts for objects that already exist, so
 # the runtime preflight below remains the authoritative compatibility repair.
