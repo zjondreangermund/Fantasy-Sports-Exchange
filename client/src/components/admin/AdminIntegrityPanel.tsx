@@ -8,6 +8,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Skeleton } from "../ui/skeleton";
+import AdminSecurityPanel from "./AdminSecurityPanel";
 
 type IntegritySummary = Record<string, number | string | boolean | null | undefined>;
 
@@ -201,6 +202,8 @@ export default function AdminIntegrityPanel() {
 
   return (
     <div className="space-y-5">
+      <AdminSecurityPanel />
+
       <Card className="overflow-hidden border-cyan-300/15 bg-gradient-to-br from-slate-950 via-slate-950/90 to-cyan-950/30 p-5 shadow-2xl shadow-black/25">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-4">
