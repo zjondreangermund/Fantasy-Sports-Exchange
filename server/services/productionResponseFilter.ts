@@ -1,14 +1,19 @@
 import type { Express } from "express";
+import { strictReadOnlyGuard } from "./readOnlyGuard.js";
 
 function isProductionTestTournament(value: any) {
   return String(value?.name || "").trim().toUpperCase().startsWith("[TEST]");
 }
 
 /**
- * Simulator data is useful in explicitly enabled admin environments but must
- * never be exposed by the normal public tournament listing in production.
+ * Registers the final global protection layer before any application routes.
+ * The strict guard is intentionally installed here because this function is
+ * called immediately after the base security middleware and before route
+ * registration in server/index.ts.
  */
 export function registerProductionResponseFilters(app: Express) {
+  app.use(strictReadOnlyGuard);
+
   app.use((req, res, next) => {
     if (req.method !== "GET" || req.path !== "/api/competitions") {
       next();
