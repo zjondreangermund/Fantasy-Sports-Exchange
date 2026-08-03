@@ -4,6 +4,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes, requireAuth, isAdmin } from "./routes.js";
 import { registerAdminInsightsRoutes } from "./routes/adminInsights.routes.js";
 import { registerDepositVerificationRoutes } from "./routes/depositVerification.routes.js";
+import { registerSecurityAdminRoutes } from "./routes/securityAdmin.routes.js";
 import { seedDatabase } from "./seed.js";
 import { serveStatic } from "./static.js";
 import { ensureRuntimeSchema } from "./runtime-schema.js";
@@ -19,6 +20,11 @@ import pgSession from "connect-pg-simple";
 import { ensureFplPlayerColumns, syncFplPremierLeaguePlayers } from "./services/fplPlayerSync.js";
 import { ensureApiFootballSyncSchema, startApiFootballSyncScheduler } from "./services/apiFootballSync.js";
 import { registerProductionResponseFilters } from "./services/productionResponseFilter.js";
+import {
+  securityControlMiddleware,
+  securityHeadersMiddleware,
+  securityOriginGuard,
+} from "./services/securityControl.js";
 import { appUrl, authStartupWarnings, getSessionSecret, googleAuthEnabled, googleClientId, googleClientSecret } from "./auth-config.js";
 
 const app = express();
@@ -71,8 +77,11 @@ if (googleAuthEnabled) {
   }));
 }
 
-app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: "256kb", verify: (req, _res, buf) => { req.rawBody = buf; } }));
+app.use(express.urlencoded({ extended: false, limit: "256kb" }));
+app.use(securityHeadersMiddleware);
+app.use(securityOriginGuard);
+app.use(securityControlMiddleware);
 registerProductionResponseFilters(app);
 
 async function ensurePlayerImageColumns() {
@@ -175,6 +184,7 @@ app.use((req, res, next) => {
   try { await seedDatabase(); } catch (error) { console.warn("Could not auto-seed player/card data:", error); }
   registerDepositVerificationRoutes(app, { requireAuth, isAdmin });
   await ensureRuntimeSchema();
+  registerSecurityAdminRoutes(app, { requireAuth, isAdmin });
   try { const result = await syncFplPremierLeaguePlayers(); console.log("FPL Premier League player sync complete:", result); } catch (error) { console.warn("Could not sync FPL Premier League players:", error); }
   await registerRoutes(httpServer, app);
   registerAdminInsightsRoutes(app, { requireAuth, isAdmin });
