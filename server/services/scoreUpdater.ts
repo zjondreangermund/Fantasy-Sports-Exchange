@@ -3,11 +3,12 @@
  *
  * Integrity rules:
  * - Entry windows close at the FPL deadline / first Premier League kickoff.
+ * - Only official Premier League FPL data for the selected gameweek is scored.
+ * - Scores freeze at the configured Tuesday settlement cutoff and never change afterwards.
+ * - FA Cup matches and Premier League fixtures played after the settlement cutoff do not count.
  * - Historical competition scores are never reset when the current gameweek changes.
  * - Every entry receives a gameweek-specific immutable scoring snapshot in tiebreak_meta.
  * - Captain bonus is applied once, to the lineup total only.
- * - Final card history is appended once after the gameweek is finished; live refreshes do not
- *   pollute the last-five history with multiple snapshots from the same gameweek.
  */
 
 import { sql } from "drizzle-orm";
@@ -135,10 +136,16 @@ export class ScoreUpdateService {
     return new Date(String(competition?.startDate || competition?.start_date || 0));
   }
 
-  private isGameweekFinal(event: any, fixtures: any[], gameWeek: number) {
-    if (Boolean(event?.finished || event?.data_checked)) return true;
-    const rows = this.fixturesForGameweek(fixtures, gameWeek);
-    return rows.length > 0 && rows.every((fixture: any) => Boolean(fixture?.finished || fixture?.finished_provisional));
+  private settlementDeadline(competition: any): Date | null {
+    const raw = competition?.settlementAt || competition?.endDate || competition?.end_date;
+    if (!raw) return null;
+    const settlement = new Date(String(raw));
+    return Number.isFinite(settlement.getTime()) ? settlement : null;
+  }
+
+  private isSettlementFinal(competition: any) {
+    const settlement = this.settlementDeadline(competition);
+    return Boolean(settlement && Date.now() >= settlement.getTime());
   }
 
   private currentOrNextGameweek(bootstrap: any) {
@@ -171,18 +178,23 @@ export class ScoreUpdateService {
     return String(competition.status || "");
   }
 
-  private scoringSnapshot(entry: any, cards: any[], cardScores: any[], gameWeek: number, final: boolean) {
+  private scoringSnapshot(entry: any, cards: any[], cardScores: any[], gameWeek: number, final: boolean, settlementAt: Date | null) {
     const captainId = Number(entry?.captainId || 0);
     const captainScore = cardScores.find((score: any) => Number(score?.card_id || 0) === captainId);
     const baseTotal = cardScores.reduce((sum: number, score: any) => sum + toNumber(score?.total_score), 0);
     const totalScore = calculateLineupScore(cardScores, captainId);
     const unresolvedCardIds = cardScores.filter((score: any) => Number(score?.element_id || 0) <= 0).map((score: any) => Number(score?.card_id || 0)).filter(Boolean);
     const complete = cards.length === 5 && cardScores.length === 5 && unresolvedCardIds.length === 0;
+    const updatedAt = new Date().toISOString();
     return {
-      version: 2,
+      version: 3,
       source: "official-fpl-live",
+      competition: "premier-league-only",
+      fixturePolicy: "Only Premier League FPL points recorded before the configured Tuesday settlement cutoff count. Cup matches and later fixtures are excluded.",
       gameWeek,
-      updatedAt: new Date().toISOString(),
+      updatedAt,
+      finalizedAt: final ? updatedAt : null,
+      settlementAt: settlementAt?.toISOString() || null,
       final,
       complete,
       captainId,
@@ -214,20 +226,34 @@ export class ScoreUpdateService {
     const playerStatsMap = new Map();
     const bootstrapElementById = new Map<number, any>();
     const identityMap = this.buildFplIdentityMap(bootstrap);
+    const settlementAt = this.settlementDeadline(competition);
     for (const element of bootstrap?.elements || []) bootstrapElementById.set(Number(element.id), element);
     for (const element of liveData.elements || []) playerStatsMap.set(Number(element.id), mapFplStatsToPlayerStats(element));
 
     const entries = await this.storage.getCompetitionEntries(competition.id);
     let updatedCount = 0;
+    let allComplete = true;
     const unresolved = new Set<number>();
 
     for (const entry of entries) {
       try {
+        const previousSnapshot = asObject(asObject(entry?.tiebreakMeta).scoring);
+        const immutableFinal = Number(previousSnapshot.version || 0) >= 2
+          && Number(previousSnapshot.gameWeek || 0) === gameWeek
+          && previousSnapshot.final === true
+          && previousSnapshot.complete === true;
+        if (immutableFinal) {
+          for (const id of Array.isArray(previousSnapshot.unresolvedCardIds) ? previousSnapshot.unresolvedCardIds : []) unresolved.add(Number(id));
+          updatedCount += 1;
+          continue;
+        }
+
         const lineupCardIds = Array.isArray(entry?.lineupCardIds) ? entry.lineupCardIds.map(Number).filter((id: number) => Number.isInteger(id) && id > 0) : [];
         const cards = (await Promise.all(lineupCardIds.map((cardId: number) => this.storage.getPlayerCardWithPlayer(cardId, entry.userId)))).filter(Boolean);
         const cardScores = this.buildCardScores(cards, identityMap, playerStatsMap);
-        const snapshot = this.scoringSnapshot(entry, cards, cardScores, gameWeek, final);
+        const snapshot = this.scoringSnapshot(entry, cards, cardScores, gameWeek, final, settlementAt);
         snapshot.unresolvedCardIds.forEach((id: number) => unresolved.add(id));
+        if (!snapshot.complete) allComplete = false;
         if (persistCards) await this.persistCardScores(cards, cardScores, bootstrapElementById, final);
         await this.storage.updateCompetitionEntry(entry.id, {
           totalScore: snapshot.totalScore,
@@ -235,6 +261,7 @@ export class ScoreUpdateService {
         });
         updatedCount += 1;
       } catch (error) {
+        allComplete = false;
         console.error(`Failed to update entry ${entry.id}:`, error);
       }
     }
@@ -244,7 +271,7 @@ export class ScoreUpdateService {
       totalEntries: entries.length,
       gameWeek,
       final,
-      complete: updatedCount === entries.length && unresolved.size === 0,
+      complete: updatedCount === entries.length && allComplete && unresolved.size === 0,
       unresolvedCardIds: [...unresolved],
     };
   }
@@ -264,7 +291,7 @@ export class ScoreUpdateService {
       const [bootstrap, fixtures] = await Promise.all([fplApi.bootstrap(), fplApi.fixturesLive()]);
       const currentGameweek = this.currentOrNextGameweek(bootstrap);
       const now = Date.now();
-      const toScore: Array<{ competition: any; event: any; final: boolean }> = [];
+      const toScore: Array<{ competition: any; final: boolean }> = [];
 
       for (const competition of competitions) {
         const gameWeek = Number(competition?.gameWeek || competition?.game_week || 0);
@@ -272,21 +299,23 @@ export class ScoreUpdateService {
         const event = this.eventForGameweek(bootstrap, gameWeek);
         const deadline = this.entryDeadline(competition, event, fixtures);
         const startTime = new Date(String(competition?.startDate || competition?.start_date || 0)).getTime();
-        const final = this.isGameweekFinal(event, fixtures, gameWeek);
+        const final = this.isSettlementFinal(competition);
         let status = String(competition?.status || "upcoming");
 
-        if (status === "upcoming" && Number.isFinite(startTime) && now >= startTime && now < deadline.getTime()) {
+        if (status === "upcoming" && Number.isFinite(startTime) && now >= startTime) {
           await this.setCompetitionStatus(Number(competition.id), "open");
           status = "open";
+          competition.status = "open";
         }
         if (status === "open" && now >= deadline.getTime()) {
           status = await this.activateCompetitionAtDeadline(competition);
         }
-        if (status === "active") toScore.push({ competition: { ...competition, status }, event, final });
-        if ((status === "open" || status === "upcoming") && final) await this.setCompetitionStatus(Number(competition.id), "closed");
+        if (status === "active" || (status === "closed" && final)) {
+          toScore.push({ competition: { ...competition, status }, final });
+        }
       }
 
-      if (!toScore.length) { console.log(`No active Premier League competitions to score (current/next GW${currentGameweek})`); return; }
+      if (!toScore.length) { console.log(`No Premier League competitions require scoring (current/next GW${currentGameweek})`); return; }
       console.log(`📊 Updating ${toScore.length} Premier League competitions without resetting historical scores...`);
 
       const liveByGameweek = new Map<number, Promise<any>>();
@@ -298,11 +327,12 @@ export class ScoreUpdateService {
       let updatedEntries = 0;
       for (const item of toScore) {
         const gameWeek = Number(item.competition?.gameWeek || item.competition?.game_week || 0);
-        const result = await this.scoreCompetitionEntries(item.competition, bootstrap, await liveFor(gameWeek), item.final, gameWeek === currentGameweek);
+        const persistCards = item.final || gameWeek === currentGameweek;
+        const result = await this.scoreCompetitionEntries(item.competition, bootstrap, await liveFor(gameWeek), item.final, persistCards);
         updatedEntries += result.updatedCount;
-        if (item.final && result.updatedCount === result.totalEntries) await this.setCompetitionStatus(Number(item.competition.id), "closed");
+        if (item.final && result.complete) await this.setCompetitionStatus(Number(item.competition.id), "closed");
       }
-      console.log(`✅ Updated ${updatedEntries} tournament entries; completed gameweeks were preserved and closed for settlement.`);
+      console.log(`✅ Updated ${updatedEntries} tournament entries; Tuesday-finalized snapshots remain immutable.`);
     } catch (error) { console.error("Failed to update competition scores:", error); throw error; }
   }
 
@@ -323,15 +353,19 @@ export class ScoreUpdateService {
       const entries = await this.storage.getCompetitionEntries(comp.id);
       return { updatedCount: 0, totalEntries: entries.length, gameWeek, final: false, complete: false, unresolvedCardIds: [], skipped: true, reason: "Tournament entries are still open" };
     }
+    if (String(comp.status) === "upcoming") {
+      await this.setCompetitionStatus(Number(comp.id), "open");
+      comp.status = "open";
+    }
     if (String(comp.status) === "open") {
       await this.activateCompetitionAtDeadline(comp);
     }
     if (!["active", "closed"].includes(String(comp.status))) throw new Error(`Competition ${competitionId} cannot be scored (status: ${comp.status})`);
 
-    const final = this.isGameweekFinal(event, fixtures, gameWeek);
+    const final = this.isSettlementFinal(comp);
     const currentGameweek = this.currentOrNextGameweek(bootstrap);
-    const result = await this.scoreCompetitionEntries(comp, bootstrap, await fplApi.getLiveGameweek(gameWeek), final, gameWeek === currentGameweek && String(comp.status) === "active");
-    if (final && result.updatedCount === result.totalEntries) await this.setCompetitionStatus(Number(comp.id), "closed");
+    const result = await this.scoreCompetitionEntries(comp, bootstrap, await fplApi.getLiveGameweek(gameWeek), final, final || gameWeek === currentGameweek);
+    if (final && result.complete) await this.setCompetitionStatus(Number(comp.id), "closed");
     return result;
   }
 }
