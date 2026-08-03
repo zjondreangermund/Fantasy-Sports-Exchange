@@ -7,17 +7,17 @@ import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { useToast } from "../../hooks/use-toast";
-import { Gift, Plus, Save, Trash2, Trophy } from "lucide-react";
+import { CheckCircle2, Gift, Plus, Save, Trash2, Trophy } from "lucide-react";
 
 const rarityOptions = ["common", "rare", "unique", "epic", "legendary"];
-const statusOptions = ["open", "upcoming", "active", "completed"];
+const statusOptions = ["open", "upcoming", "active", "closed"];
 const entryFeeByRarity: Record<string, number> = { common: 10, rare: 50, unique: 100, epic: 250, legendary: 500 };
 const marginByRarity: Record<string, number> = { common: 2.0, rare: 1.8, unique: 1.7, epic: 1.6, legendary: 1.5 };
 const rarityTone: Record<string, string> = {
   common: "border-slate-300/30 bg-slate-300/10 text-slate-100",
   rare: "border-sky-300/30 bg-sky-400/10 text-sky-100",
   unique: "border-purple-300/40 bg-purple-500/15 text-purple-100",
-  epic: "border-fuchsia-300/40 bg-fuchsia-500/15 text-fuchsia-100",
+  epic: "border-red-300/40 bg-red-500/15 text-red-100",
   legendary: "border-amber-300/40 bg-amber-400/15 text-amber-100",
 };
 
@@ -34,7 +34,20 @@ function isoLocal(value: unknown) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function defaultStartForGw(gw: number) { const base = new Date("2026-08-14T19:00:00+02:00"); base.setDate(base.getDate() + (Math.max(1, gw) - 1) * 7); return isoLocal(base); }
-function defaultEndForGw(gw: number) { const d = new Date(defaultStartForGw(gw)); d.setDate(d.getDate() + 3); d.setHours(23, 59, 0, 0); return isoLocal(d); }
+function defaultEndForGw(gw: number) {
+  const d = new Date(defaultStartForGw(gw));
+  let daysForward = (2 - d.getDay() + 7) % 7;
+  if (daysForward === 0) daysForward = 7;
+  d.setDate(d.getDate() + daysForward);
+  d.setHours(23, 59, 0, 0);
+  return isoLocal(d);
+}
+function settlementLabel(value: unknown) {
+  if (!value) return "Not set";
+  const date = new Date(String(value));
+  if (!Number.isFinite(date.getTime())) return "Invalid date";
+  return new Intl.DateTimeFormat("en-NA", { timeZone: "Africa/Windhoek", weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(date) + " CAT";
+}
 function buildEmptyForm() {
   return { id: "", name: "GW1 Rare Vault", tier: "rare", status: "open", gameWeek: "1", entryFee: "50", maxEntries: "5000", visibility: "public", prizeType: "goods", prizeKey: "ladder", prizeDescription: "Rare Prize Vault ladder", startDate: defaultStartForGw(1), endDate: defaultEndForGw(1) };
 }
@@ -74,8 +87,20 @@ export default function AdminTournamentManager() {
       const res = await apiRequest(form.id ? "PATCH" : "POST", form.id ? `/api/admin/competitions/${form.id}` : "/api/admin/competitions", body);
       return res.json();
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/competitions"] }); toast({ title: form.id ? "Tournament updated" : "Tournament created", description: `${form.tier} ladder linked. Prize upscales as entries grow.` }); if (!form.id) setForm(buildEmptyForm()); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/competitions"] }); toast({ title: form.id ? "Tournament updated" : "Tournament created", description: `${form.tier} ladder linked. Scores freeze at the configured settlement cutoff.` }); if (!form.id) setForm(buildEmptyForm()); },
     onError: (error: any) => toast({ title: "Tournament save failed", description: error.message, variant: "destructive" }),
+  });
+
+  const settleMutation = useMutation({
+    mutationFn: async (competitionId: number) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, {})).json(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/competitions/my-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/prize-vault"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/backoffice?range=30d"] });
+      toast({ title: "Tournament settled", description: "Tuesday-frozen scores, ranks and prizes are now final." });
+    },
+    onError: (error: any) => toast({ title: "Tournament settlement failed", description: error.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -95,6 +120,11 @@ export default function AdminTournamentManager() {
     deleteMutation.mutate(Number(comp.id));
   };
 
+  const requestSettlement = (comp: any) => {
+    if (!window.confirm(`Settle "${comp.name || "this tournament"}" using the score frozen at ${settlementLabel(comp.endDate || comp.end_date)}?`)) return;
+    settleMutation.mutate(Number(comp.id));
+  };
+
   const loadCompetition = (comp: any) => {
     const tier = String(comp.tier || "common").toLowerCase();
     setPreviewRarity(tier);
@@ -104,7 +134,7 @@ export default function AdminTournamentManager() {
   return (
     <Card className="border-white/10 bg-white/[0.06] p-4 text-white backdrop-blur-xl">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div><div className="flex items-center gap-2 text-lg font-black"><Trophy className="h-5 w-5 text-yellow-300" /> Official Tournament Builder</div><p className="mt-1 text-sm text-white/45">Create tournaments linked to a full rarity ladder. Admin no longer chooses one prize; the highest unlocked prize wins for that gameweek.</p></div>
+        <div><div className="flex items-center gap-2 text-lg font-black"><Trophy className="h-5 w-5 text-yellow-300" /> Official Tournament Builder</div><p className="mt-1 text-sm text-white/45">Entries lock at the first Premier League kickoff. The end field is the Tuesday score-freeze and settlement cutoff, not a Tuesday-to-Tuesday scoring window.</p></div>
         <div className="flex gap-2"><Link href="/prize-vault"><Button variant="outline" className="rounded-xl border-emerald-300/30 bg-emerald-300/10 text-emerald-100"><Gift className="mr-2 h-4 w-4" />Prize Vault</Button></Link><Button onClick={() => setForm(buildEmptyForm())} className="rounded-xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><Plus className="mr-2 h-4 w-4" />New</Button></div>
       </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-[.9fr_1.1fr]">
@@ -118,8 +148,9 @@ export default function AdminTournamentManager() {
             <label className="space-y-1 text-sm"><span className="text-white/55">Status</span><select value={form.status} onChange={(e) => setField("status", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 capitalize text-white">{statusOptions.map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
             <label className="space-y-1 text-sm"><span className="text-white/55">Visibility</span><select value={form.visibility} onChange={(e) => setField("visibility", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-white"><option value="public">Public</option><option value="private">Private PIN</option></select></label>
             <div className="md:col-span-2 rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm text-cyan-50"><b>Linked prize mode:</b> {form.tier.toUpperCase()} ladder. First unlock: {nextPrize ? `${nextPrize.title} at ${nextPrize.requiredEntrants} entries` : "loading..."}. Margin: {marginByRarity[form.tier] || 1.8}x.</div>
-            <label className="space-y-1 text-sm"><span className="text-white/55">Manual fallback start</span><Input type="datetime-local" value={form.startDate} onChange={(e) => setField("startDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
-            <label className="space-y-1 text-sm"><span className="text-white/55">End date</span><Input type="datetime-local" value={form.endDate} onChange={(e) => setField("endDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
+            <label className="space-y-1 text-sm"><span className="text-white/55">Entries open from</span><Input type="datetime-local" value={form.startDate} onChange={(e) => setField("startDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
+            <label className="space-y-1 text-sm"><span className="text-white/55">Tuesday settlement cutoff</span><Input type="datetime-local" value={form.endDate} onChange={(e) => setField("endDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
+            <div className="md:col-span-2 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs text-amber-100">Only Premier League FPL points recorded before this settlement cutoff count. FA Cup matches and Premier League fixtures played later are excluded.</div>
           </div>
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full rounded-xl bg-yellow-300 font-black text-slate-950 hover:bg-yellow-200"><Save className="mr-2 h-4 w-4" />{saveMutation.isPending ? "Saving..." : form.id ? "Save Changes" : "Create Official Tournament"}</Button>
         </div>
@@ -132,8 +163,8 @@ export default function AdminTournamentManager() {
             </div>
           </div>
           <div className="max-h-[34rem] space-y-4 overflow-y-auto pr-1">
-            <TournamentList title="Current & Upcoming" competitions={activeCompetitions} selectedId={form.id} onLoad={loadCompetition} onDelete={requestDelete} deleting={deleteMutation.isPending} />
-            <TournamentList title="Completed" competitions={completedCompetitions} selectedId={form.id} onLoad={loadCompetition} onDelete={requestDelete} deleting={deleteMutation.isPending} />
+            <TournamentList title="Current & Upcoming" competitions={activeCompetitions} selectedId={form.id} onLoad={loadCompetition} onDelete={requestDelete} onSettle={requestSettlement} deleting={deleteMutation.isPending} settling={settleMutation.isPending} />
+            <TournamentList title="Closed & Completed" competitions={completedCompetitions} selectedId={form.id} onLoad={loadCompetition} onDelete={requestDelete} onSettle={requestSettlement} deleting={deleteMutation.isPending} settling={settleMutation.isPending} />
           </div>
         </div>
       </div>
@@ -141,7 +172,6 @@ export default function AdminTournamentManager() {
   );
 }
 
-
-function TournamentList({ title, competitions, selectedId, onLoad, onDelete, deleting }: any) {
-  return <section><div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-black uppercase tracking-[.14em] text-white/60">{title}</h4><Badge variant="outline">{competitions.length}</Badge></div><div className="space-y-2">{competitions.length ? competitions.map((comp: any) => <div key={comp.id} className={`rounded-xl border p-3 text-sm transition ${String(selectedId) === String(comp.id) ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25"}`}><button onClick={() => onLoad(comp)} className="w-full text-left"><div className="flex items-center justify-between gap-3"><span className="font-bold">{comp.name}</span><Badge className="capitalize">{comp.status}</Badge></div><div className="mt-1 text-white/50">GW {comp.gameWeek ?? comp.game_week} • {comp.tier} ladder • Entry {money(comp.entryFee ?? comp.entry_fee)}</div><div className="mt-1 text-xs text-cyan-100/60">Current entries: {comp.entryCount ?? comp.entry_count ?? 0}</div></button><Button variant="destructive" size="sm" disabled={deleting} onClick={() => onDelete(comp)} className="mt-3 w-full"><Trash2 className="mr-2 h-4 w-4" />Delete Tournament</Button></div>) : <div className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-white/40">No tournaments in this section.</div>}</div></section>;
+function TournamentList({ title, competitions, selectedId, onLoad, onDelete, onSettle, deleting, settling }: any) {
+  return <section><div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-black uppercase tracking-[.14em] text-white/60">{title}</h4><Badge variant="outline">{competitions.length}</Badge></div><div className="space-y-2">{competitions.length ? competitions.map((comp: any) => { const status = String(comp.status || "").toLowerCase(); const settlement = comp.endDate || comp.end_date; const settlementMs = new Date(String(settlement || "")).getTime(); const readyToSettle = ["active", "closed"].includes(status) && Number.isFinite(settlementMs) && Date.now() >= settlementMs; return <div key={comp.id} className={`rounded-xl border p-3 text-sm transition ${String(selectedId) === String(comp.id) ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25"}`}><button onClick={() => onLoad(comp)} className="w-full text-left"><div className="flex items-center justify-between gap-3"><span className="font-bold">{comp.name}</span><Badge className="capitalize">{comp.status}</Badge></div><div className="mt-1 text-white/50">GW {comp.gameWeek ?? comp.game_week} • {comp.tier} ladder • Entry {money(comp.entryFee ?? comp.entry_fee)}</div><div className="mt-1 text-xs text-cyan-100/60">Settlement: {settlementLabel(settlement)} • Entries: {comp.entryCount ?? comp.entry_count ?? 0}</div></button>{readyToSettle ? <Button size="sm" disabled={settling} onClick={() => onSettle(comp)} className="mt-3 w-full bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200"><CheckCircle2 className="mr-2 h-4 w-4" />{settling ? "Settling..." : "Settle Tuesday Results"}</Button> : null}<Button variant="destructive" size="sm" disabled={deleting} onClick={() => onDelete(comp)} className="mt-2 w-full"><Trash2 className="mr-2 h-4 w-4" />Delete Tournament</Button></div>; }) : <div className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-white/40">No tournaments in this section.</div>}</div></section>;
 }
