@@ -8,6 +8,7 @@ import { ensurePlayerCardSerialIntegrity } from "./services/playerCardSerials.js
 import { ensureWalletPostingSchema } from "./services/walletPostingSchema.js";
 import { ensureLoanPaymentSchema } from "./services/loanPaymentSchema.js";
 import { ensureForgeOperationSchema } from "./services/forgeOperationSchema.js";
+import { ensureSecurityControlSchema } from "./services/securityControl.js";
 
 export async function ensureRuntimeSchema() {
   // External-money flows read the extended ledger and withdrawal columns. Prepare those
@@ -26,6 +27,7 @@ export async function ensureRuntimeSchema() {
   await ensureWalletPostingSchema();
   await ensureLoanPaymentSchema();
   await ensureForgeOperationSchema();
+  await ensureSecurityControlSchema();
 
   // Seeding runs only after this function completes. Canonicalize serials here so
   // legacy duplicate or missing values cannot crash the seed path first.
