@@ -55,11 +55,16 @@ requireText("server/routes/securityAdmin.routes.ts", [
 
 requireText("client/src/components/admin/AdminSecurityPanel.tsx", [
   '["/api/admin/security"]',
+  'refetchOnMount: "always"',
+  'const emergencyMutation = useMutation',
   'apiRequest("PATCH", "/api/admin/security"',
+  'updateEmergencySwitch("readOnly"',
+  'setClientSecurityStatus(settings.emergency)',
+  'queryClient.invalidateQueries({ queryKey: PUBLIC_SECURITY_KEY })',
   "/api/admin/security/events/${eventId}/resolve",
   "/api/admin/security/rate-limits/clear",
   "/api/admin/security/sessions/revoke-others",
-], "security admin links");
+], "persistent security admin controls and links");
 
 requireText("client/src/components/SecurityModeBanner.tsx", [
   '["/api/security/status"]',
@@ -100,4 +105,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Read-only enforcement, security admin links and tournament/marketplace/auction routes verified.");
+console.log("Read-only enforcement, persistent emergency controls, security links and tournament/marketplace/auction routes verified.");
