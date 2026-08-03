@@ -30,9 +30,9 @@ echo "Preparing runtime database compatibility..."
 node scripts/prepare-runtime-startup.mjs
 
 # Rebuild the official 2026/27 tournament calendar from live FPL fixtures.
-# This removes only old official ladder tournaments, preserves user-created cups,
-# creates one tournament per rarity per gameweek, and adjusts Tuesday windows
-# when a Premier League midweek round would overlap.
+# Entry availability is scheduled before the first Premier League kickoff, while
+# each competition's end_date is the following Tuesday 23:59 CAT score-freeze
+# and settlement cutoff. Existing entries and user-created tournaments remain.
 echo "Syncing official rarity tournaments..."
 node scripts/sync-official-tournaments.mjs || echo "Warning: official tournament sync failed; starting with existing tournaments."
 
