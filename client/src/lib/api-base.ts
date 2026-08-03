@@ -1,3 +1,5 @@
+import { createReadOnlyResponse, shouldClientBlockRequest } from "./security-mode";
+
 export const API_BASE = String(import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
 
 export function toApiUrl(url: string): string {
@@ -16,6 +18,10 @@ export function patchFetchForApiBase() {
 
   const originalFetch = window.fetch.bind(window);
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    if (shouldClientBlockRequest(input, init)) {
+      return Promise.resolve(createReadOnlyResponse());
+    }
+
     if (typeof input === "string") {
       return originalFetch(toApiUrl(input), init);
     }
