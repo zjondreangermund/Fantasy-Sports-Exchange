@@ -24,7 +24,9 @@ export function registerSecurityAdminRoutes(app: Express, deps: RegisterSecurity
 
   app.get("/api/security/status", async (_req, res) => {
     try {
-      const record = await getSecuritySettings();
+      const record = await getSecuritySettings(true);
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
       return res.json({
         readOnly: record.settings.emergency.readOnly,
         authPaused: record.settings.emergency.authPaused,
@@ -34,8 +36,11 @@ export function registerSecurityAdminRoutes(app: Express, deps: RegisterSecurity
         auctionsPaused: record.settings.emergency.auctionsPaused,
         message: record.settings.emergency.message,
         updatedAt: record.updatedAt,
+        enforcement: "strict_global",
+        recoveryRoute: "PATCH /api/admin/security",
       });
     } catch (error: any) {
+      res.setHeader("Cache-Control", "no-store");
       return res.status(500).json({ message: error?.message || "Security status unavailable" });
     }
   });
@@ -46,11 +51,13 @@ export function registerSecurityAdminRoutes(app: Express, deps: RegisterSecurity
         getSecuritySettings(true),
         getSecurityOverview(req.query?.limit),
       ]);
+      res.setHeader("Cache-Control", "no-store");
       return res.json({
         ...record,
         overview,
         runtime: {
           ...getRuntimeSecurityStatus(),
+          strictGlobalReadOnlyGuard: true,
           cloudflareRequestDetected: Boolean(req.headers?.["cf-ray"] || req.headers?.["cf-connecting-ip"]),
           forwardedProtocol: String(req.headers?.["x-forwarded-proto"] || req.protocol || ""),
         },
@@ -68,6 +75,7 @@ export function registerSecurityAdminRoutes(app: Express, deps: RegisterSecurity
         return res.status(400).json({ message: "A security settings object is required" });
       }
       const record = await updateSecuritySettings(candidate, userIdFrom(req));
+      res.setHeader("Cache-Control", "no-store");
       return res.json({ success: true, ...record, overview: await getSecurityOverview(60) });
     } catch (error: any) {
       console.error("Failed to update security settings:", error);
