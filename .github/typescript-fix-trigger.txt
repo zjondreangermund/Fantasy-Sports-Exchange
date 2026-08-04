@@ -1,0 +1,1 @@
+Trigger focused TypeScript repair workflow for preview tournament JSX.
