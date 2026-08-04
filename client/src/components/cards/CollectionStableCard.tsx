@@ -146,7 +146,7 @@ export default function CollectionStableCard({ player, selected = false, onClick
 
         <div style={{ position: "absolute", left: 11 * scale, right: 11 * scale, bottom: 33 * scale, padding: `${6 * scale}px ${7 * scale}px`, borderRadius: 12 * scale, background: "linear-gradient(180deg, rgba(2,6,23,.84), rgba(2,6,23,.60))", border: "1px solid rgba(255,255,255,.35)", boxShadow: `0 9px 18px rgba(0,0,0,.64), 0 0 16px ${palette.glow}, inset 0 1px 0 rgba(255,255,255,.21)`, textAlign: "center" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 * scale }}>
-            <StatChip label="OVR" value={ovr} scale={scale} glow={palette.glow} />
+            <StatChip label="A-OVR" value={ovr} scale={scale} glow={palette.glow} />
             <StatChip label="PTS" value={points} scale={scale} glow={palette.glow} />
             <StatChip label="FORM" value={form} scale={scale} glow={palette.glow} />
           </div>

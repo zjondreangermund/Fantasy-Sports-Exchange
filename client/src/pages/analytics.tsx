@@ -111,7 +111,7 @@ export default function AnalyticsPage() {
           <div className="grid gap-4 md:grid-cols-4">
             <StatCard label="Official Season Points" value={analytics.verifiedOwned.length ? String(Math.round(analytics.totalPoints)) : "—"} sub={`${analytics.verifiedOwned.length}/${analytics.owned.length} verified cards`} icon={TrendingUp} />
             <StatCard label="Lineup Season Points" value={analytics.verifiedLineup.length ? String(Math.round(analytics.lineupPoints)) : "—"} sub={`${analytics.verifiedLineup.length}/${analytics.lineup.length} verified lineup cards`} icon={Trophy} />
-            <StatCard label="Avg Official OVR" value={analytics.avgRating === null ? "—" : analytics.avgRating.toFixed(1)} sub="Verified cards only" icon={Star} />
+            <StatCard label="Avg Arena OVR" value={analytics.avgRating === null ? "—" : analytics.avgRating.toFixed(1)} sub="Derived from verified FPL inputs" icon={Star} />
             <StatCard label="Tradeable" value={String(analytics.tradeable)} sub="Rare+ market cards" icon={ShieldCheck} />
           </div>
         )}
@@ -142,7 +142,7 @@ export default function AnalyticsPage() {
           <Card className="rounded-3xl border-slate-800 bg-slate-950/60 p-5 text-white">
             <h2 className="text-lg font-black">Data Policy</h2>
             <div className="mt-4 space-y-3 text-sm text-slate-400">
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4"><b className="text-emerald-200">Included:</b> official FPL season points, form, player identity, club and position.</div>
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4"><b className="text-emerald-200">Included:</b> official FPL season points, form, player identity, club and position. Arena OVR is a Fantasy Arena rating derived from verified FPL inputs.</div>
               <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4"><b className="text-amber-200">Not estimated:</b> missing player ratings, reconstructed match totals or invented recent-form results.</div>
               <div className="rounded-2xl border border-slate-800 bg-black/25 p-4">Open any verified card below to inspect its provider and complete match history.</div>
             </div>
