@@ -355,6 +355,22 @@ function isUnsafeMethod(method: string) {
   return !["GET", "HEAD", "OPTIONS"].includes(String(method || "GET").toUpperCase());
 }
 
+function isAuthenticationRoute(path: string) {
+  return path === "/api/login" || path === "/api/auth/google" || path === "/api/auth/google/callback";
+}
+
+function isReadOnlyPreviewMutation(method: string, path: string) {
+  const upper = String(method || "GET").toUpperCase();
+  if (upper === "PATCH" && path === "/api/user/profile") return true;
+  if (upper !== "POST") return false;
+  return [
+    "/api/onboarding/create-offer",
+    "/api/onboarding/choose",
+    "/api/rewards/daily-login/claim",
+    "/api/referrals/claim",
+  ].includes(path);
+}
+
 function cleanupBuckets(now: number) {
   if (now - lastBucketCleanup < 60_000) return;
   lastBucketCleanup = now;
@@ -386,9 +402,9 @@ function rateGroup(req: any, settings: SecuritySettings) {
 
 function emergencyBlock(settings: SecuritySettings, req: any) {
   const path = String(req.path || "");
-  if (path.startsWith("/api/admin/security") || path === "/api/security/status" || path === "/api/auth/logout") return null;
-  if (settings.emergency.readOnly && isUnsafeMethod(req.method)) return "read_only";
-  if (settings.emergency.authPaused && (path === "/api/login" || path === "/api/auth/google" || path === "/api/auth/google/callback")) return "auth_paused";
+  if (path.startsWith("/api/admin/security") || path === "/api/security/status" || path === "/api/auth/logout" || path === "/api/logout") return null;
+  if (settings.emergency.authPaused && isAuthenticationRoute(path)) return "auth_paused";
+  if (settings.emergency.readOnly && isUnsafeMethod(req.method) && !isReadOnlyPreviewMutation(req.method, path)) return "read_only";
   if (settings.emergency.depositsPaused && req.method === "POST" && path === "/api/wallet/deposit") return "deposits_paused";
   if (settings.emergency.withdrawalsPaused && req.method === "POST" && path === "/api/wallet/withdraw") return "withdrawals_paused";
   if (settings.emergency.marketplacePaused && isUnsafeMethod(req.method) && path.startsWith("/api/marketplace")) return "marketplace_paused";
@@ -460,7 +476,7 @@ export const securityControlMiddleware: RequestHandler = async (req: any, res, n
         details: { method: req.method },
       });
       res.setHeader("Cache-Control", "no-store");
-      return res.status(503).json({ code: blockedBy, message: settings.emergency.message });
+      return res.status(503).json({ code: blockedBy, message: blockedBy === "auth_paused" ? "New sign-ups and logins are temporarily paused." : settings.emergency.message });
     }
 
     const group = rateGroup(req, settings);
@@ -538,5 +554,7 @@ export function getRuntimeSecurityStatus() {
     csrfOriginGuard: true,
     securityHeaders: true,
     applicationRateLimiting: true,
+    previewSignupsDuringReadOnly: true,
+    dailyLoginCommonCardCap: 20,
   };
 }
