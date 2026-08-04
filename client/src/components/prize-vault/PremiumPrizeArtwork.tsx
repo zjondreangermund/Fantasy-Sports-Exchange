@@ -81,24 +81,28 @@ function SpriteTile({ src, index, className, title, onError, decorative = false 
   const row = Math.floor(safeIndex / 5);
 
   return (
-    <svg
-      viewBox="0 0 128 128"
-      preserveAspectRatio="xMidYMid meet"
+    <div
       className={className}
       role={decorative ? undefined : "img"}
       aria-hidden={decorative ? true : undefined}
       aria-label={decorative ? undefined : title}
     >
-      <image
-        href={src}
-        x={-column * 128}
-        y={-row * 128}
-        width="640"
-        height="512"
-        preserveAspectRatio="none"
+      <div
+        className="h-full w-full bg-no-repeat"
+        style={{
+          backgroundImage: `url("${src}")`,
+          backgroundSize: "500% 400%",
+          backgroundPosition: `${column * 25}% ${row * (100 / 3)}%`,
+        }}
+      />
+      <img
+        src={src}
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute h-px w-px opacity-0"
         onError={onError}
       />
-    </svg>
+    </div>
   );
 }
 
