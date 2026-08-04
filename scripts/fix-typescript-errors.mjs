@@ -155,4 +155,10 @@ replace(
   'requireText(server, "pg_advisory_xact_lock(87421, selected.card_id)", "Concurrent submissions must serialize card selection.");',
 );
 
+replace(
+  "scripts/verify-tournament-scoring-legal-integrity.mjs",
+  'includesAll(myEntries, ["My Teams & Prizes", "Submitted lineup", "Prize claim pending", "Final scoring snapshot stored"], "Submitted teams page");',
+  'includesAll(myEntries, ["My Teams & Prizes", "Submitted lineup", "prize claim pending", "Final scoring snapshot stored"], "Submitted teams page");',
+);
+
 console.log("Applied focused TypeScript repairs.");
