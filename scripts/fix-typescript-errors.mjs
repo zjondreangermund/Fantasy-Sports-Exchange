@@ -149,5 +149,10 @@ replace(
   'requireText(server, "REQUIRED_LINEUP_POSITIONS", "Server validation must enforce the guided formation.");',
   'requireText(server, "TOURNAMENT_REQUIRED_POSITIONS", "Server validation must enforce the guided formation.");',
 );
+replace(
+  "scripts/verify-tournament-lineup-integrity.mjs",
+  'requireText(server, "pg_advisory_xact_lock(87421, card_id)", "Concurrent submissions must serialize card selection.");',
+  'requireText(server, "pg_advisory_xact_lock(87421, selected.card_id)", "Concurrent submissions must serialize card selection.");',
+);
 
 console.log("Applied focused TypeScript repairs.");
