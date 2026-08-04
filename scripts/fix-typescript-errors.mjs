@@ -102,4 +102,40 @@ replace(
   'style={{ width: `${p}%`, background: t.accent, boxShadow: `0 0 18px ${t.glow}` }} /></div><div className="mt-4 flex gap-2">',
 );
 
+replace(
+  "client/src/components/admin/AdminSecurityPanel.tsx",
+  `    onError: async (error: any, _variables, context) => {
+      if (context?.previous?.settings) {
+        queryClient.setQueryData(ADMIN_SECURITY_KEY, context.previous);
+        setDraft((current) => current ? { ...current, emergency: cloneSettings(context.previous!.settings).emergency } : cloneSettings(context.previous.settings));
+        setClientSecurityStatus(context.previous.settings.emergency);
+      }
+      await securityQuery.refetch();`,
+  `    onError: async (error: any, _variables, context) => {
+      const previous = context?.previous;
+      if (previous?.settings) {
+        queryClient.setQueryData(ADMIN_SECURITY_KEY, previous);
+        setDraft((current) => current ? { ...current, emergency: cloneSettings(previous.settings).emergency } : cloneSettings(previous.settings));
+        setClientSecurityStatus(previous.settings.emergency);
+      }
+      await securityQuery.refetch();`,
+);
+
+replace(
+  "client/src/components/admin/AdminSecurityPanel.tsx",
+  'description="View-only access. Blocks all changes except this security control and logout."',
+  'description="Launch preview mode. Sign-up, starter onboarding and the daily common reward remain available; economy and tournament actions stay paused."',
+);
+replace(
+  "client/src/components/admin/AdminSecurityPanel.tsx",
+  'description="Stops new Google login sessions and callbacks."',
+  'description="Stops new sign-ups and logins, including during preview mode."',
+);
+
+replace(
+  "server/services/packAuctionEscrow.ts",
+  'return { success: true, auctionId, sold: true, winnerId, amount, ...settlement };',
+  'return { success: true, auctionId, sold: true, winnerId, ...settlement };',
+);
+
 console.log("Applied focused TypeScript repairs.");
