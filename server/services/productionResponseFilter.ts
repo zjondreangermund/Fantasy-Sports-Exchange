@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { registerDailyLoginRewardRoutes } from "../routes/dailyLoginReward.routes.js";
 import { strictReadOnlyGuard } from "./readOnlyGuard.js";
 
 function isProductionTestTournament(value: any) {
@@ -13,6 +14,7 @@ function isProductionTestTournament(value: any) {
  */
 export function registerProductionResponseFilters(app: Express) {
   app.use(strictReadOnlyGuard);
+  registerDailyLoginRewardRoutes(app);
 
   app.use((req, res, next) => {
     if (req.method !== "GET" || req.path !== "/api/competitions") {
