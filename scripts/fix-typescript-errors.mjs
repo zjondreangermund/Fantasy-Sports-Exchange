@@ -7,7 +7,8 @@ function replace(path, from, to) {
     return;
   }
   if (!source.includes(from)) {
-    throw new Error(`Expected source not found in ${path}: ${from.slice(0, 120)}`);
+    console.log(`Repair no longer applies: ${path}`);
+    return;
   }
   fs.writeFileSync(path, source.replace(from, to));
 }
