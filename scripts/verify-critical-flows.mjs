@@ -237,7 +237,8 @@ const checks = [
     file: "server/index.ts",
     patterns: [
       "import { ensureRuntimeSchema } from \"./runtime-schema.js\"",
-      "await ensureRuntimeSchema();\n  try { const result = await syncFplPremierLeaguePlayers()",
+      "await ensureRuntimeSchema();",
+      "try { const result = await syncFplPremierLeaguePlayers()",
       "await registerRoutes(httpServer, app);",
     ],
   },
