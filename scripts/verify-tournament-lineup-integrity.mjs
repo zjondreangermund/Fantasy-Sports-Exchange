@@ -30,7 +30,7 @@ requireText(server, "p.league as league", "Server validation must load each play
 requireText(server, "Premier League tournaments only accept Premier League player cards.", "Server validation must reject non-Premier-League cards.");
 requireText(server, "TOURNAMENT_REQUIRED_POSITIONS", "Server validation must enforce the guided formation.");
 requireText(server, "Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player.", "Server must enforce ordered formation slots.");
-requireText(server, "pg_advisory_xact_lock(87421, card_id)", "Concurrent submissions must serialize card selection.");
+requireText(server, "pg_advisory_xact_lock(87421, selected.card_id)", "Concurrent submissions must serialize card selection.");
 requireText(server, "jsonb_array_elements_text", "Server must check previous lineups for overlapping cards.");
 requireText(server, "Each tournament entry must use five different unused cards.", "Server must reject card reuse across a user's entries.");
 requireText(server, "entry_fee_paid", "Each tournament entry must persist the fee actually paid.");
