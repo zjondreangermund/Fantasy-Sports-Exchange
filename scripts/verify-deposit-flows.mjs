@@ -74,16 +74,6 @@ const checks = [
       "await ensureDepositVerificationSchema()",
     ],
   },
-  {
-    name: "verified deposit routes shadow legacy wallet handlers",
-    file: "server/index.ts",
-    patterns: [
-      "registerDepositVerificationRoutes",
-      "registerDepositVerificationRoutes(app, { requireAuth, isAdmin });\n  await ensureRuntimeSchema();",
-      "await ensureRuntimeSchema();\n  try { const result = await syncFplPremierLeaguePlayers()",
-      "await registerRoutes(httpServer, app);",
-    ],
-  },
 ];
 
 let failures = 0;
@@ -100,8 +90,20 @@ for (const check of checks) {
   }
 }
 
+const index = read("server/index.ts");
+const depositRoutesAt = index.indexOf("registerDepositVerificationRoutes(app, { requireAuth, isAdmin });");
+const runtimeSchemaAt = index.indexOf("await ensureRuntimeSchema();");
+const applicationRoutesAt = index.indexOf("await registerRoutes(httpServer, app);");
+if (depositRoutesAt < 0 || runtimeSchemaAt < 0 || applicationRoutesAt < 0 || !(depositRoutesAt < runtimeSchemaAt && runtimeSchemaAt < applicationRoutesAt)) {
+  failures += 1;
+  console.error("✗ verified deposit routes shadow legacy wallet handlers");
+  console.error("  server/index.ts must register verified deposit routes before runtime schema and application routes");
+} else {
+  console.log("✓ verified deposit routes shadow legacy wallet handlers");
+}
+
 if (failures) {
   console.error(`\n${failures} deposit integrity check(s) failed.`);
   process.exit(1);
 }
-console.log(`\nAll ${checks.length} deposit integrity checks passed.`);
+console.log(`\nAll ${checks.length + 1} deposit integrity checks passed.`);
