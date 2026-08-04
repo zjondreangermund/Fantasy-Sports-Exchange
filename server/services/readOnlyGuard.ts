@@ -31,6 +31,19 @@ function isAuthenticationMutation(method: string, path: string): boolean {
   return !SAFE_METHODS.has(method.toUpperCase()) && path.startsWith("/api/auth/") && path !== "/api/auth/logout";
 }
 
+function isReadOnlyPreviewRequest(method: string, path: string): boolean {
+  const upper = String(method || "GET").toUpperCase();
+  if (isAuthenticationMutation(upper, path)) return true;
+  if (upper === "PATCH" && path === "/api/user/profile") return true;
+  if (upper !== "POST") return false;
+  return [
+    "/api/onboarding/create-offer",
+    "/api/onboarding/choose",
+    "/api/rewards/daily-login/claim",
+    "/api/referrals/claim",
+  ].includes(path);
+}
+
 function isStateChangingRequest(method: string, path: string): boolean {
   if (isRecoveryRoute(method, path)) return false;
   if (!SAFE_METHODS.has(method.toUpperCase())) return true;
@@ -52,8 +65,11 @@ function isMarketplaceMutationPath(path: string): boolean {
 function emergencyReason(settings: SecuritySettings, method: string, path: string): string | null {
   if (isRecoveryRoute(method, path)) return null;
 
-  if (settings.emergency.readOnly && isStateChangingRequest(method, path)) return "read_only";
+  // The dedicated login switch overrides preview access. When it is off,
+  // read-only launch mode still allows registration, starter onboarding and
+  // one controlled daily common-card reward while all economy actions stay frozen.
   if (settings.emergency.authPaused && isAuthenticationMutation(method, path)) return "auth_paused";
+  if (settings.emergency.readOnly && isStateChangingRequest(method, path) && !isReadOnlyPreviewRequest(method, path)) return "read_only";
 
   if (!SAFE_METHODS.has(method.toUpperCase())) {
     if (settings.emergency.depositsPaused && matchesAny(path, ["/deposit", "/deposits"])) return "deposits_paused";
@@ -67,7 +83,7 @@ function emergencyReason(settings: SecuritySettings, method: string, path: strin
 
 function blockedMessage(settings: SecuritySettings, reason: string): string {
   if (reason === "read_only") return settings.emergency.message || "Fantasy Arena is currently in view-only mode.";
-  if (reason === "auth_paused") return "New logins are temporarily paused.";
+  if (reason === "auth_paused") return "New sign-ups and logins are temporarily paused.";
   if (reason === "deposits_paused") return "Deposits are temporarily paused.";
   if (reason === "withdrawals_paused") return "Withdrawals are temporarily paused.";
   if (reason === "marketplace_paused") return "Marketplace buying, selling and loans are temporarily paused.";
@@ -79,9 +95,10 @@ function blockedMessage(settings: SecuritySettings, reason: string): string {
  * Strict, route-complete emergency guard.
  *
  * It runs before every application route and re-reads the database for every
- * state-changing request. This avoids stale multi-instance caches and ensures
- * that read-only mode cannot be bypassed by marketplace, card, loan, auction,
- * tournament, wallet, profile, onboarding or admin mutation routes.
+ * state-changing request. Read-only preview has a deliberately narrow allowlist
+ * for signup/login, starter onboarding and the capped daily common-card reward.
+ * Marketplace, wallet, auction, tournament and ordinary account mutations remain
+ * blocked at the server even when a user bypasses the interface.
  */
 export const strictReadOnlyGuard: RequestHandler = async (req: any, res, next) => {
   const path = requestPath(req);
