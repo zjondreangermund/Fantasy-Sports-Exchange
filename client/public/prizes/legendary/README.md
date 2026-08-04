@@ -1,0 +1,1 @@
+Legendary prize artwork is generated during the client build from the checked-in source sprite chunks. The build produces one standalone SVG file per prize, matching the direct-file artwork approach used by Rare, Unique and Epic.

@@ -5,8 +5,7 @@ export type PrizeArtwork = {
 
 type ArtworkRule = PrizeArtwork & { pattern: RegExp };
 
-const ARTWORK_VERSION = "2026-08-04-legendary-v1";
-const LEGENDARY_SPRITE = "/prizes/legendary/legendary-prize-sprite-128.webp";
+const ARTWORK_VERSION = "2026-08-04-legendary-direct-v2";
 
 export const prizeArtworkCatalog: Record<string, ArtworkRule[]> = {
   rare: [
@@ -74,26 +73,26 @@ export const prizeArtworkCatalog: Record<string, ArtworkRule[]> = {
     { pattern: /^Toyota\s+Hilux\s+GR\s+Sport\s+4[×x]4\s+Double\s+Cab\s*\/\s*Equivalent$/i, src: "/prizes/epic/epic-20-toyota-hilux-gr-sport.png" },
   ],
   legendary: [
-    { pattern: /^N\$10,?000\s+Luxury\s+Tech\s+Voucher$/i, src: LEGENDARY_SPRITE, spriteIndex: 0 },
-    { pattern: /^N\$25,?000\s+Luxury\s+Travel\s+Voucher$/i, src: LEGENDARY_SPRITE, spriteIndex: 1 },
-    { pattern: /^Luxury\s+Watch\s*\/\s*Equivalent$/i, src: LEGENDARY_SPRITE, spriteIndex: 2 },
-    { pattern: /^Luxury\s+African\s+Safari\s+for\s+Two$/i, src: LEGENDARY_SPRITE, spriteIndex: 3 },
-    { pattern: /^FIFA\s+World\s+Cup\s+VIP\s+Trip$/i, src: LEGENDARY_SPRITE, spriteIndex: 4 },
-    { pattern: /^Fishing\s+Boat$/i, src: LEGENDARY_SPRITE, spriteIndex: 5 },
-    { pattern: /^Around-the-World\s+Holiday$/i, src: LEGENDARY_SPRITE, spriteIndex: 6 },
-    { pattern: /^Tiny\s+Home\s*\/\s*Equivalent\s+Value$/i, src: LEGENDARY_SPRITE, spriteIndex: 7 },
-    { pattern: /^Luxury\s+Caravan$/i, src: LEGENDARY_SPRITE, spriteIndex: 8 },
-    { pattern: /^House\s+Deposit\s*\/\s*Equivalent\s+Value$/i, src: LEGENDARY_SPRITE, spriteIndex: 9 },
-    { pattern: /^VW\s+Amarok\s*\/\s*Equivalent\s+Value$/i, src: LEGENDARY_SPRITE, spriteIndex: 10 },
-    { pattern: /^Toyota\s+Fortuner\s*\/\s*Equivalent\s+Value$/i, src: LEGENDARY_SPRITE, spriteIndex: 11 },
-    { pattern: /^Apartment\s+Deposit\s*\/\s*Equivalent\s+Value$/i, src: LEGENDARY_SPRITE, spriteIndex: 12 },
-    { pattern: /^Nissan\s+Patrol\s*\/\s*Equivalent\s+Value$/i, src: LEGENDARY_SPRITE, spriteIndex: 13 },
-    { pattern: /^Toyota\s+Land\s+Cruiser\s*\/\s*Equivalent$/i, src: LEGENDARY_SPRITE, spriteIndex: 14 },
-    { pattern: /^Dream\s+Home\s*\/\s*Equivalent\s+Value$/i, src: LEGENDARY_SPRITE, spriteIndex: 15 },
-    { pattern: /^N\$2,?000,?000\s+Cash\s*\/\s*Equivalent$/i, src: LEGENDARY_SPRITE, spriteIndex: 16 },
-    { pattern: /^Luxury\s+Performance\s+SUV\s*\/\s*Equivalent\s+Value$/i, src: LEGENDARY_SPRITE, spriteIndex: 17 },
-    { pattern: /^Luxury\s+Yacht\s*\/\s*Equivalent\s+Value$/i, src: LEGENDARY_SPRITE, spriteIndex: 18 },
-    { pattern: /^N\$5,?000,?000\s+Grand\s+Prize\s*\/\s*Equivalent$/i, src: LEGENDARY_SPRITE, spriteIndex: 19 },
+    { pattern: /^N\$10,?000\s+Luxury\s+Tech\s+Voucher$/i, src: "/prizes/legendary/legendary-01-luxury-tech-voucher.svg" },
+    { pattern: /^N\$25,?000\s+Luxury\s+Travel\s+Voucher$/i, src: "/prizes/legendary/legendary-02-luxury-travel-voucher.svg" },
+    { pattern: /^Luxury\s+Watch\s*\/\s*Equivalent$/i, src: "/prizes/legendary/legendary-03-luxury-watch.svg" },
+    { pattern: /^Luxury\s+African\s+Safari\s+for\s+Two$/i, src: "/prizes/legendary/legendary-04-african-safari.svg" },
+    { pattern: /^FIFA\s+World\s+Cup\s+VIP\s+Trip$/i, src: "/prizes/legendary/legendary-05-world-cup-vip-trip.svg" },
+    { pattern: /^Fishing\s+Boat$/i, src: "/prizes/legendary/legendary-06-fishing-boat.svg" },
+    { pattern: /^Around-the-World\s+Holiday$/i, src: "/prizes/legendary/legendary-07-around-the-world-holiday.svg" },
+    { pattern: /^Tiny\s+Home\s*\/\s*Equivalent\s+Value$/i, src: "/prizes/legendary/legendary-08-tiny-home.svg" },
+    { pattern: /^Luxury\s+Caravan$/i, src: "/prizes/legendary/legendary-09-luxury-caravan.svg" },
+    { pattern: /^House\s+Deposit\s*\/\s*Equivalent\s+Value$/i, src: "/prizes/legendary/legendary-10-house-deposit.svg" },
+    { pattern: /^VW\s+Amarok\s*\/\s*Equivalent\s+Value$/i, src: "/prizes/legendary/legendary-11-vw-amarok.svg" },
+    { pattern: /^Toyota\s+Fortuner\s*\/\s*Equivalent\s+Value$/i, src: "/prizes/legendary/legendary-12-toyota-fortuner.svg" },
+    { pattern: /^Apartment\s+Deposit\s*\/\s*Equivalent\s+Value$/i, src: "/prizes/legendary/legendary-13-apartment-deposit.svg" },
+    { pattern: /^Nissan\s+Patrol\s*\/\s*Equivalent\s+Value$/i, src: "/prizes/legendary/legendary-14-nissan-patrol.svg" },
+    { pattern: /^Toyota\s+Land\s+Cruiser\s*\/\s*Equivalent$/i, src: "/prizes/legendary/legendary-15-toyota-land-cruiser.svg" },
+    { pattern: /^Dream\s+Home\s*\/\s*Equivalent\s+Value$/i, src: "/prizes/legendary/legendary-16-dream-home.svg" },
+    { pattern: /^N\$2,?000,?000\s+Cash\s*\/\s*Equivalent$/i, src: "/prizes/legendary/legendary-17-cash-2000000.svg" },
+    { pattern: /^Luxury\s+Performance\s+SUV\s*\/\s*Equivalent\s+Value$/i, src: "/prizes/legendary/legendary-18-luxury-performance-suv.svg" },
+    { pattern: /^Luxury\s+Yacht\s*\/\s*Equivalent\s+Value$/i, src: "/prizes/legendary/legendary-19-luxury-yacht.svg" },
+    { pattern: /^N\$5,?000,?000\s+Grand\s+Prize\s*\/\s*Equivalent$/i, src: "/prizes/legendary/legendary-20-grand-prize-5000000.svg" },
   ],
 };
 
