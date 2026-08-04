@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Bike,
   CarFront,
@@ -15,7 +16,7 @@ import {
   Ticket,
   Watch,
 } from "lucide-react";
-import { artworkForPrize } from "./prizeArtworkCatalog";
+import { artworkForPrize, type PrizeArtwork } from "./prizeArtworkCatalog";
 
 type ArtworkMode = "card" | "hero" | "spotlight";
 
@@ -65,17 +66,76 @@ function iconFor(title: string, category = "") {
 export function PremiumPrizeArtwork({ title, rarity, category, mode = "card" }: Props) {
   const normalizedRarity = String(rarity || "common").toLowerCase();
   const palette = palettes[normalizedRarity] || palettes.common;
-  const approvedImage = artworkForPrize(title, normalizedRarity);
+  const approvedArtwork = artworkForPrize(title, normalizedRarity);
 
-  if (approvedImage) {
-    return <ApprovedPrizeImage src={approvedImage} title={title} palette={palette} category={category} rarity={normalizedRarity} mode={mode} />;
+  if (approvedArtwork) {
+    return <ApprovedPrizeImage artwork={approvedArtwork} title={title} palette={palette} category={category} rarity={normalizedRarity} mode={mode} />;
   }
 
   return <GeneratedPrizeArtwork title={title} rarity={normalizedRarity} category={category} palette={palette} mode={mode} />;
 }
 
-function ApprovedPrizeImage({ src, title, rarity, category, palette, mode }: { src: string; title: string; rarity: string; category?: string; palette: Palette; mode: ArtworkMode }) {
+function SpriteTile({ src, index, className, title, onError, decorative = false }: { src: string; index: number; className: string; title: string; onError: () => void; decorative?: boolean }) {
+  const safeIndex = Math.max(0, Math.min(19, Math.round(index)));
+  const column = safeIndex % 5;
+  const row = Math.floor(safeIndex / 5);
+
+  return (
+    <svg
+      viewBox="0 0 128 128"
+      preserveAspectRatio="xMidYMid meet"
+      className={className}
+      role={decorative ? undefined : "img"}
+      aria-hidden={decorative ? true : undefined}
+      aria-label={decorative ? undefined : title}
+    >
+      <image
+        href={src}
+        x={-column * 128}
+        y={-row * 128}
+        width="640"
+        height="512"
+        preserveAspectRatio="none"
+        onError={onError}
+      />
+    </svg>
+  );
+}
+
+function ApprovedPrizeImage({ artwork, title, rarity, category, palette, mode }: { artwork: PrizeArtwork; title: string; rarity: string; category?: string; palette: Palette; mode: ArtworkMode }) {
+  const [failed, setFailed] = useState(false);
   const padding = mode === "hero" ? "p-3 sm:p-5" : mode === "spotlight" ? "p-3 sm:p-4" : "p-1.5";
+
+  if (failed) {
+    return <GeneratedPrizeArtwork title={title} rarity={rarity} category={category} palette={palette} mode={mode} />;
+  }
+
+  if (Number.isInteger(artwork.spriteIndex)) {
+    return (
+      <div
+        className="absolute inset-0 isolate overflow-hidden bg-[#010611]"
+        style={{ background: `radial-gradient(circle at 50% 48%,${palette.glowSoft},transparent 58%),linear-gradient(145deg,${palette.surface},${palette.surfaceDeep})` }}
+      >
+        <SpriteTile
+          src={artwork.src}
+          index={artwork.spriteIndex as number}
+          title={title}
+          decorative
+          onError={() => setFailed(true)}
+          className="absolute inset-0 h-full w-full scale-110 opacity-30 blur-xl"
+        />
+        <SpriteTile
+          src={artwork.src}
+          index={artwork.spriteIndex as number}
+          title={title}
+          onError={() => setFailed(true)}
+          className={`absolute inset-0 z-10 h-full w-full ${padding}`}
+        />
+        <div className="pointer-events-none absolute inset-0 z-20 ring-1 ring-inset ring-white/10" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[32%] bg-[linear-gradient(115deg,rgba(255,255,255,.09),transparent_32%,transparent_72%,rgba(255,255,255,.04))]" />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -83,31 +143,22 @@ function ApprovedPrizeImage({ src, title, rarity, category, palette, mode }: { s
       style={{ background: `radial-gradient(circle at 50% 48%,${palette.glowSoft},transparent 58%),linear-gradient(145deg,${palette.surface},${palette.surfaceDeep})` }}
     >
       <img
-        src={src}
+        src={artwork.src}
         alt=""
         aria-hidden="true"
         loading="lazy"
         decoding="async"
         className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-xl"
+        onError={() => setFailed(true)}
       />
       <img
-        src={src}
+        src={artwork.src}
         alt={title}
         loading="lazy"
         decoding="async"
         className={`absolute inset-0 z-10 h-full w-full object-contain object-center ${padding}`}
-        onError={(event) => {
-          const image = event.currentTarget;
-          image.style.display = "none";
-          const backdrop = image.previousElementSibling as HTMLImageElement | null;
-          if (backdrop) backdrop.style.display = "none";
-          const fallback = image.nextElementSibling as HTMLElement | null;
-          if (fallback) fallback.style.display = "block";
-        }}
+        onError={() => setFailed(true)}
       />
-      <div className="absolute inset-0 hidden">
-        <GeneratedPrizeArtwork title={title} rarity={rarity} category={category} palette={palette} mode={mode} />
-      </div>
       <div className="pointer-events-none absolute inset-0 z-20 ring-1 ring-inset ring-white/10" />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[32%] bg-[linear-gradient(115deg,rgba(255,255,255,.09),transparent_32%,transparent_72%,rgba(255,255,255,.04))]" />
     </div>
