@@ -13,6 +13,15 @@ function replace(path, from, to) {
   fs.writeFileSync(path, source.replace(from, to));
 }
 
+function replaceAll(path, from, to) {
+  const source = fs.readFileSync(path, "utf8");
+  if (!source.includes(from)) {
+    console.log(`No global replacement required: ${path}`);
+    return;
+  }
+  fs.writeFileSync(path, source.replaceAll(from, to));
+}
+
 function remove(path, value) {
   const source = fs.readFileSync(path, "utf8");
   if (!source.includes(value)) {
@@ -161,20 +170,16 @@ replace(
   'includesAll(myEntries, ["My Teams & Prizes", "Submitted lineup", "prize claim pending", "Final scoring snapshot stored"], "Submitted teams page");',
 );
 
-replace(
+for (const path of [
   "client/src/main.tsx",
-  'key !== "fantasy-site-v15"',
-  'key !== "fantasy-site-v18-lion-jpg"',
-);
-replace(
   "scripts/verify-card-data-integrity.mjs",
-  'expect(main.includes(\'"fantasy-site-v15"\'), "Client cache key must be fantasy-site-v15");',
-  'expect(main.includes(\'"fantasy-site-v18-lion-jpg"\'), "Client cache key must match the active service worker cache.");',
-);
-replace(
-  "scripts/verify-card-data-integrity.mjs",
-  'expect(serviceWorker.includes(\'const CACHE_NAME = "fantasy-site-v15"\'), "Service worker cache key must be fantasy-site-v15");',
-  'expect(serviceWorker.includes(\'const CACHE_NAME = "fantasy-site-v18-lion-jpg"\'), "Service worker cache key must match the active service worker cache.");',
-);
+  "scripts/verify-unified-scroll-architecture.mjs",
+  "scripts/verify-verified-player-profiles.mjs",
+  "scripts/verify-collection-actions-dialog.mjs",
+  "scripts/verify-api-football-player-images.mjs",
+  "scripts/verify-strict-player-identity-fixtures.mjs",
+]) {
+  replaceAll(path, "fantasy-site-v15", "fantasy-site-v18-lion-jpg");
+}
 
 console.log("Applied focused TypeScript repairs.");
