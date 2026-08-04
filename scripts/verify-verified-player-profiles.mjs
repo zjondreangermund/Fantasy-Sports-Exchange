@@ -90,8 +90,8 @@ expect(!images.includes("playerResolverUrl"), "Fuzzy portrait lookup must not be
 expect(adapter.includes("safeUrl(player?.verifiedImageUrl)"), "Fantasy card adapter must prioritize the verified provider image");
 expect(adapter.includes("const identityVerified = isVerifiedPlayerIdentity(player)"), "Fantasy card adapter must gate direct images by verified identity");
 
-expect(main.includes('"fantasy-site-v15"'), "Client cache must be fantasy-site-v15");
-expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v15"'), "Service worker cache must be fantasy-site-v15");
+expect(main.includes('"fantasy-site-v18-lion-jpg"'), "Client cache must be fantasy-site-v18-lion-jpg");
+expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v18-lion-jpg"'), "Service worker cache must be fantasy-site-v18-lion-jpg");
 
 if (failures.length) {
   console.error("Verified player profile integrity failed:");

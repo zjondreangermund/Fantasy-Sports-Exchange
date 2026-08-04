@@ -25,8 +25,8 @@ for (const expected of [
 
 expect(!collection.includes('max-w-[190px] touch-pan-y flex-col'), "Collection card action wrapper must not depend on the globally overridden max-width utility");
 expect(!collection.includes('className="w-full max-w-md rounded-[1.75rem]'), "Sale modal width must not depend on the globally overridden max-width utility");
-expect(main.includes('"fantasy-site-v15"'), "Client cache must be fantasy-site-v15");
-expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v15"'), "Service worker cache must be fantasy-site-v15");
+expect(main.includes('"fantasy-site-v18-lion-jpg"'), "Client cache must be fantasy-site-v18-lion-jpg");
+expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v18-lion-jpg"'), "Service worker cache must be fantasy-site-v18-lion-jpg");
 
 if (failures.length) {
   console.error("Collection action/dialog verification failed:");
