@@ -104,8 +104,11 @@ export function registerPrizeVaultRoutes(app: Express) {
             targetEntries: prize.requiredEntrants,
             requiredEntrants: prize.requiredEntrants,
             unlockTarget: prize.unlockTarget,
+            entryRevenueAtUnlock: prize.entryRevenueAtUnlock,
+            fundingSurplus: prize.fundingSurplus,
             entryFee: prize.entryFee,
             marginMultiplier: prize.marginMultiplier,
+            fundingFormula: `ceil((N$${prize.value} × ${prize.marginMultiplier}) ÷ N$${prize.entryFee})`,
             currentEntries,
             progressPercentage: percentage(currentEntries, prize.requiredEntrants),
             unlocked,
@@ -126,6 +129,7 @@ export function registerPrizeVaultRoutes(app: Express) {
           currentEntries,
           entryFee: RARITY_ENTRY_FEES[rarity],
           marginMultiplier: RARITY_MARGIN_MULTIPLIERS[rarity],
+          fundingFormula: "required entries = ceil((prize value × funding multiplier) ÷ entry fee)",
           unlocked: unlockedCount,
           total: ladder.length,
           progressPercentage: percentage(currentEntries, progressTarget),
@@ -151,12 +155,14 @@ export function registerPrizeVaultRoutes(app: Express) {
           entrantsToNext: state.entrantsToNext,
           entryFee: RARITY_ENTRY_FEES[rarity],
           marginMultiplier: RARITY_MARGIN_MULTIPLIERS[rarity],
+          fundingFormula: "required entries = ceil((prize value × funding multiplier) ÷ entry fee)",
         };
       }
 
       return res.json({
         season: SEASON_KEY,
         mode: "rarity_ladder_current_gameweek",
+        fundingFormula: "required entries = ceil((prize value × funding multiplier) ÷ entry fee)",
         currentGameWeek,
         ladders,
         items,
