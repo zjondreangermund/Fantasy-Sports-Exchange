@@ -120,6 +120,20 @@ jobs:
             git push origin HEAD:${{ github.head_ref }}
           fi
 
+      - name: Apply marketplace card profiles and verified stats
+        if: github.head_ref == 'agent/marketplace-card-profiles'
+        run: |
+          node scripts/apply-marketplace-card-profiles.mjs
+          if git diff --quiet; then
+            echo "Marketplace card profile integrity already applied."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add client/src server scripts
+            git commit -m "Open verified card profiles across the marketplace [skip-autofix]"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+
       - name: Install locked dependencies
         run: npm ci
 
@@ -167,6 +181,7 @@ jobs:
             node scripts/verify-route-ownership-integrity.mjs &&
             node scripts/verify-auth-production-integrity.mjs &&
             node scripts/verify-card-data-integrity.mjs &&
+            node scripts/verify-marketplace-profile-integrity.mjs &&
             node scripts/verify-unified-scroll-architecture.mjs &&
             node scripts/verify-collection-actions-dialog.mjs &&
             node scripts/verify-verified-player-profiles.mjs &&

@@ -124,14 +124,26 @@ export function toFantasyCardData(
 
   while (last5Scores.length < 5) last5Scores.push(0);
 
-  const totalPoints = finiteNumber(
+  const officialStatValues = [
     player?.totalPoints,
     player?.total_points,
     (card as any).totalPoints,
-    last5Scores.reduce((sum, value) => sum + Number(value || 0), 0),
-  );
-  const form = finiteNumber(player?.form, player?.currentForm, (card as any).form, card.decisiveScore);
-  const rating = finiteNumber(player?.overall, card.decisiveScore);
+    player?.form,
+    player?.currentForm,
+    (card as any).form,
+    player?.overall,
+  ];
+  const statsVerified = identityVerified && officialStatValues.some((value) => {
+    if (value === null || value === undefined || value === "") return false;
+    return Number.isFinite(Number(value));
+  });
+  const totalPoints = statsVerified
+    ? finiteNumber(player?.totalPoints, player?.total_points, (card as any).totalPoints)
+    : 0;
+  const form = statsVerified
+    ? finiteNumber(player?.form, player?.currentForm, (card as any).form)
+    : 0;
+  const rating = statsVerified ? finiteNumber(player?.overall) : 0;
 
   return {
     id: String(card.id),
@@ -161,5 +173,6 @@ export function toFantasyCardData(
     provenanceMarker,
     last5Scores,
     totalPoints,
+    statsVerified,
   };
 }

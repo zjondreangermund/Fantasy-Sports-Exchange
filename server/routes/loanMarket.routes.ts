@@ -1,6 +1,9 @@
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { fplApi } from "../services/fplApi.js";
+import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
+import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 import {
   getLoanFeeBreakdown,
   getLoanFloorPerGameweek,
@@ -111,27 +114,73 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
   app.get("/api/marketplace/loans", requireAuth, async (_req: any, res) => {
     try {
       await returnExpiredLoans();
-      const result = await db.execute(sql`
-        select
-          l.*,
-          p.name as player_name,
-          p.team,
-          p.position,
-          p.overall,
-          p.image_url,
-          pc.rarity,
-          pc.serial_id,
-          pc.serial_number,
-          pc.max_supply,
-          coalesce(u.manager_team_name, u.name, u.email, 'Manager') as owner_name
-        from app.card_loans l
-        join app.player_cards pc on pc.id = l.card_id
-        join app.players p on p.id = pc.player_id
-        left join app.users u on u.id = l.original_owner_id
-        where l.status = 'open'
-        order by l.created_at desc, l.id desc
-      `);
-      return res.json({ loans: rowsOf(result) });
+      const [result, bootstrap, apiFootballDirectory] = await Promise.all([
+        db.execute(sql`
+          select
+            l.*,
+            pc.player_id, pc.level, pc.xp, pc.acquired_at,
+            p.name as player_name, p.team, p.position, p.league,
+            p.fpl_id, p.code, p.photo, p.web_name, p.nationality,
+            pc.rarity, pc.serial_id, pc.serial_number, pc.max_supply,
+            coalesce(u.manager_team_name, u.name, u.email, 'Manager') as owner_name
+          from app.card_loans l
+          join app.player_cards pc on pc.id = l.card_id
+          join app.players p on p.id = pc.player_id
+          left join app.users u on u.id = l.original_owner_id
+          where l.status = 'open'
+          order by l.created_at desc, l.id desc
+        `),
+        fplApi.bootstrap().catch(() => null),
+        loadApiFootballPlayerDirectory().catch(() => []),
+      ]);
+      const fplIndex = buildFplPlayerIndex(bootstrap || {});
+      const loans = rowsOf(result).map((row: any) => {
+        const storedPlayer = {
+          id: row.player_id, name: row.player_name, team: row.team, position: row.position,
+          league: row.league, fplId: row.fpl_id, code: row.code, photo: row.photo,
+          webName: row.web_name, nationality: row.nationality,
+        };
+        const matchedElement = fplIndex.resolve(storedPlayer);
+        const canonical = matchedElement ? fplIndex.canonical(matchedElement) : null;
+        const apiFootballPlayer = resolveApiFootballPlayer({ ...storedPlayer, ...(canonical || {}) }, apiFootballDirectory);
+        const verifiedImageUrl = apiFootballPlayer
+          ? apiFootballPhotoUrl(apiFootballPlayer.apiPlayerId, apiFootballPlayer.photo)
+          : matchedElement
+            ? fplApi.playerPhotoUrl(matchedElement, 250)
+            : null;
+        const identityVerified = Boolean(apiFootballPlayer || matchedElement);
+        const identitySource = apiFootballPlayer && matchedElement
+          ? "fpl+api-football"
+          : apiFootballPlayer
+            ? "api-football-current-squad"
+            : matchedElement
+              ? "fpl"
+              : "unverified-card-data";
+        const officialTotalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
+        const officialForm = matchedElement ? Number(matchedElement.form || 0) : null;
+        const officialOverall = matchedElement ? overallFromFplElement(matchedElement) : null;
+        const player = {
+          ...storedPlayer, ...(canonical || {}),
+          name: canonical?.name || apiFootballPlayer?.name || storedPlayer.name,
+          team: apiFootballPlayer?.team || canonical?.team || storedPlayer.team,
+          position: apiFootballPlayer?.position || canonical?.position || storedPlayer.position,
+          apiFootballId: apiFootballPlayer?.apiPlayerId || null,
+          imageUrl: verifiedImageUrl, verifiedImageUrl, identityVerified, identitySource,
+          totalPoints: officialTotalPoints, form: officialForm, overall: officialOverall,
+        };
+        return {
+          ...row, image_url: verifiedImageUrl, identity_verified: identityVerified, identity_source: identitySource,
+          official_total_points: officialTotalPoints, official_form: officialForm, official_overall: officialOverall,
+          player_name: player.name, team: player.team, position: player.position,
+          card: {
+            id: Number(row.card_id), playerId: Number(row.player_id), ownerId: String(row.original_owner_id || ""),
+            rarity: row.rarity, serialId: row.serial_id, serialNumber: row.serial_number, maxSupply: row.max_supply,
+            level: Number(row.level || 1), xp: Number(row.xp || 0), decisiveScore: 0, last5Scores: [],
+            forSale: false, price: 0, acquiredAt: row.acquired_at, totalPoints: officialTotalPoints, player,
+          },
+        };
+      });
+      return res.json({ loans });
     } catch (error: any) {
       console.error("Failed to fetch loan listings:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch loan listings" });

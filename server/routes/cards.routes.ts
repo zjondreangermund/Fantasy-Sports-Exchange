@@ -138,15 +138,9 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         last5Scores = last5Scores.map((value: any) => Number(value || 0)).slice(0, 5);
         while (last5Scores.length < 5) last5Scores.push(0);
 
-        const totalPoints = matchedElement
-          ? Number(matchedElement.total_points || 0)
-          : Number(player.totalPoints ?? player.total_points ?? card.totalPoints ?? 0);
-        const form = matchedElement
-          ? Number(matchedElement.form || 0)
-          : Number(player.form ?? card.decisiveScore ?? 0);
-        const overall = matchedElement
-          ? overallFromFplElement(matchedElement)
-          : Number(player.overall || card.decisiveScore || 0);
+        const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
+        const form = matchedElement ? Number(matchedElement.form || 0) : null;
+        const overall = matchedElement ? overallFromFplElement(matchedElement) : null;
         const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl(apiFootballPlayer.apiPlayerId, apiFootballPlayer.photo) : "";
 
         return {
@@ -222,11 +216,15 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
 
   app.get("/api/cards/:cardId/profile", requireAuth, async (req: any, res: any) => {
     try {
-      const userId = String(req.authUserId || "");
+      const viewerUserId = String(req.authUserId || "");
       const cardId = Number(req.params.cardId);
       if (!Number.isInteger(cardId) || cardId <= 0) return res.status(400).json({ message: "Valid cardId required" });
-      const userCards = await storage.getUserCards(userId);
-      const card = userCards.find((item: any) => Number(item.id) === cardId);
+      let card = await storage.getPlayerCardWithPlayer(cardId, viewerUserId);
+      if (!card) {
+        const rawCard = await storage.getPlayerCard(cardId);
+        const player = rawCard ? await storage.getPlayer(Number(rawCard.playerId)) : null;
+        if (rawCard && player) card = { ...rawCard, player } as any;
+      }
       if (!card) return res.status(404).json({ message: "Card not found" });
       const player = card.player || {};
       const [lastSaleTransaction] = await db
@@ -254,7 +252,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
           providers: { identity: "Unverified legacy card data", stats: "No official match link" },
           player: { name: player.name, team: player.team, position: player.position, imageUrl: null, verifiedImageUrl: null, identityVerified: false, identitySource: "unverified-card-data" },
           last10: [],
-          stats: { matchesPlayed: 0, minutes: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, bonus: 0, totalPoints: Number(card.totalPoints || player.totalPoints || 0), selectedBy: null, value: lastSaleValue, saves: 0, averageRating: null },
+          stats: { matchesPlayed: 0, minutes: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, bonus: 0, totalPoints: 0, selectedBy: null, value: lastSaleValue, saves: 0, averageRating: null },
         });
       }
 

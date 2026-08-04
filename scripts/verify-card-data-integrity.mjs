@@ -65,6 +65,8 @@ expect(!cards.includes("elementByNameTeam"), "Card API must not require a stale 
 expect(!cards.includes("player: { ...player, overall: averageScore }"), "Card API must not replace official overall with an average of fallback scores");
 expect(!cards.includes("last10: last10.length ? last10 : lastScoresFallback(card)"), "Card profiles must not substitute fabricated fallback matches for empty official history");
 expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl"), "Unverified cards must not reuse stale stored portraits");
+expect(!cards.includes("player.form ?? card.decisiveScore"), "Card responses must not present decisive score as official form");
+expect(!cards.includes("player.overall || card.decisiveScore"), "Card responses must not present decisive score as official overall");
 
 includesAll(adapter, [
   "player?.totalPoints",
@@ -72,15 +74,20 @@ includesAll(adapter, [
   "player?.form",
   "isVerifiedPlayerIdentity",
   "const identityVerified = isVerifiedPlayerIdentity(player)",
-  "const rating = finiteNumber(player?.overall, card.decisiveScore)",
+  "const statsVerified = identityVerified",
+  "const rating = statsVerified ? finiteNumber(player?.overall) : 0",
   "rating,",
   "form,",
+  "statsVerified,",
 ], "Fantasy card adapter");
+expect(!adapter.includes("finiteNumber(player?.overall, card.decisiveScore)"), "Card rating must not fall back to decisive score");
+expect(!adapter.includes("last5Scores.reduce"), "Season points must not be invented by adding cached match values");
 
 includesAll(stableCard, [
-  "const ovr = numberStat(player.rating)",
-  "const points = numberStat(player.totalPoints)",
-  "const form = decimalStat(player.form)",
+  "const statsVerified = player.statsVerified !== false",
+  'const ovr: number | string = statsVerified ? numberStat(player.rating) : "—"',
+  'const points: number | string = statsVerified ? numberStat(player.totalPoints) : "—"',
+  'const form: number | string = statsVerified ? decimalStat(player.form) : "—"',
   "value: number | string",
 ], "Stable card stat display");
 expect(!stableCard.includes("player.totalPoints || player.form || player.rating"), "PTS must never fall back to FORM or OVR");
@@ -95,4 +102,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Card teams, positions, official season totals, form, verified identities and profile stats are wired to canonical providers.");
+console.log("Card teams, positions, official season totals, form, verified identities and profile stats are wired to canonical providers without fabricated fallbacks.");
