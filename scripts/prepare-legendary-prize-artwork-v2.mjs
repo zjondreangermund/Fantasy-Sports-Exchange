@@ -76,12 +76,27 @@ const legendaryBlock = [
   "  ],",
 ].join("\n");
 
-const replaced = catalog.replace(/  legendary: \[[\s\S]*?\n  \],\n\};/, `${legendaryBlock}\n};`);
-if (replaced === catalog || !replaced.includes("spriteIndex: 19")) {
-  throw new Error("Could not patch the Legendary artwork catalog with direct sprite mappings");
+const finalCatalog = catalog.replace(
+  /  legendary: \[[\s\S]*?\n  \],\n\};/,
+  `${legendaryBlock}\n};`,
+);
+
+const hasDirectSource = finalCatalog.includes(
+  'const LEGENDARY_SPRITE = "/prizes/legendary/legendary-prize-sprite-direct.webp"',
+);
+const mappedIndexes = [...finalCatalog.matchAll(/spriteIndex:\s*(\d+)/g)].map((match) => Number(match[1]));
+const expectedIndexes = Array.from({ length: 20 }, (_, index) => index);
+const hasAllMappings = mappedIndexes.length >= 20
+  && expectedIndexes.every((expected) => mappedIndexes.includes(expected));
+
+if (!hasDirectSource || !hasAllMappings) {
+  throw new Error("Could not prepare the Legendary artwork catalog with direct sprite mappings");
 }
-fs.writeFileSync(catalogPath, replaced);
+
+if (finalCatalog !== fs.readFileSync(catalogPath, "utf8")) {
+  fs.writeFileSync(catalogPath, finalCatalog);
+}
 
 console.log(
-  `[prize-artwork] Prepared ${path.relative(root, outputPath)} (${image.length} bytes) and patched 20 direct Legendary mappings`,
+  `[prize-artwork] Prepared ${path.relative(root, outputPath)} (${image.length} bytes) and verified 20 direct Legendary mappings`,
 );
