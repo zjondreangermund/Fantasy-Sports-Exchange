@@ -138,4 +138,10 @@ replace(
   'return { success: true, auctionId, sold: true, winnerId, ...settlement };',
 );
 
+replace(
+  "scripts/verify-critical-flows.mjs",
+  '      "await ensureRuntimeSchema();\\n  try { const result = await syncFplPremierLeaguePlayers()",',
+  '      "await ensureRuntimeSchema();",\n      "try { const result = await syncFplPremierLeaguePlayers()",',
+);
+
 console.log("Applied focused TypeScript repairs.");
