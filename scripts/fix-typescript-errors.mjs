@@ -95,4 +95,10 @@ replace(
   'res.json({ success: true, ...grantResult, kept: 5 });',
 );
 
+replace(
+  "client/src/pages/competitions-vault.tsx",
+  'style={{ width: `${p}%`, background: t.accent, boxShadow: `0 0 18px ${t.glow}` }} /></div></div><div className="mt-4 flex gap-2">',
+  'style={{ width: `${p}%`, background: t.accent, boxShadow: `0 0 18px ${t.glow}` }} /></div><div className="mt-4 flex gap-2">',
+);
+
 console.log("Applied focused TypeScript repairs.");
