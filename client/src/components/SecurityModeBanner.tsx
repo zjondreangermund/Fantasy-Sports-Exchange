@@ -18,7 +18,7 @@ export default function SecurityModeBanner() {
   const pausedLabels = useMemo(() => {
     if (!data || data.readOnly) return [];
     return [
-      data.authPaused ? "new logins" : "",
+      data.authPaused ? "new sign-ups and logins" : "",
       data.depositsPaused ? "deposits" : "",
       data.withdrawalsPaused ? "withdrawals" : "",
       data.marketplacePaused ? "marketplace and loans" : "",
@@ -29,13 +29,16 @@ export default function SecurityModeBanner() {
   if (!data?.readOnly && pausedLabels.length === 0) return null;
 
   if (data?.readOnly) {
+    const signupMessage = data.authPaused
+      ? "New sign-ups and logins are currently paused."
+      : "New users may sign up, complete starter onboarding and collect the daily common-card reward.";
     return (
       <div className="relative z-[70] shrink-0 border-b border-amber-300/30 bg-amber-300 px-3 py-2 text-slate-950 shadow-lg">
         <div className="mx-auto flex max-w-7xl items-center justify-center gap-2 text-center text-xs font-black sm:text-sm">
           <Eye className="h-4 w-4 shrink-0" />
-          <span>VIEW-ONLY MODE — buying, selling, loans, auctions, wallet actions, tournament entries, account changes and admin operations are paused.</span>
+          <span>PREVIEW MODE — explore Fantasy Arena while trading, loans, wallet actions, auctions and tournament entries remain paused.</span>
         </div>
-        {data.message ? <p className="mx-auto mt-1 max-w-5xl text-center text-[11px] font-semibold text-slate-800">{data.message}</p> : null}
+        <p className="mx-auto mt-1 max-w-5xl text-center text-[11px] font-semibold text-slate-800">{signupMessage}{data.message ? ` ${data.message}` : ""}</p>
       </div>
     );
   }
