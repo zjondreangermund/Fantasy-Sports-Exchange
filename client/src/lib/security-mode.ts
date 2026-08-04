@@ -64,9 +64,22 @@ export function isReadOnlyRecoveryRequest(method: string, path: string): boolean
     || path === "/api/auth/logout";
 }
 
+export function isReadOnlyPreviewRequest(method: string, path: string): boolean {
+  const upper = String(method || "GET").toUpperCase();
+  if (path === "/api/login" || path === "/api/auth/google" || path === "/api/auth/google/callback") return true;
+  if (upper === "PATCH" && path === "/api/user/profile") return true;
+  if (upper !== "POST") return false;
+  return [
+    "/api/onboarding/create-offer",
+    "/api/onboarding/choose",
+    "/api/rewards/daily-login/claim",
+    "/api/referrals/claim",
+  ].includes(path);
+}
+
 export function isClientStateChangingRequest(method: string, path: string): boolean {
   const upper = String(method || "GET").toUpperCase();
-  if (isReadOnlyRecoveryRequest(upper, path)) return false;
+  if (isReadOnlyRecoveryRequest(upper, path) || isReadOnlyPreviewRequest(upper, path)) return false;
   if (!["GET", "HEAD", "OPTIONS"].includes(upper)) return true;
   return path === "/api/login" || path === "/api/auth/google" || path === "/api/auth/google/callback";
 }
