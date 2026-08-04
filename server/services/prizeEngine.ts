@@ -1,22 +1,20 @@
+import {
+  RARITY_ENTRY_FEES as SHARED_RARITY_ENTRY_FEES,
+  RARITY_PRIZE_FUNDING_MULTIPLIERS,
+} from "../../shared/game-rules.js";
+
 export const SEASON_KEY = "2026-27";
 export const RARITIES = ["common", "rare", "unique", "epic", "legendary"] as const;
 
 type Rarity = (typeof RARITIES)[number];
 
+// One canonical source of truth is shared with tournament validation and the UI.
 export const RARITY_ENTRY_FEES: Record<Rarity, number> = {
-  common: 10,
-  rare: 50,
-  unique: 100,
-  epic: 250,
-  legendary: 500,
+  ...SHARED_RARITY_ENTRY_FEES,
 };
 
 export const RARITY_MARGIN_MULTIPLIERS: Record<Rarity, number> = {
-  common: 2.0,
-  rare: 1.8,
-  unique: 1.7,
-  epic: 1.6,
-  legendary: 1.5,
+  ...RARITY_PRIZE_FUNDING_MULTIPLIERS,
 };
 
 export const COMMUNITY_ENTRY_FEE = RARITY_ENTRY_FEES.common;
@@ -30,17 +28,46 @@ export type PrizeTier = {
   rarity: Rarity;
   requiredEntrants: number;
   unlockTarget: number;
+  entryRevenueAtUnlock: number;
+  fundingSurplus: number;
   tierIndex: number;
   entryFee: number;
   marginMultiplier: number;
 };
 
-function makePrize(key: string, title: string, value: number, category: string, rarity: Rarity): PrizeTier {
+export function calculatePrizeFunding(value: unknown, rarity: Rarity) {
+  const prizeValue = Math.max(0, Number(value || 0));
+  if (!Number.isFinite(prizeValue) || prizeValue <= 0) {
+    throw new Error(`Prize value must be positive for ${rarity}`);
+  }
+
   const entryFee = RARITY_ENTRY_FEES[rarity];
   const marginMultiplier = RARITY_MARGIN_MULTIPLIERS[rarity];
-  const unlockTarget = Math.ceil(value * marginMultiplier);
+  const unlockTarget = Math.ceil(prizeValue * marginMultiplier);
   const requiredEntrants = Math.max(1, Math.ceil(unlockTarget / entryFee));
-  return { key, title, value, category, rarity, requiredEntrants, unlockTarget, tierIndex: 0, entryFee, marginMultiplier };
+  const entryRevenueAtUnlock = requiredEntrants * entryFee;
+  const fundingSurplus = Math.max(0, entryRevenueAtUnlock - unlockTarget);
+
+  return {
+    entryFee,
+    marginMultiplier,
+    unlockTarget,
+    requiredEntrants,
+    entryRevenueAtUnlock,
+    fundingSurplus,
+  };
+}
+
+function makePrize(key: string, title: string, value: number, category: string, rarity: Rarity): PrizeTier {
+  return {
+    key,
+    title,
+    value,
+    category,
+    rarity,
+    ...calculatePrizeFunding(value, rarity),
+    tierIndex: 0,
+  };
 }
 
 const common = [
@@ -130,8 +157,8 @@ const legendary = [
   makePrize("legendary-tech-10000", "N$10,000 Luxury Tech Voucher", 10000, "Electronics", "legendary"),
   makePrize("legendary-travel-25000", "N$25,000 Luxury Travel Voucher", 25000, "Travel", "legendary"),
   makePrize("legendary-watch-50000", "Luxury Watch / Equivalent", 50000, "Luxury", "legendary"),
+  makePrize("legendary-safari", "Luxury African Safari for Two", 180000, "Travel", "legendary"),
   makePrize("legendary-world-cup", "FIFA World Cup VIP Trip", 250000, "Travel", "legendary"),
-  makePrize("legendary-ucl-final", "UEFA Champions League Final Package", 180000, "Travel", "legendary"),
   makePrize("legendary-fishing-boat", "Fishing Boat", 250000, "Adventure", "legendary"),
   makePrize("legendary-world-holiday", "Around-the-World Holiday", 300000, "Travel", "legendary"),
   makePrize("legendary-tiny-home", "Tiny Home / Equivalent Value", 350000, "Property", "legendary"),
@@ -143,6 +170,10 @@ const legendary = [
   makePrize("legendary-patrol", "Nissan Patrol / Equivalent Value", 900000, "Vehicle", "legendary"),
   makePrize("legendary-land-cruiser", "Toyota Land Cruiser / Equivalent", 1100000, "Vehicle", "legendary"),
   makePrize("legendary-dream-home", "Dream Home / Equivalent Value", 1500000, "Property", "legendary"),
+  makePrize("legendary-cash-2000000", "N$2,000,000 Cash / Equivalent", 2000000, "Cash", "legendary"),
+  makePrize("legendary-performance-suv", "Luxury Performance SUV / Equivalent Value", 2500000, "Vehicle", "legendary"),
+  makePrize("legendary-yacht", "Luxury Yacht / Equivalent Value", 3500000, "Adventure", "legendary"),
+  makePrize("legendary-grand-prize", "N$5,000,000 Grand Prize / Equivalent", 5000000, "Cash", "legendary"),
 ];
 
 export const PRIZE_LADDERS: Record<Rarity, PrizeTier[]> = { common, rare, unique, epic, legendary };
@@ -152,15 +183,90 @@ for (const rarity of RARITIES) {
   PRIZE_LADDERS[rarity].forEach((prize, index) => { prize.tierIndex = index + 1; });
 }
 
+function assertPrizeLadderIntegrity() {
+  const keys = new Set<string>();
+
+  for (const rarity of RARITIES) {
+    const ladder = PRIZE_LADDERS[rarity];
+    let previousEntrants = 0;
+    let previousValue = 0;
+
+    for (const prize of ladder) {
+      if (keys.has(prize.key)) throw new Error(`Duplicate Prize Vault key: ${prize.key}`);
+      keys.add(prize.key);
+
+      const expected = calculatePrizeFunding(prize.value, rarity);
+      if (
+        prize.entryFee !== expected.entryFee
+        || prize.marginMultiplier !== expected.marginMultiplier
+        || prize.unlockTarget !== expected.unlockTarget
+        || prize.requiredEntrants !== expected.requiredEntrants
+        || prize.entryRevenueAtUnlock !== expected.entryRevenueAtUnlock
+        || prize.fundingSurplus !== expected.fundingSurplus
+      ) {
+        throw new Error(`Invalid Prize Vault funding calculation: ${prize.key}`);
+      }
+      if (prize.requiredEntrants < previousEntrants || prize.value < previousValue) {
+        throw new Error(`Prize Vault ladder is not ascending: ${rarity} tier ${prize.tierIndex}`);
+      }
+      previousEntrants = prize.requiredEntrants;
+      previousValue = prize.value;
+    }
+  }
+
+  if (PRIZE_LADDERS.legendary.length !== 20) {
+    throw new Error("Legendary Prize Vault ladder must contain exactly 20 prizes");
+  }
+
+  const tier16 = PRIZE_LADDERS.legendary[15];
+  if (tier16?.key !== "legendary-dream-home" || tier16.value !== 1500000) {
+    throw new Error("Legendary prize 16 must remain the N$1,500,000 Dream Home tier");
+  }
+
+  for (const prize of PRIZE_LADDERS.legendary.slice(16)) {
+    if (prize.value <= tier16.value) {
+      throw new Error(`Legendary prize ${prize.tierIndex} must exceed prize 16 value`);
+    }
+  }
+
+  if (PRIZE_LADDERS.legendary.some((prize) => /champions league/i.test(prize.title))) {
+    throw new Error("The Champions League package must not appear in the Legendary ladder");
+  }
+}
+
+assertPrizeLadderIntegrity();
+
 export const PRIZE_CATALOG: PrizeTier[] = RARITIES.flatMap((rarity) => PRIZE_LADDERS[rarity]);
-export function getEntryFeeForRarity(rarity: unknown): number { const key = String(rarity || "common").toLowerCase() as Rarity; return RARITY_ENTRY_FEES[key] || COMMUNITY_ENTRY_FEE; }
-export function getMarginForRarity(rarity: unknown): number { const key = String(rarity || "rare").toLowerCase() as Rarity; return RARITY_MARGIN_MULTIPLIERS[key] || PRIZE_MARGIN_MULTIPLIER; }
-export function getPrizeLadder(rarity: unknown): PrizeTier[] { const key = String(rarity || "common").toLowerCase() as Rarity; return PRIZE_LADDERS[key] || PRIZE_LADDERS.common; }
+
+export function getEntryFeeForRarity(rarity: unknown): number {
+  const key = String(rarity || "common").toLowerCase() as Rarity;
+  return RARITY_ENTRY_FEES[key] || COMMUNITY_ENTRY_FEE;
+}
+
+export function getMarginForRarity(rarity: unknown): number {
+  const key = String(rarity || "rare").toLowerCase() as Rarity;
+  return RARITY_MARGIN_MULTIPLIERS[key] || PRIZE_MARGIN_MULTIPLIER;
+}
+
+export function getPrizeLadder(rarity: unknown): PrizeTier[] {
+  const key = String(rarity || "common").toLowerCase() as Rarity;
+  return PRIZE_LADDERS[key] || PRIZE_LADDERS.common;
+}
+
 export function getActivePrizeForEntries(rarity: unknown, entryCount: unknown) {
   const count = Math.max(0, Number(entryCount || 0));
   const ladder = getPrizeLadder(rarity);
   const unlocked = ladder.filter((item) => count >= item.requiredEntrants);
   const activePrize = unlocked[unlocked.length - 1] || null;
   const nextPrize = ladder.find((item) => count < item.requiredEntrants) || null;
-  return { activePrize, nextPrize, ladder, currentEntries: count, prizeUnlocked: Boolean(activePrize), requiredEntrants: activePrize?.requiredEntrants || nextPrize?.requiredEntrants || 0, entrantsToNext: nextPrize ? Math.max(0, nextPrize.requiredEntrants - count) : 0 };
+
+  return {
+    activePrize,
+    nextPrize,
+    ladder,
+    currentEntries: count,
+    prizeUnlocked: Boolean(activePrize),
+    requiredEntrants: activePrize?.requiredEntrants || nextPrize?.requiredEntrants || 0,
+    entrantsToNext: nextPrize ? Math.max(0, nextPrize.requiredEntrants - count) : 0,
+  };
 }
