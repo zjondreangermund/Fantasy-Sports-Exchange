@@ -9,6 +9,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import Metal3DCard from "../components/Metal3DCard";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import MatchdayCenter from "../components/dashboard/MatchdayCenter";
+import DailyLoginRewardPanel from "../components/dashboard/DailyLoginRewardPanel";
 import { PremiumHero, PremiumPage, PremiumPanel, PremiumStat } from "../components/premium";
 import { type Competition, type CompetitionEntry, type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
 
@@ -60,6 +61,7 @@ export default function DashboardPage() {
   return (
     <PremiumPage>
       <MatchdayCenter />
+      <DailyLoginRewardPanel />
 
       <PremiumHero eyebrow="Club Command Centre" title="Fantasy Arena" subtitle="Your squad, wallet, tournaments and trading floor in one premium matchday control room.">
         <div className="grid min-w-[310px] grid-cols-3 gap-2">
