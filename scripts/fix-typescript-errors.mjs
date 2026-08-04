@@ -161,4 +161,20 @@ replace(
   'includesAll(myEntries, ["My Teams & Prizes", "Submitted lineup", "prize claim pending", "Final scoring snapshot stored"], "Submitted teams page");',
 );
 
+replace(
+  "client/src/main.tsx",
+  'key !== "fantasy-site-v15"',
+  'key !== "fantasy-site-v18-lion-jpg"',
+);
+replace(
+  "scripts/verify-card-data-integrity.mjs",
+  'expect(main.includes(\'"fantasy-site-v15"\'), "Client cache key must be fantasy-site-v15");',
+  'expect(main.includes(\'"fantasy-site-v18-lion-jpg"\'), "Client cache key must match the active service worker cache.");',
+);
+replace(
+  "scripts/verify-card-data-integrity.mjs",
+  'expect(serviceWorker.includes(\'const CACHE_NAME = "fantasy-site-v15"\'), "Service worker cache key must be fantasy-site-v15");',
+  'expect(serviceWorker.includes(\'const CACHE_NAME = "fantasy-site-v18-lion-jpg"\'), "Service worker cache key must match the active service worker cache.");',
+);
+
 console.log("Applied focused TypeScript repairs.");
