@@ -1,1 +1,1 @@
-Trigger focused TypeScript repair workflow for preview tournament JSX.
+Trigger final preview TypeScript repairs for admin security and pack settlement.

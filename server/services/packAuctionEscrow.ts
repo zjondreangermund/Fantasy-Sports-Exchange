@@ -559,6 +559,6 @@ export async function settlePackAuction(input: any) {
       INSERT INTO app.audit_logs (user_id, action, meta)
       VALUES (${actorId}, 'pack_auction.settled', ${JSON.stringify({ auctionId, winnerId, amount })}::jsonb)
     `);
-    return { success: true, auctionId, sold: true, winnerId, amount, ...settlement };
+    return { success: true, auctionId, sold: true, winnerId, ...settlement };
   });
 }

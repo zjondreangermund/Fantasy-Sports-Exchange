@@ -219,10 +219,11 @@ export default function AdminSecurityPanel() {
       toast({ title: `${label} ${variables.value ? "enabled" : "disabled"}`, description: "The change was saved immediately and will remain active when you change tabs." });
     },
     onError: async (error: any, _variables, context) => {
-      if (context?.previous?.settings) {
-        queryClient.setQueryData(ADMIN_SECURITY_KEY, context.previous);
-        setDraft((current) => current ? { ...current, emergency: cloneSettings(context.previous!.settings).emergency } : cloneSettings(context.previous.settings));
-        setClientSecurityStatus(context.previous.settings.emergency);
+      const previous = context?.previous;
+      if (previous?.settings) {
+        queryClient.setQueryData(ADMIN_SECURITY_KEY, previous);
+        setDraft((current) => current ? { ...current, emergency: cloneSettings(previous.settings).emergency } : cloneSettings(previous.settings));
+        setClientSecurityStatus(previous.settings.emergency);
       }
       await securityQuery.refetch();
       toast({ title: "Emergency control not saved", description: error?.message || "The previous setting has been restored.", variant: "destructive" });
@@ -280,8 +281,8 @@ export default function AdminSecurityPanel() {
       <Card className="border-red-300/15 bg-slate-950/75 p-5 text-white">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2 text-lg font-black"><Power className="h-5 w-5 text-red-200" />Emergency controls</div><p className="mt-1 text-sm text-slate-400">Each switch is written to the database immediately and stays in the same position when you change tabs or refresh.</p></div><Badge className={emergencyActive ? "bg-red-500/15 text-red-100" : "bg-emerald-500/15 text-emerald-100"}>{emergencyMutation.isPending ? "Applying…" : emergencyActive ? `${emergencyActive} active` : "Normal operation"}</Badge></div>
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <SwitchRow title="Read-only mode" description="View-only access. Blocks all changes except this security control and logout." checked={draft.emergency.readOnly} disabled={emergencyMutation.isPending} onCheckedChange={(value) => updateEmergencySwitch("readOnly", value)} danger />
-          <SwitchRow title="Pause new logins" description="Stops new Google login sessions and callbacks." checked={draft.emergency.authPaused} disabled={emergencyMutation.isPending} onCheckedChange={(value) => updateEmergencySwitch("authPaused", value)} danger />
+          <SwitchRow title="Read-only mode" description="Launch preview mode. Sign-up, starter onboarding and the daily common reward remain available; economy and tournament actions stay paused." checked={draft.emergency.readOnly} disabled={emergencyMutation.isPending} onCheckedChange={(value) => updateEmergencySwitch("readOnly", value)} danger />
+          <SwitchRow title="Pause new logins" description="Stops new sign-ups and logins, including during preview mode." checked={draft.emergency.authPaused} disabled={emergencyMutation.isPending} onCheckedChange={(value) => updateEmergencySwitch("authPaused", value)} danger />
           <SwitchRow title="Pause deposits" description="Stops new wallet deposit submissions." checked={draft.emergency.depositsPaused} disabled={emergencyMutation.isPending} onCheckedChange={(value) => updateEmergencySwitch("depositsPaused", value)} danger />
           <SwitchRow title="Pause withdrawals" description="Stops new withdrawal requests." checked={draft.emergency.withdrawalsPaused} disabled={emergencyMutation.isPending} onCheckedChange={(value) => updateEmergencySwitch("withdrawalsPaused", value)} danger />
           <SwitchRow title="Pause marketplace" description="Blocks buying, selling, listing and loans while pages remain viewable." checked={draft.emergency.marketplacePaused} disabled={emergencyMutation.isPending} onCheckedChange={(value) => updateEmergencySwitch("marketplacePaused", value)} danger />

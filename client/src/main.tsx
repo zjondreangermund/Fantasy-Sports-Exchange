@@ -40,7 +40,7 @@ if ("serviceWorker" in navigator) {
         if ("caches" in window) {
           caches.keys().then((keys) => {
             keys
-              .filter((key) => key !== "fantasy-site-v15")
+              .filter((key) => key !== "fantasy-site-v18-lion-jpg")
               .forEach((key) => caches.delete(key));
           });
         }

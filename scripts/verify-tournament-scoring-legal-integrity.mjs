@@ -117,7 +117,7 @@ includesAll(legal, [
 includesAll(app, ["MyEntriesPage", 'path="/my-entries"', '"/terms-and-conditions"', '"/game-rules"', '"/contact-us"'], "Application routing");
 includesAll(sidebar, ["My Teams & Prizes", "Game Rules", "Terms & Conditions", "Help Centre", "Contact Us"], "Authenticated sidebar");
 includesAll(footer, ["Official Game Rules", "Terms & Conditions", "Contact Us", "Privacy Policy"], "Site footer");
-includesAll(myEntries, ["My Teams & Prizes", "Submitted lineup", "Prize claim pending", "Final scoring snapshot stored"], "Submitted teams page");
+includesAll(myEntries, ["My Teams & Prizes", "Submitted lineup", "prize claim pending", "Final scoring snapshot stored"], "Submitted teams page");
 
 includesAll(sharedRules, [
   "CAPTAIN_MULTIPLIER = 1.1",
