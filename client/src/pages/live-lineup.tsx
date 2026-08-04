@@ -88,10 +88,10 @@ function SlotCard({
         <Metric label="Team" value={shortTeam(data.team)} />
         <Metric label="Season PTS" value={statText(data.totalPoints, verified)} />
         <Metric label="Form" value={statText(data.form, verified, 1)} />
-        <Metric label="OVR" value={statText(data.rating, verified)} />
+        <Metric label="A-OVR" value={statText(data.rating, verified)} />
       </div>
       <p className={`mt-3 text-center text-[10px] font-bold uppercase tracking-[.14em] ${verified ? "text-emerald-300" : "text-amber-200"}`}>
-        {verified ? "Official provider-linked statistics" : "Official statistics unavailable — no estimate shown"}
+        {verified ? "Official stats • Arena OVR derived from FPL" : "Official statistics unavailable — no estimate shown"}
       </p>
     </div>
   );
@@ -206,7 +206,7 @@ export default function LiveLineupPage() {
           <Card className="rounded-3xl border-slate-800 bg-slate-950/60 p-5 text-white">
             <h2 className="text-lg font-black">Accuracy Guard</h2>
             <div className="mt-4 space-y-3 text-sm text-slate-400">
-              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4"><b className="text-emerald-200">Player cards:</b> official provider-linked identity, season points, form and OVR.</div>
+              <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4"><b className="text-emerald-200">Player cards:</b> official provider-linked identity, season points and form. Arena OVR is derived from verified FPL inputs.</div>
               <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4"><b className="text-amber-200">Unavailable data:</b> displayed as a dash rather than estimated from card rarity, stored decisive score or team events.</div>
               <div className="rounded-2xl border border-slate-800 bg-black/25 p-4">Click a player card to view its full verified profile, providers and match history.</div>
             </div>

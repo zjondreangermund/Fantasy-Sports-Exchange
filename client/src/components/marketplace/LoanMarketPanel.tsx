@@ -486,7 +486,7 @@ function LoanMarketRow({
         <div className="flex min-w-0 items-center gap-3 text-left">
           <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-black/35">
             <img src={loanImage(loan)} alt={loanPlayerName(loan)} className="h-full w-full object-cover" />
-            <div className="absolute left-1 top-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black">{statText(overall)}</div>
+            <div title="Arena OVR derived from official FPL inputs" className="absolute left-1 top-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black">A-OVR {statText(overall)}</div>
           </div>
           <div className="min-w-0">
             <p className="truncate text-lg font-black">{loanPlayerName(loan)}</p>

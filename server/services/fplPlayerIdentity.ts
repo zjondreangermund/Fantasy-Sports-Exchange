@@ -26,6 +26,7 @@ export function fplPlayerPosition(element: any): FplPosition {
   return FPL_POSITION_BY_ELEMENT_TYPE[Number(element?.element_type)] || "MID";
 }
 
+/** Fantasy Arena OVR: a platform rating derived from verified FPL inputs, not an official league rating. */
 export function overallFromFplElement(element: any): number {
   const toNumber = (value: unknown, fallback = 0) => {
     const number = Number(value);
