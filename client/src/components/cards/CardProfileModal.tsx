@@ -104,6 +104,13 @@ function sourceLabel(data: CardProfileData) {
   return "Awaiting official link";
 }
 
+function officialStat(data: CardProfileData, value: unknown, decimals = 0): string | number {
+  if (data.source === "card-fallback") return "—";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return decimals > 0 ? number.toFixed(decimals) : Math.round(number);
+}
+
 export default function CardProfileModal({ card, onClose }: { card: PlayerCardWithPlayer; onClose: () => void }) {
   const { setOpen, setOpenMobile } = useSidebar();
   const fallback = fallbackData(card);
@@ -200,10 +207,10 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
 
             <section className="min-w-0 space-y-4">
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <HeroStat icon={<Star className="h-4 w-4" />} label={totalPointsLabel} value={data.stats.totalPoints} />
+                <HeroStat icon={<Star className="h-4 w-4" />} label={totalPointsLabel} value={officialStat(data, data.stats.totalPoints)} />
                 <HeroStat icon={<TrendingUp className="h-4 w-4" />} label="Ownership" value={data.stats.selectedBy ? `${data.stats.selectedBy}%` : "—"} />
                 <HeroStat icon={<Zap className="h-4 w-4" />} label="Last Arena Sale" value={money(data.stats.value)} />
-                <HeroStat icon={<Award className="h-4 w-4" />} label={data.source === "api-football" ? "Avg Rating" : "Bonus"} value={data.source === "api-football" ? (data.stats.averageRating ?? "—") : (data.stats.bonus || 0)} />
+                <HeroStat icon={<Award className="h-4 w-4" />} label={data.source === "api-football" ? "Avg Rating" : "Bonus"} value={data.source === "api-football" ? officialStat(data, data.stats.averageRating, 1) : officialStat(data, data.stats.bonus)} />
               </div>
 
               <div className="rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
@@ -239,15 +246,15 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
                 <div className="rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
                   <h3 className="mb-4 flex items-center gap-2 text-lg font-black text-white"><Activity className="h-5 w-5 text-emerald-200" /> Season Stats</h3>
                   <div className="space-y-2">
-                    <Stat icon={<CalendarDays className="h-4 w-4" />} label="Starts" value={data.stats.matchesPlayed} />
-                    <Stat icon={<Activity className="h-4 w-4" />} label="Minutes" value={data.stats.minutes} />
-                    <Stat icon={<Star className="h-4 w-4" />} label="Goals" value={data.stats.goals} />
-                    <Stat icon={<Star className="h-4 w-4" />} label="Assists" value={data.stats.assists} />
-                    <Stat icon={<Shield className="h-4 w-4" />} label="Clean sheets" value={data.stats.cleanSheets || 0} />
-                    {position === "GK" || Number(data.stats.saves || 0) > 0 ? <Stat icon={<Shield className="h-4 w-4" />} label="Saves" value={data.stats.saves || 0} /> : null}
-                    <Stat icon={<Activity className="h-4 w-4" />} label="Yellow cards" value={data.stats.yellowCards} />
-                    <Stat icon={<Activity className="h-4 w-4" />} label="Red cards" value={data.stats.redCards} />
-                    <Stat icon={<Award className="h-4 w-4" />} label="Bonus" value={data.stats.bonus || 0} />
+                    <Stat icon={<CalendarDays className="h-4 w-4" />} label="Starts" value={officialStat(data, data.stats.matchesPlayed)} />
+                    <Stat icon={<Activity className="h-4 w-4" />} label="Minutes" value={officialStat(data, data.stats.minutes)} />
+                    <Stat icon={<Star className="h-4 w-4" />} label="Goals" value={officialStat(data, data.stats.goals)} />
+                    <Stat icon={<Star className="h-4 w-4" />} label="Assists" value={officialStat(data, data.stats.assists)} />
+                    <Stat icon={<Shield className="h-4 w-4" />} label="Clean sheets" value={officialStat(data, data.stats.cleanSheets)} />
+                    {position === "GK" || Number(data.stats.saves || 0) > 0 ? <Stat icon={<Shield className="h-4 w-4" />} label="Saves" value={officialStat(data, data.stats.saves)} /> : null}
+                    <Stat icon={<Activity className="h-4 w-4" />} label="Yellow cards" value={officialStat(data, data.stats.yellowCards)} />
+                    <Stat icon={<Activity className="h-4 w-4" />} label="Red cards" value={officialStat(data, data.stats.redCards)} />
+                    <Stat icon={<Award className="h-4 w-4" />} label="Bonus" value={officialStat(data, data.stats.bonus)} />
                   </div>
                 </div>
               </div>

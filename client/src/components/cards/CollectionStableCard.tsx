@@ -97,9 +97,10 @@ export default function CollectionStableCard({ player, selected = false, onClick
   const image = imageOf(player);
   const team = player.team || player.club || "Fantasy Arena";
   const price = Number(player.price || player.listedPrice || 0);
-  const ovr = numberStat(player.rating);
-  const points = numberStat(player.totalPoints);
-  const form = decimalStat(player.form);
+  const statsVerified = player.statsVerified !== false;
+  const ovr: number | string = statsVerified ? numberStat(player.rating) : "—";
+  const points: number | string = statsVerified ? numberStat(player.totalPoints) : "—";
+  const form: number | string = statsVerified ? decimalStat(player.form) : "—";
   const serial = numberStat(player.serial);
   const maxSupply = numberStat(player.maxSupply);
   const serialText = serial > 0 && maxSupply > 0 ? `${serial}/${maxSupply}` : "SERIAL PENDING";

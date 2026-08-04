@@ -94,6 +94,58 @@ function loanOwnerName(loan: LoanListing) {
   return String(loan.owner_name || loan.ownerName || "Manager");
 }
 
+function loanCard(loan: LoanListing): PlayerCardWithPlayer {
+  if (loan.card?.id) return loan.card as PlayerCardWithPlayer;
+  return {
+    id: Number(loan.card_id || loan.cardId || 0),
+    playerId: Number(loan.player_id || loan.playerId || 0),
+    ownerId: String(loan.original_owner_id || loan.ownerId || ""),
+    rarity: rarityOfLoan(loan) as any,
+    serialId: loan.serial_id || loan.serialId || null,
+    serialNumber: loan.serial_number == null ? null : Number(loan.serial_number),
+    maxSupply: loan.max_supply == null ? null : Number(loan.max_supply),
+    level: Number(loan.level || 1),
+    xp: Number(loan.xp || 0),
+    decisiveScore: 0,
+    last5Scores: [],
+    forSale: false,
+    price: 0,
+    acquiredAt: loan.acquired_at || null,
+    player: {
+      id: Number(loan.player_id || loan.playerId || 0),
+      name: loanPlayerName(loan),
+      team: loan.team || "",
+      position: loan.position || "",
+      league: loan.league || "Premier League",
+      overall: loan.official_overall ?? null,
+      totalPoints: loan.official_total_points ?? null,
+      form: loan.official_form ?? null,
+      imageUrl: loanImage(loan),
+      verifiedImageUrl: loanImage(loan),
+      identityVerified: Boolean(loan.identity_verified),
+      identitySource: loan.identity_source || "unverified-card-data",
+    } as any,
+  } as PlayerCardWithPlayer;
+}
+
+function loanOfficialPoints(loan: LoanListing): number | null {
+  if (!loan.identity_verified) return null;
+  const value = loan.official_total_points ?? loan.card?.player?.totalPoints;
+  const number = Number(value);
+  return value === null || value === undefined || !Number.isFinite(number) ? null : number;
+}
+
+function loanOfficialOverall(loan: LoanListing): number | null {
+  if (!loan.identity_verified) return null;
+  const value = loan.official_overall ?? loan.card?.player?.overall;
+  const number = Number(value);
+  return value === null || value === undefined || !Number.isFinite(number) ? null : number;
+}
+
+function statText(value: number | null) {
+  return value === null ? "—" : value.toFixed(0);
+}
+
 function RarityIcon({ rarity }: { rarity: string }) {
   if (rarity === "legendary") return <Crown className="h-4 w-4 text-amber-300" />;
   if (rarity === "unique" || rarity === "epic") return <Gem className="h-4 w-4 text-fuchsia-300" />;
@@ -107,12 +159,14 @@ export function LoanMarketPanel({
   search = "",
   rarity = "all",
   sortBy = "performance",
+  onViewProfile,
 }: {
   myCards: PlayerCardWithPlayer[];
   walletBalance: number;
   search?: string;
   rarity?: string;
   sortBy?: SortMode;
+  onViewProfile?: (card: PlayerCardWithPlayer) => void;
 }) {
   const { toast } = useToast();
   const loanableCards = useMemo(
@@ -171,7 +225,7 @@ export function LoanMarketPanel({
         if (sortBy === "priceAsc") return loanTotal(a) - loanTotal(b);
         if (sortBy === "priceDesc") return loanTotal(b) - loanTotal(a);
         if (sortBy === "rarity") return (rarityOrder[rarityOfLoan(b)] || 0) - (rarityOrder[rarityOfLoan(a)] || 0);
-        return Number(b.overall || b.decisive_score || 0) - Number(a.overall || a.decisive_score || 0);
+        return (loanOfficialPoints(b) ?? -1) - (loanOfficialPoints(a) ?? -1);
       });
   }, [data?.loans, rarity, search, sortBy]);
 
@@ -252,6 +306,7 @@ export function LoanMarketPanel({
               walletBalance={walletBalance}
               accepting={acceptLoanMutation.isPending}
               onAccept={() => setConfirmingLoan(loan)}
+              onDetails={() => onViewProfile?.(loanCard(loan))}
             />
           ))
         ) : (
@@ -402,21 +457,28 @@ function LoanMarketRow({
   walletBalance,
   accepting,
   onAccept,
+  onDetails,
 }: {
   loan: LoanListing;
   walletBalance: number;
   accepting: boolean;
   onAccept: () => void;
+  onDetails: () => void;
 }) {
   const rarity = rarityOfLoan(loan);
   const glow = rarityGlow[rarity] || rarityGlow.common;
   const gross = loanTotal(loan);
   const gameweeks = Number(loan.gameweeks || 1);
-  const overall = Number(loan.overall || loan.decisive_score || 0);
+  const overall = loanOfficialOverall(loan);
 
   return (
     <article
-      className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-3 text-white backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-cyan-300/30"
+      role="button"
+      tabIndex={0}
+      aria-label={`View verified stats for ${loanPlayerName(loan)}`}
+      onClick={onDetails}
+      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onDetails(); }}
+      className="relative cursor-pointer overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-3 text-white backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-cyan-300/30"
       style={{ boxShadow: `0 0 30px ${glow}, 0 18px 48px rgba(0,0,0,.35)` }}
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,.07),transparent)]" />
@@ -424,7 +486,7 @@ function LoanMarketRow({
         <div className="flex min-w-0 items-center gap-3 text-left">
           <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-black/35">
             <img src={loanImage(loan)} alt={loanPlayerName(loan)} className="h-full w-full object-cover" />
-            <div className="absolute left-1 top-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black">{overall.toFixed(0)}</div>
+            <div className="absolute left-1 top-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black">{statText(overall)}</div>
           </div>
           <div className="min-w-0">
             <p className="truncate text-lg font-black">{loanPlayerName(loan)}</p>
@@ -453,7 +515,7 @@ function LoanMarketRow({
           <Button
             size="sm"
             disabled={accepting || walletBalance < gross}
-            onClick={onAccept}
+            onClick={(event) => { event.stopPropagation(); onAccept(); }}
             className="rounded-xl bg-cyan-300 font-black text-black hover:bg-cyan-200"
           >
             {walletBalance < gross ? "Insufficient" : "Loan"} <ArrowRight className="ml-1 h-3.5 w-3.5" />

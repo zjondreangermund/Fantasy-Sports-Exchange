@@ -39,6 +39,8 @@ export type PlayerCardData = {
   listed?: boolean;
   last5Scores?: number[];
   totalPoints?: number;
+  /** True only when the displayed performance fields came from a verified official provider. */
+  statsVerified?: boolean;
   status?: "active" | "legacy" | "uncovered_league";
   competitionEligible?: boolean;
   provenanceMarker?: string;

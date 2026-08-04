@@ -8,7 +8,7 @@ import { registerTournamentCreatorRoutes } from "./tournamentCreator.routes.js";
 import { ensureTournamentSchema } from "./tournamentSchema.ensure.js";
 import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
 import { fplApi } from "../services/fplApi.js";
-import { buildFplPlayerIndex } from "../services/fplPlayerIdentity.js";
+import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
 import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
@@ -149,7 +149,28 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl(apiFootballPlayer.apiPlayerId, apiFootballPlayer.photo) : "";
         const verifiedImageUrl = apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null);
         const identityVerified = Boolean(apiFootballPlayer || matchedElement);
-        return { ...row, player: { ...storedPlayer, ...(canonical || {}), name: canonical?.name || apiFootballPlayer?.name || storedPlayer.name, team: apiFootballPlayer?.team || canonical?.team || storedPlayer.team, position: apiFootballPlayer?.position || canonical?.position || storedPlayer.position, apiFootballId: apiFootballPlayer?.apiPlayerId || null, imageUrl: verifiedImageUrl, verifiedImageUrl, identityVerified, identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data" } };
+        const officialTotalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
+        const officialForm = matchedElement ? Number(matchedElement.form || 0) : null;
+        const officialOverall = matchedElement ? overallFromFplElement(matchedElement) : null;
+        return {
+          ...row,
+          totalPoints: officialTotalPoints,
+          player: {
+            ...storedPlayer,
+            ...(canonical || {}),
+            name: canonical?.name || apiFootballPlayer?.name || storedPlayer.name,
+            team: apiFootballPlayer?.team || canonical?.team || storedPlayer.team,
+            position: apiFootballPlayer?.position || canonical?.position || storedPlayer.position,
+            apiFootballId: apiFootballPlayer?.apiPlayerId || null,
+            imageUrl: verifiedImageUrl,
+            verifiedImageUrl,
+            identityVerified,
+            identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
+            totalPoints: officialTotalPoints,
+            form: officialForm,
+            overall: officialOverall,
+          },
+        };
       });
       return res.json({ listings, cards: listings });
     } catch (error: any) {

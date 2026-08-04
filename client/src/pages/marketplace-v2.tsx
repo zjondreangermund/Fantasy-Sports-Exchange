@@ -10,6 +10,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { LiveHero, LivePageShell, LiveStatCard } from "../components/layout/LivePageShell";
 import CardShowcase from "../components/CardShowcase";
+import CardProfileModal from "../components/cards/CardProfileModal";
 import { LoanMarketPanel } from "../components/marketplace/LoanMarketPanel";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
@@ -82,6 +83,30 @@ function cardSerial(card: PlayerCardWithPlayer) {
 
 function ownerName(card: PlayerCardWithPlayer) {
   return String((card as any).ownerUsername || (card as any).ownerName || "Fantasy Arena");
+}
+
+function verifiedPlayerStat(card: PlayerCardWithPlayer, ...keys: string[]): number | null {
+  const player = card.player as any;
+  if (!player?.identityVerified) return null;
+  for (const key of keys) {
+    const value = key === "card.totalPoints" ? (card as any).totalPoints : player?.[key];
+    if (value === null || value === undefined || value === "") continue;
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function officialPoints(card: PlayerCardWithPlayer) {
+  return verifiedPlayerStat(card, "totalPoints", "total_points", "card.totalPoints");
+}
+
+function officialOverall(card: PlayerCardWithPlayer) {
+  return verifiedPlayerStat(card, "overall");
+}
+
+function statText(value: number | null, decimals = 0) {
+  return value === null ? "—" : value.toFixed(decimals);
 }
 
 export default function MarketplaceV2Page() {
@@ -163,7 +188,7 @@ export default function MarketplaceV2Page() {
         if (sortBy === "priceAsc") return cardPrice(a) - cardPrice(b);
         if (sortBy === "priceDesc") return cardPrice(b) - cardPrice(a);
         if (sortBy === "rarity") return (rarityOrder[rarityOf(b)] || 0) - (rarityOrder[rarityOf(a)] || 0);
-        return Number(b.decisiveScore || 0) - Number(a.decisiveScore || 0);
+        return (officialPoints(b) ?? -1) - (officialPoints(a) ?? -1);
       });
   }, [listings, search, rarity, sortBy]);
 
@@ -286,6 +311,7 @@ export default function MarketplaceV2Page() {
             search={search}
             rarity={rarity}
             sortBy={sortBy}
+            onViewProfile={setSelected}
           />
         ) : (
           <div className="grid gap-3">
@@ -342,26 +368,7 @@ export default function MarketplaceV2Page() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent className="max-w-5xl border-white/10 bg-[#070b18] text-white">
-          <DialogHeader><DialogTitle>Market Details</DialogTitle></DialogHeader>
-          {selected ? (
-            <div className="space-y-4">
-              <MarketRow
-                card={selected}
-                watched={watchlist.includes(cardId(selected))}
-                onWatch={() => toggleWatch(cardId(selected))}
-                onBuy={() => setBuying(selected)}
-              />
-              <div className="grid gap-3 rounded-2xl border border-white/10 bg-black/35 p-4 text-sm text-slate-300 sm:grid-cols-3">
-                <p>Seller: <strong className="text-white">{ownerName(selected)}</strong></p>
-                <p>Price: <strong className="text-emerald-300">{money(cardPrice(selected))}</strong></p>
-                <p>Rarity: <strong className="capitalize text-white">{rarityOf(selected)}</strong></p>
-              </div>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      {selected ? <CardProfileModal card={selected} onClose={() => setSelected(null)} /> : null}
     </LivePageShell>
   );
 }
@@ -419,22 +426,27 @@ function MarketRow({
 
   return (
     <article
-      className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-3 text-white backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-cyan-300/30"
+      role="button"
+      tabIndex={0}
+      aria-label={`View verified stats for ${fantasy.name}`}
+      onClick={() => onDetails?.()}
+      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") onDetails?.(); }}
+      className="relative cursor-pointer overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-3 text-white backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-cyan-300/30"
       style={{ boxShadow: `0 0 30px ${glow}, 0 18px 48px rgba(0,0,0,.35)` }}
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,.07),transparent)]" />
       <div className="relative grid gap-3 md:grid-cols-[1.45fr_0.7fr_0.7fr_0.9fr_auto] md:items-center">
-        <button onClick={onDetails} className="flex min-w-0 items-center gap-3 text-left">
+        <div className="flex min-w-0 items-center gap-3 text-left">
           <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-black/35">
             <img src={fantasy.image} alt={fantasy.name} className="h-full w-full object-cover" />
-            <div className="absolute left-1 top-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black">{Number(fantasy.rating || 0).toFixed(0)}</div>
+            <div className="absolute left-1 top-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black">{statText(officialOverall(card))}</div>
           </div>
           <div className="min-w-0">
             <p className="truncate text-lg font-black">{fantasy.name}</p>
             <p className="truncate text-xs text-white/50">{fantasy.team || fantasy.club} • {fantasy.position}</p>
             <p className="truncate text-[11px] text-white/35">Seller: {ownerName(card)}</p>
           </div>
-        </button>
+        </div>
 
         <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2">
           <RarityIcon rarity={rarity} />
@@ -442,8 +454,8 @@ function MarketRow({
         </div>
 
         <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
-          <p className="text-[10px] uppercase tracking-[.14em] text-white/40">Points</p>
-          <p className="font-black">{Number(fantasy.totalPoints || card.decisiveScore || 0).toFixed(0)}</p>
+          <p className="text-[10px] uppercase tracking-[.14em] text-white/40">Season points</p>
+          <p className="font-black">{statText(officialPoints(card))}</p>
         </div>
 
         <div className="rounded-xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-2">
@@ -452,10 +464,10 @@ function MarketRow({
         </div>
 
         <div className="flex items-center justify-end gap-2">
-          <Button size="sm" onClick={onBuy} className="rounded-xl bg-cyan-300 font-black text-black hover:bg-cyan-200">
+          <Button size="sm" onClick={(event) => { event.stopPropagation(); onBuy?.(); }} className="rounded-xl bg-cyan-300 font-black text-black hover:bg-cyan-200">
             Buy <ArrowRight className="ml-1 h-3.5 w-3.5" />
           </Button>
-          <Button size="icon" variant="ghost" onClick={onWatch} className={watched ? "text-red-300" : "text-white/45"}>
+          <Button size="icon" variant="ghost" onClick={(event) => { event.stopPropagation(); onWatch?.(); }} className={watched ? "text-red-300" : "text-white/45"}>
             <Heart className={watched ? "h-5 w-5 fill-current" : "h-5 w-5"} />
           </Button>
         </div>
