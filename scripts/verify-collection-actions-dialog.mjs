@@ -12,9 +12,7 @@ const main = read("client/src/main.tsx");
 const serviceWorker = read("client/public/sw.js");
 
 for (const expected of [
-  'className="collection-card-item group flex touch-pan-y flex-col items-center gap-2"',
-  'width: isMobile ? 146 : 170',
-  'maxWidth: isMobile ? 146 : 170',
+  'className="collection-card-item group flex w-[164px] touch-pan-y flex-col items-center gap-2"',
   'className="grid w-full grid-cols-2 gap-2"',
   'data-collection-sell-overlay',
   'role="dialog" aria-modal="true" data-collection-sell-dialog',
@@ -23,10 +21,11 @@ for (const expected of [
   expect(collection.includes(expected), `Collection repair is missing: ${expected}`);
 }
 
+expect(collection.includes('size="sm"'), "Collection cards must use the compact card size.");
 expect(!collection.includes('max-w-[190px] touch-pan-y flex-col'), "Collection card action wrapper must not depend on the globally overridden max-width utility");
 expect(!collection.includes('className="w-full max-w-md rounded-[1.75rem]'), "Sale modal width must not depend on the globally overridden max-width utility");
-expect(main.includes('"fantasy-site-v18-lion-jpg"'), "Client cache must be fantasy-site-v18-lion-jpg");
-expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v18-lion-jpg"'), "Service worker cache must be fantasy-site-v18-lion-jpg");
+expect(main.includes('"fantasy-site-v18-lion-jpg"'), "Client cache must match the active service worker cache");
+expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v18-lion-jpg"'), "Service worker cache must match the active client cache");
 
 if (failures.length) {
   console.error("Collection action/dialog verification failed:");
@@ -34,4 +33,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Collection Sell/Loan controls match card width and the sale form stays a compact modal.");
+console.log("Collection Sell/Loan controls match the compact card width and the sale form stays a bounded modal.");
