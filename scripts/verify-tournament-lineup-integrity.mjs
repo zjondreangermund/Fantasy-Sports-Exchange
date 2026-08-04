@@ -28,7 +28,7 @@ forbidText(client, "disabled={entered", "Existing entries must not disable the t
 
 requireText(server, "p.league as league", "Server validation must load each player's league.");
 requireText(server, "Premier League tournaments only accept Premier League player cards.", "Server validation must reject non-Premier-League cards.");
-requireText(server, "REQUIRED_LINEUP_POSITIONS", "Server validation must enforce the guided formation.");
+requireText(server, "TOURNAMENT_REQUIRED_POSITIONS", "Server validation must enforce the guided formation.");
 requireText(server, "Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player.", "Server must enforce ordered formation slots.");
 requireText(server, "pg_advisory_xact_lock(87421, card_id)", "Concurrent submissions must serialize card selection.");
 requireText(server, "jsonb_array_elements_text", "Server must check previous lineups for overlapping cards.");
