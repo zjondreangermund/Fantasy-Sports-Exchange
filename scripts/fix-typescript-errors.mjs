@@ -144,4 +144,10 @@ replace(
   '      "await ensureRuntimeSchema();",\n      "try { const result = await syncFplPremierLeaguePlayers()",',
 );
 
+replace(
+  "scripts/verify-tournament-lineup-integrity.mjs",
+  'requireText(server, "REQUIRED_LINEUP_POSITIONS", "Server validation must enforce the guided formation.");',
+  'requireText(server, "TOURNAMENT_REQUIRED_POSITIONS", "Server validation must enforce the guided formation.");',
+);
+
 console.log("Applied focused TypeScript repairs.");
