@@ -182,6 +182,7 @@ jobs:
             node scripts/verify-auth-production-integrity.mjs &&
             node scripts/verify-card-data-integrity.mjs &&
             node scripts/verify-marketplace-profile-integrity.mjs &&
+            node scripts/verify-prize-vault-funding.mjs &&
             node scripts/verify-unified-scroll-architecture.mjs &&
             node scripts/verify-collection-actions-dialog.mjs &&
             node scripts/verify-verified-player-profiles.mjs &&
