@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Clock3, Mail, Phone, ShieldCheck } from "lucide-react";
@@ -11,7 +12,7 @@ function VerificationRow({
   label,
   value,
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: string;
 }) {
