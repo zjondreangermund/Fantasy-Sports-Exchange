@@ -4,22 +4,16 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const artworkDirectory = path.join(root, "client", "public", "prizes", "legendary");
-const catalogPath = path.join(
+const catalogDirectory = path.join(
   root,
   "client",
   "src",
   "components",
   "prize-vault",
-  "prizeArtworkCatalog.ts",
 );
-const artworkComponentPath = path.join(
-  root,
-  "client",
-  "src",
-  "components",
-  "prize-vault",
-  "PremiumPrizeArtwork.tsx",
-);
+const catalogPath = path.join(catalogDirectory, "prizeArtworkCatalog.ts");
+const legacyCatalogPath = path.join(catalogDirectory, "prizeArtworkCatalogLegacy.ts");
+const artworkComponentPath = path.join(catalogDirectory, "PremiumPrizeArtwork.tsx");
 
 const expectedFiles = [
   "legendary-01-cash-10000.png",
@@ -57,15 +51,22 @@ for (const fileName of expectedFiles) {
   }
 }
 
+if (!fs.existsSync(legacyCatalogPath)) {
+  throw new Error("Missing legacy Prize Vault artwork catalog");
+}
+
 const catalog = fs.readFileSync(catalogPath, "utf8");
+const legacyCatalog = fs.readFileSync(legacyCatalogPath, "utf8");
+const combinedCatalog = `${catalog}\n${legacyCatalog}`;
+
 for (const fileName of expectedFiles) {
   const publicPath = `/prizes/legendary/${fileName}`;
-  if (!catalog.includes(`src: "${publicPath}"`)) {
+  if (!combinedCatalog.includes(`src: "${publicPath}"`)) {
     throw new Error(`Legendary catalog is not linked to ${publicPath}`);
   }
 }
 
-const legendarySection = catalog.match(/legendary:\s*\[([\s\S]*?)\n\s*\],\n\};/i)?.[1] || "";
+const legendarySection = legacyCatalog.match(/legendary:\s*\[([\s\S]*?)\n\s*\],\n\};/i)?.[1] || "";
 const mappedPngs = [...legendarySection.matchAll(/src:\s*"\/prizes\/legendary\/([^"]+\.png)"/g)]
   .map((match) => match[1]);
 if (mappedPngs.length !== 20 || new Set(mappedPngs).size !== 20) {
