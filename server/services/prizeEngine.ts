@@ -84,6 +84,43 @@ const common = [
   makePrize("common-watch", "Smart Watch", 2200, "Electronics", "common"),
   makePrize("common-phone", "Entry Smartphone", 3500, "Electronics", "common"),
   makePrize("common-tablet", "Compact Tablet", 4500, "Electronics", "common"),
+  makePrize("common-sports-voucher-5000", "N$5,000 Sports Store Voucher", 5000, "Voucher", "common"),
+  makePrize("common-coffee-machine", "Premium Coffee Machine", 5500, "Home", "common"),
+  makePrize("common-home-appliance-voucher-6000", "N$6,000 Home Appliance Voucher", 6000, "Voucher", "common"),
+  makePrize("common-fitness-tracker", "Fitness Tracker", 6500, "Electronics", "common"),
+  makePrize("common-portable-projector", "Portable Projector", 7000, "Electronics", "common"),
+  makePrize("common-keyboard-mouse", "Gaming Keyboard and Mouse", 7500, "Gaming", "common"),
+  makePrize("common-weekend-stay", "Weekend Stay Voucher", 8000, "Travel", "common"),
+  makePrize("common-tv-32", "32-inch Smart TV", 8500, "Electronics", "common"),
+  makePrize("common-earbuds", "Premium Wireless Earbuds", 9000, "Electronics", "common"),
+  makePrize("common-cash-10000", "N$10,000 Cash", 10000, "Cash", "common"),
+  makePrize("common-smartphone-upgrade", "Smartphone Upgrade", 11000, "Electronics", "common"),
+  makePrize("common-soundbar", "Home Soundbar", 12000, "Electronics", "common"),
+  makePrize("common-monitor", "Gaming Monitor", 13000, "Computers", "common"),
+  makePrize("common-mountain-bike", "Mountain Bike", 14000, "Adventure", "common"),
+  makePrize("common-ps5-digital", "PlayStation 5 Digital Console", 15000, "Gaming", "common"),
+  makePrize("common-laptop", "Everyday Laptop", 16000, "Computers", "common"),
+  makePrize("common-travel-voucher-17000", "N$17,000 Travel Voucher", 17000, "Travel", "common"),
+  makePrize("common-tv-43", "43-inch Smart TV", 18000, "Electronics", "common"),
+  makePrize("common-gaming-chair", "Gaming Chair", 19000, "Gaming", "common"),
+  makePrize("common-premium-smartphone", "Premium Smartphone", 20000, "Electronics", "common"),
+  makePrize("common-gaming-laptop", "Gaming Laptop", 21000, "Computers", "common"),
+  makePrize("common-cash-22000", "N$22,000 Cash", 22000, "Cash", "common"),
+  makePrize("common-family-weekend", "Family Weekend Getaway", 22500, "Travel", "common"),
+  makePrize("common-home-entertainment", "Home Entertainment Package", 23000, "Electronics", "common"),
+  makePrize("common-adventure-two", "Adventure Experience for Two", 23500, "Adventure", "common"),
+  makePrize("common-premium-gaming-pc", "Premium Gaming PC", 24000, "Gaming", "common"),
+  makePrize("common-shopping-spree-24100", "N$24,100 Shopping Spree", 24100, "Voucher", "common"),
+  makePrize("common-tablet-bundle", "Premium Tablet Bundle", 24200, "Electronics", "common"),
+  makePrize("common-home-office", "Home Office Setup", 24300, "Computers", "common"),
+  makePrize("common-sports-package", "Sports Equipment Package", 24400, "Football", "common"),
+  makePrize("common-cash-24500", "N$24,500 Cash", 24500, "Cash", "common"),
+  makePrize("common-grocery-fuel", "Family Grocery and Fuel Bundle", 24600, "Voucher", "common"),
+  makePrize("common-mobile-tech", "Mobile Tech Bundle", 24700, "Electronics", "common"),
+  makePrize("common-weekend-adventure", "Weekend Adventure Package", 24800, "Adventure", "common"),
+  makePrize("common-cash-24900", "N$24,900 Cash", 24900, "Cash", "common"),
+  makePrize("common-electronics-voucher", "Ultimate Electronics Voucher", 24950, "Voucher", "common"),
+  makePrize("common-grand-prize", "N$25,000 Grand Prize", 25000, "Cash", "common"),
 ];
 
 const rare = [
@@ -212,6 +249,15 @@ function assertPrizeLadderIntegrity() {
       previousEntrants = prize.requiredEntrants;
       previousValue = prize.value;
     }
+  }
+
+  if (PRIZE_LADDERS.common.length !== 50) {
+    throw new Error("Common Prize Vault ladder must contain exactly 50 prizes");
+  }
+
+  const commonFinal = PRIZE_LADDERS.common[49];
+  if (commonFinal?.key !== "common-grand-prize" || commonFinal.value !== 25000) {
+    throw new Error("Common prize 50 must remain the N$25,000 Grand Prize");
   }
 
   if (PRIZE_LADDERS.legendary.length !== 20) {
