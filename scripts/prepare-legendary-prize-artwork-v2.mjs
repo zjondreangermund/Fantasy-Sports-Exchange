@@ -13,6 +13,14 @@ const catalogPath = path.join(
   "prize-vault",
   "prizeArtworkCatalog.ts",
 );
+const artworkComponentPath = path.join(
+  root,
+  "client",
+  "src",
+  "components",
+  "prize-vault",
+  "PremiumPrizeArtwork.tsx",
+);
 
 const chunkFiles = fs
   .readdirSync(artworkDirectory)
@@ -65,7 +73,7 @@ const legendaryRules = [
 let catalog = fs.readFileSync(catalogPath, "utf8");
 catalog = catalog.replace(
   /const ARTWORK_VERSION = "[^"]+";\n(?:const LEGENDARY_SPRITE = "[^"]+";\n)?/,
-  'const ARTWORK_VERSION = "2026-08-04-legendary-real-webp-v3";\nconst LEGENDARY_SPRITE = "/prizes/legendary/legendary-prize-sprite-direct.webp";\n',
+  'const ARTWORK_VERSION = "2026-08-05-legendary-square-v4";\nconst LEGENDARY_SPRITE = "/prizes/legendary/legendary-prize-sprite-direct.webp";\n',
 );
 
 const legendaryBlock = [
@@ -97,6 +105,24 @@ if (finalCatalog !== fs.readFileSync(catalogPath, "utf8")) {
   fs.writeFileSync(catalogPath, finalCatalog);
 }
 
+let artworkComponent = fs.readFileSync(artworkComponentPath, "utf8");
+artworkComponent = artworkComponent.replace(
+  "      className={className}\n      role={decorative ? undefined : \"img\"}",
+  "      className={`${className} flex items-center justify-center`}\n      role={decorative ? undefined : \"img\"}",
+);
+artworkComponent = artworkComponent.replace(
+  '        className="h-full w-full bg-no-repeat"',
+  '        className={decorative\n          ? "h-full w-full bg-no-repeat"\n          : "aspect-square h-full w-auto max-h-full max-w-full shrink-0 bg-no-repeat"}',
+);
+
+if (!artworkComponent.includes("aspect-square h-full w-auto max-h-full max-w-full")) {
+  throw new Error("Could not apply square Legendary poster containment");
+}
+
+if (artworkComponent !== fs.readFileSync(artworkComponentPath, "utf8")) {
+  fs.writeFileSync(artworkComponentPath, artworkComponent);
+}
+
 console.log(
-  `[prize-artwork] Prepared ${path.relative(root, outputPath)} (${image.length} bytes) and verified 20 direct Legendary mappings`,
+  `[prize-artwork] Prepared ${path.relative(root, outputPath)} (${image.length} bytes), verified 20 mappings and enforced square Legendary poster rendering`,
 );
