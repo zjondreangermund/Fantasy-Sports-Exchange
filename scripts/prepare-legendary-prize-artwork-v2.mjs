@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const artworkDirectory = path.join(root, "client", "public", "prizes", "legendary");
+const sourcePath = path.join(artworkDirectory, "hq-sprite-001.txt");
 const outputPath = path.join(artworkDirectory, "legendary-prize-sprite-direct.webp");
 const catalogPath = path.join(
   root,
@@ -22,27 +23,70 @@ const artworkComponentPath = path.join(
   "PremiumPrizeArtwork.tsx",
 );
 
-const chunkFiles = fs
-  .readdirSync(artworkDirectory)
-  .filter((name) => /^direct-sprite-\d+\.txt$/i.test(name))
-  .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+function readWebpDimensions(image) {
+  if (
+    image.length < 30
+    || image.toString("ascii", 0, 4) !== "RIFF"
+    || image.toString("ascii", 8, 12) !== "WEBP"
+  ) {
+    return null;
+  }
 
-if (chunkFiles.length !== 5) {
-  throw new Error(`Expected 5 direct Legendary artwork chunks, found ${chunkFiles.length}`);
+  let offset = 12;
+  while (offset + 8 <= image.length) {
+    const chunkType = image.toString("ascii", offset, offset + 4);
+    const chunkSize = image.readUInt32LE(offset + 4);
+    const dataOffset = offset + 8;
+
+    if (chunkType === "VP8X" && dataOffset + 10 <= image.length) {
+      return {
+        width: 1 + image.readUIntLE(dataOffset + 4, 3),
+        height: 1 + image.readUIntLE(dataOffset + 7, 3),
+      };
+    }
+
+    if (
+      chunkType === "VP8 "
+      && dataOffset + 10 <= image.length
+      && image[dataOffset + 3] === 0x9d
+      && image[dataOffset + 4] === 0x01
+      && image[dataOffset + 5] === 0x2a
+    ) {
+      return {
+        width: image.readUInt16LE(dataOffset + 6) & 0x3fff,
+        height: image.readUInt16LE(dataOffset + 8) & 0x3fff,
+      };
+    }
+
+    if (chunkType === "VP8L" && dataOffset + 5 <= image.length && image[dataOffset] === 0x2f) {
+      const bits = image.readUInt32LE(dataOffset + 1);
+      return {
+        width: 1 + (bits & 0x3fff),
+        height: 1 + ((bits >> 14) & 0x3fff),
+      };
+    }
+
+    offset = dataOffset + chunkSize + (chunkSize % 2);
+  }
+
+  return null;
 }
 
-const encoded = chunkFiles
-  .map((name) => fs.readFileSync(path.join(artworkDirectory, name), "utf8"))
-  .join("")
-  .replace(/\s+/g, "");
+if (!fs.existsSync(sourcePath)) {
+  throw new Error(`Missing high-resolution Legendary artwork source: ${path.relative(root, sourcePath)}`);
+}
 
+const encoded = fs.readFileSync(sourcePath, "utf8").replace(/\s+/g, "");
 const image = Buffer.from(encoded, "base64");
-const isWebp = image.length > 50_000
-  && image.toString("ascii", 0, 4) === "RIFF"
-  && image.toString("ascii", 8, 12) === "WEBP";
+const dimensions = readWebpDimensions(image);
+const isHighResolutionWebp = image.length > 500_000
+  && dimensions?.width === 1920
+  && dimensions?.height === 1536;
 
-if (!isWebp) {
-  throw new Error("Legendary Prize Vault direct artwork did not decode to a valid WebP image");
+if (!isHighResolutionWebp) {
+  throw new Error(
+    `Legendary artwork must be the verified 1920×1536 high-resolution WebP; received ${dimensions?.width || 0}×${dimensions?.height || 0} and ${image.length} bytes`,
+  );
 }
 
 fs.writeFileSync(outputPath, image);
@@ -73,7 +117,7 @@ const legendaryRules = [
 let catalog = fs.readFileSync(catalogPath, "utf8");
 catalog = catalog.replace(
   /const ARTWORK_VERSION = "[^"]+";\n(?:const LEGENDARY_SPRITE = "[^"]+";\n)?/,
-  'const ARTWORK_VERSION = "2026-08-05-legendary-square-v4";\nconst LEGENDARY_SPRITE = "/prizes/legendary/legendary-prize-sprite-direct.webp";\n',
+  'const ARTWORK_VERSION = "2026-08-05-legendary-hq384-v5";\nconst LEGENDARY_SPRITE = "/prizes/legendary/legendary-prize-sprite-direct.webp";\n',
 );
 
 const legendaryBlock = [
@@ -98,7 +142,7 @@ const hasAllMappings = mappedIndexes.length >= 20
   && expectedIndexes.every((expected) => mappedIndexes.includes(expected));
 
 if (!hasDirectSource || !hasAllMappings) {
-  throw new Error("Could not prepare the Legendary artwork catalog with direct sprite mappings");
+  throw new Error("Could not prepare the Legendary artwork catalog with high-resolution sprite mappings");
 }
 
 if (finalCatalog !== fs.readFileSync(catalogPath, "utf8")) {
@@ -124,5 +168,5 @@ if (artworkComponent !== fs.readFileSync(artworkComponentPath, "utf8")) {
 }
 
 console.log(
-  `[prize-artwork] Prepared ${path.relative(root, outputPath)} (${image.length} bytes), verified 20 mappings and enforced square Legendary poster rendering`,
+  `[prize-artwork] Prepared high-resolution Legendary sprite ${dimensions.width}×${dimensions.height} (${image.length} bytes), verified 20 mappings and square rendering`,
 );
