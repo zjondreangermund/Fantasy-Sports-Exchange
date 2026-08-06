@@ -162,7 +162,7 @@ for (const [file, importAnchor, importReplacement] of [
   source = replaceOnce(source, importAnchor, importReplacement, `${file} scoring imports`);
   source = replaceRegex(
     source,
-    /function scorePreview\(stat: any\) \{[\s\S]*?\n\}\n\n(?=function )/,
+    /function scorePreview\(stat: any\) \{[\s\S]*?\n\}\n\n(?=(?:async\s+)?function |export )/,
     canonicalPreview,
     `${file} canonical scorePreview`,
   );
