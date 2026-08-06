@@ -54,8 +54,7 @@ const AdminSeasonSimulatorPage = React.lazy(() => import("./pages/admin-season-s
 const AdminLiveDataPage = React.lazy(() => import("./pages/admin-live-data"));
 const CardLabPage = React.lazy(() => import("./pages/card-lab"));
 
-const ADMIN_TEST_TOOLS_ENABLED =
-  import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_TEST_TOOLS === "true";
+const ADMIN_TEST_TOOLS_ENABLED = import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_TEST_TOOLS === "true";
 
 const legalInfoPaths = [
   "/about", "/contact", "/contact-us", "/help", "/faq",
@@ -70,14 +69,12 @@ function RouteFallback() {
   return <div className="flex min-h-40 flex-1 items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
 }
 
-function LegalRoutes() {
-  return (
-    <>
-      <Route path="/legal/scoring" component={ScoringRulesPage} />
-      {legalInfoPaths.map((path) => path === "/legal/scoring" ? null : <Route key={path} path={path} component={LegalCentrePage} />)}
-      {trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />)}
-    </>
-  );
+function legalRouteElements() {
+  return [
+    <Route key="/legal/scoring" path="/legal/scoring" component={ScoringRulesPage} />,
+    ...legalInfoPaths.filter((path) => path !== "/legal/scoring").map((path) => <Route key={path} path={path} component={LegalCentrePage} />),
+    ...trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />),
+  ];
 }
 
 function AdminGate({ children }: { children: React.ReactNode }) {
@@ -103,7 +100,7 @@ function AuthenticatedRouter() {
     return (
       <React.Suspense fallback={<RouteFallback />}>
         <Switch>
-          <LegalRoutes />
+          {legalRouteElements()}
           <Route path="/onboarding" component={OnboardingPage} />
           <Route path="/onboarding-packs" component={OnboardingPacksScene} />
           <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
@@ -117,7 +114,7 @@ function AuthenticatedRouter() {
   return (
     <React.Suspense fallback={<RouteFallback />}>
       <Switch>
-        <LegalRoutes />
+        {legalRouteElements()}
         <Route path="/" component={DashboardPage} />
         <Route path="/dashboard" component={DashboardPage} />
         <Route path="/analytics" component={AnalyticsPage} />
@@ -193,14 +190,7 @@ function AuthenticatedApp() {
 }
 
 function PublicRouter() {
-  return (
-    <React.Suspense fallback={<RouteFallback />}>
-      <Switch>
-        <LegalRoutes />
-        <Route component={LandingPage} />
-      </Switch>
-    </React.Suspense>
-  );
+  return <React.Suspense fallback={<RouteFallback />}><Switch>{legalRouteElements()}<Route component={LandingPage} /></Switch></React.Suspense>;
 }
 
 function AppContent() {
