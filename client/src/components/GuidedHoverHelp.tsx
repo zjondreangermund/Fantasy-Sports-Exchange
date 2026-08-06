@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CircleHelp, X } from "lucide-react";
 
 type HelpState = {
@@ -9,6 +10,7 @@ type HelpState = {
 };
 
 const HELP_DELAY_MS = 3_000;
+const HELP_LAYER = 2_147_483_000;
 const TARGET_SELECTOR = [
   "[data-help]",
   "[aria-description]",
@@ -195,15 +197,16 @@ export default function GuidedHoverHelp() {
     };
   }, []);
 
-  return (
+  const content = (
     <>
       {help ? (
         <div
           data-guided-help-popup
-          className="pointer-events-none fixed z-[190] w-[min(340px,calc(100vw-24px))] rounded-2xl border border-cyan-200/25 bg-slate-950/88 p-3 text-sm leading-5 text-white shadow-[0_18px_55px_rgba(0,0,0,.62),0_0_24px_rgba(34,211,238,.12)] backdrop-blur-2xl"
+          className="pointer-events-none fixed w-[min(340px,calc(100vw-24px))] rounded-2xl border border-cyan-200/25 bg-slate-950/88 p-3 text-sm leading-5 text-white shadow-[0_18px_55px_rgba(0,0,0,.62),0_0_24px_rgba(34,211,238,.12)] backdrop-blur-2xl"
           style={{
             left: help.left,
             top: help.top,
+            zIndex: HELP_LAYER,
             transform: help.placement === "above" ? "translateY(-100%)" : undefined,
           }}
           role="tooltip"
@@ -221,7 +224,8 @@ export default function GuidedHoverHelp() {
       {introVisible ? (
         <div
           data-guided-help-popup
-          className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-3 z-[185] w-[min(360px,calc(100vw-24px))] rounded-2xl border border-cyan-200/25 bg-slate-950/88 p-4 text-white shadow-[0_20px_65px_rgba(0,0,0,.62)] backdrop-blur-2xl sm:bottom-4 sm:right-4"
+          className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-3 w-[min(360px,calc(100vw-24px))] rounded-2xl border border-cyan-200/25 bg-slate-950/88 p-4 text-white shadow-[0_20px_65px_rgba(0,0,0,.62)] backdrop-blur-2xl sm:bottom-4 sm:right-4"
+          style={{ zIndex: HELP_LAYER - 1 }}
         >
           <button
             type="button"
@@ -246,4 +250,6 @@ export default function GuidedHoverHelp() {
       ) : null}
     </>
   );
+
+  return typeof document === "undefined" ? content : createPortal(content, document.body);
 }
