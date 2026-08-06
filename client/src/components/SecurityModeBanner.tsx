@@ -1,28 +1,33 @@
 import { useEffect, useState } from "react";
-import { Eye } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
-
-export type PublicSecurityStatus = {
-  readOnlyMode: boolean;
-  blockedMessage: string;
-};
+import { Eye, Gavel, LockKeyhole } from "lucide-react";
+import { apiRequest } from "../lib/queryClient";
+import {
+  setClientSecurityStatus,
+  type PublicSecurityStatus,
+} from "../lib/security-mode";
 
 export default function SecurityModeBanner() {
   const [status, setStatus] = useState<PublicSecurityStatus | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
     const load = async () => {
       try {
         const response = await apiRequest("GET", "/api/security/status");
-        const next = await response.json();
-        if (!cancelled) setStatus(next);
+        const next = (await response.json()) as PublicSecurityStatus;
+        if (cancelled) return;
+        setStatus(next);
+        setClientSecurityStatus(next);
+        window.dispatchEvent(
+          new CustomEvent("fantasy-arena-security-status", { detail: next }),
+        );
       } catch {
-        // The server remains the final protection if the status endpoint is temporarily unavailable.
+        // Server-side security controls remain authoritative if this status request fails.
       }
     };
 
-    load();
+    void load();
     const timer = window.setInterval(load, 5_000);
     return () => {
       cancelled = true;
@@ -30,21 +35,30 @@ export default function SecurityModeBanner() {
     };
   }, []);
 
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent("fantasy-arena-security-status", { detail: status }));
-  }, [status]);
-
-  if (!status?.readOnlyMode) return null;
+  if (!status?.readOnly) return null;
 
   return (
-    <div className="sticky top-0 z-[70] border-b border-amber-300/50 bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-300 px-3 py-2 text-center text-black shadow-[0_8px_26px_rgba(245,158,11,.22)]">
-      <div className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wide sm:text-sm">
-        <Eye className="h-4 w-4" />
-        FANTASY ARENA IS IN PRODUCTION — explore the arena while launch systems are being completed.
+    <aside
+      className="pointer-events-none fixed inset-x-2 top-2 z-[160] mx-auto max-w-5xl rounded-2xl border border-amber-200/55 bg-slate-950/88 px-3 py-2 text-amber-50 shadow-[0_14px_50px_rgba(0,0,0,.55),0_0_30px_rgba(245,158,11,.18)] backdrop-blur-2xl sm:px-4"
+      aria-live="polite"
+      data-help="Fantasy Arena is in production-preview mode. You can explore and finish starter onboarding, while money, tournament, marketplace and auction actions remain paused until the administrator turns off Read-only mode."
+    >
+      <div className="flex items-start justify-center gap-2 text-center">
+        <Eye className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-[.16em] sm:text-xs">
+            Production preview · Read-only mode
+          </p>
+          <p className="mt-0.5 text-[10px] leading-4 text-amber-100/72 sm:text-[11px]">
+            Explore the arena and collect starter rewards. Trading, wallet actions,
+            tournament entries and auction bids are paused until launch controls are opened.
+          </p>
+        </div>
+        <div className="hidden shrink-0 items-center gap-1 text-amber-200/70 sm:flex">
+          <LockKeyhole className="h-3.5 w-3.5" />
+          <Gavel className="h-3.5 w-3.5" />
+        </div>
       </div>
-      <div className="mt-0.5 text-[10px] font-semibold leading-snug sm:text-xs">
-        New users may sign up, complete starter onboarding and collect the daily Common-card reward. Trading, loans, wallet actions, auctions and tournament entries remain safely paused until launch readiness is complete.
-      </div>
-    </div>
+    </aside>
   );
 }

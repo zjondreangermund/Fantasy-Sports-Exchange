@@ -9,6 +9,7 @@ import {
   revokeOtherSessions,
   updateSecuritySettings,
 } from "../services/securityControl.js";
+import { registerCommunityChatV2Routes } from "./communityChatV2.routes.js";
 
 interface RegisterSecurityAdminRoutesDeps {
   requireAuth: any;
@@ -21,6 +22,11 @@ function userIdFrom(req: any) {
 
 export function registerSecurityAdminRoutes(app: Express, deps: RegisterSecurityAdminRoutesDeps) {
   const { requireAuth, isAdmin } = deps;
+
+  // Registered before the main application routes so Community Live v2 remains
+  // available during the production preview while retaining its own auth,
+  // same-origin, moderation and rate-limit controls.
+  registerCommunityChatV2Routes(app, { requireAuth, isAdmin });
 
   app.get("/api/security/status", async (_req, res) => {
     try {
