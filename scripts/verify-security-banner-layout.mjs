@@ -3,6 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 await import("./apply-production-message-profile-collection.mjs");
+await import("./apply-complete-scoring-v2.mjs");
+await import("./verify-complete-scoring-v2.mjs");
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
