@@ -18,6 +18,9 @@ import MarketplaceFloorNotice from "./components/MarketplaceFloorNotice";
 import MobileNavDock from "./components/MobileNavDock";
 import SiteFooter from "./components/SiteFooter";
 import PageScene, { routeToPageSceneVariant } from "./components/PageScene";
+import SecurityModeBanner from "./components/SecurityModeBanner";
+import GuidedHoverHelp from "./components/GuidedHoverHelp";
+import GlobalActionToasts from "./components/GlobalActionToasts";
 import { useAuth } from "./hooks/use-auth";
 import { useScrollRepair } from "./hooks/use-scroll-repair";
 import { Skeleton } from "./components/ui/skeleton";
@@ -26,6 +29,7 @@ import NotFound from "./pages/not-found";
 
 const LandingPage = React.lazy(() => import("./pages/landing"));
 const LegalCentrePage = React.lazy(() => import("./pages/legal-centre"));
+const ScoringRulesPage = React.lazy(() => import("./pages/scoring-rules"));
 const TrustCentrePage = React.lazy(() => import("./pages/trust-centre"));
 const OnboardingPage = React.lazy(() => import("./pages/onboarding"));
 const OnboardingPacksScene = React.lazy(() => import("./pages/onboarding-packs"));
@@ -66,61 +70,40 @@ function RouteFallback() {
   return <div className="flex min-h-40 flex-1 items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
 }
 
-function AdminGate({ children }: { children: React.ReactNode }) {
-  const { data, isLoading } = useQuery<{ isAdmin: boolean }>({
-    queryKey: ["/api/admin/check"],
-    retry: false,
-    staleTime: 60_000,
-  });
+function LegalRoutes() {
+  return (
+    <>
+      <Route path="/legal/scoring" component={ScoringRulesPage} />
+      {legalInfoPaths.map((path) => path === "/legal/scoring" ? null : <Route key={path} path={path} component={LegalCentrePage} />)}
+      {trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />)}
+    </>
+  );
+}
 
+function AdminGate({ children }: { children: React.ReactNode }) {
+  const { data, isLoading } = useQuery<{ isAdmin: boolean }>({ queryKey: ["/api/admin/check"], retry: false, staleTime: 60_000 });
   if (isLoading) return <RouteFallback />;
   if (!data?.isAdmin) {
-    return (
-      <main className="flex min-h-[60vh] items-center justify-center px-4 text-white">
-        <div className="w-full max-w-lg rounded-[2rem] border border-red-300/20 bg-slate-950/90 p-8 text-center shadow-2xl">
-          <p className="text-xs font-black uppercase tracking-[.2em] text-red-200">Restricted area</p>
-          <h1 className="mt-3 text-3xl font-black">Admin access required</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-400">This page is available only to authorised Fantasy Arena administrators.</p>
-          <a href="/" className="mt-6 inline-flex rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950">Return to dashboard</a>
-        </div>
-      </main>
-    );
+    return <main className="flex min-h-[60vh] items-center justify-center px-4 text-white"><div className="w-full max-w-lg rounded-[2rem] border border-red-300/20 bg-slate-950/90 p-8 text-center shadow-2xl"><p className="text-xs font-black uppercase tracking-[.2em] text-red-200">Restricted area</p><h1 className="mt-3 text-3xl font-black">Admin access required</h1><p className="mt-3 text-sm leading-6 text-slate-400">This page is available only to authorised Fantasy Arena administrators.</p><a href="/" className="mt-6 inline-flex rounded-xl bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950">Return to dashboard</a></div></main>;
   }
-
   return <>{children}</>;
 }
 
-function AdminDashboardRoute() {
-  return <AdminGate><AdminPage /></AdminGate>;
-}
-
-function AdminLiveDataRoute() {
-  return <AdminGate><AdminLiveDataPage /></AdminGate>;
-}
-
-function AdminTestConsoleRoute() {
-  return <AdminGate><AdminTestConsolePage /></AdminGate>;
-}
-
-function AdminSeasonSimulatorRoute() {
-  return <AdminGate><AdminSeasonSimulatorPage /></AdminGate>;
-}
-
-function CardLabRoute() {
-  return <AdminGate><CardLabPage /></AdminGate>;
-}
+function AdminDashboardRoute() { return <AdminGate><AdminPage /></AdminGate>; }
+function AdminLiveDataRoute() { return <AdminGate><AdminLiveDataPage /></AdminGate>; }
+function AdminTestConsoleRoute() { return <AdminGate><AdminTestConsolePage /></AdminGate>; }
+function AdminSeasonSimulatorRoute() { return <AdminGate><AdminSeasonSimulatorPage /></AdminGate>; }
+function CardLabRoute() { return <AdminGate><CardLabPage /></AdminGate>; }
 
 function AuthenticatedRouter() {
   const { data: onboarding, isLoading } = useQuery<{ completed: boolean }>({ queryKey: ["/api/onboarding/status"] });
-
   if (isLoading) return <div className="flex min-h-40 flex-1 items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
 
   if (onboarding && !onboarding.completed) {
     return (
       <React.Suspense fallback={<RouteFallback />}>
         <Switch>
-          {legalInfoPaths.map((path) => <Route key={path} path={path} component={LegalCentrePage} />)}
-          {trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />)}
+          <LegalRoutes />
           <Route path="/onboarding" component={OnboardingPage} />
           <Route path="/onboarding-packs" component={OnboardingPacksScene} />
           <Route path="/onboarding-tunnel" component={OnboardingTunnelPage} />
@@ -134,8 +117,7 @@ function AuthenticatedRouter() {
   return (
     <React.Suspense fallback={<RouteFallback />}>
       <Switch>
-        {legalInfoPaths.map((path) => <Route key={path} path={path} component={LegalCentrePage} />)}
-        {trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />)}
+        <LegalRoutes />
         <Route path="/" component={DashboardPage} />
         <Route path="/dashboard" component={DashboardPage} />
         <Route path="/analytics" component={AnalyticsPage} />
@@ -191,22 +173,13 @@ function AuthenticatedApp() {
           <RouteSceneBackground pathname={location} />
           {!isPlayRoute && !isInfoRoute && <StadiumAmbientLayer teamName={teamName} />}
           <header className="relative z-50 flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/80 p-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="h-10 w-10 shrink-0 rounded-xl border border-white/15 bg-white/5" />
-              <span className="truncate text-xs font-bold text-white/65">Show / hide menu</span>
-            </div>
+            <div className="flex min-w-0 items-center gap-2"><SidebarTrigger data-testid="button-sidebar-toggle" className="h-10 w-10 shrink-0 rounded-xl border border-white/15 bg-white/5" /><span className="truncate text-xs font-bold text-white/65">Show / hide menu</span></div>
             <ThemeToggle />
           </header>
           {!isInfoRoute && <LivePulseDock />}
           {showMarketplaceFloors && <MarketplaceFloorNotice />}
           <main className={`app-scroll-root relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto ${isPlayRoute ? "play-route-scroll" : ""}`} data-app-scroll-root>
-            <div
-              className="app-page-content min-w-0 flex-none"
-              data-page-scroll-content
-              data-fixed-docks={isInfoRoute ? "false" : "true"}
-            >
-              <AuthenticatedRouter />
-            </div>
+            <div className="app-page-content min-w-0 flex-none" data-page-scroll-content data-fixed-docks={isInfoRoute ? "false" : "true"}><AuthenticatedRouter /></div>
             {isInfoRoute && <SiteFooter />}
           </main>
           {!isInfoRoute && <MatchdayQuickDock />}
@@ -223,8 +196,7 @@ function PublicRouter() {
   return (
     <React.Suspense fallback={<RouteFallback />}>
       <Switch>
-        {legalInfoPaths.map((path) => <Route key={path} path={path} component={LegalCentrePage} />)}
-        {trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />)}
+        <LegalRoutes />
         <Route component={LandingPage} />
       </Switch>
     </React.Suspense>
@@ -234,12 +206,24 @@ function PublicRouter() {
 function AppContent() {
   const { user, isLoading } = useAuth();
   React.useEffect(() => { const params = new URLSearchParams(window.location.search); const ref = String(params.get("ref") || "").trim(); if (ref) localStorage.setItem("fantasy_referral_code", ref); }, []);
-  React.useEffect(() => { if (!user) return; const code = localStorage.getItem("fantasy_referral_code"); if (!code) return; fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }), }).then(() => localStorage.removeItem("fantasy_referral_code")).catch(() => {}); }, [user]);
+  React.useEffect(() => { if (!user) return; const code = localStorage.getItem("fantasy_referral_code"); if (!code) return; fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) }).then(() => localStorage.removeItem("fantasy_referral_code")).catch(() => {}); }, [user]);
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Skeleton className="h-12 w-12 rounded-md" /><Skeleton className="h-4 w-32" /></div></div>;
   if (!user) { const pathname = window.location.pathname || "/"; return <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen"><PublicRouter /></PageScene>; }
   return <AuthenticatedApp />;
 }
 
 export default function App() {
-  return <QueryClientProvider client={queryClient}><ThemeProvider><TooltipProvider><AppContent /><Toaster /></TooltipProvider></ThemeProvider></QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <TooltipProvider>
+          <SecurityModeBanner />
+          <GuidedHoverHelp />
+          <AppContent />
+          <GlobalActionToasts />
+          <Toaster />
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
 }
