@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowRight, BellRing, CreditCard, LayoutGrid, LineChart, ShoppingBag, Trophy, Users, Wallet as WalletIcon } from "lucide-react";
+import { ArrowRight, BellRing, CreditCard, LayoutGrid, LineChart, ShoppingBag, Trophy, Wallet as WalletIcon } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -52,9 +52,9 @@ export default function DashboardPage() {
 
   const nextAction = useMemo(() => {
     if (!cards?.length) return { title: "Open starter packs", href: "/onboarding", cta: "Start" };
-    if (lineupCards.length !== 5) return { title: "Set your 5-card lineup", href: "/select-squad", cta: "Select Squad" };
-    if (activeTournaments.length === 0) return { title: "Enter a tournament", href: "/competitions", cta: "Enter Now" };
+    if (activeTournaments.length === 0) return { title: "Enter a tournament", href: "/competitions", cta: "Play Now" };
     if (walletBalance <= 0) return { title: "Fund your wallet", href: "/wallet", cta: "Deposit" };
+    if (lineupCards.length !== 5) return { title: "Review your tournament lineup", href: "/live-lineup", cta: "View Lineup" };
     return { title: retentionSummary?.nextBestAction?.title || "Review your live lineup", href: retentionSummary?.nextBestAction?.ctaPath || "/live-lineup", cta: "Review" };
   }, [cards?.length, lineupCards.length, activeTournaments.length, walletBalance, retentionSummary?.nextBestAction]);
 
@@ -95,16 +95,16 @@ export default function DashboardPage() {
         <MetricCard icon={<WalletIcon className="h-5 w-5" />} label="Wallet Balance" value={walletLoading ? null : money(walletBalance)} helper="Finance hub" href="/wallet" />
         <MetricCard icon={<CreditCard className="h-5 w-5" />} label="Cards Owned" value={cardsLoading ? null : String(cards?.length || 0)} helper={`${listedCards.length} listed for sale`} href="/collection" />
         <MetricCard icon={<Trophy className="h-5 w-5" />} label="Live Entries" value={String(activeTournaments.length)} helper={`${openTournaments.length} open tournaments`} href="/competitions" />
-        <MetricCard icon={<LineChart className="h-5 w-5" />} label="Lineup Score" value={lineupLoading ? null : String(lineupScore)} helper={`${lineupCards.length}/5 cards selected`} href="/select-squad" />
+        <MetricCard icon={<LineChart className="h-5 w-5" />} label="Lineup Score" value={lineupLoading ? null : String(lineupScore)} helper={`${lineupCards.length}/5 cards selected`} href="/live-lineup" />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <PremiumPanel>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div><h2 className="text-lg font-bold text-white">Current Lineup</h2><p className="text-sm text-white/50">Your active 5-card squad under the floodlights.</p></div>
-            <Link href="/select-squad"><Button size="sm" variant="outline">Select Squad</Button></Link>
+            <Link href="/live-lineup"><Button size="sm" variant="outline">View Lineup</Button></Link>
           </div>
-          {lineupLoading ? <div className="flex gap-3 overflow-x-auto pb-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-64 w-44 shrink-0 rounded-xl" />)}</div> : lineupCards.length ? <div className="flex gap-3 overflow-x-auto pb-2">{lineupCards.map((card) => <Metal3DCard key={card.id} player={toFantasyCardData(card)} className="!w-[180px] shrink-0" />)}</div> : <EmptyState title="No lineup set" body="Select 5 eligible cards from your squad selector before entering tournaments." action="Select Squad" href="/select-squad" />}
+          {lineupLoading ? <div className="flex gap-3 overflow-x-auto pb-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-64 w-44 shrink-0 rounded-xl" />)}</div> : lineupCards.length ? <div className="flex gap-3 overflow-x-auto pb-2">{lineupCards.map((card) => <Metal3DCard key={card.id} player={toFantasyCardData(card)} className="!w-[180px] shrink-0" />)}</div> : <EmptyState title="No lineup saved" body="Build and submit your five-card team from the Play area when you enter a tournament." action="Open Play" href="/competitions" />}
         </PremiumPanel>
         <div className="space-y-4">
           <PremiumPanel><div className="mb-4 flex items-center gap-2"><Trophy className="h-5 w-5 text-yellow-300" /><h2 className="font-bold text-white">Active Tournaments</h2></div>{activeTournaments.length ? <div className="space-y-2">{activeTournaments.slice(0, 4).map((comp) => <CompactRow key={comp.id} title={comp.name} meta={`${String(comp.tier || "common").toUpperCase()} • ${money(comp.entryFee)}`} badge={comp.status} />)}</div> : <EmptyState title="No active entries" body="Join a public tournament or enter a private PIN cup." action="Find Tournaments" href="/competitions" compact />}</PremiumPanel>
@@ -113,7 +113,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <ActionCard icon={<Users className="h-5 w-5" />} title="Squad Selection" body="Choose the exact five cards that represent your club on matchday." href="/select-squad" cta="Select Squad" />
+        <ActionCard icon={<Trophy className="h-5 w-5" />} title="Prize Vault" body="Follow each rarity ladder and see the reward your tournament entries are unlocking." href="/prize-vault" cta="View Prizes" />
         <ActionCard icon={<ShoppingBag className="h-5 w-5" />} title="Trading Floor" body="Buy cards and manage listings in the upgraded market experience." href="/marketplace" cta="Open Market" />
       </section>
     </PremiumPage>
