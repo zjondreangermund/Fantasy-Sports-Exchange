@@ -19,6 +19,10 @@ const publicSecurityRoute = read("server/routes/securityAdmin.routes.ts");
 const readOnlyGuard = read("server/services/readOnlyGuard.ts");
 const collection = read("client/src/pages/collection-clean.tsx");
 const profileCollectionCard = read("client/src/components/cards/CollectionProfileCard.tsx");
+const guidedHelp = read("client/src/components/GuidedHoverHelp.tsx");
+const premiumCard = read("client/src/components/cards/PremiumFootballCard.tsx");
+const unifiedCard = read("client/src/components/cards/UnifiedPlayerCard.tsx");
+const stableCard = read("client/src/components/cards/CollectionStableCard.tsx");
 
 const oldSecurityMessage = "security team completes checks";
 const checks = [
@@ -38,6 +42,18 @@ const checks = [
   [!collection.includes("PremiumFootballCard"), "Collection still references PremiumFootballCard"],
   [profileCollectionCard.includes("CollectionStableCard"), "Collection profile card does not use the profile modal renderer"],
   [profileCollectionCard.includes('queryKey: ["/api/cards/profile", card.id]'), "Collection profile card does not use verified profile data"],
+
+  [guidedHelp.includes('import { createPortal } from "react-dom";'), "Guided hover help is not rendered through a portal"],
+  [guidedHelp.includes("createPortal(content, document.body)"), "Guided hover help is still trapped inside the app/sidebar stacking context"],
+  [guidedHelp.includes("HELP_LAYER = 2_147_483_000"), "Guided hover help does not use the front-most application layer"],
+  [guidedHelp.includes("zIndex: HELP_LAYER"), "Guided hover popup does not consume the front-most layer"],
+
+  [stableCard.includes("export default function CollectionStableCard"), "Canonical Collection card renderer is missing"],
+  [premiumCard.includes('import CollectionStableCard from "./CollectionStableCard";'), "Legacy card surfaces do not delegate to the Collection renderer"],
+  [premiumCard.includes('queryKey: ["/api/cards/profile", cardId]'), "Legacy card surfaces do not load the same verified profile data as Collection"],
+  [premiumCard.includes('data-card-engine="collection-profile-card"'), "Legacy card adapter is not marked as the Collection profile renderer"],
+  [!premiumCard.includes("CARD_THEMES"), "The old dull Premium card visual engine is still active"],
+  [unifiedCard.includes('data-card-engine="collection-profile-card"'), "Unified card wrapper still identifies the old renderer"],
 ];
 
 for (const [passed, message] of checks) {
@@ -45,4 +61,5 @@ for (const [passed, message] of checks) {
 }
 
 console.log("[layout] Verified production banner, app header and mobile sidebar do not overlap");
-console.log("[collection] Verified one production notice and profile-quality Collection cards");
+console.log("[help] Verified guided hover information portals above the sidebar and app shell");
+console.log("[cards] Verified Collection profile-quality rendering is shared by all legacy card surfaces");
