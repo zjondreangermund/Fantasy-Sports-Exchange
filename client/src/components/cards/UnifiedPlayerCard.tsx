@@ -31,13 +31,14 @@ export default function UnifiedPlayerCard({
   );
 
   return (
-    <div className={className} data-card-engine="premium-football-card">
+    <div className={className} data-card-engine="collection-profile-card">
       <PremiumFootballCard
         player={player}
         size={resolveSize(size, variant)}
         selected={selected}
         showPrice={showPrice}
         className={interactive ? "cursor-pointer" : ""}
+        interactive={interactive}
       />
     </div>
   );
