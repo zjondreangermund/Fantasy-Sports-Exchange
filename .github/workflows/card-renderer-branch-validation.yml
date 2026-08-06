@@ -1,0 +1,51 @@
+name: Card renderer branch validation
+
+on:
+  push:
+    branches:
+      - agent/front-help-unify-card-renderers
+
+permissions:
+  contents: read
+
+concurrency:
+  group: card-renderer-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: TypeScript, builds and critical flows
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Full TypeScript check
+        run: npm run check
+
+      - name: Build client
+        run: npm run build:client
+
+      - name: Build server
+        run: npm run build:server
+
+      - name: Verify critical flows
+        run: |
+          npm run test:critical-flows
+          node --check scripts/prepare-runtime-startup.mjs
+          node --check scripts/sync-official-tournaments.mjs
+          node scripts/verify-tournament-scoring-legal-integrity.mjs
+          node scripts/verify-production-readiness.mjs
