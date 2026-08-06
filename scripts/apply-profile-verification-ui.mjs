@@ -29,3 +29,6 @@ if (!source.includes(verificationImport) || !source.includes(verificationCard)) 
 
 if (changed) fs.writeFileSync(accountPath, source);
 console.log(`[profile] ${changed ? "Applied" : "Verified"} inactive email and cell-number verification UI`);
+
+await import("./prepare-guided-help-patch.mjs");
+await import("./apply-guided-help-chat-auction-v2.mjs");
