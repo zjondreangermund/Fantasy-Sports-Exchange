@@ -177,6 +177,25 @@ html.app-scroll-locked .app-content > header {
   max-width: none;
 }
 
+/* Starter Draft rows use the full available width. Each of the three choices
+ * owns one equal column so cards are easy to compare instead of bunching in
+ * the centre of the screen. */
+[data-onboarding-scroll-root] main section > div:last-child {
+  width: 100% !important;
+  max-width: none !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  justify-items: center !important;
+  align-items: start !important;
+  column-gap: clamp(0.5rem, 3vw, 1.75rem) !important;
+  padding-inline: clamp(0.35rem, 2vw, 1.25rem) !important;
+}
+
+[data-onboarding-scroll-root] main section > div:last-child > button {
+  width: min(100%, 6.75rem) !important;
+  max-width: 6.75rem !important;
+  justify-self: center !important;
+}
+
 @media (max-width: 767px) {
   [data-page-scroll-content][data-fixed-docks="true"] {
     /* Clears both the bottom navigation and the Matchday quick dock. */
