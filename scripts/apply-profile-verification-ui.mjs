@@ -42,5 +42,21 @@ if (legalSource.includes(oldCardDefinition)) {
 
 await import("./prepare-guided-help-patch.mjs");
 await import("./apply-guided-help-chat-auction-v2.mjs");
-await import("./apply-free-card-cups.mjs");
+
+const competitionsPath = path.join(root, "client", "src", "pages", "competitions.tsx");
+const landingPath = path.join(root, "client", "src", "pages", "landing.tsx");
+const routesPath = path.join(root, "server", "routes.ts");
+const competitionsSource = fs.readFileSync(competitionsPath, "utf8");
+const landingSource = fs.readFileSync(landingPath, "utf8");
+const routesSource = fs.readFileSync(routesPath, "utf8");
+const freeCardCupsApplied = competitionsSource.includes('value="free"')
+  && competitionsSource.includes("Free-to-play card reward")
+  && landingSource.includes("data-free-card-cups")
+  && routesSource.includes("isFreeCardCup");
+
+if (!freeCardCupsApplied) {
+  await import("./apply-free-card-cups.mjs");
+} else {
+  console.log("[free-card-cups] Verified free-to-play tournament patch already applied");
+}
 await import("./fix-free-card-cup-card-jsx.mjs");
