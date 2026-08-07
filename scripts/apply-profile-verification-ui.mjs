@@ -62,3 +62,5 @@ if (!freeCardCupsApplied) {
 await import("./apply-free-card-cup-auto-awards.mjs");
 await import("./fix-free-card-cup-scoring-copy.mjs");
 await import("./fix-free-card-cup-card-jsx.mjs");
+await import("./apply-tournament-creator-server-rules.mjs");
+await import("./apply-tournament-creator-client-rules.mjs");
