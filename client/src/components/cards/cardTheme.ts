@@ -1,6 +1,6 @@
 import { type Rarity } from "./types";
 
-export type PremiumCardSize = "sm" | "md" | "lg" | "xl";
+export type PremiumCardSize = "xs" | "sm" | "md" | "lg" | "xl";
 
 export type PremiumCardTheme = {
   label: string;
@@ -21,6 +21,7 @@ export type PremiumCardTheme = {
 };
 
 export const CARD_SIZE: Record<PremiumCardSize, { width: number; height: number; radius: number; scale: number }> = {
+  xs: { width: 96, height: 136, radius: 12, scale: 0.5 },
   sm: { width: 164, height: 232, radius: 18, scale: 0.74 },
   md: { width: 204, height: 290, radius: 22, scale: 0.94 },
   lg: { width: 258, height: 366, radius: 28, scale: 1.18 },
@@ -78,32 +79,20 @@ export const CARD_THEMES: Record<Rarity, PremiumCardTheme> = {
     foil: "linear-gradient(115deg,transparent 15%,rgba(235,210,255,.66) 34%,rgba(192,132,252,.52) 46%,rgba(255,255,255,.44) 54%,rgba(126,34,206,.36) 62%,transparent 78%)",
     holo: "repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,255,255,.12) 0deg 8deg,transparent 8deg 16deg),linear-gradient(45deg,rgba(168,85,247,.26),rgba(126,34,206,.22),rgba(236,72,153,.12))",
     glass: "linear-gradient(130deg,rgba(255,255,255,.44),rgba(168,85,247,.18) 25%,transparent 50%,rgba(216,180,254,.16) 76%,transparent)",
-    nameplate: "linear-gradient(90deg,rgba(46,16,101,.96),rgba(126,34,206,.48),rgba(192,132,252,.36),rgba(46,16,101,.98))",
-    border: "rgba(233,213,255,.98)", text: "#f5d0fe", mutedText: "rgba(245,208,254,.78)", glow: "0 24px 72px rgba(168,85,247,.82),0 0 122px rgba(126,34,206,.44),0 0 48px rgba(216,180,254,.20),0 4px 18px rgba(0,0,0,.70)", glowRgb: "168,85,247", accent: "#f5d0fe", dark: "#030109",
+    nameplate: "linear-gradient(90deg,rgba(46,16,101,.96),rgba(126,34,206,.50),rgba(192,132,252,.42),rgba(46,16,101,.98))",
+    border: "rgba(245,208,254,.98)", text: "#faf5ff", mutedText: "rgba(250,245,255,.78)",
+    glow: "0 22px 68px rgba(168,85,247,.82),0 0 116px rgba(126,34,206,.44),0 4px 18px rgba(0,0,0,.68)", glowRgb: "168,85,247", accent: "#d8b4fe", dark: "#030109",
   },
   legendary: {
     label: "LEGENDARY",
-    chrome: "linear-gradient(135deg,#451a03 0%,#d97706 16%,#fff7ed 29%,#fbbf24 44%,#f97316 60%,#78350f 78%,#fde68a 100%)",
-    frame: "linear-gradient(145deg,#fff7ed 0%,#fde68a 19%,#fbbf24 37%,#d97706 59%,#78350f 100%)",
-    background: "radial-gradient(circle at 30% 9%,rgba(251,191,36,.72),transparent 31%),linear-gradient(160deg,#211305 0%,#120902 58%,#050201 100%)",
-    foil: "linear-gradient(115deg,transparent 14%,rgba(255,240,180,.78) 34%,rgba(255,255,255,.60) 47%,rgba(255,190,90,.50) 58%,transparent 78%)",
-    holo: "repeating-conic-gradient(from 45deg at 50% 50%,rgba(255,230,150,.15) 0deg 6deg,transparent 6deg 12deg),linear-gradient(45deg,rgba(255,255,255,.12),rgba(251,191,36,.24),rgba(249,115,22,.16))",
-    glass: "linear-gradient(130deg,rgba(255,255,255,.48),rgba(251,191,36,.16) 25%,transparent 50%,rgba(255,255,255,.12) 76%,transparent)",
-    nameplate: "linear-gradient(90deg,rgba(69,26,3,.96),rgba(251,191,36,.48),rgba(217,119,6,.46),rgba(69,26,3,.98))",
-    border: "rgba(254,243,199,.98)", text: "#fff7ed", mutedText: "rgba(255,247,237,.78)", glow: "0 26px 78px rgba(245,158,11,.84),0 0 138px rgba(251,191,36,.42),0 4px 18px rgba(0,0,0,.70)", glowRgb: "251,191,36", accent: "#fef3c7", dark: "#050201",
+    chrome: "linear-gradient(135deg,#2b1700 0%,#854d0e 13%,#facc15 27%,#fff7c2 40%,#f59e0b 54%,#fde047 68%,#5a3305 84%,#1a0d00 100%)",
+    frame: "linear-gradient(145deg,#fff7c2 0%,#facc15 20%,#a16207 43%,#fde68a 65%,#5a3305 100%)",
+    background: "radial-gradient(circle at 30% 10%,rgba(250,204,21,.78),transparent 30%),linear-gradient(160deg,#2f2105 0%,#120d02 58%,#050300 100%)",
+    foil: "linear-gradient(115deg,transparent 14%,rgba(255,247,194,.82) 32%,rgba(250,204,21,.58) 44%,rgba(255,255,255,.68) 51%,rgba(245,158,11,.54) 61%,transparent 80%)",
+    holo: "repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,255,255,.16) 0deg 7deg,transparent 7deg 14deg),linear-gradient(45deg,rgba(250,204,21,.34),rgba(245,158,11,.26),rgba(255,255,255,.13))",
+    glass: "linear-gradient(130deg,rgba(255,255,255,.54),rgba(250,204,21,.20) 25%,transparent 48%,rgba(253,224,71,.18) 73%,transparent)",
+    nameplate: "linear-gradient(90deg,rgba(66,32,6,.98),rgba(161,98,7,.58),rgba(250,204,21,.46),rgba(66,32,6,.98))",
+    border: "rgba(255,247,194,1)", text: "#fffbea", mutedText: "rgba(255,251,235,.82)",
+    glow: "0 24px 74px rgba(250,204,21,.90),0 0 126px rgba(245,158,11,.52),0 4px 20px rgba(0,0,0,.72)", glowRgb: "250,204,21", accent: "#fde047", dark: "#050300",
   },
 };
-
-export function teamCode(team?: string | null): string {
-  const cleaned = String(team || "FA").replace(/[^a-zA-Z\s]/g, " ").trim();
-  if (!cleaned) return "FA";
-  const parts = cleaned.split(/\s+/).filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 3).toUpperCase();
-  return parts.slice(0, 3).map((part) => part[0]).join("").toUpperCase();
-}
-
-export function cardNumber(seed?: string | number): string {
-  const raw = String(seed || "1");
-  const sum = raw.split("").reduce((total, char) => total + char.charCodeAt(0), 0);
-  return `#${String((sum % 99) + 1).padStart(2, "0")}`;
-}
