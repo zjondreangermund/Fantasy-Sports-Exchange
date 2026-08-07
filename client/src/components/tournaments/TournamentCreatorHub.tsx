@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Copy, Eye, Lock, RefreshCw, Trash2, Trophy, Unlock, Users } from "lucide-react";
+import { Copy, Eye, Lock, RefreshCw, Trash2, Trophy, Unlock } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
@@ -27,6 +27,10 @@ type CreatorTournament = {
   platformFeeTotal?: number;
   prize_pool_total?: number;
   prizePoolTotal?: number;
+  prize_distribution?: string;
+  prizeDistribution?: string;
+  prize_distribution_rules?: Array<{ rank: number; percent: number }>;
+  prizeDistributionRules?: Array<{ rank: number; percent: number }>;
 };
 
 type Entrant = {
@@ -52,6 +56,14 @@ function inviteLink(pin: string | null | undefined) {
   if (!pin) return "";
   const base = typeof window !== "undefined" ? window.location.origin : "";
   return `${base}/join/${pin}`;
+}
+
+function payoutLabel(tournament: CreatorTournament) {
+  const mode = String(tournament.prize_distribution || tournament.prizeDistribution || "winner_takes_all").toLowerCase();
+  if (mode !== "top3") return "Winner takes all";
+  const rules = tournament.prize_distribution_rules || tournament.prizeDistributionRules || [];
+  const byRank = [1, 2, 3].map((rank) => n(rules.find((rule) => Number(rule.rank) === rank)?.percent));
+  return `Top 3 • ${byRank[0] || 60}% / ${byRank[1] || 30}% / ${byRank[2] || 10}%`;
 }
 
 export default function TournamentCreatorHub() {
@@ -107,7 +119,7 @@ export default function TournamentCreatorHub() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/user-tournaments/mine"] });
       queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
-      toast({ title: "Tournament duplicated", description: data?.pin ? `New PIN: ${data.pin}` : undefined });
+      toast({ title: "Tournament duplicated", description: data?.pin ? `New share code: ${data.pin}` : undefined });
     },
     onError: (error: any) => toast({ title: "Could not duplicate", description: error.message, variant: "destructive" }),
   });
@@ -144,11 +156,14 @@ export default function TournamentCreatorHub() {
   const tournaments = Array.isArray(tournamentsQuery.data?.tournaments) ? tournamentsQuery.data!.tournaments : [];
 
   if (!tournaments.length) {
-    return <Card className="p-8 text-center"><Trophy className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><h3 className="font-bold">No tournaments created yet</h3><p className="mt-1 text-sm text-muted-foreground">Create a private PIN tournament from the Create tab.</p></Card>;
+    return <Card className="p-8 text-center"><Trophy className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><h3 className="font-bold">No tournaments created yet</h3><p className="mt-1 text-sm text-muted-foreground">Create a cash tournament from the Create tab. Fantasy Arena keeps 10% and 90% funds the prize pool.</p></Card>;
   }
 
   return (
     <div className="space-y-4">
+      <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4 text-sm text-emerald-50">
+        <b>Your tournaments are cash-only:</b> 10% platform fee, 90% prize pool. Your permanent share code stays visible below so you can invite players at any time.
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
         {tournaments.map((tournament) => {
           const pin = tournament.join_pin || tournament.joinPin || "";
@@ -157,8 +172,8 @@ export default function TournamentCreatorHub() {
           const entryFee = n(tournament.entry_fee ?? tournament.entryFee);
           const rawPlatformFee = tournament.platform_fee_total ?? tournament.platformFeeTotal;
           const rawPrizePool = tournament.prize_pool_total ?? tournament.prizePoolTotal;
-          const platformFee = n(rawPlatformFee || entryFee * 0.2 * entries);
-          const prizePool = n(rawPrizePool || entryFee * 0.8 * entries);
+          const platformFee = n(rawPlatformFee || entryFee * 0.1 * entries);
+          const prizePool = n(rawPrizePool || entryFee * 0.9 * entries);
           const link = inviteLink(pin);
           const isOpen = String(tournament.status || "") === "open";
 
@@ -178,14 +193,18 @@ export default function TournamentCreatorHub() {
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <Mini label="Entry Fee" value={money(entryFee)} />
                 <Mini label="Entrants" value={`${entries}${maxEntries ? `/${maxEntries}` : ""}`} />
-                <Mini label="Prize Pool" value={money(prizePool)} />
-                <Mini label="Platform Fee" value={money(platformFee)} />
+                <Mini label="Prize Pool (90%)" value={money(prizePool)} />
+                <Mini label="Platform Fee (10%)" value={money(platformFee)} />
+                <div className="col-span-2"><Mini label="Cash Payout" value={payoutLabel(tournament)} /></div>
               </div>
 
-              {pin && <div className="space-y-2 rounded-xl border bg-muted/20 p-3 text-xs">
-                <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">PIN</span><code className="font-bold tracking-[0.24em]">{pin}</code><Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => copy("PIN", pin)}><Copy className="h-3.5 w-3.5" /></Button></div>
-                <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Invite</span><code className="max-w-[180px] truncate">{link}</code><Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => copy("Invite link", link)}><Copy className="h-3.5 w-3.5" /></Button></div>
-              </div>}
+              <div className="space-y-2 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-3 text-xs">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-200">Permanent share details</div>
+                {pin ? <>
+                  <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Share code</span><code className="text-base font-black tracking-[0.24em]">{pin}</code><Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => copy("Share code", pin)}><Copy className="h-3.5 w-3.5" /></Button></div>
+                  <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">Invite</span><code className="max-w-[180px] truncate">{link}</code><Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => copy("Invite link", link)}><Copy className="h-3.5 w-3.5" /></Button></div>
+                </> : <div className="text-muted-foreground">A share code is being generated for this older tournament. Refresh in a moment.</div>}
+              </div>
 
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <Button size="sm" variant="outline" onClick={() => setSelectedTournament(tournament)}><Eye className="mr-1 h-3.5 w-3.5" />Entrants</Button>
