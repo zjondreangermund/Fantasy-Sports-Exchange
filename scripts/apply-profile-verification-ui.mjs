@@ -60,4 +60,5 @@ if (!freeCardCupsApplied) {
   console.log("[free-card-cups] Verified free-to-play tournament patch already applied");
 }
 await import("./apply-free-card-cup-auto-awards.mjs");
+await import("./fix-free-card-cup-scoring-copy.mjs");
 await import("./fix-free-card-cup-card-jsx.mjs");
