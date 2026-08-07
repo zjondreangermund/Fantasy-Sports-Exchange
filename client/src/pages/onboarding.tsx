@@ -21,7 +21,7 @@ const packColors = [
   "from-red-600/30 to-red-900/50",
 ];
 const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"];
-const onboardingShell = "fixed inset-0 z-[200] flex min-h-[100dvh] w-full overflow-y-auto bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.12),transparent_32%),linear-gradient(180deg,#050814,#02040d)] text-foreground backdrop-blur-2xl";
+const onboardingShell = "fixed inset-0 z-[200] flex h-[100dvh] w-full overflow-y-scroll overscroll-y-contain touch-pan-y bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.12),transparent_32%),linear-gradient(180deg,#050814,#02040d)] text-foreground backdrop-blur-2xl [-webkit-overflow-scrolling:touch]";
 
 type OnboardingConfig = {
   signupPacksEnabled: boolean;
@@ -230,7 +230,7 @@ export default function OnboardingPage() {
     return (
       <div className={`${onboardingShell} flex-col items-center p-4 sm:p-8`}>
         <div className="mb-6 w-full max-w-5xl text-center"><h1 className="mb-2 text-2xl font-bold text-foreground sm:text-3xl">Starter Player Pool</h1><p className="text-muted-foreground">You can reveal packs or skip straight to choosing your 5 starter cards.</p></div>
-        {!packsReady ? <div className="w-full max-w-2xl space-y-4 rounded-xl border border-white/10 bg-card/40 p-6 text-center"><p className="text-sm text-muted-foreground">Preparing your player choices...</p><Button variant="outline" onClick={async () => { try { await createOfferMutation.mutateAsync(); } finally { await refetch(); } }} disabled={createOfferMutation.isPending}>{createOfferMutation.isPending ? "Loading..." : "Retry Load Players"}</Button></div> : <><div className="mb-6 flex w-full max-w-5xl flex-wrap justify-center gap-4 sm:gap-6">{packs.map((pack, i) => { const PackIcon = packIcons[i] || Zap; const isRevealed = revealedPacks.has(i); return isRevealed ? <div key={i} className={`flex flex-col items-center gap-3 rounded-xl border border-white/10 bg-gradient-to-b p-4 ${packColors[i]}`}><span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-foreground"><PackIcon className="h-3 w-3" />{packLabels[i]}</span><div className="flex gap-2">{pack.map((card) => <CardThumbnail key={card.id} card={card} size="sm" />)}</div></div> : <motion.button key={i} onClick={() => revealPack(i)} className={`flex h-52 w-36 flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-primary/40 bg-gradient-to-b transition-all duration-300 hover:scale-105 hover:border-primary/70 active:scale-95 ${packColors[i]}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: i * 0.06 }}><Package className="h-10 w-10 text-primary" /><span className="text-sm font-bold text-foreground">{packLabels[i]}</span><span className="text-xs text-muted-foreground">3 Players</span></motion.button>; })}</div><Button onClick={() => setStep("select")} size="lg">Choose Starter 5 <ChevronRight className="ml-2 h-5 w-5" /></Button></>}
+        {!packsReady ? <div className="w-full max-w-2xl space-y-4 rounded-xl border border-white/10 bg-card/40 p-6 text-center"><p className="text-sm text-muted-foreground">Preparing your player choices...</p><Button variant="outline" onClick={async () => { try { await createOfferMutation.mutateAsync(); } finally { await refetch(); } }} disabled={createOfferMutation.isPending}>{createOfferMutation.isPending ? "Loading..." : "Retry Load Players"}</Button></div> : <><div className="mb-6 flex w-full max-w-5xl flex-wrap justify-center gap-4 sm:gap-6">{packs.map((pack, i) => { const PackIcon = packIcons[i] || Zap; const isRevealed = revealedPacks.has(i); return isRevealed ? <div key={i} className={`flex flex-col items-center gap-3 rounded-xl border border-white/10 bg-gradient-to-b p-4 ${packColors[i]}`}><span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-foreground"><PackIcon className="h-3 w-3" />{packLabels[i]}</span><div className="grid grid-cols-3 gap-1.5">{pack.map((card) => <CardThumbnail key={card.id} card={card} size="xs" />)}</div></div> : <motion.button key={i} onClick={() => revealPack(i)} className={`flex h-52 w-36 flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-primary/40 bg-gradient-to-b transition-all duration-300 hover:scale-105 hover:border-primary/70 active:scale-95 ${packColors[i]}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: i * 0.06 }}><Package className="h-10 w-10 text-primary" /><span className="text-sm font-bold text-foreground">{packLabels[i]}</span><span className="text-xs text-muted-foreground">3 Players</span></motion.button>; })}</div><Button onClick={() => setStep("select")} size="lg">Choose Starter 5 <ChevronRight className="ml-2 h-5 w-5" /></Button></>}
       </div>
     );
   }
@@ -239,10 +239,60 @@ export default function OnboardingPage() {
     const selectedCount = selectedPlayerIds.size;
     const requiredSelections = packs.length;
     return (
-      <div className={`${onboardingShell} flex-col items-center p-4 pb-[calc(8rem+env(safe-area-inset-bottom,0px))] sm:p-8`}>
-        <div className="mb-6 w-full max-w-6xl text-center"><h1 className="mb-2 text-2xl font-bold text-foreground sm:text-3xl">Choose Your Starter 5</h1><p className="text-muted-foreground">Pick 1 player from each row. These 5 common cards are granted immediately after confirmation.</p><p className="mt-2 text-sm">Selected: <span className="font-bold text-primary">{selectedCount}/{requiredSelections}</span></p></div>
-        <div className="mb-6 flex w-full max-w-6xl flex-col gap-6">{packs.map((pack, packIndex) => { const PackIcon = packIcons[packIndex] || Zap; const hasSelectionInPack = pack.some((card) => selectedPlayerIds.has(card.playerId)); return <div key={packIndex} className="rounded-xl border border-white/10 bg-card/40 p-4"><div className="mb-4 flex items-center justify-between"><div className="flex items-center gap-2"><PackIcon className="h-4 w-4 text-primary" /><h3 className="text-sm font-semibold text-foreground sm:text-base">{packLabels[packIndex] || `Pack ${packIndex + 1}`}</h3></div><span className={`text-xs font-semibold ${hasSelectionInPack ? "text-primary" : "text-muted-foreground"}`}>{hasSelectionInPack ? "1 selected" : "0 selected"}</span></div><div className="flex flex-wrap justify-center gap-4 sm:justify-start">{pack.map((card) => { const isSelected = selectedPlayerIds.has(card.playerId); return <div key={card.playerId} className={`cursor-pointer transition-all duration-200 ${isSelected ? "scale-[1.02] rounded-xl ring-2 ring-primary ring-offset-2 ring-offset-background" : "hover:scale-[1.02]"}`} onClick={() => toggleSelect(card.playerId, packIndex)}><CardThumbnail card={card} size="md" selected={isSelected} selectable /></div>; })}</div></div>; })}</div>
-        <Button onClick={handleConfirm} disabled={selectedCount !== requiredSelections || chooseMutation.isPending} size="lg" className="mb-10 px-8 text-lg">{chooseMutation.isPending ? "Adding your 5 cards..." : <>Confirm Starter 5 <Check className="ml-2 h-5 w-5" /></>}</Button>
+      <div className={`${onboardingShell} flex-col items-center`}>
+        <div className="w-full max-w-6xl px-3 pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] pt-4 sm:px-8 sm:pt-8">
+          <div className="mb-5 overflow-hidden rounded-[1.75rem] border border-cyan-300/15 bg-black/35 p-5 text-center shadow-[0_24px_80px_rgba(0,0,0,.28)] backdrop-blur-xl sm:p-7">
+            <div className="mx-auto mb-2 flex w-fit items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.22em] text-cyan-100"><Sparkles className="h-3.5 w-3.5" />Starter Draft</div>
+            <h1 className="text-2xl font-black text-white sm:text-4xl">Choose Your Starter 5</h1>
+            <p className="mx-auto mt-2 max-w-2xl text-sm text-white/55 sm:text-base">Choose exactly one Common card from each position group. Every row shows three choices and your five selected cards are minted into your Collection after confirmation.</p>
+            <div className="mx-auto mt-4 flex w-fit items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm text-white/70">Selected <span className="text-lg font-black text-cyan-200">{selectedCount}/{requiredSelections}</span></div>
+          </div>
+
+          <div className="space-y-4 sm:space-y-5">
+            {packs.map((pack, packIndex) => {
+              const PackIcon = packIcons[packIndex] || Zap;
+              const hasSelectionInPack = pack.some((card) => selectedPlayerIds.has(card.playerId));
+              return (
+                <section key={packIndex} className={`overflow-hidden rounded-[1.5rem] border bg-white/[0.045] shadow-[0_16px_50px_rgba(0,0,0,.2)] transition ${hasSelectionInPack ? "border-cyan-300/35" : "border-white/10"}`}>
+                  <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-black/25 px-4 py-3 sm:px-5">
+                    <div className="flex min-w-0 items-center gap-3"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl border ${hasSelectionInPack ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/[0.04] text-white/60"}`}><PackIcon className="h-4 w-4" /></span><div className="min-w-0"><h3 className="truncate text-sm font-black text-white sm:text-base">{packLabels[packIndex] || `Pack ${packIndex + 1}`}</h3><p className="text-[11px] text-white/40">Select 1 of 3</p></div></div>
+                    <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${hasSelectionInPack ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-200" : "border-white/10 bg-white/[0.04] text-white/40"}`}>{hasSelectionInPack ? "Selected" : "Choose one"}</span>
+                  </div>
+
+                  <div className="mx-auto grid w-full max-w-[304px] grid-cols-3 items-start gap-1.5 p-1.5 sm:max-w-[340px] sm:gap-3 sm:p-3">
+                    {pack.map((card, cardIndex) => {
+                      const isSelected = selectedPlayerIds.has(card.playerId);
+                      return (
+                        <motion.button
+                          type="button"
+                          key={card.playerId}
+                          onClick={() => toggleSelect(card.playerId, packIndex)}
+                          aria-pressed={isSelected}
+                          aria-label={`Select ${card.player?.name || `card ${cardIndex + 1}`} for ${packLabels[packIndex] || `pack ${packIndex + 1}`}`}
+                          className={`relative flex min-w-0 flex-col items-center rounded-2xl border p-1 text-center outline-none transition focus-visible:ring-2 focus-visible:ring-cyan-300 sm:p-2 ${isSelected ? "border-cyan-300/60 bg-cyan-300/10 shadow-[0_0_28px_rgba(34,211,238,.16)]" : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.04]"}`}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <span className="absolute left-1.5 top-1.5 z-20 grid h-5 w-5 place-items-center rounded-full border border-white/15 bg-slate-950/85 text-[9px] font-black text-white/65">{cardIndex + 1}</span>
+                          {isSelected ? <span className="absolute right-1.5 top-1.5 z-20 grid h-6 w-6 place-items-center rounded-full bg-cyan-300 text-slate-950 shadow-lg"><Check className="h-3.5 w-3.5" /></span> : null}
+                          <div className="w-full min-w-0 overflow-hidden"><CardThumbnail card={card} size="xs" selected={isSelected} selectable /></div>
+                          <span className="mt-1 block w-full truncate px-1 text-[9px] font-black text-white/80 sm:text-[10px]">{card.player?.name || "Player"}</span>
+                          <span className={`mt-1 rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.08em] ${isSelected ? "bg-cyan-300 text-slate-950" : "bg-white/[0.06] text-white/45"}`}>{isSelected ? "Your pick" : "Select"}</span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 z-30 mt-auto w-full border-t border-white/10 bg-[#030611]/95 px-3 pb-[calc(.75rem+env(safe-area-inset-bottom,0px))] pt-3 shadow-[0_-18px_50px_rgba(0,0,0,.42)] backdrop-blur-xl sm:px-8">
+          <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
+            <div className="hidden min-w-0 flex-1 sm:block"><div className="text-sm font-black text-white">{selectedCount === requiredSelections ? "Starter 5 complete" : `${requiredSelections - selectedCount} selection${requiredSelections - selectedCount === 1 ? "" : "s"} remaining`}</div><div className="text-xs text-white/40">Cards receive permanent mint serials when confirmed.</div></div>
+            <Button onClick={handleConfirm} disabled={selectedCount !== requiredSelections || chooseMutation.isPending} size="lg" className="h-12 w-full rounded-xl bg-cyan-300 text-base font-black text-slate-950 hover:bg-cyan-200 sm:w-auto sm:min-w-[240px]">{chooseMutation.isPending ? "Minting your 5 cards..." : <>Confirm & Mint Starter 5 <Check className="ml-2 h-5 w-5" /></>}</Button>
+          </div>
+        </div>
       </div>
     );
   }

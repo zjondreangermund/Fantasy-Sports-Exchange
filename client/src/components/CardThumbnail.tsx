@@ -5,7 +5,7 @@ import { PremiumFootballCard } from "./cards";
 
 type CardThumbnailProps = {
   card: PlayerCardWithPlayer;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   selected?: boolean;
   selectable?: boolean;
   onClick?: () => void;
@@ -21,10 +21,10 @@ function CardThumbnailBase({
   showPrice = false,
 }: CardThumbnailProps) {
   const player = card.player || ({} as any);
-  const fantasyCard = toFantasyCardData(card, { imageWidth: size === "lg" ? 640 : 420 });
+  const fantasyCard = toFantasyCardData(card, { imageWidth: size === "lg" ? 640 : size === "xs" ? 280 : 420 });
 
   return (
-    <div className="relative inline-flex flex-col items-center">
+    <div className="relative inline-flex max-w-full flex-col items-center">
       <PremiumFootballCard
         player={fantasyCard}
         size={size}
@@ -37,7 +37,7 @@ function CardThumbnailBase({
       {showPrice && Number(card.price || 0) > 0 ? (
         <p className="mt-2 text-center text-[11px] font-bold text-emerald-300">N${Number(card.price || 0).toFixed(2)}</p>
       ) : null}
-      <p className="mt-1 max-w-[220px] truncate text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">
+      <p className={`${size === "xs" ? "max-w-[96px] text-[8px] tracking-[0.1em]" : "max-w-[220px] text-[10px] tracking-[0.18em]"} mt-1 truncate text-center font-semibold uppercase text-white/60`}>
         {String(player?.position || "N/A").toUpperCase()}
         {player?.team ? ` • ${String(player.team).toUpperCase()}` : ""}
       </p>
