@@ -42,3 +42,4 @@ if (legalSource.includes(oldCardDefinition)) {
 
 await import("./prepare-guided-help-patch.mjs");
 await import("./apply-guided-help-chat-auction-v2.mjs");
+await import("./apply-free-card-cups.mjs");
