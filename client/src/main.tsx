@@ -7,6 +7,7 @@ import "./prize-vault-depth.css";
 import "./marketplace-rarity.css";
 import "./unified-scroll.css";
 import "./card-image-sizing.css";
+import "./onboarding-card-clipping-fix.css";
 import { patchFetchForApiBase } from "./lib/api-base";
 
 patchFetchForApiBase();

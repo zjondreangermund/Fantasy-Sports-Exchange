@@ -1,0 +1,20 @@
+/*
+ * Starter Draft card rendering fix.
+ *
+ * The unified Collection card is rendered at full size and scaled down inside
+ * PremiumFootballCard. The Starter Draft choice wrapper used overflow-hidden,
+ * which clipped the unscaled card box before the visual transform was applied.
+ * Keep the selection tile and canonical card renderer overflow-visible so the
+ * complete metallic card remains visible in all three mobile columns.
+ */
+[data-onboarding-scroll-root] main section > div:last-child > button {
+  overflow: visible !important;
+}
+
+[data-onboarding-scroll-root] [data-card-engine="collection-profile-card"] {
+  overflow: visible !important;
+}
+
+[data-onboarding-scroll-root] [data-card-engine="collection-profile-card"] > div {
+  overflow: visible !important;
+}
