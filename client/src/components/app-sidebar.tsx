@@ -79,6 +79,11 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { isMobile, setOpenMobile } = useSidebar();
+  const { data: onboarding, isLoading: onboardingLoading } = useQuery<{ completed: boolean }>({
+    queryKey: ["/api/onboarding/status"],
+    enabled: Boolean(user),
+    staleTime: 15_000,
+  });
 
   useEffect(() => {
     if (isMobile) setOpenMobile(false);
@@ -92,7 +97,16 @@ export function AppSidebar() {
     queryKey: ["/api/admin/check"],
     retry: false,
     staleTime: 60_000,
+    enabled: Boolean(user && onboarding?.completed),
   });
+
+  const onboardingRoute =
+    location.startsWith("/onboarding") ||
+    location.startsWith("/card-reveal");
+
+  if (!user || onboardingLoading || !onboarding?.completed || onboardingRoute) {
+    return null;
+  }
 
   const adminItems: NavItem[] = adminCheck?.isAdmin
     ? [
