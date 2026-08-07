@@ -7,7 +7,17 @@
  * Keep the selection tile and canonical card renderer overflow-visible so the
  * complete metallic card remains visible in all three mobile columns.
  */
+[data-onboarding-scroll-root] main section > div:last-child {
+  width: min(94%, 32rem) !important;
+  max-width: min(94%, 32rem) !important;
+  margin-inline: auto !important;
+  column-gap: clamp(0.3rem, 1.6vw, 0.8rem) !important;
+  padding-inline: 0.25rem !important;
+}
+
 [data-onboarding-scroll-root] main section > div:last-child > button {
+  width: min(100%, 6.5rem) !important;
+  max-width: 6.5rem !important;
   overflow: visible !important;
 }
 
