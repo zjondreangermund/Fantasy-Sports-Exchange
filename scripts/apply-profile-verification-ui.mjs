@@ -30,5 +30,15 @@ if (!source.includes(verificationImport) || !source.includes(verificationCard)) 
 if (changed) fs.writeFileSync(accountPath, source);
 console.log(`[profile] ${changed ? "Applied" : "Verified"} inactive email and cell-number verification UI`);
 
+const legalPath = path.join(root, "client", "src", "pages", "legal-centre.tsx");
+let legalSource = fs.readFileSync(legalPath, "utf8");
+const oldCardDefinition = "Cards are licensed digital platform items used inside Fantasy Arena. They are not shares, securities, cryptocurrency or legal ownership of a football player.";
+const currentCardDefinition = "Cards are licensed digital platform items used inside Fantasy Arena. They do not represent shares, securities or legal ownership of a football player.";
+if (legalSource.includes(oldCardDefinition)) {
+  legalSource = legalSource.replace(oldCardDefinition, currentCardDefinition);
+  fs.writeFileSync(legalPath, legalSource);
+  console.log("[copy] Updated user-facing digital player card wording");
+}
+
 await import("./prepare-guided-help-patch.mjs");
 await import("./apply-guided-help-chat-auction-v2.mjs");

@@ -62,7 +62,7 @@ export const managerHubFeeCopy = {
   tournaments: `Tournament platform fee is ${formatPercent(TOURNAMENT_PLATFORM_FEE_RATE)}. Entry fees are ${CURRENCY}${TOURNAMENT_ENTRY_BY_RARITY.common} common, ${CURRENCY}${TOURNAMENT_ENTRY_BY_RARITY.rare} rare, ${CURRENCY}${TOURNAMENT_ENTRY_BY_RARITY.unique} unique and ${CURRENCY}${TOURNAMENT_ENTRY_BY_RARITY.legendary} legendary.`,
   deposits: `Deposits below ${CURRENCY}${DEPOSIT_FEE_FREE_THRESHOLD.toFixed(0)} are charged ${formatPercent(SMALL_DEPOSIT_FEE_RATE)}. Deposits at or above ${CURRENCY}${DEPOSIT_FEE_FREE_THRESHOLD.toFixed(0)} are free.`,
   withdrawals: `Fantasy Arena charges no withdrawal fee. The minimum withdrawal amount is ${CURRENCY}${MIN_WITHDRAWAL_AMOUNT.toFixed(0)}. A bank, eWallet or payment gateway may apply its own processing fee.`,
-  noCrypto: "Fantasy Arena is configured for Namibian dollar balances only. Do not display crypto, ETH, coins or token wording in manager-facing pages.",
+  noCrypto: "Fantasy Arena uses Namibian dollar balances. Manager-facing prices, entry fees, prizes and wallet amounts should be displayed in N$.",
   lineup: `Lineup uses exactly ${LINEUP_CARD_LIMIT} selected cards. Do not show formations, pitch formations or 11-player football tactics controls.`,
 } as const;
 
