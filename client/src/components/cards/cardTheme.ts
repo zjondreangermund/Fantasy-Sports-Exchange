@@ -21,7 +21,7 @@ export type PremiumCardTheme = {
 };
 
 export const CARD_SIZE: Record<PremiumCardSize, { width: number; height: number; radius: number; scale: number }> = {
-  xs: { width: 96, height: 136, radius: 12, scale: 0.5 },
+  xs: { width: 90, height: 128, radius: 12, scale: 0.48 },
   sm: { width: 164, height: 232, radius: 18, scale: 0.74 },
   md: { width: 204, height: 290, radius: 22, scale: 0.94 },
   lg: { width: 258, height: 366, radius: 28, scale: 1.18 },
