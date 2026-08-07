@@ -17,22 +17,139 @@ export async function ensurePlayerCardSerialIntegrity(): Promise<{ repairedCount
           ADD COLUMN IF NOT EXISTS max_supply integer DEFAULT 0
       `);
 
+      await tx.execute(sql`
+        CREATE TABLE IF NOT EXISTS app.player_card_serial_counters (
+          player_id integer NOT NULL REFERENCES app.players(id) ON DELETE CASCADE,
+          rarity text NOT NULL,
+          last_serial_number integer NOT NULL DEFAULT 0,
+          max_supply integer NOT NULL,
+          updated_at timestamptz NOT NULL DEFAULT now(),
+          PRIMARY KEY (player_id, rarity),
+          CHECK (last_serial_number >= 0)
+        )
+      `);
+
+      // Lock while importing existing serial history and repairing only missing metadata.
+      // Existing non-null serial numbers are deliberately never renumbered.
       await tx.execute(sql`LOCK TABLE app.player_cards IN SHARE ROW EXCLUSIVE MODE`);
+
+      await tx.execute(sql`
+        INSERT INTO app.player_card_serial_counters (player_id, rarity, last_serial_number, max_supply)
+        SELECT
+          pc.player_id,
+          pc.rarity::text,
+          coalesce(max(pc.serial_number), 0)::int,
+          CASE pc.rarity::text
+            WHEN 'common' THEN 1000
+            WHEN 'rare' THEN 100
+            WHEN 'unique' THEN 10
+            WHEN 'epic' THEN 3
+            WHEN 'legendary' THEN 1
+            ELSE 0
+          END::int
+        FROM app.player_cards pc
+        GROUP BY pc.player_id, pc.rarity
+        ON CONFLICT (player_id, rarity) DO UPDATE
+        SET last_serial_number = greatest(
+              app.player_card_serial_counters.last_serial_number,
+              excluded.last_serial_number
+            ),
+            max_supply = excluded.max_supply,
+            updated_at = now()
+      `);
+
+      const impossibleMissing = rowsOf(await tx.execute(sql`
+        WITH missing AS (
+          SELECT pc.player_id, pc.rarity::text AS rarity, count(*)::int AS missing_count
+          FROM app.player_cards pc
+          WHERE pc.serial_number IS NULL OR pc.serial_number <= 0
+          GROUP BY pc.player_id, pc.rarity
+        )
+        SELECT m.player_id, m.rarity, m.missing_count,
+          coalesce(c.last_serial_number, 0)::int AS last_serial_number,
+          coalesce(c.max_supply, 0)::int AS max_supply
+        FROM missing m
+        LEFT JOIN app.player_card_serial_counters c
+          ON c.player_id = m.player_id AND c.rarity = m.rarity
+        WHERE coalesce(c.max_supply, 0) > 0
+          AND coalesce(c.last_serial_number, 0) + m.missing_count > c.max_supply
+      `));
+      if (impossibleMissing.length > 0) {
+        const row = impossibleMissing[0];
+        throw new Error(
+          `Cannot repair missing serials for player ${row.player_id}, rarity ${row.rarity}: supply cap would be exceeded`,
+        );
+      }
+
+      // Legacy rows without a mint number receive fresh numbers ABOVE every number already used.
+      // This preserves all existing serial identities and prevents historical serial reuse.
+      await tx.execute(sql`
+        WITH missing AS (
+          SELECT
+            pc.id,
+            pc.player_id,
+            pc.rarity::text AS rarity,
+            row_number() OVER (PARTITION BY pc.player_id, pc.rarity ORDER BY pc.id)::int AS offset_number
+          FROM app.player_cards pc
+          WHERE pc.serial_number IS NULL OR pc.serial_number <= 0
+        ),
+        assigned AS (
+          SELECT
+            m.id,
+            m.player_id,
+            m.rarity,
+            (c.last_serial_number + m.offset_number)::int AS serial_number,
+            c.max_supply,
+            upper(left(regexp_replace(coalesce(p.name, 'PLAYER'), '[^A-Za-z0-9]+', '', 'g'), 3)) AS initials
+          FROM missing m
+          JOIN app.player_card_serial_counters c
+            ON c.player_id = m.player_id AND c.rarity = m.rarity
+          JOIN app.players p ON p.id = m.player_id
+        )
+        UPDATE app.player_cards pc
+        SET serial_number = assigned.serial_number,
+            max_supply = assigned.max_supply,
+            serial_id = concat(
+              coalesce(nullif(assigned.initials, ''), 'PLY'), '-', assigned.player_id, '-',
+              upper(left(assigned.rarity, 1)), '-', lpad(assigned.serial_number::text, 4, '0')
+            )
+        FROM assigned
+        WHERE pc.id = assigned.id
+      `);
+
+      // Advance counters after any one-time legacy repair. GREATEST makes this safe to run repeatedly.
+      await tx.execute(sql`
+        INSERT INTO app.player_card_serial_counters (player_id, rarity, last_serial_number, max_supply)
+        SELECT
+          pc.player_id,
+          pc.rarity::text,
+          coalesce(max(pc.serial_number), 0)::int,
+          CASE pc.rarity::text
+            WHEN 'common' THEN 1000
+            WHEN 'rare' THEN 100
+            WHEN 'unique' THEN 10
+            WHEN 'epic' THEN 3
+            WHEN 'legendary' THEN 1
+            ELSE 0
+          END::int
+        FROM app.player_cards pc
+        GROUP BY pc.player_id, pc.rarity
+        ON CONFLICT (player_id, rarity) DO UPDATE
+        SET last_serial_number = greatest(
+              app.player_card_serial_counters.last_serial_number,
+              excluded.last_serial_number
+            ),
+            max_supply = excluded.max_supply,
+            updated_at = now()
+      `);
+
       await tx.execute(sql`DROP TABLE IF EXISTS pg_temp.player_card_serial_repair_plan`);
       await tx.execute(sql`
         CREATE TEMP TABLE player_card_serial_repair_plan ON COMMIT DROP AS
-        WITH ranked AS (
-          SELECT pc.id,
-            pc.player_id,
-            pc.rarity::text AS rarity,
-            row_number() OVER (PARTITION BY pc.player_id, pc.rarity ORDER BY pc.id)::int AS serial_number,
-            upper(left(regexp_replace(coalesce(p.name, 'PLAYER'), '[^A-Za-z0-9]+', '', 'g'), 3)) AS initials
-          FROM app.player_cards pc
-          JOIN app.players p ON p.id = pc.player_id
-        )
-        SELECT id,
-          serial_number,
-          CASE rarity
+        SELECT
+          pc.id,
+          pc.serial_number,
+          CASE pc.rarity::text
             WHEN 'common' THEN 1000
             WHEN 'rare' THEN 100
             WHEN 'unique' THEN 10
@@ -41,10 +158,15 @@ export async function ensurePlayerCardSerialIntegrity(): Promise<{ repairedCount
             ELSE 0
           END::int AS max_supply,
           concat(
-            coalesce(nullif(initials, ''), 'PLY'), '-', player_id, '-',
-            upper(left(rarity, 1)), '-', lpad(serial_number::text, 4, '0')
+            coalesce(
+              nullif(upper(left(regexp_replace(coalesce(p.name, 'PLAYER'), '[^A-Za-z0-9]+', '', 'g'), 3)), ''),
+              'PLY'
+            ), '-', pc.player_id, '-', upper(left(pc.rarity::text, 1)), '-',
+            lpad(pc.serial_number::text, 4, '0')
           ) AS serial_id
-        FROM ranked
+        FROM app.player_cards pc
+        JOIN app.players p ON p.id = pc.player_id
+        WHERE pc.serial_number IS NOT NULL AND pc.serial_number > 0
       `);
 
       const mismatches = rowsOf(await tx.execute(sql`
@@ -52,35 +174,30 @@ export async function ensurePlayerCardSerialIntegrity(): Promise<{ repairedCount
         FROM app.player_cards pc
         JOIN player_card_serial_repair_plan plan ON plan.id = pc.id
         WHERE pc.serial_id IS DISTINCT FROM plan.serial_id
-           OR pc.serial_number IS DISTINCT FROM plan.serial_number
            OR pc.max_supply IS DISTINCT FROM plan.max_supply
       `));
       const repairedCount = Number(mismatches[0]?.count || 0);
 
       if (repairedCount > 0) {
-        // Move only rows that need repair to collision-proof temporary values first.
-        // This avoids transient failures against the global serial_id unique index and
-        // the per-player rarity/serial-number unique index during canonicalization.
+        // Use collision-proof temporary IDs while normalizing labels/max-supply only.
+        // Serial numbers themselves remain immutable.
         await tx.execute(sql`
           UPDATE app.player_cards pc
-          SET serial_id = concat('__serial_repair__', pc.id),
-              serial_number = NULL
+          SET serial_id = concat('__serial_metadata_repair__', pc.id)
           FROM player_card_serial_repair_plan plan
           WHERE plan.id = pc.id
-            AND (
-              pc.serial_id IS DISTINCT FROM plan.serial_id
-              OR pc.serial_number IS DISTINCT FROM plan.serial_number
-              OR pc.max_supply IS DISTINCT FROM plan.max_supply
-            )
+            AND pc.serial_id IS DISTINCT FROM plan.serial_id
         `);
         await tx.execute(sql`
           UPDATE app.player_cards pc
           SET serial_id = plan.serial_id,
-              serial_number = plan.serial_number,
               max_supply = plan.max_supply
           FROM player_card_serial_repair_plan plan
           WHERE plan.id = pc.id
-            AND pc.serial_id = concat('__serial_repair__', pc.id)
+            AND (
+              pc.serial_id IS DISTINCT FROM plan.serial_id
+              OR pc.max_supply IS DISTINCT FROM plan.max_supply
+            )
         `);
       }
 
@@ -90,11 +207,16 @@ export async function ensurePlayerCardSerialIntegrity(): Promise<{ repairedCount
         WHERE serial_number IS NOT NULL
       `);
       await tx.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS player_cards_serial_id_unique
+        ON app.player_cards (serial_id)
+        WHERE serial_id IS NOT NULL AND serial_id <> ''
+      `);
+
+      await tx.execute(sql`
         CREATE OR REPLACE FUNCTION app.enforce_player_card_serial_supply()
         RETURNS trigger LANGUAGE plpgsql AS $$
         DECLARE
           supply_limit integer;
-          current_supply integer;
           next_serial integer;
           player_initials text;
         BEGIN
@@ -106,19 +228,34 @@ export async function ensurePlayerCardSerialIntegrity(): Promise<{ repairedCount
             WHEN 'legendary' THEN 1
             ELSE 0
           END;
-          PERFORM pg_advisory_xact_lock(NEW.player_id, hashtext(NEW.rarity::text));
-          SELECT count(*)::int, coalesce(max(serial_number), 0)::int + 1
-            INTO current_supply, next_serial
-          FROM app.player_cards
-          WHERE player_id = NEW.player_id AND rarity = NEW.rarity;
-          IF supply_limit > 0 AND current_supply >= supply_limit THEN
+
+          IF supply_limit <= 0 THEN
+            RAISE EXCEPTION 'Unsupported card rarity %', NEW.rarity
+              USING ERRCODE = '23514';
+          END IF;
+
+          -- The counter row is permanent mint history. Deleting/transferring a card never lowers it.
+          INSERT INTO app.player_card_serial_counters (
+            player_id, rarity, last_serial_number, max_supply, updated_at
+          ) VALUES (
+            NEW.player_id, NEW.rarity::text, 1, supply_limit, now()
+          )
+          ON CONFLICT (player_id, rarity) DO UPDATE
+          SET last_serial_number = app.player_card_serial_counters.last_serial_number + 1,
+              max_supply = excluded.max_supply,
+              updated_at = now()
+          RETURNING last_serial_number INTO next_serial;
+
+          IF next_serial > supply_limit THEN
             RAISE EXCEPTION 'Supply cap reached for player %, rarity % (% max)', NEW.player_id, NEW.rarity, supply_limit
               USING ERRCODE = '23514';
           END IF;
+
           SELECT upper(left(regexp_replace(coalesce(name, 'PLAYER'), '[^A-Za-z0-9]+', '', 'g'), 3))
             INTO player_initials
           FROM app.players
           WHERE id = NEW.player_id;
+
           NEW.serial_number := next_serial;
           NEW.max_supply := supply_limit;
           NEW.serial_id := concat(
@@ -129,11 +266,35 @@ export async function ensurePlayerCardSerialIntegrity(): Promise<{ repairedCount
         END;
         $$
       `);
+
       await tx.execute(sql`DROP TRIGGER IF EXISTS player_cards_serial_supply_guard ON app.player_cards`);
       await tx.execute(sql`
         CREATE TRIGGER player_cards_serial_supply_guard
         BEFORE INSERT ON app.player_cards
         FOR EACH ROW EXECUTE FUNCTION app.enforce_player_card_serial_supply()
+      `);
+
+      await tx.execute(sql`
+        CREATE OR REPLACE FUNCTION app.prevent_player_card_mint_identity_change()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.player_id IS DISTINCT FROM OLD.player_id
+             OR NEW.rarity IS DISTINCT FROM OLD.rarity
+             OR NEW.serial_number IS DISTINCT FROM OLD.serial_number
+             OR NEW.serial_id IS DISTINCT FROM OLD.serial_id
+             OR NEW.max_supply IS DISTINCT FROM OLD.max_supply THEN
+            RAISE EXCEPTION 'Mint identity is immutable for player card %', OLD.id
+              USING ERRCODE = '23514';
+          END IF;
+          RETURN NEW;
+        END;
+        $$
+      `);
+      await tx.execute(sql`DROP TRIGGER IF EXISTS player_cards_mint_identity_guard ON app.player_cards`);
+      await tx.execute(sql`
+        CREATE TRIGGER player_cards_mint_identity_guard
+        BEFORE UPDATE OF player_id, rarity, serial_number, serial_id, max_supply ON app.player_cards
+        FOR EACH ROW EXECUTE FUNCTION app.prevent_player_card_mint_identity_change()
       `);
 
       return { repairedCount };
