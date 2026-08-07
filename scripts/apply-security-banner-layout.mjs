@@ -31,11 +31,20 @@ function replaceOnce(source, from, to, label) {
     "SecurityModeBanner ref",
   );
 
-  const statusGuard = '  if (!status?.readOnly) return null;';
+  const gatedGuard = '  if (!mainAppReady || !status?.readOnly) return null;';
+  const legacyGuard = '  if (!status?.readOnly) return null;';
+  const statusGuard = source.includes(gatedGuard) ? gatedGuard : legacyGuard;
+  if (!source.includes(statusGuard)) {
+    throw new Error("Security banner layout patch anchor not found: SecurityModeBanner status guard");
+  }
+
+  const hasMainAppGate = statusGuard === gatedGuard;
+  const hiddenCondition = hasMainAppGate ? "!mainAppReady || !status?.readOnly" : "!status?.readOnly";
+  const dependencies = hasMainAppGate ? "[mainAppReady, status?.readOnly]" : "[status?.readOnly]";
   const measuredOffsetEffect = `  useEffect(() => {
     const rootElement = document.documentElement;
 
-    if (!status?.readOnly) {
+    if (${hiddenCondition}) {
       rootElement.style.setProperty("--security-banner-offset", "0px");
       rootElement.removeAttribute("data-security-banner-visible");
       return;
@@ -62,7 +71,7 @@ function replaceOnce(source, from, to, label) {
       rootElement.style.setProperty("--security-banner-offset", "0px");
       rootElement.removeAttribute("data-security-banner-visible");
     };
-  }, [status?.readOnly]);
+  }, ${dependencies});
 
 ${statusGuard}`;
 
