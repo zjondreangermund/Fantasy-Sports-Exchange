@@ -1,5 +1,10 @@
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
-import { buildCardImageCandidates, CARD_IMAGE_FALLBACK, isVerifiedPlayerIdentity } from "./card-image";
+import {
+  buildCardImageCandidates,
+  CARD_IMAGE_FALLBACK,
+  isVerifiedPlayerIdentity,
+  toSafeImageUrl,
+} from "./card-image";
 import { type PlayerCardData, type Rarity } from "../components/cards/types";
 import {
   getCardStatus,
@@ -41,6 +46,16 @@ function safeUrl(value: unknown): string | undefined {
   return text || undefined;
 }
 
+function trustedOfficialPreviewUrl(value: unknown): string | undefined {
+  const text = safeUrl(value);
+  if (!text) return undefined;
+  if (/^\/api\/image-proxy\?url=/i.test(text)) return text;
+  if (/^https?:\/\/(resources\.premierleague\.com|media\.api-sports\.io)\//i.test(text)) {
+    return toSafeImageUrl(text);
+  }
+  return undefined;
+}
+
 function uniqueStrings(values: Array<string | undefined | null>): string[] {
   return Array.from(new Set(values.filter(Boolean) as string[]));
 }
@@ -78,6 +93,7 @@ export function toFantasyCardData(
   const requestedWidth =
     Number(options.imageWidth) > 0 ? Number(options.imageWidth) : 1024;
   const imageWidth = Math.max(1024, requestedWidth);
+  const unmintedPreview = !card.ownerId && !card.serialId && Number(card.serialNumber || 0) <= 0;
 
   const generatedCandidates = buildCardImageCandidates(card, {
     thumb: false,
@@ -93,11 +109,19 @@ export function toFantasyCardData(
         safeUrl(player?.photoUrl),
         safeUrl(player?.image_url),
       ]).filter((src) => !isLowQualityFallback(src))
-    : [];
+    : unmintedPreview
+      ? uniqueStrings([
+          trustedOfficialPreviewUrl(player?.verifiedImageUrl),
+          trustedOfficialPreviewUrl(player?.imageUrl),
+          trustedOfficialPreviewUrl(player?.photoUrl),
+          trustedOfficialPreviewUrl(player?.image_url),
+          trustedOfficialPreviewUrl(player?.photo),
+        ]).filter((src) => !isLowQualityFallback(src))
+      : [];
 
   const candidates = uniqueStrings([
-    ...generatedCandidates,
     ...directCandidates,
+    ...generatedCandidates,
     CARD_IMAGE_FALLBACK,
   ]);
 
@@ -144,7 +168,6 @@ export function toFantasyCardData(
     ? finiteNumber(player?.form, player?.currentForm, (card as any).form)
     : 0;
   const rating = statsVerified ? finiteNumber(player?.overall) : 0;
-  const unmintedPreview = !card.ownerId && !card.serialId && Number(card.serialNumber || 0) <= 0;
 
   return {
     // Unminted onboarding/player previews must never masquerade as an existing card ID.
