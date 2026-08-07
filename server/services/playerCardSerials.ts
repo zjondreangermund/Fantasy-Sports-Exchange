@@ -19,7 +19,7 @@ export async function ensurePlayerCardSerialIntegrity(): Promise<{ repairedCount
 
       await tx.execute(sql`
         CREATE TABLE IF NOT EXISTS app.player_card_serial_counters (
-          player_id integer NOT NULL REFERENCES app.players(id) ON DELETE CASCADE,
+          player_id integer NOT NULL,
           rarity text NOT NULL,
           last_serial_number integer NOT NULL DEFAULT 0,
           max_supply integer NOT NULL,
@@ -28,6 +28,15 @@ export async function ensurePlayerCardSerialIntegrity(): Promise<{ repairedCount
           CHECK (last_serial_number >= 0)
         )
       `);
+      // Mint history must outlive a player/card row. Never cascade-delete the counter ledger.
+      await tx.execute(sql`
+        ALTER TABLE app.player_card_serial_counters
+        DROP CONSTRAINT IF EXISTS player_card_serial_counters_player_id_fkey
+      `);
+
+      // A previous boot may already have installed the immutability guard. Temporarily
+      // remove it while repairing legacy metadata; it is recreated before this transaction commits.
+      await tx.execute(sql`DROP TRIGGER IF EXISTS player_cards_mint_identity_guard ON app.player_cards`);
 
       // Lock while importing existing serial history and repairing only missing metadata.
       // Existing non-null serial numbers are deliberately never renumbered.
