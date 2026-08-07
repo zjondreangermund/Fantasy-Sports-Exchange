@@ -144,9 +144,11 @@ export function toFantasyCardData(
     ? finiteNumber(player?.form, player?.currentForm, (card as any).form)
     : 0;
   const rating = statsVerified ? finiteNumber(player?.overall) : 0;
+  const unmintedPreview = !card.ownerId && !card.serialId && Number(card.serialNumber || 0) <= 0;
 
   return {
-    id: String(card.id),
+    // Unminted onboarding/player previews must never masquerade as an existing card ID.
+    id: unmintedPreview ? "0" : String(card.id),
     name: String(player?.name || "Unknown Player"),
     rating,
     position: String(player?.position || "N/A"),
