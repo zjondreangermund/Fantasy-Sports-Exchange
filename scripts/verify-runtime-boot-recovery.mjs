@@ -5,6 +5,25 @@ import { relative, resolve } from "node:path";
 const root = resolve(new URL("..", import.meta.url).pathname);
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 
+const permanentSerialPatterns = [
+  "CREATE TABLE IF NOT EXISTS app.player_card_serial_counters",
+  "last_serial_number = app.player_card_serial_counters.last_serial_number + 1",
+  "RETURNING last_serial_number INTO next_serial",
+  "IF next_serial > supply_limit THEN",
+  "player_cards_player_rarity_serial_unique",
+  "player_cards_serial_id_unique",
+  "CREATE OR REPLACE FUNCTION app.prevent_player_card_mint_identity_change()",
+  "CREATE TRIGGER player_cards_mint_identity_guard",
+  "DROP CONSTRAINT IF EXISTS player_card_serial_counters_player_id_fkey",
+];
+
+const obsoleteReusableSerialPatterns = [
+  "coalesce(max(serial_number), 0)::int + 1",
+  "current_supply integer;",
+  "serial_number = plan.serial_number",
+  "concat('__serial_repair__', pc.id)",
+];
+
 const checks = [
   {
     name: "startup preserves db push diagnostics and runs compatibility preflight first",
@@ -34,17 +53,17 @@ const checks = [
     ],
   },
   {
-    name: "serial repair is collision safe and installs the supply trigger",
+    name: "serial preflight preserves mint history and installs permanent allocation guards",
     file: "scripts/prepare-runtime-startup.mjs",
     patterns: [
       "LOCK TABLE app.player_cards IN SHARE ROW EXCLUSIVE MODE",
       "CREATE TEMP TABLE player_card_serial_repair_plan ON COMMIT DROP",
-      "concat('__serial_repair__', pc.id)",
-      "player_cards_player_rarity_serial_unique",
+      "concat('__serial_metadata_repair__', pc.id)",
       "CREATE OR REPLACE FUNCTION app.enforce_player_card_serial_supply()",
-      "pg_advisory_xact_lock",
       "CREATE TRIGGER player_cards_serial_supply_guard",
+      ...permanentSerialPatterns,
     ],
+    forbiddenPatterns: obsoleteReusableSerialPatterns,
   },
   {
     name: "official tournament sync discovers competition enum schemas",
@@ -85,16 +104,17 @@ const checks = [
     ],
   },
   {
-    name: "transactional serial service protects global and per-player uniqueness",
+    name: "transactional serial service prevents serial reuse and preserves immutable mint identity",
     file: "server/services/playerCardSerials.ts",
     patterns: [
       "db.transaction",
       "LOCK TABLE app.player_cards IN SHARE ROW EXCLUSIVE MODE",
       "player_card_serial_repair_plan",
-      "serial_id = concat('__serial_repair__', pc.id)",
-      "player_cards_player_rarity_serial_unique",
-      "pg_advisory_xact_lock",
+      "concat('__serial_metadata_repair__', pc.id)",
+      "Serial numbers themselves remain immutable",
+      ...permanentSerialPatterns,
     ],
+    forbiddenPatterns: obsoleteReusableSerialPatterns,
   },
 ];
 
