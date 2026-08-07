@@ -153,6 +153,7 @@ function AuthenticatedApp() {
   const showMarketplaceFloors = location.startsWith("/collection") || location.startsWith("/marketplace");
   const style = { "--sidebar-width": "16rem", "--sidebar-width-icon": "3rem" };
   const { data: user } = useQuery<{ managerTeamName?: string }>({ queryKey: ["/api/user"] });
+  const { data: onboardingStatus, isLoading: onboardingStatusLoading } = useQuery<{ completed: boolean }>({ queryKey: ["/api/onboarding/status"] });
   const teamName = user?.managerTeamName || "Your Stadium";
   useScrollRepair(location);
 
@@ -161,6 +162,17 @@ function AuthenticatedApp() {
     fetch("/api/audit/client-event", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event: "route_view", path: location, title: document.title, ts: new Date().toISOString() }), signal: controller.signal }).catch(() => {});
     return () => controller.abort();
   }, [location]);
+
+  if (onboardingStatusLoading) {
+    return <div className="flex h-[100dvh] w-full items-center justify-center overflow-hidden bg-[#02040d]"><RouteFallback /></div>;
+  }
+
+  // Incomplete signup deliberately lives outside SidebarProvider/app-shell.
+  // This prevents dashboard chrome and the global app scroll rules from taking
+  // space away from the starter draft, and gives onboarding its own touch scroll.
+  if (onboardingStatus && !onboardingStatus.completed) {
+    return <div className="h-[100dvh] w-full overflow-hidden bg-[#02040d]"><AuthenticatedRouter /></div>;
+  }
 
   return (
     <SidebarProvider className="h-[100dvh] min-h-0 overflow-hidden" style={style as React.CSSProperties}>
