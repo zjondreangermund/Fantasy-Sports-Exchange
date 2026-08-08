@@ -1,4 +1,4 @@
-import { getMarketplaceFloorPrice } from "./card-economy";
+import { getMarketplaceFloorPrice } from "./card-economy.js";
 
 export type LoanRarity = "rare" | "unique" | "epic" | "legendary";
 
