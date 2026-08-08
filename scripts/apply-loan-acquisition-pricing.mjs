@@ -12,6 +12,27 @@ function replaceOnce(source, from, to, label) {
   return source.replace(from, to);
 }
 
+// The Free Card Cups patch predates the new free-first landing and is imported by
+// another build repair script. Once the new landing is present, its old landing
+// string replacements are obsolete. Make those replacements no-ops while leaving
+// all tournament/API/card-award patches untouched.
+patchFile("scripts/apply-free-card-cups.mjs", (original) => {
+  const oldHelper = `function replaceOnce(source, from, to, label) {
+  if (source.includes(to)) return source;
+  if (!source.includes(from)) throw new Error(\`Free Card Cups patch anchor not found: \${label}\`);
+  return source.replace(from, to);
+}`;
+  const compatibleHelper = `function replaceOnce(source, from, to, label) {
+  if (label.startsWith("landing") && source.includes("Start Free. Build Your Club.")) return source;
+  if (source.includes(to)) return source;
+  if (!source.includes(from)) throw new Error(\`Free Card Cups patch anchor not found: \${label}\`);
+  return source.replace(from, to);
+}`;
+  if (original.includes(compatibleHelper)) return original;
+  if (!original.includes(oldHelper)) throw new Error("Could not make Free Card Cups landing patch compatible with the free-first landing");
+  return original.replace(oldHelper, compatibleHelper);
+});
+
 patchFile("server/routes/loanMarket.routes.ts", (original) => {
   let source = original;
 
