@@ -1,15 +1,11 @@
+import { getMarketplaceFloorPrice } from "./card-economy.js";
+
 export type LoanRarity = "rare" | "unique" | "epic" | "legendary";
 
 export const LOAN_MARKET_FEE_RATE = 0.10;
+export const LOAN_MINIMUM_RATE = 0.10;
 
 export const LOAN_DURATIONS_GAMEWEEKS = [1, 2, 3, 4] as const;
-
-export const LOAN_FLOOR_PER_GAMEWEEK: Record<LoanRarity, number> = {
-  rare: 20,
-  unique: 50,
-  epic: 50,
-  legendary: 100,
-};
 
 export function normalizeLoanRarity(rarity: string): LoanRarity | null {
   const value = String(rarity || "").toLowerCase();
@@ -20,12 +16,19 @@ export function normalizeLoanRarity(rarity: string): LoanRarity | null {
   return null;
 }
 
+/**
+ * Minimum loan price per gameweek:
+ * - purchased card: 10% of the current owner's acquisition price;
+ * - won/free card: 10% of the rarity Marketplace floor price.
+ *
+ * Common cards remain non-loanable because normalizeLoanRarity returns null.
+ */
 export function getLoanFloorPerGameweek(rarity: string, costBasis = 0): number {
   const normalized = normalizeLoanRarity(rarity);
   if (!normalized) return 0;
-  const rarityFloor = LOAN_FLOOR_PER_GAMEWEEK[normalized];
-  const valueFloor = Math.round(Math.max(0, Number(costBasis || 0)) * 0.10 * 100) / 100;
-  return Math.max(rarityFloor, valueFloor);
+  const paidBasis = Math.max(0, Number(costBasis || 0));
+  const basis = paidBasis > 0 ? paidBasis : getMarketplaceFloorPrice(normalized);
+  return Math.round(Math.max(0, basis) * LOAN_MINIMUM_RATE * 100) / 100;
 }
 
 export function getLoanFeeBreakdown(input: {
@@ -49,6 +52,8 @@ export function getLoanFeeBreakdown(input: {
     fee,
     ownerReceives,
     feeRate: LOAN_MARKET_FEE_RATE,
+    minimumRate: LOAN_MINIMUM_RATE,
     costBasis: Math.max(0, Number(input.costBasis || 0)),
+    minimumBasis: Math.max(0, Number(input.costBasis || 0)) > 0 ? "purchase" : "rarity_floor",
   };
 }
