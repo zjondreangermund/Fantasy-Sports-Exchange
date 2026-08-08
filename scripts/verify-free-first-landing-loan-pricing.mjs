@@ -22,7 +22,7 @@ requireText(landing, "Loan it:", "won-card loan hint");
 rejectText(landing, "const tournamentRules", "paid rarity table on landing");
 rejectText(landing, "What does 2.0× funding mean?", "Prize Vault funding calculation on landing");
 
-requireText(loanShared, 'import { getMarketplaceFloorPrice } from "./card-economy";', "Marketplace floor source");
+requireText(loanShared, 'import { getMarketplaceFloorPrice } from "./card-economy.js";', "Marketplace floor source");
 requireText(loanShared, "export const LOAN_MINIMUM_RATE = 0.10", "10% loan minimum rate");
 requireText(loanShared, "paidBasis > 0 ? paidBasis : getMarketplaceFloorPrice(normalized)", "purchase-or-floor minimum basis");
 
