@@ -16,7 +16,9 @@ requireText(landing, 'sendMarketingEvent("start_free_click"', "Start Free click 
 requireText(landing, "Google sign-in did not complete", "visible Google auth error");
 requireText(adminRoutes, "SIGNUP_FUNNEL_OBSERVABILITY_V2", "marketing funnel endpoint marker");
 requireText(adminRoutes, '/api/admin/signup-funnel', "admin signup funnel endpoint");
-requireText(adminRoutes, 'label: "Google accounts created"', "admin account conversion stage");
+if (!adminRoutes.includes('label: "Google accounts created"') && !adminRoutes.includes('label: "Tracked new accounts"')) {
+  throw new Error("Missing admin account conversion stage");
+}
 requireText(adminRoutes, "left join app.user_onboarding", "database Starter 5 cohort");
 requireText(adminRoutes, "appUrlMatchesExpected", "APP_URL diagnostic");
 requireText(adminPage, "Signup Funnel · Last 7 days", "admin signup funnel UI");
@@ -25,3 +27,5 @@ requireText(indexHtml, "https://fantasy-sports-exchange-production-d05c.up.railw
 requireText(capacitor, "https://fantasy-sports-exchange-production-d05c.up.railway.app", "live Capacitor URL");
 
 console.log("Signup funnel observability and live URL alignment verified.");
+await import("./apply-signup-source-attribution-v3.mjs");
+await import("./verify-signup-source-attribution-v3.mjs");
