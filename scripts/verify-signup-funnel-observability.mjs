@@ -16,10 +16,11 @@ requireText(landing, 'sendMarketingEvent("start_free_click"', "Start Free click 
 requireText(landing, "Google sign-in did not complete", "visible Google auth error");
 requireText(adminRoutes, "SIGNUP_FUNNEL_OBSERVABILITY_V2", "marketing funnel endpoint marker");
 requireText(adminRoutes, '/api/admin/signup-funnel', "admin signup funnel endpoint");
+requireText(adminRoutes, 'label: "Google accounts created"', "admin account conversion stage");
 requireText(adminRoutes, "left join app.user_onboarding", "database Starter 5 cohort");
 requireText(adminRoutes, "appUrlMatchesExpected", "APP_URL diagnostic");
 requireText(adminPage, "Signup Funnel · Last 7 days", "admin signup funnel UI");
-requireText(adminPage, "Google accounts created", "admin account conversion stage");
+requireText(adminPage, "/api/admin/signup-funnel?hours=168", "admin funnel query");
 requireText(indexHtml, "https://fantasy-sports-exchange-production-d05c.up.railway.app/", "live public metadata URL");
 requireText(capacitor, "https://fantasy-sports-exchange-production-d05c.up.railway.app", "live Capacitor URL");
 
