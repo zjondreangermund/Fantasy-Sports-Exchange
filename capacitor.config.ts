@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: "dist",
   bundledWebRuntime: false,
   server: {
-    url: "https://fantasy-sports-exchange-production-b10a.up.railway.app",
+    url: "https://fantasy-sports-exchange-production-d05c.up.railway.app",
     cleartext: false,
   },
 };

@@ -1,0 +1,79 @@
+import fs from "node:fs";
+
+function patchFile(file, transform) {
+  const source = fs.readFileSync(file, "utf8");
+  const next = transform(source);
+  if (next !== source) fs.writeFileSync(file, next);
+}
+
+function replaceOnce(source, from, to, label) {
+  if (source.includes(to)) return source;
+  if (!source.includes(from)) throw new Error(`Signup funnel patch anchor not found: ${label}`);
+  return source.replace(from, to);
+}
+
+function insertAfter(source, anchor, insertion, marker, label) {
+  if (source.includes(marker)) return source;
+  if (!source.includes(anchor)) throw new Error(`Signup funnel patch anchor not found: ${label}`);
+  return source.replace(anchor, `${anchor}${insertion}`);
+}
+
+patchFile("client/src/pages/landing.tsx", (original) => {
+  let source = original;
+  source = replaceOnce(source, 'import { useState } from "react";', 'import { useEffect, useState } from "react";', "landing useEffect import");
+
+  const logoAnchor = 'const BRAND_LOGO = "/brand/fantasy-arena-logo.jpg?v=lion-jpg-2026-08";';
+  const helpers = `\n\nconst MARKETING_VISITOR_KEY = "fantasy_arena_marketing_visitor_id";\n\nfunction getMarketingVisitorId() {\n  if (typeof window === "undefined") return "";\n  const existing = window.localStorage.getItem(MARKETING_VISITOR_KEY);\n  if (existing) return existing;\n  const generated = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"\n    ? crypto.randomUUID()\n    : \`fa-\${Date.now()}-\${Math.random().toString(36).slice(2, 12)}\`;\n  window.localStorage.setItem(MARKETING_VISITOR_KEY, generated);\n  return generated;\n}\n\nfunction sendMarketingEvent(event: string, visitorId: string) {\n  if (typeof window === "undefined" || !visitorId) return;\n  const params = new URLSearchParams(window.location.search);\n  const payload = {\n    event,\n    visitorId,\n    path: window.location.pathname,\n    source: params.get("utm_source") || params.get("source") || document.referrer || "direct",\n    campaign: params.get("utm_campaign") || "",\n    medium: params.get("utm_medium") || "",\n    content: params.get("utm_content") || "",\n  };\n  fetch("/api/marketing/funnel", {\n    method: "POST",\n    headers: { "Content-Type": "application/json" },\n    body: JSON.stringify(payload),\n    keepalive: true,\n  }).catch(() => {});\n}\n\nfunction authErrorMessage(code: string) {\n  if (code === "configuration") return "Google sign-in is temporarily unavailable because the production login configuration needs attention.";\n  if (code === "google") return "Google sign-in did not complete. Please try again, or open Fantasy Arena directly in Chrome if you are using an in-app social browser.";\n  return "Sign-in did not complete. Please try again.";\n}`;
+  source = insertAfter(source, logoAnchor, helpers, "MARKETING_VISITOR_KEY", "landing marketing helpers");
+
+  const componentAnchor = `export default function LandingPage() {\n  const [heroVideoError, setHeroVideoError] = useState(false);\n  const refCode = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("ref") : "";\n  const loginHref = refCode ? \`/api/login?ref=\${encodeURIComponent(refCode)}\` : "/api/login";`;
+  const componentReplacement = `export default function LandingPage() {\n  const [heroVideoError, setHeroVideoError] = useState(false);\n  const pageParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();\n  const refCode = pageParams.get("ref") || "";\n  const authError = pageParams.get("auth_error") || "";\n  const visitorId = getMarketingVisitorId();\n  const loginQuery = new URLSearchParams();\n  if (refCode) loginQuery.set("ref", refCode);\n  if (visitorId) loginQuery.set("vid", visitorId);\n  const loginHref = \`/api/login\${loginQuery.toString() ? \`?\${loginQuery.toString()}\` : ""}\`;\n  const trackStartFree = () => sendMarketingEvent("start_free_click", visitorId);\n\n  useEffect(() => {\n    const sessionKey = \`fantasy_arena_landing_seen:\${window.location.pathname}\`;\n    if (!window.sessionStorage.getItem(sessionKey)) {\n      window.sessionStorage.setItem(sessionKey, "1");\n      sendMarketingEvent("landing_view", visitorId);\n    }\n    if (authError) sendMarketingEvent(\`auth_error_\${authError}\`, visitorId);\n  }, [authError, visitorId]);`;
+  source = replaceOnce(source, componentAnchor, componentReplacement, "landing funnel setup");
+
+  source = source.replaceAll('<a href={loginHref}>', '<a href={loginHref} onClick={trackStartFree}>');
+
+  const heroAnchor = `      <section className="relative overflow-hidden pt-16">`;
+  const errorBanner = `      {authError ? (\n        <div className="fixed left-1/2 top-20 z-[70] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 rounded-2xl border border-red-300/25 bg-red-950/95 p-4 text-sm text-red-50 shadow-2xl backdrop-blur-xl" role="alert">\n          <div className="font-black">Google sign-in did not complete</div>\n          <div className="mt-1 leading-6 text-red-100/80">{authErrorMessage(authError)}</div>\n          <a href={loginHref} onClick={trackStartFree} className="mt-3 inline-flex rounded-xl bg-white px-4 py-2 text-xs font-black text-red-950">Try Google sign-in again</a>\n        </div>\n      ) : null}\n\n`;
+  source = insertAfter(source, "      </nav>\n\n", errorBanner, "Google sign-in did not complete", "landing auth error banner");
+
+  return source;
+});
+
+patchFile("server/routes/admin.routes.ts", (original) => {
+  let source = original;
+  const registerAnchor = `  registerAdminIntegrityRoutes(app, { requireAuth, isAdmin });`;
+  const publicRoute = `\n\n  // SIGNUP_FUNNEL_OBSERVABILITY_V1\n  app.post("/api/marketing/funnel", async (req: any, res) => {\n    try {\n      const allowedEvents = new Set([\n        "landing_view",\n        "start_free_click",\n        "auth_error_google",\n        "auth_error_configuration",\n      ]);\n      const event = String(req.body?.event || "").trim().slice(0, 64);\n      if (!allowedEvents.has(event)) return res.status(400).json({ message: "Unsupported marketing event" });\n\n      const visitorId = String(req.body?.visitorId || "")\n        .trim()\n        .replace(/[^a-zA-Z0-9._:-]/g, "")\n        .slice(0, 96);\n      if (!visitorId) return res.status(400).json({ message: "Missing visitor identifier" });\n\n      const meta = {\n        event,\n        visitorId,\n        path: String(req.body?.path || "/").slice(0, 160),\n        source: String(req.body?.source || "direct").slice(0, 300),\n        campaign: String(req.body?.campaign || "").slice(0, 160),\n        medium: String(req.body?.medium || "").slice(0, 80),\n        content: String(req.body?.content || "").slice(0, 160),\n        userAgent: String(req.headers["user-agent"] || "").slice(0, 300),\n      };\n      await db.execute(sql\`\n        insert into app.audit_logs (user_id, action, meta)\n        values (null, 'marketing.funnel', \${JSON.stringify(meta)}::jsonb)\n      \`);\n      return res.status(202).json({ ok: true });\n    } catch (error) {\n      console.warn("Marketing funnel event failed:", error);\n      return res.status(202).json({ ok: false });\n    }\n  });`;
+  source = insertAfter(source, registerAnchor, publicRoute, "SIGNUP_FUNNEL_OBSERVABILITY_V1", "public marketing funnel endpoint");
+
+  const statsAnchor = `  app.get("/api/admin/stats", requireAuth, isAdmin, async (_req: any, res) => {`;
+  const funnelRoute = `  app.get("/api/admin/signup-funnel", requireAuth, isAdmin, async (req: any, res) => {\n    try {\n      const hours = Math.min(24 * 30, Math.max(1, Number(req.query.hours || 168) || 168));\n      const intervalText = \`\${hours} hours\`;\n\n      const eventRows = rowsOf(await db.execute(sql\`\n        select meta->>'event' as event,\n          count(distinct coalesce(nullif(meta->>'visitorId', ''), id::text))::int as count\n        from app.audit_logs\n        where action = 'marketing.funnel'\n          and created_at >= now() - \${intervalText}::interval\n        group by meta->>'event'\n      \`));\n      const eventCounts = Object.fromEntries(eventRows.map((row: any) => [String(row.event || ""), Number(row.count || 0)]));\n\n      const cohort = rowsOf(await db.execute(sql\`\n        select\n          count(*)::int as "accountsCreated",\n          count(*) filter (where nullif(btrim(u.manager_team_name), '') is not null)::int as "teamNamesCreated",\n          count(*) filter (where coalesce(o.completed, false) = true)::int as "starter5Completed"\n        from app.users u\n        left join app.onboarding o on o.user_id = u.id\n        where u.created_at >= now() - \${intervalText}::interval\n      \`))[0] || {};\n\n      const landingViews = Number(eventCounts.landing_view || 0);\n      const startFreeClicks = Number(eventCounts.start_free_click || 0);\n      const accountsCreated = Number(cohort.accountsCreated || 0);\n      const teamNamesCreated = Number(cohort.teamNamesCreated || 0);\n      const starter5Completed = Number(cohort.starter5Completed || 0);\n      const rate = (value: number, base: number) => base > 0 ? Math.round((value / base) * 1000) / 10 : null;\n      const stages = [\n        { key: "landing", label: "Landing visitors", value: landingViews, rateFromPrevious: null },\n        { key: "start", label: "Start Free taps", value: startFreeClicks, rateFromPrevious: rate(startFreeClicks, landingViews) },\n        { key: "account", label: "Google accounts created", value: accountsCreated, rateFromPrevious: rate(accountsCreated, startFreeClicks) },\n        { key: "team", label: "Team names created", value: teamNamesCreated, rateFromPrevious: rate(teamNamesCreated, accountsCreated) },\n        { key: "starter", label: "Starter 5 completed", value: starter5Completed, rateFromPrevious: rate(starter5Completed, teamNamesCreated) },\n      ];\n\n      const configuredAppUrl = String(process.env.APP_URL || "").replace(/\\/$/, "");\n      return res.json({\n        hours,\n        generatedAt: new Date().toISOString(),\n        stages,\n        events: eventCounts,\n        cohort: { accountsCreated, teamNamesCreated, starter5Completed },\n        authErrors: {\n          google: Number(eventCounts.auth_error_google || 0),\n          configuration: Number(eventCounts.auth_error_configuration || 0),\n        },\n        auth: {\n          appUrl: configuredAppUrl,\n          expectedAppUrl: "https://fantasy-sports-exchange-production-d05c.up.railway.app",\n          appUrlMatchesExpected: configuredAppUrl === "https://fantasy-sports-exchange-production-d05c.up.railway.app",\n          googleConfigured: Boolean(String(process.env.GOOGLE_CLIENT_ID || "").trim() && String(process.env.GOOGLE_CLIENT_SECRET || "").trim()),\n          expectedCallbackUrl: configuredAppUrl ? \`\${configuredAppUrl}/api/auth/google/callback\` : "",\n        },\n      });\n    } catch (error: any) {\n      console.error("Failed to fetch signup funnel:", error);\n      return res.status(500).json({ message: error?.message || "Failed to fetch signup funnel" });\n    }\n  });\n\n`;
+  source = insertAfter(source, `  app.get("/api/admin/check", requireAuth, async (req: any, res) => {\n    const allowed = await isAdminUser(req);\n    res.json({ isAdmin: allowed });\n  });\n\n`, funnelRoute, "/api/admin/signup-funnel", "admin signup funnel endpoint");
+
+  return source;
+});
+
+patchFile("client/src/pages/admin.tsx", (original) => {
+  let source = original;
+  const trafficTypeAnchor = `type Traffic = {\n  onlineUsersLast10Minutes?: number;\n  requestsLastHour?: number;\n  activeUsers?: any[];\n};`;
+  const funnelType = `\n\ntype SignupFunnel = {\n  hours: number;\n  generatedAt: string;\n  stages: Array<{ key: string; label: string; value: number; rateFromPrevious: number | null }>;\n  authErrors: { google: number; configuration: number };\n  auth: { appUrl: string; expectedAppUrl: string; appUrlMatchesExpected: boolean; googleConfigured: boolean; expectedCallbackUrl: string };\n};`;
+  source = insertAfter(source, trafficTypeAnchor, funnelType, "type SignupFunnel", "admin signup funnel type");
+
+  const queryAnchor = `  const { data: traffic, refetch: refetchTraffic } = useQuery<Traffic>({ queryKey: ["/api/admin/traffic"] });`;
+  const funnelQuery = `\n  const { data: signupFunnel, refetch: refetchSignupFunnel } = useQuery<SignupFunnel>({ queryKey: ["/api/admin/signup-funnel?hours=168"], refetchInterval: 60_000 });`;
+  source = insertAfter(source, queryAnchor, funnelQuery, "refetchSignupFunnel", "admin funnel query");
+
+  source = replaceOnce(
+    source,
+    `    refetchTraffic();\n    refetchTx();`,
+    `    refetchTraffic();\n    refetchSignupFunnel();\n    refetchTx();`,
+    "admin refresh funnel",
+  );
+
+  const kpiSectionEnd = `        </section>\n\n        <Tabs value={activeTab} onValueChange={setActiveTab}>`;
+  const funnelCard = `        </section>\n\n        <Card className="border-cyan-300/15 bg-[linear-gradient(135deg,rgba(6,182,212,.09),rgba(15,23,42,.88))] p-4 text-white sm:p-5">\n          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">\n            <div>\n              <div className="text-xs font-black uppercase tracking-[.16em] text-cyan-200">Signup Funnel · Last 7 days</div>\n              <h2 className="mt-1 text-xl font-black">See where promoted visitors actually stop</h2>\n              <p className="mt-1 text-xs leading-5 text-white/45">Internal Fantasy Arena data. New-account, team-name and Starter 5 counts come directly from the production database.</p>\n            </div>\n            <Badge className={signupFunnel?.auth?.appUrlMatchesExpected && signupFunnel?.auth?.googleConfigured ? "bg-emerald-500/20 text-emerald-100" : "bg-amber-500/20 text-amber-100"}>\n              {signupFunnel?.auth?.appUrlMatchesExpected && signupFunnel?.auth?.googleConfigured ? "OAuth config looks aligned" : "Check OAuth config"}\n            </Badge>\n          </div>\n          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">\n            {(signupFunnel?.stages || []).map((stage) => (\n              <div key={stage.key} className="rounded-2xl border border-white/10 bg-black/25 p-3">\n                <div className="text-2xl font-black">{stage.value}</div>\n                <div className="mt-1 text-[10px] font-black uppercase tracking-[.1em] text-white/45">{stage.label}</div>\n                <div className="mt-1 text-[10px] text-cyan-100/70">{stage.rateFromPrevious == null ? "Starting point" : `${stage.rateFromPrevious}% from previous`}</div>\n              </div>\n            ))}\n          </div>\n          <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2">\n            <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-white/55">\n              <b className="text-white">Google login errors:</b> {Number(signupFunnel?.authErrors?.google || 0)} failed · {Number(signupFunnel?.authErrors?.configuration || 0)} configuration\n            </div>\n            <div className={`rounded-xl border p-3 ${signupFunnel?.auth?.appUrlMatchesExpected ? "border-emerald-300/15 bg-emerald-400/5 text-emerald-100/75" : "border-amber-300/20 bg-amber-400/8 text-amber-100"}`}>\n              <b>APP_URL:</b> {signupFunnel?.auth?.appUrl || "Not configured"}<br />\n              <span className="break-all"><b>Expected callback:</b> {signupFunnel?.auth?.expectedCallbackUrl || "Unavailable until APP_URL is configured"}</span>\n            </div>\n          </div>\n        </Card>\n\n        <Tabs value={activeTab} onValueChange={setActiveTab}>`;
+  source = replaceOnce(source, kpiSectionEnd, funnelCard, "admin funnel card");
+
+  return source;
+});
+
+console.log("Applied live signup funnel observability and auth visibility.");
