@@ -38,6 +38,30 @@ async function nextEligibleAt(executor: any): Promise<string> {
   return row?.nextEligibleAt ? new Date(row.nextEligibleAt).toISOString() : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 }
 
+async function signupEligibility(executor: any, userId: string) {
+  const row = rowsOf(await executor.execute(sql`
+    SELECT
+      to_char(s."signupLocal"::date, 'YYYY-MM-DD') AS "signupDay",
+      to_char((s."signupLocal"::date + 1), 'YYYY-MM-DD') AS "eligibleFrom",
+      ((now() AT TIME ZONE 'Africa/Windhoek')::date > s."signupLocal"::date) AS "eligibleForDailyReward",
+      ((((s."signupLocal"::date + 1)::timestamp) AT TIME ZONE 'Africa/Windhoek')) AS "eligibleAt"
+    FROM (
+      SELECT ((u.created_at AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'Africa/Windhoek') AS "signupLocal"
+      FROM app.users u
+      WHERE u.id = ${userId}
+      LIMIT 1
+    ) s
+  `))[0];
+
+  if (!row) throw new Error("User account was not found for daily reward eligibility");
+  return {
+    signupDay: String(row.signupDay || ""),
+    eligibleFrom: String(row.eligibleFrom || ""),
+    eligibleForDailyReward: Boolean(row.eligibleForDailyReward),
+    eligibleAt: row.eligibleAt ? new Date(row.eligibleAt).toISOString() : null,
+  };
+}
+
 async function loadRewardCard(executor: any, userId: string, rewardDay?: string | null) {
   const rows = rowsOf(await executor.execute(sql`
     SELECT
@@ -96,17 +120,20 @@ async function loadRewardCard(executor: any, userId: string, rewardDay?: string 
 
 export async function getDailyLoginRewardStatus(userId: string) {
   await ensureDailyLoginRewardSchema();
-  const row = rowsOf(await db.execute(sql`
-    SELECT
-      (SELECT count(*)::int FROM app.player_cards pc WHERE pc.owner_id = ${userId} AND pc.rarity::text = 'common') AS "commonCount",
-      (SELECT count(*)::int FROM app.daily_login_rewards dlr WHERE dlr.user_id = ${userId}) AS "rewardCount",
-      EXISTS (
-        SELECT 1 FROM app.daily_login_rewards dlr
-        WHERE dlr.user_id = ${userId}
-          AND dlr.reward_day = (now() AT TIME ZONE 'Africa/Windhoek')::date
-      ) AS "claimedToday",
-      to_char((now() AT TIME ZONE 'Africa/Windhoek')::date, 'YYYY-MM-DD') AS "rewardDay"
-  `))[0] || {};
+  const [row, eligibility] = await Promise.all([
+    db.execute(sql`
+      SELECT
+        (SELECT count(*)::int FROM app.player_cards pc WHERE pc.owner_id = ${userId} AND pc.rarity::text = 'common') AS "commonCount",
+        (SELECT count(*)::int FROM app.daily_login_rewards dlr WHERE dlr.user_id = ${userId}) AS "rewardCount",
+        EXISTS (
+          SELECT 1 FROM app.daily_login_rewards dlr
+          WHERE dlr.user_id = ${userId}
+            AND dlr.reward_day = (now() AT TIME ZONE 'Africa/Windhoek')::date
+        ) AS "claimedToday",
+        to_char((now() AT TIME ZONE 'Africa/Windhoek')::date, 'YYYY-MM-DD') AS "rewardDay"
+    `).then((result) => rowsOf(result)[0] || {}),
+    signupEligibility(db, userId),
+  ]);
 
   const commonCount = Number(row.commonCount || 0);
   const claimedToday = Boolean(row.claimedToday);
@@ -117,10 +144,17 @@ export async function getDailyLoginRewardStatus(userId: string) {
     rewardCount: Number(row.rewardCount || 0),
     remaining: Math.max(0, DAILY_LOGIN_COMMON_CARD_CAP - commonCount),
     claimedToday,
-    canClaim: !claimedToday && !capReached,
+    canClaim: eligibility.eligibleForDailyReward && !claimedToday && !capReached,
     capReached,
     rewardDay: String(row.rewardDay || ""),
-    nextEligibleAt: claimedToday ? await nextEligibleAt(db) : null,
+    signupDay: eligibility.signupDay,
+    eligibleFrom: eligibility.eligibleFrom,
+    eligibleForDailyReward: eligibility.eligibleForDailyReward,
+    nextEligibleAt: claimedToday
+      ? await nextEligibleAt(db)
+      : !eligibility.eligibleForDailyReward
+        ? eligibility.eligibleAt
+        : null,
     card: claimedToday ? await loadRewardCard(db, userId, String(row.rewardDay || "")) : null,
   };
 }
@@ -149,6 +183,7 @@ export async function claimDailyLoginReward(userId: string) {
       WHERE owner_id = ${userId} AND rarity::text = 'common'
     `))[0] || {};
     const commonCount = Number(commonRow.count || 0);
+    const eligibility = await signupEligibility(tx, userId);
 
     if (existing) {
       return {
@@ -161,8 +196,30 @@ export async function claimDailyLoginReward(userId: string) {
         canClaim: false,
         capReached: commonCount >= DAILY_LOGIN_COMMON_CARD_CAP,
         rewardDay,
+        signupDay: eligibility.signupDay,
+        eligibleFrom: eligibility.eligibleFrom,
+        eligibleForDailyReward: eligibility.eligibleForDailyReward,
         nextEligibleAt: await nextEligibleAt(tx),
         card: await loadRewardCard(tx, userId, rewardDay),
+      };
+    }
+
+    if (!eligibility.eligibleForDailyReward) {
+      return {
+        claimed: false,
+        alreadyClaimed: false,
+        cap: DAILY_LOGIN_COMMON_CARD_CAP,
+        commonCount,
+        remaining: Math.max(0, DAILY_LOGIN_COMMON_CARD_CAP - commonCount),
+        claimedToday: false,
+        canClaim: false,
+        capReached: commonCount >= DAILY_LOGIN_COMMON_CARD_CAP,
+        rewardDay,
+        signupDay: eligibility.signupDay,
+        eligibleFrom: eligibility.eligibleFrom,
+        eligibleForDailyReward: false,
+        nextEligibleAt: eligibility.eligibleAt,
+        card: null,
       };
     }
 
@@ -177,6 +234,9 @@ export async function claimDailyLoginReward(userId: string) {
         canClaim: false,
         capReached: true,
         rewardDay,
+        signupDay: eligibility.signupDay,
+        eligibleFrom: eligibility.eligibleFrom,
+        eligibleForDailyReward: true,
         nextEligibleAt: null,
         card: null,
       };
@@ -258,6 +318,9 @@ export async function claimDailyLoginReward(userId: string) {
       canClaim: false,
       capReached: commonCountAfter >= DAILY_LOGIN_COMMON_CARD_CAP,
       rewardDay,
+      signupDay: eligibility.signupDay,
+      eligibleFrom: eligibility.eligibleFrom,
+      eligibleForDailyReward: true,
       nextEligibleAt: commonCountAfter >= DAILY_LOGIN_COMMON_CARD_CAP ? null : await nextEligibleAt(tx),
       card: await loadRewardCard(tx, userId, rewardDay),
     };
