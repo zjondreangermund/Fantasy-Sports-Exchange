@@ -28,3 +28,4 @@ requireText(adminPage, "Completed tracked signups by source", "signup source UI"
 requireText(adminPage, "Older or untracked accounts are shown separately", "campaign-safe explanation");
 
 console.log("Account-level signup attribution and pre-tracking separation verified.");
+await import("./make-signup-v2-idempotent-with-v3.mjs");
