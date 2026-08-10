@@ -1,3 +1,4 @@
+import "./apply-admin-readonly-bypass.mjs";
 import fs from "node:fs";
 
 const file = "server/routes/onboarding.routes.ts";
@@ -75,14 +76,14 @@ const replacement = `  const getOnboardingPlayerPool = async () => {
     }
 
     const existingPlayers = await storage.getPlayers();
-    const mapKey = (name: string, team: string, pos: string) => \`${"${name.toLowerCase()}::${team.toLowerCase()}::${pos}"}\`;
+    const mapKey = (name: string, team: string, pos: string) => `${"${name.toLowerCase()}::${team.toLowerCase()}::${pos}"}`;
     const existingMap = new Map<string, any>();
     existingPlayers.forEach((p: any) => existingMap.set(mapKey(String(p.name), String(p.team), String(p.position)), p));
 
     const ensurePlayer = async (fplPlayer: any) => {
       const teamName = String(teamMap.get(Number(fplPlayer.team))?.name || "Unknown");
       const position = positionMap[Number(fplPlayer.element_type)] || "MID";
-      const fullName = \`${"${String(fplPlayer.first_name || \"\").trim()} ${String(fplPlayer.second_name || \"\").trim()}"}\`.trim() || String(fplPlayer.web_name || "Unknown");
+      const fullName = `${"${String(fplPlayer.first_name || \"\").trim()} ${String(fplPlayer.second_name || \"\").trim()}"}`.trim() || String(fplPlayer.web_name || "Unknown");
       const key = mapKey(fullName, teamName, position);
       const existing = existingMap.get(key);
       if (existing) return existing;
