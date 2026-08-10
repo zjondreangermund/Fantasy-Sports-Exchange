@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import { getSecuritySettings, recordSecurityEvent, type SecuritySettings } from "./securityControl.js";
+import { getSecuritySettings, isPrivilegedAdminRequest, recordSecurityEvent, type SecuritySettings } from "./securityControl.js";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -97,8 +97,8 @@ function blockedMessage(settings: SecuritySettings, reason: string): string {
  * It runs before every application route and re-reads the database for every
  * state-changing request. Read-only preview has a deliberately narrow allowlist
  * for signup/login, starter onboarding and the capped daily common-card reward.
- * Marketplace, wallet, auction, tournament and ordinary account mutations remain
- * blocked at the server even when a user bypasses the interface.
+ * Verified administrators bypass only the global Read-only switch so they can
+ * continue maintaining the platform; dedicated pause switches remain enforced.
  */
 export const strictReadOnlyGuard: RequestHandler = async (req: any, res, next) => {
   const path = requestPath(req);
@@ -121,7 +121,11 @@ export const strictReadOnlyGuard: RequestHandler = async (req: any, res, next) =
       });
     }
 
-    const reason = emergencyReason(record.settings, method, path);
+    const adminReadOnlyBypass = record.settings.emergency.readOnly && isPrivilegedAdminRequest(req);
+    const effectiveSettings: SecuritySettings = adminReadOnlyBypass
+      ? { ...record.settings, emergency: { ...record.settings.emergency, readOnly: false } }
+      : record.settings;
+    const reason = emergencyReason(effectiveSettings, method, path);
     if (!reason) return next();
 
     void recordSecurityEvent({
