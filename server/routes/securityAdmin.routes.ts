@@ -4,6 +4,7 @@ import {
   getRuntimeSecurityStatus,
   getSecurityOverview,
   getSecuritySettings,
+  isPrivilegedAdminRequest,
   recordSecurityEvent,
   resolveSecurityEvent,
   revokeOtherSessions,
@@ -28,13 +29,16 @@ export function registerSecurityAdminRoutes(app: Express, deps: RegisterSecurity
   // same-origin, moderation and rate-limit controls.
   registerCommunityChatV2Routes(app, { requireAuth, isAdmin });
 
-  app.get("/api/security/status", async (_req, res) => {
+  app.get("/api/security/status", async (req: any, res) => {
     try {
       const record = await getSecuritySettings(true);
+      const adminBypass = isPrivilegedAdminRequest(req);
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       res.setHeader("Pragma", "no-cache");
       return res.json({
         readOnly: record.settings.emergency.readOnly,
+        adminBypass,
+        readOnlyAppliesToYou: record.settings.emergency.readOnly && !adminBypass,
         authPaused: record.settings.emergency.authPaused,
         depositsPaused: record.settings.emergency.depositsPaused,
         withdrawalsPaused: record.settings.emergency.withdrawalsPaused,
@@ -64,6 +68,7 @@ export function registerSecurityAdminRoutes(app: Express, deps: RegisterSecurity
         runtime: {
           ...getRuntimeSecurityStatus(),
           strictGlobalReadOnlyGuard: true,
+          adminReadOnlyBypass: true,
           cloudflareRequestDetected: Boolean(req.headers?.["cf-ray"] || req.headers?.["cf-connecting-ip"]),
           forwardedProtocol: String(req.headers?.["x-forwarded-proto"] || req.protocol || ""),
         },
@@ -122,6 +127,15 @@ export function registerSecurityAdminRoutes(app: Express, deps: RegisterSecurity
   app.post("/api/admin/security/sessions/revoke-others", requireAuth, isAdmin, async (req: any, res) => {
     try {
       const revoked = await revokeOtherSessions(String(req.sessionID || ""), userIdFrom(req));
+      await recordSecurityEvent({
+        userId: userIdFrom(req) || null,
+        ip: String(req.ip || ""),
+        category: "administration",
+        action: "security.sessions.revoked",
+        route: req.path,
+        severity: "warning",
+        details: { revoked },
+      });
       return res.json({ success: true, revoked });
     } catch (error: any) {
       console.error("Failed to revoke sessions:", error);
