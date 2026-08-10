@@ -187,9 +187,9 @@ export const RARITY_ENTRY_FEES = {
 } as const;
 
 export const RARITY_PRIZE_FUNDING_MULTIPLIERS = {
-  common: 2,
-  rare: 1.8,
-  unique: 1.7,
-  epic: 1.6,
-  legendary: 1.5,
+  common: 1.7,
+  rare: 1.6,
+  unique: 1.5,
+  epic: 1.4,
+  legendary: 1.3,
 } as const;
