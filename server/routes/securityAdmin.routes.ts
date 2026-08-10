@@ -127,15 +127,6 @@ export function registerSecurityAdminRoutes(app: Express, deps: RegisterSecurity
   app.post("/api/admin/security/sessions/revoke-others", requireAuth, isAdmin, async (req: any, res) => {
     try {
       const revoked = await revokeOtherSessions(String(req.sessionID || ""), userIdFrom(req));
-      await recordSecurityEvent({
-        userId: userIdFrom(req) || null,
-        ip: String(req.ip || ""),
-        category: "administration",
-        action: "security.sessions.revoked",
-        route: req.path,
-        severity: "warning",
-        details: { revoked },
-      });
       return res.json({ success: true, revoked });
     } catch (error: any) {
       console.error("Failed to revoke sessions:", error);
