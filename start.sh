@@ -10,6 +10,13 @@ if [ -z "${DATABASE_URL:-}" ]; then
   exit 1
 fi
 
+# Build-time repair scripts are intentionally idempotent. Re-apply the Admin
+# Read-only maintenance bypass before startup verification so a clean runtime
+# checkout is validated against the same rule used to compile the server.
+echo "Preparing Admin Read-only maintenance bypass..."
+node scripts/apply-admin-readonly-bypass.mjs
+node scripts/verify-admin-readonly-startup.mjs
+
 # Fail the deployment if the read-only guard, admin security links, tournament
 # settlement route or marketplace/auction routes drift out of alignment.
 echo "Verifying read-only and route contracts..."
