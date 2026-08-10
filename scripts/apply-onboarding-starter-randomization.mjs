@@ -1,3 +1,4 @@
+import "./apply-admin-readonly-bypass.mjs";
 import fs from "node:fs";
 
 const file = "server/routes/onboarding.routes.ts";

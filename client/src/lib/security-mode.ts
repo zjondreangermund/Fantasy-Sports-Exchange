@@ -1,5 +1,6 @@
 export type PublicSecurityStatus = {
   readOnly: boolean;
+  adminBypass: boolean;
   authPaused: boolean;
   depositsPaused: boolean;
   withdrawalsPaused: boolean;
@@ -11,6 +12,7 @@ export type PublicSecurityStatus = {
 
 const DEFAULT_STATUS: PublicSecurityStatus = {
   readOnly: false,
+  adminBypass: false,
   authPaused: false,
   depositsPaused: false,
   withdrawalsPaused: false,
@@ -85,7 +87,7 @@ export function isClientStateChangingRequest(method: string, path: string): bool
 }
 
 export function shouldClientBlockRequest(input: RequestInfo | URL | string, init?: RequestInit): boolean {
-  if (!currentStatus.readOnly) return false;
+  if (!currentStatus.readOnly || currentStatus.adminBypass) return false;
   const path = apiPathFromInput(input);
   if (!path.startsWith("/api/")) return false;
   const method = methodFromRequest(input, init);
