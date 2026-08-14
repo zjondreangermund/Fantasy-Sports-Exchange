@@ -5,6 +5,7 @@ const competitions = read("client/src/pages/competitions-vault.tsx");
 const app = read("client/src/App.tsx");
 const quickDock = read("client/src/components/MatchdayQuickDock.tsx");
 const prizeVault = read("server/routes/prizeVault.routes.ts");
+const routes = read("server/routes.ts");
 const marketplace = read("server/routes/marketplace.routes.ts");
 const userTournaments = read("server/routes/userTournaments.routes.ts");
 const sidebar = read("client/src/components/app-sidebar.tsx");
@@ -27,10 +28,18 @@ check(app.includes("SITE_AUDIT_PENDING_INVITE_V1"), "Private tournament PIN must
 check(quickDock.includes('<Link href="/live-lineup">'), "Edit Lineup quick action must open the actual lineup editor");
 check(!quickDock.includes('/collection?editLineup=1'), "Unused collection editLineup shortcut must stay removed");
 
-check(prizeVault.includes("and c.created_by_user_id is null"), "Prize Vault must exclude user-created tournaments");
-check(prizeVault.includes("lower(coalesce(c.prize_key, '')) = 'ladder'"), "Prize Vault must require the official ladder prize key");
-check(prizeVault.includes("lower(coalesce(c.prize_type, 'goods')) = 'goods'"), "Prize Vault must require official goods prizes");
-check(prizeVault.includes("coalesce(lower(c.visibility), 'public') = 'public'"), "Prize Vault must require public official tournaments");
+check(prizeVault.includes("lower(coalesce(c.prize_key, 'ladder')) = 'ladder'"), "Prize Vault must accept historical blank ladder keys while excluding explicit non-ladder products");
+check(prizeVault.includes("lower(coalesce(c.prize_type, 'goods')) = 'goods'"), "Prize Vault must require goods prizes");
+check(prizeVault.includes("coalesce(lower(c.visibility), 'public') = 'public'"), "Prize Vault must require public tournaments");
+check(!prizeVault.includes("and c.created_by_user_id is null\n          and lower(coalesce(c.prize_key, '')) = 'ladder'"), "Prize Vault must not reject legitimate admin-created or legacy official ladders solely by creator id");
+
+check(routes.includes("SITE_AUDIT_LIVE_HUB_V1"), "Server must expose the live hub summary used by LivePulseDock");
+check(routes.includes('app.get("/api/live/hub"'), "Live hub endpoint is missing");
+check(routes.includes("liveCompetitions"), "Live hub must return competition count");
+check(routes.includes("updatedAt: new Date().toISOString()"), "Live hub must return a freshness timestamp");
+check(routes.includes("SITE_AUDIT_SETTLEMENT_CLOCK_V1"), "Server must calculate the Tuesday CAT settlement clock");
+check(routes.includes("const settlementAt = catTuesdaySettlementAfterKickoff(new Date(submissionClosesAt));"), "Competition API must expose calculated settlementAt");
+check(routes.includes("submissionClosesAt, settlementAt, entryOpen"), "Competition response must return entry lock and settlement together");
 
 check(!marketplace.includes('registerTournamentCreatorRoutes(app, { requireAuth })'), "Marketplace must not register tournament creator routes a second time");
 check(!marketplace.includes('app.post("/api/user-tournaments/create"'), "Marketplace must not shadow the canonical tournament creation endpoint");
@@ -54,4 +63,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Site integrity audit verified: total tournament counts, official Prize Vault isolation, invite routing, lineup shortcut, canonical tournament creation, and primary navigation links.");
+console.log("Site integrity audit verified: total tournament counts, Prize Vault compatibility, invite routing, live hub, Tuesday settlement clock, lineup shortcut, canonical tournament creation, and primary navigation links.");

@@ -73,12 +73,40 @@ patchFile("client/src/App.tsx", (original) => {
   return source;
 });
 
-// Only official Fantasy Arena prize-ladder tournaments may advance the shared
-// Prize Vault. User-created cash tournaments are a separate economy.
-patchFile("server/routes/prizeVault.routes.ts", (source) => {
-  const filterAnchor = `          and c.name not like '[TEST]%'`;
-  const officialFilters = `\n          and coalesce(lower(c.visibility), 'public') = 'public'\n          and c.created_by_user_id is null\n          and lower(coalesce(c.prize_key, '')) = 'ladder'\n          and lower(coalesce(c.prize_type, 'goods')) = 'goods'`;
-  return insertAfter(source, filterAnchor, officialFilters, "and c.created_by_user_id is null", "official Prize Vault filters");
+// Only actual official Prize Ladder tournaments may advance the shared Prize
+// Vault. Older official rows can legitimately have a blank prize_key, so treat a
+// blank key as the historical ladder default while still excluding free-card and
+// creator cash tournaments by their explicit metadata.
+patchFile("server/routes/prizeVault.routes.ts", (original) => {
+  let source = original;
+  const strictFilters = `\n          and coalesce(lower(c.visibility), 'public') = 'public'\n          and c.created_by_user_id is null\n          and lower(coalesce(c.prize_key, '')) = 'ladder'\n          and lower(coalesce(c.prize_type, 'goods')) = 'goods'`;
+  const safeFilters = `\n          and coalesce(lower(c.visibility), 'public') = 'public'\n          and lower(coalesce(c.prize_type, 'goods')) = 'goods'\n          and lower(coalesce(c.prize_key, 'ladder')) = 'ladder'`;
+  if (source.includes(strictFilters)) source = source.replace(strictFilters, safeFilters);
+  if (!source.includes(safeFilters)) {
+    const filterAnchor = `          and c.name not like '[TEST]%'`;
+    source = insertAfter(source, filterAnchor, safeFilters, "lower(coalesce(c.prize_key, 'ladder')) = 'ladder'", "official Prize Vault filters");
+  }
+  return source;
+});
+
+// Restore the data contract used by LivePulseDock and expose one authoritative
+// settlement timestamp calculated from the same Premier League entry lock.
+patchFile("server/routes.ts", (original) => {
+  let source = original;
+
+  const fallbackAnchor = 'function fallbackGameweekKickoff(gameWeek: number) { const start = new Date("2026-08-14T19:00:00+02:00"); start.setDate(start.getDate() + (Math.max(1, Number(gameWeek) || 1) - 1) * 7); return start; }';
+  const settlementHelper = `\n// SITE_AUDIT_SETTLEMENT_CLOCK_V1\nfunction catTuesdaySettlementAfterKickoff(kickoff: Date) {\n  const CAT_OFFSET_MS = 2 * 60 * 60 * 1000;\n  const shifted = new Date(kickoff.getTime() + CAT_OFFSET_MS);\n  const day = shifted.getUTCDay();\n  let daysForward = (2 - day + 7) % 7;\n  if (daysForward === 0) daysForward = 7;\n  shifted.setUTCDate(shifted.getUTCDate() + daysForward);\n  shifted.setUTCHours(23, 59, 0, 0);\n  return new Date(shifted.getTime() - CAT_OFFSET_MS);\n}`;
+  source = insertAfter(source, fallbackAnchor, settlementHelper, "SITE_AUDIT_SETTLEMENT_CLOCK_V1", "Tuesday settlement helper");
+
+  const competitionReturnFrom = `        const submissionClosesAt = await getCompetitionSubmissionCloseAt(comp);\n        const normalized = normalizeCompetitionRow({ ...comp, entryCount: entries.length });\n        return { ...normalized, submissionClosesAt, entryOpen: comp.status === "open" && Date.now() < new Date(submissionClosesAt).getTime(), entries, entryCount: entries.length, winner: comp.status === "completed" && entries[0] ? { userId: entries[0].userId, userName: entries[0].userName, totalScore: Number(entries[0].totalScore || 0), prizeAmount: Number(entries[0].prizeAmount || 0), prizeCardId: entries[0].prizeCardId || null, tiebreak: entries[0].tiebreak || null } : null };`;
+  const competitionReturnTo = `        const submissionClosesAt = await getCompetitionSubmissionCloseAt(comp);\n        const settlementAt = catTuesdaySettlementAfterKickoff(new Date(submissionClosesAt));\n        const normalized = normalizeCompetitionRow({ ...comp, entryCount: entries.length });\n        return { ...normalized, submissionClosesAt, settlementAt, entryOpen: comp.status === "open" && Date.now() < new Date(submissionClosesAt).getTime(), entries, entryCount: entries.length, winner: comp.status === "completed" && entries[0] ? { userId: entries[0].userId, userName: entries[0].userName, totalScore: Number(entries[0].totalScore || 0), prizeAmount: Number(entries[0].prizeAmount || 0), prizeCardId: entries[0].prizeCardId || null, tiebreak: entries[0].tiebreak || null } : null };`;
+  source = replaceOnce(source, competitionReturnFrom, competitionReturnTo, "competition settlement timestamp");
+
+  const pointFeedAnchor = `  app.get("/api/live/point-feed", async (req, res) => {`;
+  const liveHubRoute = `  // SITE_AUDIT_LIVE_HUB_V1\n  app.get("/api/live/hub", async (_req, res) => {\n    try {\n      const [liveGames, listings, competitions, pointFeed] = await Promise.all([\n        fplApi.getLiveGames().catch(() => []),\n        storage.getMarketplaceListings().catch(() => []),\n        storage.getCompetitions().catch(() => []),\n        buildRealFplPointFeed(12).catch(() => []),\n      ]);\n      const liveCompetitions = (Array.isArray(competitions) ? competitions : []).filter((competition: any) =>\n        ["open", "active"].includes(String(competition?.status || "").toLowerCase()),\n      ).length;\n      res.setHeader("Cache-Control", "private, max-age=5, stale-while-revalidate=10");\n      return res.json({\n        updatedAt: new Date().toISOString(),\n        liveMatches: Array.isArray(liveGames) ? liveGames.length : 0,\n        activeListings: Array.isArray(listings) ? listings.length : 0,\n        liveCompetitions,\n        pointFeed: Array.isArray(pointFeed) ? pointFeed : [],\n        chatHighlights: [],\n        recentSales: [],\n      });\n    } catch (error) {\n      console.error("Live hub summary failed:", error);\n      return res.json({ updatedAt: new Date().toISOString(), liveMatches: 0, activeListings: 0, liveCompetitions: 0, pointFeed: [], chatHighlights: [], recentSales: [] });\n    }\n  });\n\n`;
+  source = insertBefore(source, pointFeedAnchor, liveHubRoute, "SITE_AUDIT_LIVE_HUB_V1", "live hub route");
+
+  return source;
 });
 
 // Marketplace must own marketplace routes only. It previously registered the
@@ -111,4 +139,4 @@ patchFile("scripts/verify-critical-flows.mjs", (source) => {
   return source;
 });
 
-console.log("Applied site integrity audit fixes: tournament totals, Prize Vault isolation, invite routes, lineup shortcut, canonical tournament creation, and aligned integrity guards.");
+console.log("Applied site integrity audit fixes: tournament totals, Prize Vault isolation, invite routes, live hub, Tuesday settlement clock, lineup shortcut, canonical tournament creation, and aligned integrity guards.");
