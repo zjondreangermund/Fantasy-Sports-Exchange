@@ -1,3 +1,4 @@
+import "./prepare-tournament-data-contract-v2.mjs";
 import "./apply-tournament-data-contract-v2.mjs";
 import "./verify-tournament-data-contract-v2.mjs";
 import fs from "node:fs";
