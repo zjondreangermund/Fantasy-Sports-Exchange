@@ -97,4 +97,18 @@ patchFile("server/routes/marketplace.routes.ts", (original) => {
   return source;
 });
 
-console.log("Applied site integrity audit fixes: tournament totals, Prize Vault isolation, invite routes, lineup shortcut, and canonical tournament creation.");
+// The legacy critical-flow check used to require Marketplace to register the
+// tournament creator immediately after cancellation routes. That is exactly the
+// duplicate route ownership removed above. Keep the cancellation guard, but make
+// the assertion compatible with the canonical single-owner architecture.
+patchFile("scripts/verify-critical-flows.mjs", (source) => {
+  const oldName = 'name: "cancellation routes are registered before legacy tournament handlers",';
+  const newName = 'name: "competition cancellation routes remain registered without marketplace tournament duplication",';
+  source = replaceOnce(source, oldName, newName, "critical flow cancellation guard name");
+  const oldPattern = '      "registerCompetitionCancellationRoutes(app, { requireAuth });\\n  registerTournamentCreatorRoutes(app, { requireAuth });",';
+  const newPattern = '      "registerCompetitionCancellationRoutes(app, { requireAuth });",';
+  source = replaceOnce(source, oldPattern, newPattern, "critical flow cancellation guard pattern");
+  return source;
+});
+
+console.log("Applied site integrity audit fixes: tournament totals, Prize Vault isolation, invite routes, lineup shortcut, canonical tournament creation, and aligned integrity guards.");
