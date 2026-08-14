@@ -137,7 +137,7 @@ patchFile("client/src/components/LivePulseDock.tsx", (original) => {
   source = replaceOnce(
     source,
     `          <Badge className={liveSummary.hasPositiveMomentum ? "bg-emerald-600" : "bg-zinc-600"}>\n            Momentum {liveSummary.hasPositiveMomentum ? "+" : ""}{liveSummary.momentum}\n          </Badge>`,
-    `          <Link href="/my-entries" title="Open my tournament scores and entries">\n            <Badge className={\`${liveSummary.hasPositiveMomentum ? "bg-emerald-600" : "bg-zinc-600"} cursor-pointer\`}>\n              Momentum {liveSummary.hasPositiveMomentum ? "+" : ""}{liveSummary.momentum}\n            </Badge>\n          </Link>`,
+    `          <Link href="/my-entries" title="Open my tournament scores and entries">\n            <Badge className={(liveSummary.hasPositiveMomentum ? "bg-emerald-600" : "bg-zinc-600") + " cursor-pointer"}>\n              Momentum {liveSummary.hasPositiveMomentum ? "+" : ""}{liveSummary.momentum}\n            </Badge>\n          </Link>`,
     "momentum metric link",
   );
   source = replaceOnce(
