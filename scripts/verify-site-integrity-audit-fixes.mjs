@@ -1,3 +1,6 @@
+import "./prepare-tournament-data-contract-v2.mjs";
+import "./apply-tournament-data-contract-v2.mjs";
+import "./verify-tournament-data-contract-v2.mjs";
 import fs from "node:fs";
 
 const read = (file) => fs.readFileSync(file, "utf8");
@@ -16,10 +19,10 @@ const failures = [];
 const check = (condition, message) => { if (!condition) failures.push(message); };
 const count = (source, text) => source.split(text).length - 1;
 
-check(competitions.includes("SITE_AUDIT_TOTAL_ENTRY_COUNT_V1"), "Tournament page must use the total-entry-count repair");
-check(competitions.includes("tournamentEntryCount(pinTournament)"), "Private tournament cards must show total server entryCount");
-check(competitions.includes("tournamentEntryCount(comp)"), "Official tournament cards must show total server entryCount");
-check(!competitions.includes("entryCounts.get(Number(comp.id))"), "Tournament display must not count only the current user's entries");
+check(competitions.includes("USER_SCOPED_TOURNAMENT_ENTRY_COUNTS_V2"), "Tournament page must keep current-user entry counts separate from public totals");
+check(competitions.includes('entryCount={entryCounts.get(Number(pinTournament.id)) || 0}'), "Private tournament card must use the current user's own entry count");
+check(competitions.includes('entryCount={entryCounts.get(Number(comp.id)) || 0}'), "Official tournament cards must use the current user's own entry count");
+check(!competitions.includes("entryCount={tournamentEntryCount(comp)}"), "Public totals must not populate the My entries field");
 check(competitions.includes("SITE_AUDIT_INVITE_AUTO_LOOKUP_V1"), "Private invite PIN must auto-resolve on the tournament page");
 check(competitions.includes("initialInvitePin"), "Tournament page must read the PIN from /join/:pin or ?pin=");
 
@@ -28,18 +31,20 @@ check(app.includes("SITE_AUDIT_PENDING_INVITE_V1"), "Private tournament PIN must
 check(quickDock.includes('<Link href="/live-lineup">'), "Edit Lineup quick action must open the actual lineup editor");
 check(!quickDock.includes('/collection?editLineup=1'), "Unused collection editLineup shortcut must stay removed");
 
-check(prizeVault.includes("lower(coalesce(c.prize_key, 'ladder')) = 'ladder'"), "Prize Vault must accept historical blank ladder keys while excluding explicit non-ladder products");
-check(prizeVault.includes("lower(coalesce(c.prize_type, 'goods')) = 'goods'"), "Prize Vault must require goods prizes");
-check(prizeVault.includes("coalesce(lower(c.visibility), 'public') = 'public'"), "Prize Vault must require public tournaments");
-check(!prizeVault.includes("and c.created_by_user_id is null\n          and lower(coalesce(c.prize_key, '')) = 'ladder'"), "Prize Vault must not reject legitimate admin-created or legacy official ladders solely by creator id");
+check(prizeVault.includes("coalesce(c.entry_fee, 0) > 0"), "Prize Vault must count paid entries only");
+check(prizeVault.includes("nullif(trim(c.prize_key), '')"), "Prize Vault must accept historical blank ladder keys");
+check(prizeVault.includes("nullif(trim(c.prize_type), '')"), "Prize Vault must normalize historical blank prize types");
+check(prizeVault.includes("<> 'cash_pool'"), "Prize Vault must exclude creator cash tournaments");
+check(!prizeVault.includes("and c.created_by_user_id is null\n          and lower(coalesce(c.prize_key, '')) = 'ladder'"), "Prize Vault must not reject legitimate admin-created official ladders solely by creator id");
 
-check(routes.includes("SITE_AUDIT_LIVE_HUB_V1"), "Server must expose the live hub summary used by LivePulseDock");
+check(routes.includes("TOURNAMENT_DATA_CONTRACT_LIVE_HUB_V2"), "Server must expose the database-backed live hub summary used by LivePulseDock");
 check(routes.includes('app.get("/api/live/hub"'), "Live hub endpoint is missing");
-check(routes.includes("liveCompetitions"), "Live hub must return competition count");
+check(routes.includes("select count(*)::int as count"), "Live hub must count current open/active tournaments directly from the database");
 check(routes.includes("updatedAt: new Date().toISOString()"), "Live hub must return a freshness timestamp");
 check(routes.includes("SITE_AUDIT_SETTLEMENT_CLOCK_V1"), "Server must calculate the Tuesday CAT settlement clock");
 check(routes.includes("const settlementAt = catTuesdaySettlementAfterKickoff(new Date(submissionClosesAt));"), "Competition API must expose calculated settlementAt");
 check(routes.includes("submissionClosesAt, settlementAt, entryOpen"), "Competition response must return entry lock and settlement together");
+check(routes.includes("USER_SCOPED_MY_ENTRIES_API_V2"), "My entries API must be private and user scoped");
 
 check(!marketplace.includes('registerTournamentCreatorRoutes(app, { requireAuth })'), "Marketplace must not register tournament creator routes a second time");
 check(!marketplace.includes('app.post("/api/user-tournaments/create"'), "Marketplace must not shadow the canonical tournament creation endpoint");
@@ -63,4 +68,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Site integrity audit verified: total tournament counts, Prize Vault compatibility, invite routing, live hub, Tuesday settlement clock, lineup shortcut, canonical tournament creation, and primary navigation links.");
+console.log("Site integrity audit verified: public totals stay separate from My entries, Prize Vault uses paid qualifying entries, live stats are linked and DB-backed, invites/settlement/navigation remain intact.");
