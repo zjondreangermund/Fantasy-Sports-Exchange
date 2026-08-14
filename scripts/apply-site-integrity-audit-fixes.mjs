@@ -24,21 +24,13 @@ function insertAfter(source, anchor, insertion, marker, label) {
   return source.replace(anchor, `${anchor}${insertion}`);
 }
 
-// The live /competitions route uses competitions-vault.tsx. Its displayed entrant
-// totals must come from /api/competitions (all tournament entries), never from the
-// current user's /my-entries payload.
+// The live /competitions route must keep two separate counters:
+// - comp.entryCount = public tournament-wide total from /api/competitions
+// - entryCounts = authenticated user's own entries from /api/competitions/my-entries
+// Do not replace the user-specific prop with the public total.
 patchFile("client/src/pages/competitions-vault.tsx", (original) => {
   let source = original;
   source = replaceOnce(source, 'import { useMemo, useState } from "react";', 'import { useEffect, useMemo, useState } from "react";', "competition useEffect import");
-
-  const helperAnchor = `const entryLineupCardIds = (entry: CompetitionEntry) => {\n  const raw = (entry as any).lineupCardIds ?? (entry as any).lineup_card_ids;\n  return Array.isArray(raw) ? raw.map(Number).filter((id) => Number.isInteger(id) && id > 0) : [];\n};`;
-  const helper = `\n// SITE_AUDIT_TOTAL_ENTRY_COUNT_V1\nconst tournamentEntryCount = (competition: Tournament | null | undefined) => Math.max(0, Number(competition?.entryCount ?? competition?.entry_count ?? 0) || 0);`;
-  source = insertAfter(source, helperAnchor, helper, "SITE_AUDIT_TOTAL_ENTRY_COUNT_V1", "tournament total entry helper");
-
-  const userCountBlock = `  const entryCounts = useMemo(() => {\n    const counts = new Map<number, number>();\n    for (const entry of entries) {\n      const competitionId = entryCompetitionId(entry);\n      counts.set(competitionId, (counts.get(competitionId) || 0) + 1);\n    }\n    return counts;\n  }, [entries]);\n`;
-  if (source.includes(userCountBlock)) source = source.replace(userCountBlock, "");
-  source = source.replaceAll('entryCount={entryCounts.get(Number(pinTournament.id)) || 0}', 'entryCount={tournamentEntryCount(pinTournament)}');
-  source = source.replaceAll('entryCount={entryCounts.get(Number(comp.id)) || 0}', 'entryCount={tournamentEntryCount(comp)}');
 
   const pinState = '  const [pin, setPin] = useState("");';
   const pinStateReplacement = `  const initialInvitePin = typeof window !== "undefined"\n    ? (window.location.pathname.match(/^\\/join\\/([A-Z0-9]+)/i)?.[1] || new URLSearchParams(window.location.search).get("pin") || "").toUpperCase()\n    : "";\n  const [pin, setPin] = useState(initialInvitePin);`;
@@ -73,18 +65,20 @@ patchFile("client/src/App.tsx", (original) => {
   return source;
 });
 
-// Only actual official Prize Ladder tournaments may advance the shared Prize
-// Vault. Older official rows can legitimately have a blank prize_key, so treat a
-// blank key as the historical ladder default while still excluding free-card and
-// creator cash tournaments by their explicit metadata.
+// Prize Vault entry totals are paid official ladder entries only. Historical
+// official rows can have NULL/blank metadata, so blank values use historical
+// public/goods/ladder defaults. N$0 Free Cups and cash-pool creator tournaments
+// stay excluded.
 patchFile("server/routes/prizeVault.routes.ts", (original) => {
   let source = original;
   const strictFilters = `\n          and coalesce(lower(c.visibility), 'public') = 'public'\n          and c.created_by_user_id is null\n          and lower(coalesce(c.prize_key, '')) = 'ladder'\n          and lower(coalesce(c.prize_type, 'goods')) = 'goods'`;
-  const safeFilters = `\n          and coalesce(lower(c.visibility), 'public') = 'public'\n          and lower(coalesce(c.prize_type, 'goods')) = 'goods'\n          and lower(coalesce(c.prize_key, 'ladder')) = 'ladder'`;
+  const previousFilters = `\n          and coalesce(lower(c.visibility), 'public') = 'public'\n          and lower(coalesce(c.prize_type, 'goods')) = 'goods'\n          and lower(coalesce(c.prize_key, 'ladder')) = 'ladder'`;
+  const safeFilters = `\n          and coalesce(lower(nullif(trim(c.visibility), '')), 'public') = 'public'\n          and coalesce(c.entry_fee, 0) > 0\n          and lower(coalesce(nullif(trim(c.prize_type), ''), 'goods')) <> 'cash_pool'\n          and lower(coalesce(nullif(trim(c.prize_key), ''), 'ladder')) = 'ladder'`;
   if (source.includes(strictFilters)) source = source.replace(strictFilters, safeFilters);
+  if (source.includes(previousFilters)) source = source.replace(previousFilters, safeFilters);
   if (!source.includes(safeFilters)) {
     const filterAnchor = `          and c.name not like '[TEST]%'`;
-    source = insertAfter(source, filterAnchor, safeFilters, "lower(coalesce(c.prize_key, 'ladder')) = 'ladder'", "official Prize Vault filters");
+    source = insertAfter(source, filterAnchor, safeFilters, "nullif(trim(c.prize_key), '')", "official Prize Vault filters");
   }
   return source;
 });
@@ -103,8 +97,8 @@ patchFile("server/routes.ts", (original) => {
   source = replaceOnce(source, competitionReturnFrom, competitionReturnTo, "competition settlement timestamp");
 
   const pointFeedAnchor = `  app.get("/api/live/point-feed", async (req, res) => {`;
-  const liveHubRoute = `  // SITE_AUDIT_LIVE_HUB_V1\n  app.get("/api/live/hub", async (_req, res) => {\n    try {\n      const [liveGames, listings, competitions, pointFeed] = await Promise.all([\n        fplApi.getLiveGames().catch(() => []),\n        storage.getMarketplaceListings().catch(() => []),\n        storage.getCompetitions().catch(() => []),\n        buildRealFplPointFeed(12).catch(() => []),\n      ]);\n      const liveCompetitions = (Array.isArray(competitions) ? competitions : []).filter((competition: any) =>\n        ["open", "active"].includes(String(competition?.status || "").toLowerCase()),\n      ).length;\n      res.setHeader("Cache-Control", "private, max-age=5, stale-while-revalidate=10");\n      return res.json({\n        updatedAt: new Date().toISOString(),\n        liveMatches: Array.isArray(liveGames) ? liveGames.length : 0,\n        activeListings: Array.isArray(listings) ? listings.length : 0,\n        liveCompetitions,\n        pointFeed: Array.isArray(pointFeed) ? pointFeed : [],\n        chatHighlights: [],\n        recentSales: [],\n      });\n    } catch (error) {\n      console.error("Live hub summary failed:", error);\n      return res.json({ updatedAt: new Date().toISOString(), liveMatches: 0, activeListings: 0, liveCompetitions: 0, pointFeed: [], chatHighlights: [], recentSales: [] });\n    }\n  });\n\n`;
-  source = insertBefore(source, pointFeedAnchor, liveHubRoute, "SITE_AUDIT_LIVE_HUB_V1", "live hub route");
+  const liveHubRoute = `  // TOURNAMENT_DATA_CONTRACT_LIVE_HUB_V2\n  app.get("/api/live/hub", async (_req, res) => {\n    try {\n      const { db } = await import("./db.js");\n      const [liveGames, listings, competitionCountResult, pointFeed] = await Promise.all([\n        fplApi.getLiveGames().catch(() => []),\n        storage.getMarketplaceListings().catch(() => []),\n        db.execute(sql\`\n          select count(*)::int as count\n          from app.competitions c\n          where lower(c.status::text) in ('open', 'active')\n            and c.name not like '[TEST]%'\n            and coalesce(lower(nullif(trim(c.visibility), '')), 'public') <> 'private'\n        \`).catch(() => null),\n        buildRealFplPointFeed(12).catch(() => []),\n      ]);\n      const competitionRows = rowsOf(competitionCountResult);\n      const liveCompetitions = Math.max(0, Number(competitionRows[0]?.count || 0));\n      res.setHeader("Cache-Control", "private, max-age=5, stale-while-revalidate=10");\n      return res.json({\n        updatedAt: new Date().toISOString(),\n        liveMatches: Array.isArray(liveGames) ? liveGames.length : 0,\n        activeListings: Array.isArray(listings) ? listings.length : 0,\n        liveCompetitions,\n        pointFeed: Array.isArray(pointFeed) ? pointFeed : [],\n        chatHighlights: [],\n        recentSales: [],\n      });\n    } catch (error) {\n      console.error("Live hub summary failed:", error);\n      return res.json({ updatedAt: new Date().toISOString(), liveMatches: 0, activeListings: 0, liveCompetitions: 0, pointFeed: [], chatHighlights: [], recentSales: [] });\n    }\n  });\n\n`;
+  source = insertBefore(source, pointFeedAnchor, liveHubRoute, "TOURNAMENT_DATA_CONTRACT_LIVE_HUB_V2", "live hub route");
 
   return source;
 });
@@ -139,4 +133,4 @@ patchFile("scripts/verify-critical-flows.mjs", (source) => {
   return source;
 });
 
-console.log("Applied site integrity audit fixes: tournament totals, Prize Vault isolation, invite routes, live hub, Tuesday settlement clock, lineup shortcut, canonical tournament creation, and aligned integrity guards.");
+console.log("Applied site integrity audit fixes: separate public/user tournament counts, Prize Vault isolation, invite routes, DB-backed live hub, Tuesday settlement clock, lineup shortcut, canonical tournament creation, and aligned integrity guards.");
