@@ -13,13 +13,14 @@ function requireSignedIn(req: any, res: any, next: any) {
 }
 
 export function registerDailyLoginRewardRoutes(app: Express) {
+  // Keep the existing API path for backwards compatibility; the reward cadence is weekly.
   app.get("/api/rewards/daily-login", requireSignedIn, async (req: any, res) => {
     try {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       return res.json(await getDailyLoginRewardStatus(String(req.authUserId)));
     } catch (error: any) {
-      console.error("Daily login reward status failed:", error);
-      return res.status(500).json({ message: error?.message || "Daily reward status is unavailable" });
+      console.error("Weekly common reward status failed:", error);
+      return res.status(500).json({ message: error?.message || "Weekly reward status is unavailable" });
     }
   });
 
@@ -28,8 +29,8 @@ export function registerDailyLoginRewardRoutes(app: Express) {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       return res.json(await claimDailyLoginReward(String(req.authUserId)));
     } catch (error: any) {
-      console.error("Daily login reward claim failed:", error);
-      return res.status(500).json({ message: error?.message || "Daily reward could not be collected" });
+      console.error("Weekly common reward claim failed:", error);
+      return res.status(500).json({ message: error?.message || "Weekly reward could not be collected" });
     }
   });
 }
