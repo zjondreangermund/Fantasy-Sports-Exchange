@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 
 export const DAILY_LOGIN_COMMON_CARD_CAP = 20;
+export const WEEKLY_COMMON_REWARD_INTERVAL_DAYS = 7;
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : Array.isArray(result) ? result : [];
@@ -31,33 +32,47 @@ export async function ensureDailyLoginRewardSchema(): Promise<void> {
   await schemaReady;
 }
 
-async function nextEligibleAt(executor: any): Promise<string> {
+async function weeklyEligibility(executor: any, userId: string) {
   const row = rowsOf(await executor.execute(sql`
-    SELECT ((date_trunc('day', now() AT TIME ZONE 'Africa/Windhoek') + interval '1 day') AT TIME ZONE 'Africa/Windhoek') AS "nextEligibleAt"
-  `))[0];
-  return row?.nextEligibleAt ? new Date(row.nextEligibleAt).toISOString() : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-}
-
-async function signupEligibility(executor: any, userId: string) {
-  const row = rowsOf(await executor.execute(sql`
-    SELECT
-      to_char(s."signupLocal"::date, 'YYYY-MM-DD') AS "signupDay",
-      to_char((s."signupLocal"::date + 1), 'YYYY-MM-DD') AS "eligibleFrom",
-      ((now() AT TIME ZONE 'Africa/Windhoek')::date > s."signupLocal"::date) AS "eligibleForDailyReward",
-      ((((s."signupLocal"::date + 1)::timestamp) AT TIME ZONE 'Africa/Windhoek')) AS "eligibleAt"
-    FROM (
-      SELECT ((u.created_at AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'Africa/Windhoek') AS "signupLocal"
+    WITH account AS (
+      SELECT ((u.created_at AT TIME ZONE current_setting('TIMEZONE')) AT TIME ZONE 'Africa/Windhoek')::date AS signup_day
       FROM app.users u
       WHERE u.id = ${userId}
       LIMIT 1
-    ) s
+    ), latest_reward AS (
+      SELECT max(dlr.reward_day)::date AS last_reward_day
+      FROM app.daily_login_rewards dlr
+      WHERE dlr.user_id = ${userId}
+    ), schedule AS (
+      SELECT
+        account.signup_day,
+        latest_reward.last_reward_day,
+        GREATEST(
+          account.signup_day + 1,
+          COALESCE(latest_reward.last_reward_day + ${WEEKLY_COMMON_REWARD_INTERVAL_DAYS}, account.signup_day + 1)
+        )::date AS next_eligible_day
+      FROM account
+      CROSS JOIN latest_reward
+    )
+    SELECT
+      to_char(signup_day, 'YYYY-MM-DD') AS "signupDay",
+      to_char(signup_day + 1, 'YYYY-MM-DD') AS "firstEligibleFrom",
+      to_char(next_eligible_day, 'YYYY-MM-DD') AS "eligibleFrom",
+      to_char(last_reward_day, 'YYYY-MM-DD') AS "lastRewardDay",
+      ((now() AT TIME ZONE 'Africa/Windhoek')::date >= next_eligible_day) AS "eligibleForWeeklyReward",
+      (last_reward_day IS NOT NULL AND (now() AT TIME ZONE 'Africa/Windhoek')::date < next_eligible_day) AS "claimedThisWeek",
+      (((next_eligible_day::timestamp) AT TIME ZONE 'Africa/Windhoek')) AS "eligibleAt"
+    FROM schedule
   `))[0];
 
-  if (!row) throw new Error("User account was not found for daily reward eligibility");
+  if (!row) throw new Error("User account was not found for weekly reward eligibility");
   return {
     signupDay: String(row.signupDay || ""),
+    firstEligibleFrom: String(row.firstEligibleFrom || ""),
     eligibleFrom: String(row.eligibleFrom || ""),
-    eligibleForDailyReward: Boolean(row.eligibleForDailyReward),
+    lastRewardDay: row.lastRewardDay ? String(row.lastRewardDay) : null,
+    eligibleForWeeklyReward: Boolean(row.eligibleForWeeklyReward),
+    claimedThisWeek: Boolean(row.claimedThisWeek),
     eligibleAt: row.eligibleAt ? new Date(row.eligibleAt).toISOString() : null,
   };
 }
@@ -125,37 +140,35 @@ export async function getDailyLoginRewardStatus(userId: string) {
       SELECT
         (SELECT count(*)::int FROM app.player_cards pc WHERE pc.owner_id = ${userId} AND pc.rarity::text = 'common') AS "commonCount",
         (SELECT count(*)::int FROM app.daily_login_rewards dlr WHERE dlr.user_id = ${userId}) AS "rewardCount",
-        EXISTS (
-          SELECT 1 FROM app.daily_login_rewards dlr
-          WHERE dlr.user_id = ${userId}
-            AND dlr.reward_day = (now() AT TIME ZONE 'Africa/Windhoek')::date
-        ) AS "claimedToday",
         to_char((now() AT TIME ZONE 'Africa/Windhoek')::date, 'YYYY-MM-DD') AS "rewardDay"
     `).then((result) => rowsOf(result)[0] || {}),
-    signupEligibility(db, userId),
+    weeklyEligibility(db, userId),
   ]);
 
   const commonCount = Number(row.commonCount || 0);
-  const claimedToday = Boolean(row.claimedToday);
   const capReached = commonCount >= DAILY_LOGIN_COMMON_CARD_CAP;
+  const rewardDay = String(row.rewardDay || "");
+  const claimedToday = Boolean(eligibility.lastRewardDay && eligibility.lastRewardDay === rewardDay);
+  const canClaim = eligibility.eligibleForWeeklyReward && !capReached;
   return {
     cap: DAILY_LOGIN_COMMON_CARD_CAP,
+    cadenceDays: WEEKLY_COMMON_REWARD_INTERVAL_DAYS,
     commonCount,
     rewardCount: Number(row.rewardCount || 0),
     remaining: Math.max(0, DAILY_LOGIN_COMMON_CARD_CAP - commonCount),
     claimedToday,
-    canClaim: eligibility.eligibleForDailyReward && !claimedToday && !capReached,
+    claimedThisWeek: eligibility.claimedThisWeek,
+    canClaim,
     capReached,
-    rewardDay: String(row.rewardDay || ""),
+    rewardDay,
     signupDay: eligibility.signupDay,
+    firstEligibleFrom: eligibility.firstEligibleFrom,
     eligibleFrom: eligibility.eligibleFrom,
-    eligibleForDailyReward: eligibility.eligibleForDailyReward,
-    nextEligibleAt: claimedToday
-      ? await nextEligibleAt(db)
-      : !eligibility.eligibleForDailyReward
-        ? eligibility.eligibleAt
-        : null,
-    card: claimedToday ? await loadRewardCard(db, userId, String(row.rewardDay || "")) : null,
+    eligibleForWeeklyReward: eligibility.eligibleForWeeklyReward,
+    eligibleForDailyReward: eligibility.eligibleForWeeklyReward,
+    lastRewardDay: eligibility.lastRewardDay,
+    nextEligibleAt: capReached || canClaim ? null : eligibility.eligibleAt,
+    card: eligibility.lastRewardDay ? await loadRewardCard(db, userId, eligibility.lastRewardDay) : null,
   };
 }
 
@@ -163,7 +176,7 @@ export async function claimDailyLoginReward(userId: string) {
   await ensureDailyLoginRewardSchema();
 
   return await db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`daily-login:${userId}`}))`);
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`weekly-common:${userId}`}))`);
 
     const dayRow = rowsOf(await tx.execute(sql`
       SELECT to_char((now() AT TIME ZONE 'Africa/Windhoek')::date, 'YYYY-MM-DD') AS "rewardDay"
@@ -183,43 +196,53 @@ export async function claimDailyLoginReward(userId: string) {
       WHERE owner_id = ${userId} AND rarity::text = 'common'
     `))[0] || {};
     const commonCount = Number(commonRow.count || 0);
-    const eligibility = await signupEligibility(tx, userId);
+    const eligibility = await weeklyEligibility(tx, userId);
 
     if (existing) {
       return {
         claimed: false,
         alreadyClaimed: true,
         cap: DAILY_LOGIN_COMMON_CARD_CAP,
+        cadenceDays: WEEKLY_COMMON_REWARD_INTERVAL_DAYS,
         commonCount,
         remaining: Math.max(0, DAILY_LOGIN_COMMON_CARD_CAP - commonCount),
         claimedToday: true,
+        claimedThisWeek: true,
         canClaim: false,
         capReached: commonCount >= DAILY_LOGIN_COMMON_CARD_CAP,
         rewardDay,
         signupDay: eligibility.signupDay,
+        firstEligibleFrom: eligibility.firstEligibleFrom,
         eligibleFrom: eligibility.eligibleFrom,
-        eligibleForDailyReward: eligibility.eligibleForDailyReward,
-        nextEligibleAt: await nextEligibleAt(tx),
+        eligibleForWeeklyReward: false,
+        eligibleForDailyReward: false,
+        lastRewardDay: rewardDay,
+        nextEligibleAt: eligibility.eligibleAt,
         card: await loadRewardCard(tx, userId, rewardDay),
       };
     }
 
-    if (!eligibility.eligibleForDailyReward) {
+    if (!eligibility.eligibleForWeeklyReward) {
       return {
         claimed: false,
-        alreadyClaimed: false,
+        alreadyClaimed: eligibility.claimedThisWeek,
         cap: DAILY_LOGIN_COMMON_CARD_CAP,
+        cadenceDays: WEEKLY_COMMON_REWARD_INTERVAL_DAYS,
         commonCount,
         remaining: Math.max(0, DAILY_LOGIN_COMMON_CARD_CAP - commonCount),
         claimedToday: false,
+        claimedThisWeek: eligibility.claimedThisWeek,
         canClaim: false,
         capReached: commonCount >= DAILY_LOGIN_COMMON_CARD_CAP,
         rewardDay,
         signupDay: eligibility.signupDay,
+        firstEligibleFrom: eligibility.firstEligibleFrom,
         eligibleFrom: eligibility.eligibleFrom,
+        eligibleForWeeklyReward: false,
         eligibleForDailyReward: false,
+        lastRewardDay: eligibility.lastRewardDay,
         nextEligibleAt: eligibility.eligibleAt,
-        card: null,
+        card: eligibility.lastRewardDay ? await loadRewardCard(tx, userId, eligibility.lastRewardDay) : null,
       };
     }
 
@@ -228,15 +251,20 @@ export async function claimDailyLoginReward(userId: string) {
         claimed: false,
         alreadyClaimed: false,
         cap: DAILY_LOGIN_COMMON_CARD_CAP,
+        cadenceDays: WEEKLY_COMMON_REWARD_INTERVAL_DAYS,
         commonCount,
         remaining: 0,
         claimedToday: false,
+        claimedThisWeek: false,
         canClaim: false,
         capReached: true,
         rewardDay,
         signupDay: eligibility.signupDay,
+        firstEligibleFrom: eligibility.firstEligibleFrom,
         eligibleFrom: eligibility.eligibleFrom,
+        eligibleForWeeklyReward: true,
         eligibleForDailyReward: true,
+        lastRewardDay: eligibility.lastRewardDay,
         nextEligibleAt: null,
         card: null,
       };
@@ -274,14 +302,14 @@ export async function claimDailyLoginReward(userId: string) {
       `))[0];
     }
 
-    if (!player) throw new Error("No eligible Premier League player is available for the daily reward");
+    if (!player) throw new Error("No eligible Premier League player is available for the weekly reward");
 
     const card = rowsOf(await tx.execute(sql`
       INSERT INTO app.player_cards (player_id, owner_id, rarity, level, xp, decisive_score, for_sale, price)
       VALUES (${Number(player.id)}, ${userId}, 'common', 1, 0, 35, false, 0)
       RETURNING id
     `))[0];
-    if (!card?.id) throw new Error("Daily reward card could not be created");
+    if (!card?.id) throw new Error("Weekly reward card could not be created");
 
     await tx.execute(sql`
       INSERT INTO app.daily_login_rewards (user_id, reward_day, card_id)
@@ -293,8 +321,8 @@ export async function claimDailyLoginReward(userId: string) {
       VALUES (
         ${userId},
         'system',
-        'Daily common card collected',
-        ${`You received ${String(player.name || "a Premier League player")} as today’s common-card reward.`}
+        'Weekly common card collected',
+        ${`You received ${String(player.name || "a Premier League player")} as this week's free common-card reward.`}
       )
     `);
 
@@ -302,26 +330,32 @@ export async function claimDailyLoginReward(userId: string) {
       INSERT INTO app.audit_logs (user_id, action, meta)
       VALUES (
         ${userId},
-        'reward.daily_login.claimed',
-        ${JSON.stringify({ rewardDay, cardId: Number(card.id), playerId: Number(player.id), commonCountAfter: commonCount + 1, cap: DAILY_LOGIN_COMMON_CARD_CAP })}::jsonb
+        'reward.weekly_common.claimed',
+        ${JSON.stringify({ rewardDay, cardId: Number(card.id), playerId: Number(player.id), commonCountAfter: commonCount + 1, cap: DAILY_LOGIN_COMMON_CARD_CAP, cadenceDays: WEEKLY_COMMON_REWARD_INTERVAL_DAYS })}::jsonb
       )
     `);
 
     const commonCountAfter = commonCount + 1;
+    const nextEligibility = await weeklyEligibility(tx, userId);
     return {
       claimed: true,
       alreadyClaimed: false,
       cap: DAILY_LOGIN_COMMON_CARD_CAP,
+      cadenceDays: WEEKLY_COMMON_REWARD_INTERVAL_DAYS,
       commonCount: commonCountAfter,
       remaining: Math.max(0, DAILY_LOGIN_COMMON_CARD_CAP - commonCountAfter),
       claimedToday: true,
+      claimedThisWeek: true,
       canClaim: false,
       capReached: commonCountAfter >= DAILY_LOGIN_COMMON_CARD_CAP,
       rewardDay,
-      signupDay: eligibility.signupDay,
-      eligibleFrom: eligibility.eligibleFrom,
-      eligibleForDailyReward: true,
-      nextEligibleAt: commonCountAfter >= DAILY_LOGIN_COMMON_CARD_CAP ? null : await nextEligibleAt(tx),
+      signupDay: nextEligibility.signupDay,
+      firstEligibleFrom: nextEligibility.firstEligibleFrom,
+      eligibleFrom: nextEligibility.eligibleFrom,
+      eligibleForWeeklyReward: false,
+      eligibleForDailyReward: false,
+      lastRewardDay: rewardDay,
+      nextEligibleAt: commonCountAfter >= DAILY_LOGIN_COMMON_CARD_CAP ? null : nextEligibility.eligibleAt,
       card: await loadRewardCard(tx, userId, rewardDay),
     };
   });

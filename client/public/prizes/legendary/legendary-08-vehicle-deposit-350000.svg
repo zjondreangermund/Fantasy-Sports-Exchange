@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">N$350,000 Vehicle Deposit or Equivalent Value</title>
+  <desc id="desc">Premium gold Fantasy Arena Legendary Prize Vault artwork featuring a generic luxury four-by-four vehicle.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07101f"/>
+      <stop offset="0.55" stop-color="#11172d"/>
+      <stop offset="1" stop-color="#080b16"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="47%" r="55%">
+      <stop offset="0" stop-color="#d9ad45" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#d9ad45" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" x2="1">
+      <stop offset="0" stop-color="#b77a24"/>
+      <stop offset="0.45" stop-color="#ffe182"/>
+      <stop offset="1" stop-color="#c89032"/>
+    </linearGradient>
+    <linearGradient id="car" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#344054"/>
+      <stop offset="1" stop-color="#131a28"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="48" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="48" fill="url(#glow)"/>
+  <rect x="24" y="24" width="976" height="976" rx="42" fill="none" stroke="url(#gold)" stroke-width="6"/>
+  <rect x="38" y="38" width="948" height="948" rx="34" fill="none" stroke="#71511f" stroke-width="2" opacity="0.9"/>
+
+  <rect x="88" y="84" width="340" height="58" rx="29" fill="#111b31" stroke="#8c682c" stroke-width="2"/>
+  <text x="118" y="122" fill="#ffe09a" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" letter-spacing="4">LEGENDARY PRIZE</text>
+
+  <text x="88" y="252" fill="#f9fbff" font-family="Arial, Helvetica, sans-serif" font-size="94" font-weight="900">N$350,000</text>
+  <text x="92" y="324" fill="#f4c85e" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="900" letter-spacing="1">VEHICLE DEPOSIT</text>
+  <text x="94" y="370" fill="#aeb8cc" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="700" letter-spacing="2">OR EQUIVALENT VALUE</text>
+
+  <ellipse cx="518" cy="794" rx="360" ry="78" fill="#d7a83c" opacity="0.14" filter="url(#shadow)"/>
+
+  <!-- Generic premium 4x4; no manufacturer branding -->
+  <path d="M194 608 Q201 562 249 548 L327 532 410 448 Q430 426 468 426 H650 Q686 426 711 451 L784 529 840 547 Q874 560 884 595 L894 692 Q898 736 854 750 L781 772 H251 L174 744 Q143 731 148 694 Z" fill="url(#car)" stroke="url(#gold)" stroke-width="6"/>
+  <path d="M421 461 H501 V527 H355 Z" fill="#244352" stroke="#61a8b3" stroke-width="3"/>
+  <path d="M527 461 H641 Q659 461 674 477 L718 527 H527 Z" fill="#244352" stroke="#61a8b3" stroke-width="3"/>
+  <path d="M250 560 H787" stroke="#66748c" stroke-width="5" opacity="0.55"/>
+  <rect x="794" y="604" width="85" height="48" rx="18" fill="#fff0ad"/>
+  <rect x="151" y="610" width="48" height="48" rx="16" fill="#ad453e"/>
+  <path d="M197 693 H870" stroke="#9b7430" stroke-width="4" opacity="0.8"/>
+
+  <g>
+    <circle cx="306" cy="758" r="82" fill="#070a10" stroke="#7c8495" stroke-width="5"/>
+    <circle cx="306" cy="758" r="46" fill="#31394a" stroke="url(#gold)" stroke-width="5"/>
+    <circle cx="306" cy="758" r="14" fill="#0e131e"/>
+  </g>
+  <g>
+    <circle cx="746" cy="758" r="82" fill="#070a10" stroke="#7c8495" stroke-width="5"/>
+    <circle cx="746" cy="758" r="46" fill="#31394a" stroke="url(#gold)" stroke-width="5"/>
+    <circle cx="746" cy="758" r="14" fill="#0e131e"/>
+  </g>
+
+  <rect x="88" y="904" width="848" height="62" rx="28" fill="#0f1728" stroke="#705322" stroke-width="2"/>
+  <text x="512" y="944" text-anchor="middle" fill="#f6d47b" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="800" letter-spacing="5">FANTASY ARENA • PRIZE VAULT</text>
+</svg>

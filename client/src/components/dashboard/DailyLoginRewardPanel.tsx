@@ -26,16 +26,20 @@ type DailyRewardStatus = {
   claimed?: boolean;
   alreadyClaimed?: boolean;
   cap: number;
+  cadenceDays?: number;
   commonCount: number;
   rewardCount: number;
   remaining: number;
   claimedToday: boolean;
+  claimedThisWeek?: boolean;
   canClaim: boolean;
   capReached: boolean;
   rewardDay: string;
   signupDay?: string | null;
+  firstEligibleFrom?: string | null;
   eligibleFrom?: string | null;
-  eligibleForDailyReward?: boolean;
+  eligibleForWeeklyReward?: boolean;
+  lastRewardDay?: string | null;
   nextEligibleAt?: string | null;
   card?: DailyRewardCard | null;
 };
@@ -43,12 +47,14 @@ type DailyRewardStatus = {
 const DAILY_REWARD_KEY = ["/api/rewards/daily-login"] as const;
 
 function nextRewardLabel(value?: string | null) {
-  if (!value) return "Tomorrow";
+  if (!value) return "Next week";
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "Tomorrow";
+  if (!Number.isFinite(date.getTime())) return "Next week";
   return date.toLocaleString("en-NA", {
     timeZone: "Africa/Windhoek",
     weekday: "short",
+    day: "numeric",
+    month: "short",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -79,14 +85,14 @@ export default function DailyLoginRewardPanel() {
       ]);
       if (result.claimed && result.card?.player) {
         toast({
-          title: "Daily common card collected",
+          title: "Weekly common card collected",
           description: `${result.card.player.name} has been added to your collection.`,
         });
       }
     },
     onError: (error: any) => {
       toast({
-        title: "Daily reward unavailable",
+        title: "Weekly reward unavailable",
         description: error?.message || "The reward could not be collected.",
         variant: "destructive",
       });
@@ -107,9 +113,11 @@ export default function DailyLoginRewardPanel() {
   const status = rewardQuery.data;
   const cap = Math.max(1, Number(status.cap || 20));
   const count = Math.max(0, Number(status.commonCount || 0));
+  const cadenceDays = Math.max(1, Number(status.cadenceDays || 7));
   const progress = Math.min(100, Math.round((count / cap) * 100));
   const player = status.card?.player;
-  const waitingForDayTwo = status.eligibleForDailyReward === false && !status.claimedToday;
+  const waitingForFirstWeekly = status.eligibleForWeeklyReward === false && !status.lastRewardDay;
+  const waitingForNextWeekly = Boolean(status.claimedThisWeek && status.lastRewardDay);
 
   return (
     <PremiumPanel>
@@ -120,27 +128,27 @@ export default function DailyLoginRewardPanel() {
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-xs font-black uppercase tracking-[.18em] text-sky-200/75">Daily login reward</p>
-              <Badge className="bg-sky-300/15 text-sky-100">{waitingForDayTwo ? "Starts Day 2" : "Common only"}</Badge>
+              <p className="text-xs font-black uppercase tracking-[.18em] text-sky-200/75">Weekly Common reward</p>
+              <Badge className="bg-sky-300/15 text-sky-100">{waitingForFirstWeekly ? "Starts Day 2" : `Every ${cadenceDays} days`}</Badge>
             </div>
             <h2 className="mt-1 text-xl font-black text-white">
               {status.capReached
                 ? "Your 20-card common collection is complete"
-                : waitingForDayTwo
-                  ? "Your first daily card unlocks tomorrow"
+                : waitingForFirstWeekly
+                  ? "Your first weekly card unlocks on Day 2"
                   : player
                     ? `${player.name} joined your club`
                     : claimMutation.isPending
-                      ? "Opening today’s common card…"
-                      : status.claimedToday
-                        ? "Today’s card has been collected"
-                        : "A common card is waiting"}
+                      ? "Opening this week’s common card…"
+                      : waitingForNextWeekly
+                        ? "This week’s card has been collected"
+                        : "A weekly common card is waiting"}
             </h2>
             <p className="mt-1 text-sm text-white/50">
               {player ? `${player.position} • ${player.team}. ` : ""}
-              {waitingForDayTwo
-                ? "Your Starter 5 covers signup day. Daily Common cards begin from your second day and continue within the existing Common-card limit."
-                : `Starter cards and daily rewards count toward a maximum of ${cap} common cards.`}
+              {waitingForFirstWeekly
+                ? `Your Starter 5 covers signup day. Your first free Common card unlocks on Day 2, then one card becomes available every ${cadenceDays} days.`
+                : `Starter cards and weekly rewards count toward a maximum of ${cap} common cards.`}
             </p>
           </div>
         </div>
@@ -158,11 +166,11 @@ export default function DailyLoginRewardPanel() {
             <span>
               {status.capReached
                 ? "Reward journey completed"
-                : waitingForDayTwo
-                  ? `First daily card: ${nextRewardLabel(status.nextEligibleAt)}`
-                  : status.claimedToday
-                    ? `Next card: ${nextRewardLabel(status.nextEligibleAt)}`
-                    : "Collecting today’s card"}
+                : waitingForFirstWeekly
+                  ? `First weekly card: ${nextRewardLabel(status.nextEligibleAt)}`
+                  : waitingForNextWeekly
+                    ? `Next weekly card: ${nextRewardLabel(status.nextEligibleAt)}`
+                    : "Collecting this week’s card"}
             </span>
           </div>
         </div>
