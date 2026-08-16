@@ -4,13 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const artworkDirectory = path.join(root, "client", "public", "prizes", "legendary");
-const catalogDirectory = path.join(
-  root,
-  "client",
-  "src",
-  "components",
-  "prize-vault",
-);
+const catalogDirectory = path.join(root, "client", "src", "components", "prize-vault");
 const catalogPath = path.join(catalogDirectory, "prizeArtworkCatalog.ts");
 const legacyCatalogPath = path.join(catalogDirectory, "prizeArtworkCatalogLegacy.ts");
 const artworkComponentPath = path.join(catalogDirectory, "PremiumPrizeArtwork.tsx");
@@ -23,7 +17,7 @@ const expectedFiles = [
   "legendary-05-cash-250000.png",
   "legendary-06-fishing-boat.png",
   "legendary-07-holiday.png",
-  "legendary-08-tiny-home.png",
+  "legendary-08-vehicle-deposit-350000.svg",
   "legendary-09-luxury-caravan.png",
   "legendary-10-house-deposit.png",
   "legendary-11-vw-amarok.png",
@@ -41,19 +35,25 @@ const expectedFiles = [
 const pngSignature = "89504e470d0a1a0a";
 for (const fileName of expectedFiles) {
   const filePath = path.join(artworkDirectory, fileName);
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Missing Legendary artwork file: ${fileName}`);
-  }
+  if (!fs.existsSync(filePath)) throw new Error(`Missing Legendary artwork file: ${fileName}`);
 
-  const image = fs.readFileSync(filePath);
-  if (image.length < 10_000 || image.subarray(0, 8).toString("hex") !== pngSignature) {
-    throw new Error(`Invalid Legendary PNG artwork: ${fileName}`);
+  if (fileName.endsWith(".png")) {
+    const image = fs.readFileSync(filePath);
+    if (image.length < 10_000 || image.subarray(0, 8).toString("hex") !== pngSignature) {
+      throw new Error(`Invalid Legendary PNG artwork: ${fileName}`);
+    }
+  } else if (fileName.endsWith(".svg")) {
+    const svg = fs.readFileSync(filePath, "utf8");
+    if (!svg.trim().startsWith("<svg") || !svg.includes("N$350,000") || !svg.includes("VEHICLE DEPOSIT")) {
+      throw new Error(`Invalid Legendary SVG artwork: ${fileName}`);
+    }
   }
 }
 
-if (!fs.existsSync(legacyCatalogPath)) {
-  throw new Error("Missing legacy Prize Vault artwork catalog");
+if (fs.existsSync(path.join(artworkDirectory, "legendary-08-tiny-home.png"))) {
+  throw new Error("Obsolete Tiny Home Legendary artwork must be removed");
 }
+if (!fs.existsSync(legacyCatalogPath)) throw new Error("Missing legacy Prize Vault artwork catalog");
 
 const catalog = fs.readFileSync(catalogPath, "utf8");
 const legacyCatalog = fs.readFileSync(legacyCatalogPath, "utf8");
@@ -67,13 +67,16 @@ for (const fileName of expectedFiles) {
 }
 
 const legendarySection = legacyCatalog.match(/legendary:\s*\[([\s\S]*?)\n\s*\],\n\};/i)?.[1] || "";
-const mappedPngs = [...legendarySection.matchAll(/src:\s*"\/prizes\/legendary\/([^"]+\.png)"/g)]
+const mappedArtwork = [...legendarySection.matchAll(/src:\s*"\/prizes\/legendary\/([^"]+\.(?:png|svg))"/g)]
   .map((match) => match[1]);
-if (mappedPngs.length !== 20 || new Set(mappedPngs).size !== 20) {
-  throw new Error(`Expected 20 unique Legendary PNG mappings, received ${mappedPngs.length}`);
+if (mappedArtwork.length !== 20 || new Set(mappedArtwork).size !== 20) {
+  throw new Error(`Expected 20 unique Legendary artwork mappings, received ${mappedArtwork.length}`);
 }
-if (/\.svg|LEGENDARY_SPRITE|spriteIndex/i.test(legendarySection)) {
-  throw new Error("Legendary catalog still contains obsolete SVG or sprite mappings");
+if (/LEGENDARY_SPRITE|spriteIndex/i.test(legendarySection)) {
+  throw new Error("Legendary catalog still contains obsolete sprite mappings");
+}
+if (/Tiny\\s\+Home|FIFA\\s\+World\\s\+Cup/i.test(legendarySection)) {
+  throw new Error("Legendary catalog still references removed Tiny Home or World Cup trip titles");
 }
 
 const artworkComponent = fs.readFileSync(artworkComponentPath, "utf8");
@@ -81,4 +84,4 @@ if (/LegendaryCrispPoster|rarity\s*===\s*["']legendary["']/i.test(artworkCompone
   throw new Error("Legendary artwork is still using a special renderer instead of the shared rarity image renderer");
 }
 
-console.log(`[prize-artwork] Verified ${expectedFiles.length} individual Legendary PNG files and direct catalog mappings`);
+console.log(`[prize-artwork] Verified ${expectedFiles.length} individual Legendary artwork files and direct catalog mappings`);
