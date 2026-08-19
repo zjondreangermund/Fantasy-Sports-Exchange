@@ -42,14 +42,20 @@ echo "Preparing runtime database compatibility..."
 node scripts/prepare-runtime-startup.mjs
 
 # Rebuild all 190 official 2026/27 Prize Ladder tournament slots from live FPL
-# fixtures (38 gameweeks × 5 rarities). Entries open before the first PL kickoff.
+# fixtures (38 gameweeks × 5 rarities). If the FPL endpoint is temporarily
+# unavailable, the sync now creates all 190 slots using a safe weekly fallback
+# and refreshes the dates from live fixtures on a later successful deployment.
 # The score/settlement cutoff is 23:59 CAT on the day after the last eligible PL
 # fixture. A postponed fixture played on/after the next GW starts is excluded.
 # Official/admin tournaments use a 0% platform fee; user-created cash tournaments
 # remain separate and keep their creator platform-fee rules.
-echo "Syncing official rarity tournaments..."
-node scripts/sync-official-tournaments.mjs || echo "Warning: official tournament sync failed; starting with existing tournaments."
+echo "Syncing and verifying all 38 official gameweeks..."
+if ! node scripts/sync-official-tournaments.mjs; then
+  echo "ERROR: official tournament sync did not produce complete 38-gameweek coverage."
+  echo "Refusing to start this deployment with a partial tournament calendar."
+  exit 1
+fi
 
-# Start the server
+# Start the server only after all 190 official GW/rarity slots are verified.
 echo "Starting server..."
 exec node dist/server/server/index.js
