@@ -311,6 +311,7 @@ async function main() {
     await client.query("COMMIT");
     console.log(`Official tournaments synced for ${SEASON}. Current GW: ${currentGw}. Created ${created}, updated ${updated}.`);
     console.log(`Verified ${coveragePairs}/190 official GW/rarity slots across all 38 gameweeks.`);
+    console.log("Created/updated 5 official Prize Ladder tournaments per gameweek (190 total season slots) with no admin platform fee.");
     console.log(`Preserved ${preservedEntries} existing official tournament entries; startup sync did not delete user teams.`);
     console.log(`Excluded ${excludedPostponed} postponed fixture assignment(s) that fall on or after the next gameweek starts.`);
     console.log(`${fallbackWindows} gameweek window(s) used fallback dates because live FPL fixture data was unavailable/incomplete; these refresh automatically on the next successful sync.`);
