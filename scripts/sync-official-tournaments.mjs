@@ -42,14 +42,15 @@ function catTuesdayBefore(date) {
   return new Date(shifted.getTime() - CAT_OFFSET_MS);
 }
 
-function catTuesdaySettlementAfter(firstKickoff) {
-  const shifted = new Date(firstKickoff.getTime() + CAT_OFFSET_MS);
-  const day = shifted.getUTCDay();
-  let daysForward = (2 - day + 7) % 7;
-  if (daysForward === 0) daysForward = 7;
-  shifted.setUTCDate(shifted.getUTCDate() + daysForward);
+function catEndOfFollowingDay(date) {
+  const shifted = new Date(date.getTime() + CAT_OFFSET_MS);
+  shifted.setUTCDate(shifted.getUTCDate() + 1);
   shifted.setUTCHours(23, 59, 0, 0);
   return new Date(shifted.getTime() - CAT_OFFSET_MS);
+}
+
+function fallbackFirstKickoff(gw) {
+  return new Date(Date.UTC(2026, 7, 21 + (Math.max(1, gw) - 1) * 7, 19, 0, 0));
 }
 
 async function fetchJson(url) {
@@ -107,6 +108,12 @@ async function main() {
       byGw.set(gw, row);
     }
 
+    const firstKickoffByGw = new Map();
+    for (let gw = 1; gw <= 38; gw += 1) {
+      const kickoffs = [...(byGw.get(gw) || [])].sort((a, b) => a.getTime() - b.getTime());
+      if (kickoffs[0]) firstKickoffByGw.set(gw, kickoffs[0]);
+    }
+
     const now = new Date();
     const currentEvent =
       events.find((event) => event.is_current) ||
@@ -117,11 +124,22 @@ async function main() {
 
     const windows = [];
     for (let gw = 1; gw <= 38; gw += 1) {
-      const kickoffs = [...(byGw.get(gw) || [])].sort((a, b) => a.getTime() - b.getTime());
-      const first = kickoffs[0] || new Date(Date.UTC(2026, 7, 21 + (gw - 1) * 7, 17, 0, 0));
+      const scheduledKickoffs = [...(byGw.get(gw) || [])].sort((a, b) => a.getTime() - b.getTime());
+      const nextFirst = firstKickoffByGw.get(gw + 1) || null;
+      const eligibleKickoffs = scheduledKickoffs.filter((kickoff) => !nextFirst || kickoff.getTime() < nextFirst.getTime());
+      const first = eligibleKickoffs[0] || scheduledKickoffs[0] || fallbackFirstKickoff(gw);
+      const last = eligibleKickoffs[eligibleKickoffs.length - 1] || first;
       const start = catTuesdayBefore(first);
-      const settlement = catTuesdaySettlementAfter(first);
-      windows.push({ gw, first, start, settlement });
+      const settlement = catEndOfFollowingDay(last);
+      windows.push({
+        gw,
+        first,
+        last,
+        start,
+        settlement,
+        nextFirst,
+        excludedPostponed: Math.max(0, scheduledKickoffs.length - eligibleKickoffs.length),
+      });
     }
 
     await client.query("BEGIN");
@@ -131,16 +149,25 @@ async function main() {
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS prize_key text`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS visibility text DEFAULT 'public'`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS max_entries integer`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS platform_fee_rate real DEFAULT 0.2`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS platform_fee_total real DEFAULT 0`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS season text`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS gameweek_label text`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS fixture_window_start timestamp`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS fixture_window_end timestamp`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS reschedule_alerts_enabled boolean DEFAULT true`);
 
     let created = 0;
     let updated = 0;
     let preservedEntries = 0;
+    let excludedPostponed = 0;
 
     for (const window of windows) {
       const status = plannedStatus({ ...window, now });
+      excludedPostponed += window.excludedPostponed;
       for (const rarity of RARITIES) {
         const name = `GW${window.gw} ${title(rarity.tier)} Prize Ladder`;
-        const scheduleNote = `${title(rarity.tier)} Prize Vault ladder. Entries lock at the first Premier League kickoff. Scores freeze at 23:59 CAT on the following Tuesday; FA Cup matches and Premier League fixtures played after that cutoff do not count.`;
+        const scheduleNote = `${title(rarity.tier)} Prize Vault ladder. Entries lock at the first Premier League kickoff. Scores freeze at 23:59 CAT on the day after the last eligible Premier League fixture in this gameweek. A postponed fixture moved to or beyond the start of the next gameweek is excluded. FA Cup matches do not count.`;
 
         const existing = await client.query(
           `select c.id, c.status::text as status,
@@ -149,6 +176,7 @@ async function main() {
            where c.created_by_user_id is null
              and c.game_week = $1
              and c.tier::text = $2
+             and (c.season = $4 or c.season is null)
              and (
                c.name = $3
                or c.name ~* ('^' || initcap($2) || ' Tournament - GW' || $1 || '$')
@@ -156,7 +184,7 @@ async function main() {
              )
            order by case when c.name = $3 then 0 else 1 end, c.id asc
            limit 1`,
-          [window.gw, rarity.tier, name],
+          [window.gw, rarity.tier, name, SEASON],
         );
 
         if (existing.rows.length) {
@@ -173,19 +201,55 @@ async function main() {
                  prize_card_rarity = $6,
                  visibility = 'public',
                  max_entries = 100000,
+                 platform_fee_rate = 0,
+                 platform_fee_total = 0,
                  prize_type = 'goods',
                  prize_description = $7,
-                 prize_key = 'ladder'
-             where id = $8`,
-            [name, rarity.fee, nextStatus, window.start, window.settlement, rarity.prizeCardRarity, scheduleNote, Number(row.id)],
+                 prize_key = 'ladder',
+                 season = $8,
+                 gameweek_label = $9,
+                 fixture_window_start = $10,
+                 fixture_window_end = $11,
+                 reschedule_alerts_enabled = true
+             where id = $12`,
+            [
+              name,
+              rarity.fee,
+              nextStatus,
+              window.start,
+              window.settlement,
+              rarity.prizeCardRarity,
+              scheduleNote,
+              SEASON,
+              `GW ${window.gw}`,
+              window.first,
+              window.last,
+              Number(row.id),
+            ],
           );
           updated += 1;
         } else {
           await client.query(
             `insert into app.competitions
-              (name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity, visibility, max_entries, prize_type, prize_description, prize_key)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,'public',100000,'goods',$9,'ladder')`,
-            [name, rarity.tier, rarity.fee, status, window.gw, window.start, window.settlement, rarity.prizeCardRarity, scheduleNote],
+              (name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity, visibility, max_entries,
+               platform_fee_rate, platform_fee_total, prize_type, prize_description, prize_key, season, gameweek_label,
+               fixture_window_start, fixture_window_end, reschedule_alerts_enabled)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,'public',100000,0,0,'goods',$9,'ladder',$10,$11,$12,$13,true)`,
+            [
+              name,
+              rarity.tier,
+              rarity.fee,
+              status,
+              window.gw,
+              window.start,
+              window.settlement,
+              rarity.prizeCardRarity,
+              scheduleNote,
+              SEASON,
+              `GW ${window.gw}`,
+              window.first,
+              window.last,
+            ],
           );
           created += 1;
         }
@@ -195,8 +259,9 @@ async function main() {
     await client.query("COMMIT");
     console.log(`Official tournaments synced for ${SEASON}. Current GW: ${currentGw}. Created ${created}, updated ${updated}.`);
     console.log(`Preserved ${preservedEntries} existing official tournament entries; startup sync did not delete user teams.`);
-    console.log("Admin-created tournaments were preserved and remain visible in Play.");
-    console.log("Official scores freeze at 23:59 CAT on the Tuesday after each gameweek begins. Cup matches and later fixtures are excluded.");
+    console.log(`Excluded ${excludedPostponed} postponed fixture assignment(s) that fall on or after the next gameweek starts.`);
+    console.log("Created/updated 5 official Prize Ladder tournaments per gameweek (190 total season slots) with no admin platform fee.");
+    console.log("Official scores freeze at 23:59 CAT on the day after the last eligible Premier League fixture; FA Cup and late postponed fixtures are excluded.");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;
