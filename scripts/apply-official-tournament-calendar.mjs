@@ -132,6 +132,19 @@ function patchTournamentCopy(input) {
 }
 
 if (patchFile("client/src/pages/competitions.tsx", patchTournamentCopy)) changedFiles += 1;
-if (patchFile("client/src/pages/competitions-vault.tsx", patchTournamentCopy)) changedFiles += 1;
+if (patchFile("client/src/pages/competitions-vault.tsx", (input) => {
+  let source = patchTournamentCopy(input);
+  source = replaceRequired(
+    source,
+    `  const gameweeks = useMemo(
+    () => [...new Set<number>(official.map((c) => Number(c.gameWeek || c.game_week || 0)).filter(Boolean))].sort((a, b) => a - b),
+    [official],
+  );`,
+    '  const gameweeks = useMemo(() => Array.from({ length: 38 }, (_, index) => index + 1), []);',
+    "all 38 gameweeks selector",
+    "Array.from({ length: 38 }",
+  );
+  return source;
+})) changedFiles += 1;
 
-console.log(`[official-tournaments] ${changedFiles ? `Patched ${changedFiles} source file(s)` : "Verified"}: 38 gameweeks × 5 rarities, live fixture windows, late-postponement exclusion, admin fee 0%.`);
+console.log(`[official-tournaments] ${changedFiles ? `Patched ${changedFiles} source file(s)` : "Verified"}: 38 gameweeks × 5 rarities, live fixture windows with fallback coverage, late-postponement exclusion, admin fee 0%.`);
