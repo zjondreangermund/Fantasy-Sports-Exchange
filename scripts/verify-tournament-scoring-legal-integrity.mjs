@@ -27,6 +27,7 @@ const myEntries = read("client/src/pages/my-entries.tsx");
 const competitions = read("client/src/pages/competitions.tsx");
 const adminTournaments = read("client/src/components/admin/AdminTournamentManager.tsx");
 const sharedRules = read("shared/game-rules.ts");
+const calendarPatch = read("scripts/apply-official-tournament-calendar.mjs");
 
 expect(!/delete\s+from\s+app\.competition_entries/i.test(sync), "Official tournament sync must never delete submitted tournament entries");
 expect(!/delete\s+from\s+app\.competitions/i.test(sync), "Official tournament sync must update rows rather than delete/recreate them");
@@ -35,12 +36,17 @@ includesAll(sync, [
   "resolveEnumSchema",
   "competition_status",
   "created_by_user_id is null",
-  "catTuesdaySettlementAfter",
-  "23:59 CAT",
-  "FA Cup matches",
-  "later fixtures are excluded",
+  "catEndOfFollowingDay",
+  "eligibleKickoffs",
+  "nextFirst",
+  "platform_fee_rate = 0",
+  "platform_fee_total = 0",
+  "190 total season slots",
+  "day after the last eligible Premier League fixture",
+  "postponed fixture assignment(s)",
+  "FA Cup",
 ], "Official tournament sync");
-expect(!sync.includes("public.competition_status"), "Official tournament sync must not hard-code the public enum namespace");
+expect(!sync.includes("catTuesdaySettlementAfter"), "Official tournament sync must not use the old fixed Tuesday-after-first-kickoff settlement rule");
 expect(!sync.includes("Runs Tuesday to Tuesday"), "Official tournament sync must not describe settlement as a Tuesday-to-Tuesday scoring window");
 expect(!sync.includes("Tuesday window shortened"), "Official tournament sync must not use the old fixture-overlap window model");
 
@@ -58,13 +64,21 @@ includesAll(scoreUpdater, [
   "captainMultiplier: 1.1",
   "unresolvedCardIds",
 ], "Score updater");
-expect(!scoreUpdater.includes("isGameweekFinal"), "Tournament finalization must use the Tuesday settlement cutoff, not the FPL event-finished flag");
+expect(!scoreUpdater.includes("isGameweekFinal"), "Tournament finalization must use the configured gameweek settlement cutoff, not the FPL event-finished flag");
 expect(!scoreUpdater.includes("resetForNewGameweek"), "Score updater must not reset historical gameweek scores");
 expect(!scoreUpdater.includes("totalScore: 0"), "Score updater must not zero other gameweek entries");
 expect(!scoreUpdater.includes("otherActiveComps"), "Score updater must not clear non-current active competitions");
 
 includesAll(scoring, ["Captain receives +10%", "baseScore * 1.1", "rarity does NOT change football points"], "Scoring engine");
-includesAll(tournamentRules, ["getScoringSnapshot", "snapshot.captainBasePoints", "snapshot.squadValue", "snapshot.totalXp", "snapshot.rarityPrestige"], "Tournament ranking");
+includesAll(tournamentRules, [
+  "getScoringSnapshot",
+  "snapshot.captainBasePoints",
+  "snapshot.squadValue",
+  "snapshot.totalXp",
+  "snapshot.rarityPrestige",
+  "platformFeeRate: 0.1",
+  "prizePoolRate: 0.9",
+], "Tournament ranking/economy config");
 
 includesAll(economy, [
   "resolveEntryDeadline",
@@ -92,17 +106,28 @@ includesAll(preflight, [
 
 includesAll(competitions, [
   "tournamentSettlementLabel",
-  "Tuesday 23:59 CAT",
+  "Day after the last eligible Premier League fixture",
+  "gameweek settlement cutoff",
   "FA Cup",
-  "later rescheduled fixtures",
+  "postponed fixtures played after the next gameweek starts",
   "submissionClosesAt",
 ], "Tournament page");
 includesAll(adminTournaments, [
-  "Tuesday settlement cutoff",
-  "Settle Tuesday Results",
+  "Settlement cutoff — day after last eligible PL match",
+  "Settle Results",
   "/api/admin/competitions/settle/",
-  "FA Cup matches",
+  "postponed Premier League fixture does not count",
+  "common: 1.7, rare: 1.6, unique: 1.5, epic: 1.4, legendary: 1.3",
+  "const scheduled = officialCompetitions.find",
 ], "Admin tournament manager");
+
+includesAll(calendarPatch, [
+  "Official/admin tournaments do not pay a platform fee.",
+  "platformFeeRate = 0",
+  "POSTPONED_AFTER_NEXT_GAMEWEEK_START_COUNT",
+  "const scheduled = officialCompetitions.find",
+  "38 gameweeks × 5 rarities",
+], "Official tournament build patch");
 
 includesAll(legal, [
   '"/legal/game-rules"',
@@ -125,10 +150,11 @@ includesAll(sharedRules, [
   "common: 1",
   "legendary: 1",
   "SUBMITTED_LINEUPS_ARE_FINAL = true",
-  'TOURNAMENT_SETTLEMENT_DAY = "Tuesday"',
+  'TOURNAMENT_SETTLEMENT_DAY = "day-after-last-eligible-fixture"',
   'TOURNAMENT_SETTLEMENT_TIME_CAT = "23:59"',
   "CUP_FIXTURES_COUNT = false",
   "POST_SETTLEMENT_FIXTURES_COUNT = false",
+  "POSTPONED_AFTER_NEXT_GAMEWEEK_START_COUNT = false",
 ], "Shared game rules");
 expect(!/Common:\s*1\.0|Rare:\s*1\.1|Unique:\s*1\.2|Epic:\s*1\.35|Legendary:\s*1\.5/.test(sharedRules), "Shared rules must not contain obsolete rarity football-point multipliers");
 
@@ -138,4 +164,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Tournament entry lock, Tuesday settlement freeze, Premier League-only scoring, submitted-team records and legal/support navigation verified.");
+console.log("Tournament entry lock, live fixture-window settlement, late-postponement exclusion, Premier League-only scoring, admin 0% platform fees and legal/support navigation verified.");

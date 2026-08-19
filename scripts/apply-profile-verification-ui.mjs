@@ -67,3 +67,4 @@ await import("./apply-tournament-creator-client-rules.mjs");
 await import("./make-gameweek-isolation-patch-safe.mjs");
 await import("./apply-gameweek-prize-isolation.mjs");
 await import("./verify-gameweek-prize-isolation.mjs");
+await import("./apply-official-tournament-calendar.mjs");
