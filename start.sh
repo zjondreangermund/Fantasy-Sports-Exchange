@@ -41,6 +41,12 @@ fi
 echo "Preparing runtime database compatibility..."
 node scripts/prepare-runtime-startup.mjs
 
+# Production can contain an older competition_status enum even when the current
+# Drizzle schema declares the newer lifecycle values. Repair it outside any
+# transaction so newly-added enum values are immediately usable by the sync.
+echo "Preparing competition status lifecycle enum..."
+node scripts/ensure-competition-status-enum.mjs
+
 # Rebuild all 190 official 2026/27 Prize Ladder tournament slots from live FPL
 # fixtures (38 gameweeks × 5 rarities). If the FPL endpoint is temporarily
 # unavailable, the sync now creates all 190 slots using a safe weekly fallback

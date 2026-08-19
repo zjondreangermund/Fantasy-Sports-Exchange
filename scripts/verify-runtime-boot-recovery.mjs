@@ -32,6 +32,7 @@ const checks = [
       "DB_PUSH_OUTPUT=$(npm run db:push 2>&1)",
       "printf '%s\\n' \"$DB_PUSH_OUTPUT\"",
       "node scripts/prepare-runtime-startup.mjs",
+      "node scripts/ensure-competition-status-enum.mjs",
       "node scripts/sync-official-tournaments.mjs",
       "exec node dist/server/server/index.js",
     ],
@@ -50,6 +51,22 @@ const checks = [
     forbiddenPatterns: [
       "ALTER TYPE app.competition_tier",
       "ALTER TYPE app.withdrawal_status",
+    ],
+  },
+  {
+    name: "competition status enum is repaired before official tournament sync",
+    file: "scripts/ensure-competition-status-enum.mjs",
+    patterns: [
+      'const REQUIRED_STATUSES = ["open", "upcoming", "closed", "active", "completed", "cancelled"]',
+      "JOIN pg_namespace n ON n.oid = t.typnamespace",
+      "t.typtype = 'e'",
+      'resolveEnumSchema(client, "competition_status")',
+      "ALTER TYPE ${qualifiedType} ADD VALUE IF NOT EXISTS",
+      "competition_status enum repair incomplete",
+    ],
+    forbiddenPatterns: [
+      "ALTER TYPE public.competition_status",
+      "ALTER TYPE app.competition_status",
     ],
   },
   {
@@ -136,13 +153,14 @@ for (const check of checks) {
 
 const start = read("start.sh");
 const preflightAt = start.indexOf("node scripts/prepare-runtime-startup.mjs");
+const competitionStatusAt = start.indexOf("node scripts/ensure-competition-status-enum.mjs");
 const tournamentAt = start.indexOf("node scripts/sync-official-tournaments.mjs");
 const serverAt = start.indexOf("exec node dist/server/server/index.js");
-if (!(preflightAt >= 0 && tournamentAt > preflightAt && serverAt > tournamentAt)) {
+if (!(preflightAt >= 0 && competitionStatusAt > preflightAt && tournamentAt > competitionStatusAt && serverAt > tournamentAt)) {
   failures += 1;
-  console.error("✗ startup compatibility preflight must run before tournament sync and server boot");
+  console.error("✗ startup compatibility preflight and competition-status repair must run before tournament sync and server boot");
 } else {
-  console.log("✓ startup compatibility preflight runs before all data mutation paths");
+  console.log("✓ startup compatibility and competition-status preflights run before all tournament data mutation paths");
 }
 
 const runtimeSchema = read("server/runtime-schema.ts");
