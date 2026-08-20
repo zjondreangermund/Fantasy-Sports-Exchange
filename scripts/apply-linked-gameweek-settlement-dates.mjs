@@ -34,7 +34,7 @@ replaceRequired(
 );
 
 replaceRequired(
-  'Only Premier League points recorded for this gameweek before Tuesday settlement count. FA Cup matches and Premier League fixtures played after settlement are excluded.',
+  'Only Premier League points recorded for this gameweek before the gameweek settlement cutoff count. FA Cup matches and Premier League fixtures played after settlement are excluded.',
   'Only Premier League points recorded for this gameweek before the settlement cutoff shown above count. FA Cup matches and Premier League fixtures played after that cutoff are excluded.',
   "tournament settlement explanation",
 );
