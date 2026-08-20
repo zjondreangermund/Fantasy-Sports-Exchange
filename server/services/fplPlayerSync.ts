@@ -8,6 +8,7 @@ import {
   normalizePlayerText,
   overallFromFplElement,
 } from "./fplPlayerIdentity.js";
+import { processFplRosterChanges } from "./playerTransferMonitoring.js";
 
 function toNumber(value: unknown, fallback = 0) {
   const n = Number(value);
@@ -166,5 +167,16 @@ export async function syncFplPremierLeaguePlayers() {
     }
   }
 
-  return { inserted, updated, linkedLegacyRows, skipped, total: elements.length };
+  let rosterChanges: any = { movedWithinLeague: 0, leftLeague: 0, replacementClaims: 0 };
+  try {
+    rosterChanges = await processFplRosterChanges(
+      existingRows,
+      elements.map((element: any) => toNumber(element?.id, 0)).filter((id: number) => id > 0),
+    );
+  } catch (error: any) {
+    console.warn("Player transfer notification sync failed:", error?.message || error);
+    rosterChanges = { ...rosterChanges, error: String(error?.message || error || "Transfer monitoring failed") };
+  }
+
+  return { inserted, updated, linkedLegacyRows, skipped, total: elements.length, rosterChanges };
 }
