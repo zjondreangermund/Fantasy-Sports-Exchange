@@ -2,6 +2,11 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
+import {
+  claimReplacementCard,
+  ensurePlayerTransferMonitoringSchema,
+  listUserReplacementClaims,
+} from "../services/playerTransferMonitoring.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -105,13 +110,24 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
   app.get("/api/notifications", requireAuth, async (req: any, res) => {
     try {
       await ensureNotificationsSchema();
+      await ensurePlayerTransferMonitoringSchema();
       const userId = String(req.authUserId || "");
       await syncGameweekNotifications(userId);
       const notifications = rowsOf(await db.execute(sql`
-        select id, user_id as "userId", type::text as type, title, message, read, created_at as "createdAt"
-        from app.notifications
-        where user_id = ${userId}
-        order by created_at desc nulls last, id desc
+        select n.id, n.user_id as "userId", n.type::text as type, n.title, n.message, n.read,
+               n.created_at as "createdAt",
+               pr.id as "replacementClaimId",
+               pr.rarity as "replacementRarity",
+               pr.source_card_id as "replacementSourceCardId",
+               pr.source_player_name as "replacementSourcePlayerName",
+               pr.replacement_card_id as "replacementCardId",
+               pr.claimed_at as "replacementClaimedAt"
+        from app.notifications n
+        left join app.player_replacement_claims pr
+          on pr.user_id=n.user_id
+         and n.dedupe_key=concat('replacement-claim:', pr.id::text)
+        where n.user_id = ${userId}
+        order by n.created_at desc nulls last, n.id desc
         limit 100
       `));
       const unreadCount = notifications.filter((item) => !item.read).length;
@@ -119,6 +135,32 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
     } catch (error: any) {
       console.error("Failed to load notifications:", error);
       return res.status(500).json({ message: error?.message || "Failed to load notifications" });
+    }
+  });
+
+  app.get("/api/player-replacements", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const claims = await listUserReplacementClaims(userId);
+      return res.json({ claims, openClaims: claims.filter((claim: any) => !claim.replacementCardId).length });
+    } catch (error: any) {
+      console.error("Failed to load replacement claims:", error);
+      return res.status(500).json({ message: error?.message || "Failed to load replacement claims" });
+    }
+  });
+
+  app.post("/api/player-replacements/:id/claim", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const claimId = Number(req.params.id);
+      if (!Number.isInteger(claimId) || claimId <= 0) return res.status(400).json({ message: "Valid replacement claim required" });
+      const result = await claimReplacementCard(userId, claimId);
+      return res.json({ success: true, ...result });
+    } catch (error: any) {
+      console.error("Replacement card claim failed:", error);
+      const message = String(error?.message || "Failed to mint replacement card");
+      const status = message.includes("not found") ? 404 : message.includes("No ") ? 409 : 500;
+      return res.status(status).json({ message });
     }
   });
 

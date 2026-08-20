@@ -69,3 +69,4 @@ await import("./apply-gameweek-prize-isolation.mjs");
 await import("./verify-gameweek-prize-isolation.mjs");
 await import("./apply-official-tournament-calendar.mjs");
 await import("./apply-linked-gameweek-settlement-dates.mjs");
+await import("./apply-player-transfer-notifications.mjs");
