@@ -47,21 +47,27 @@ node scripts/prepare-runtime-startup.mjs
 echo "Preparing competition status lifecycle enum..."
 node scripts/ensure-competition-status-enum.mjs
 
-# Rebuild all 190 official 2026/27 Prize Ladder tournament slots from live FPL
-# fixtures (38 gameweeks × 5 rarities). If the FPL endpoint is temporarily
-# unavailable, the sync now creates all 190 slots using a safe weekly fallback
-# and refreshes the dates from live fixtures on a later successful deployment.
-# The score/settlement cutoff is 23:59 CAT on the day after the last eligible PL
-# fixture. A postponed fixture played on/after the next GW starts is excluded.
-# Official/admin tournaments use a 0% platform fee; user-created cash tournaments
-# remain separate and keep their creator platform-fee rules.
-echo "Syncing and verifying all 38 official gameweeks..."
+# Rebuild all 190 official paid 2026/27 Prize Ladder tournament slots from live
+# FPL fixtures (38 gameweeks × 5 rarities). The sync preserves every existing
+# entry row and never deletes player teams.
+echo "Syncing and verifying all 38 paid official gameweeks..."
 if ! node scripts/sync-official-tournaments.mjs; then
   echo "ERROR: official tournament sync did not produce complete 38-gameweek coverage."
   echo "Refusing to start this deployment with a partial tournament calendar."
   exit 1
 fi
 
-# Start the server only after all 190 official GW/rarity slots are verified.
+# Create/refresh one FREE Card Cup for every rarity in every gameweek, using the
+# exact same fixture windows as the paid official tournaments. Winners progress
+# Common→Rare, Rare→Unique, Unique→Epic, Epic→Legendary and Legendary→Legendary.
+# Existing FREE Cup entries are preserved; no entry rows are deleted or moved.
+echo "Syncing and verifying all FREE Card Cups..."
+if ! node scripts/sync-free-card-tournaments.mjs; then
+  echo "ERROR: FREE Card Cup sync did not produce complete 38-gameweek coverage."
+  echo "Refusing to start this deployment with incomplete FREE tournament coverage."
+  exit 1
+fi
+
+# Start only after all 380 official season slots are present: 190 paid + 190 free.
 echo "Starting server..."
 exec node dist/server/server/index.js
