@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { createNotificationOnce, ensureNotificationsSchema } from "./notifications.js";
 
 let cancellationSchemaReady: Promise<void> | null = null;
 
@@ -13,12 +14,40 @@ function toMoney(value: unknown): number {
   return Math.round(amount * 100) / 100;
 }
 
+function quoteIdentifier(value: string): string {
+  return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+async function resolveEnumSchema(enumName: string): Promise<string> {
+  const row = rowsOf(await db.execute(sql`
+    SELECT n.nspname AS enum_schema
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = ${enumName}
+      AND t.typtype = 'e'
+    ORDER BY CASE WHEN n.nspname = 'app' THEN 0 WHEN n.nspname = 'public' THEN 1 ELSE 2 END
+    LIMIT 1
+  `))[0];
+  return String(row?.enum_schema || "");
+}
+
+async function ensureEnumValue(enumName: string, enumValue: string): Promise<void> {
+  const enumSchema = await resolveEnumSchema(enumName);
+  if (!enumSchema) throw new Error(`Database enum ${enumName} does not exist`);
+  const qualifiedType = `${quoteIdentifier(enumSchema)}.${quoteIdentifier(enumName)}`;
+  const escapedValue = String(enumValue).replace(/'/g, "''");
+  await db.execute(sql.raw(`ALTER TYPE ${qualifiedType} ADD VALUE IF NOT EXISTS '${escapedValue}'`));
+}
+
 export async function ensureCompetitionCancellationSchema(): Promise<void> {
   if (!cancellationSchemaReady) {
     cancellationSchemaReady = (async () => {
-      await db.execute(sql`ALTER TYPE app.competition_status ADD VALUE IF NOT EXISTS 'closed'`);
-      await db.execute(sql`ALTER TYPE app.competition_status ADD VALUE IF NOT EXISTS 'cancelled'`);
-      await db.execute(sql`ALTER TYPE app.transaction_type ADD VALUE IF NOT EXISTS 'tournament_refund'`);
+      // COMPETITION_CANCEL_REFUND_V2_DYNAMIC_ENUMS
+      // Drizzle pgEnum values may live in public even when the tables live in app.
+      // Resolve the real enum namespace instead of assuming app.competition_status.
+      await ensureEnumValue("competition_status", "closed");
+      await ensureEnumValue("competition_status", "cancelled");
+      await ensureEnumValue("transaction_type", "tournament_refund");
       await db.execute(sql`
         ALTER TABLE app.competition_entries
           ADD COLUMN IF NOT EXISTS entry_fee_paid real NOT NULL DEFAULT 0
@@ -99,6 +128,7 @@ export type CancelCompetitionInput = {
 
 export async function cancelCompetitionWithRefunds(input: CancelCompetitionInput) {
   await ensureCompetitionCancellationSchema();
+  await ensureNotificationsSchema();
 
   const competitionId = Number(input.competitionId);
   const actorId = String(input.actorId || "");
@@ -130,6 +160,8 @@ export async function cancelCompetitionWithRefunds(input: CancelCompetitionInput
       throw new Error(`Tournament cannot be cancelled from status ${currentStatus || "unknown"}`);
     }
 
+    // IMPORTANT: every refund query below is scoped to this one competition ID.
+    // Competition entries are preserved as financial/audit history; they are never deleted here.
     const entries = rowsOf(await tx.execute(sql`
       SELECT ce.id, ce.user_id,
         CASE
@@ -193,10 +225,19 @@ export async function cancelCompetitionWithRefunds(input: CancelCompetitionInput
       await tx.execute(sql`
         UPDATE app.competition_entry_refunds
         SET transaction_id = ${transactionId}
-        WHERE entry_id = ${entryId}
+        WHERE entry_id = ${entryId} AND competition_id = ${competitionId}
       `);
       newlyRefundedEntries += 1;
       newlyRefundedTotal = toMoney(newlyRefundedTotal + refundAmount);
+
+      await createNotificationOnce(tx, {
+        userId,
+        title: refundAmount > 0 ? "Tournament refund completed" : "Tournament entry cancelled",
+        message: refundAmount > 0
+          ? `${String(competition.name || "Tournament")} was cancelled. N$${refundAmount.toFixed(2)} has been returned to your Fantasy Arena wallet.`
+          : `${String(competition.name || "Tournament")} was cancelled. Your entry has been cancelled; there was no paid entry fee to refund.`,
+        dedupeKey: `competition-cancellation-refund:${competitionId}:entry:${entryId}`,
+      });
     }
 
     const releasedLocks = rowsOf(await tx.execute(sql`
@@ -230,6 +271,8 @@ export async function cancelCompetitionWithRefunds(input: CancelCompetitionInput
       RETURNING *
     `))[0];
 
+    if (!updated) throw new Error("Tournament cancellation update failed");
+
     await tx.execute(sql`
       INSERT INTO app.audit_logs (user_id, action, meta)
       VALUES (
@@ -244,6 +287,8 @@ export async function cancelCompetitionWithRefunds(input: CancelCompetitionInput
           newlyRefundedTotal,
           releasedLocks,
           reason,
+          entryHistoryPreserved: true,
+          scope: "single_tournament",
         })}::jsonb
       )
     `);
@@ -256,6 +301,7 @@ export async function cancelCompetitionWithRefunds(input: CancelCompetitionInput
       newlyRefundedEntries,
       newlyRefundedTotal,
       releasedLocks,
+      entryHistoryPreserved: true,
     };
   });
 }
