@@ -1,0 +1,71 @@
+name: Production player image smoke test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/player-image-production-smoke.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/player-image-production-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-player-images:
+    name: API-Football image feed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check production image health
+        env:
+          HEALTH_URL: https://fantasy-sports-exchange-production-d05c.up.railway.app/api/health/player-images
+        run: |
+          set -euo pipefail
+          body=""
+          http=""
+
+          for attempt in $(seq 1 12); do
+            echo "Health attempt ${attempt}/12"
+            http=$(curl --silent --show-error --location \
+              --connect-timeout 10 --max-time 30 \
+              --output player-image-health.json \
+              --write-out '%{http_code}' \
+              "$HEALTH_URL" || true)
+
+            body=$(cat player-image-health.json 2>/dev/null || true)
+            echo "HTTP ${http}"
+            echo "$body" | jq '{service, configured, provider, season, players, photos, missingPhotos, coveragePercent, healthy, imageProbe, lastSync}' 2>/dev/null || echo "$body"
+
+            if [[ "$http" == "200" ]] && jq -e '
+              .service == "api-football-player-images" and
+              .configured == true and
+              (.players | tonumber) > 0 and
+              (.photos | tonumber) > 0 and
+              .imageProbe.reachable == true and
+              .healthy == true
+            ' player-image-health.json >/dev/null 2>&1; then
+              echo "API-Football player image integration is healthy in production."
+              exit 0
+            fi
+
+            sleep 30
+          done
+
+          echo "Production player image health did not become healthy within six minutes."
+          echo "Final HTTP status: ${http}"
+          cat player-image-health.json 2>/dev/null || true
+          exit 1
+
+      - name: Upload health response
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-player-image-health
+          path: player-image-health.json
+          if-no-files-found: warn
+          retention-days: 7
