@@ -70,3 +70,5 @@ await import("./verify-gameweek-prize-isolation.mjs");
 await import("./apply-official-tournament-calendar.mjs");
 await import("./apply-linked-gameweek-settlement-dates.mjs");
 await import("./apply-player-transfer-notifications.mjs");
+await import("./apply-admin-cancel-refund-notifications.mjs");
+await import("./verify-admin-cancel-refund-notifications.mjs");
