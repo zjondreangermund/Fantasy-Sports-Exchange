@@ -74,3 +74,4 @@ await import("./apply-admin-cancel-refund-notifications.mjs");
 await import("./fix-admin-refund-notification-syntax.mjs");
 await import("./fix-admin-cancel-refund-list.mjs");
 await import("./verify-admin-cancel-refund-notifications.mjs");
+await import("./verify-cancel-refund-free-cups.mjs");
