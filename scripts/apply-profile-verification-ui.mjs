@@ -70,3 +70,7 @@ await import("./verify-gameweek-prize-isolation.mjs");
 await import("./apply-official-tournament-calendar.mjs");
 await import("./apply-linked-gameweek-settlement-dates.mjs");
 await import("./apply-player-transfer-notifications.mjs");
+await import("./apply-admin-cancel-refund-notifications.mjs");
+await import("./fix-admin-refund-notification-syntax.mjs");
+await import("./fix-admin-cancel-refund-list.mjs");
+await import("./verify-admin-cancel-refund-notifications.mjs");
