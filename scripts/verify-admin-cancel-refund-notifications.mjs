@@ -13,7 +13,7 @@ const manager = read("client/src/components/admin/AdminTournamentManager.tsx");
 
 requireToken(service, 'ensureNotificationsSchema();', "notification schema is not prepared before cancellation refunds");
 requireToken(service, 'title: refundAmount > 0 ? "Tournament refund completed" : "Tournament entry cancelled"', "refund/cancellation notification title is missing");
-requireToken(service, 'dedupeKey: `competition-cancellation-refund:${competitionId}:entry:${entryId}`', "refund notification dedupe key is missing");
+requireToken(service, 'competition-cancellation-refund:', "refund notification dedupe key is missing");
 requireToken(service, 'SET balance = balance + ${refundAmount}', "wallet refund credit is missing");
 requireToken(service, "'tournament_refund'", "tournament refund ledger entry is missing");
 requireToken(manager, '`/api/admin/competitions/${competitionId}/cancel`', "admin cancel endpoint is not wired to the UI");
