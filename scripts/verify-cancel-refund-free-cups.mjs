@@ -18,7 +18,8 @@ const freeAwards = read("scripts/apply-free-card-cup-auto-awards.mjs");
 const start = read("start.sh");
 
 requireToken(cancellation, "COMPETITION_CANCEL_REFUND_V2_DYNAMIC_ENUMS", "dynamic enum compatibility marker missing");
-requireToken(cancellation, 'resolveEnumSchema("competition_status")', "competition_status enum is not resolved dynamically");
+requireToken(cancellation, 'ensureEnumValue("competition_status", "cancelled")', "competition_status enum is not resolved/prepared dynamically");
+requireToken(cancellation, 'ensureEnumValue("transaction_type", "tournament_refund")', "transaction_type enum is not resolved/prepared dynamically");
 forbidToken(cancellation, "ALTER TYPE app.competition_status", "refund service still hardcodes app.competition_status");
 forbidToken(cancellation, "DELETE FROM app.competition_entries", "cancellation must never delete tournament entry history");
 requireToken(cancellation, "WHERE ce.competition_id = ${competitionId}", "refund selection is not scoped to one tournament");
