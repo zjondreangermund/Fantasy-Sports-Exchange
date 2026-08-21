@@ -176,6 +176,10 @@ jobs:
             node --check scripts/prepare-runtime-startup.mjs &&
             node --check scripts/reconcile-production-card-inventory-v2.mjs &&
             node scripts/verify-epl-card-inventory-reconciliation.mjs &&
+            node --check scripts/apply-reconcile-supply-overflow-fix.mjs &&
+            node scripts/apply-reconcile-supply-overflow-fix.mjs &&
+            node --check scripts/reconcile-production-card-inventory-v2.mjs &&
+            node scripts/verify-reconcile-supply-overflow-fix.mjs &&
             node --check scripts/sync-official-tournaments.mjs &&
             node scripts/verify-runtime-boot-recovery.mjs &&
             node scripts/verify-tournament-lineup-integrity.mjs &&
