@@ -54,10 +54,16 @@ node scripts/refresh-epl-api-football-directory-startup.mjs
 # but they are intentionally absent here. Only the four explicitly named test
 # accounts may have ownership reset below.
 #
-# Run the compact, line-oriented normal-user forensic audit before taking the next
-# snapshot. It excludes the four test accounts and never changes player_cards
-# ownership. The legacy audit is intentionally not run here because its historical
-# SQL uses a reserved PostgreSQL alias and cannot be relied on during startup.
+# Keep the backup-gated recovery audit in its protected startup position. Repair
+# its legacy PostgreSQL reserved-word alias only inside the running container;
+# this does not touch database ownership. Then run the compact line-oriented audit
+# so affected users/cards are visible in Railway logs before taking the snapshot.
+echo "Auditing normal-user card ownership without modifying cards..."
+sed -i 's/as references/as evidence_count/g; s/order by references desc/order by evidence_count desc/g' scripts/audit-and-recover-normal-user-cards.mjs
+if ! node scripts/audit-and-recover-normal-user-cards.mjs; then
+  echo "Warning: normal-user card ownership audit could not complete; startup will continue without changing card ownership."
+fi
+
 echo "Running compact normal-user card forensic audit (read-only)..."
 if ! node scripts/audit-normal-user-cards-compact.mjs; then
   echo "Warning: compact normal-user card audit could not complete; startup will continue without changing card ownership."
