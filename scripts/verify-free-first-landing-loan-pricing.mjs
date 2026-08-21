@@ -1,3 +1,5 @@
+import "./apply-api-football-pro-mode.mjs";
+import "./verify-api-football-pro-mode.mjs";
 import fs from "node:fs";
 
 const landing = fs.readFileSync("client/src/pages/landing.tsx", "utf8");
