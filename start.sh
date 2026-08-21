@@ -10,6 +10,12 @@ if [ -z "${DATABASE_URL:-}" ]; then
   exit 1
 fi
 
+# Keep the one-time GW1 test entry extension in force for both compiled server
+# logic and the runtime tournament sync. It expires automatically at 21:00 CAT
+# on 21 Aug 2026; GW2+ continue using the normal first-kickoff lock rule.
+echo "Preparing GW1 21:00 CAT test entry extension..."
+node scripts/apply-gw1-entry-extension.mjs
+
 # Build-time repair scripts are intentionally idempotent. Re-apply the Admin
 # Read-only maintenance bypass before startup verification so a clean runtime
 # checkout is validated against the same rule used to compile the server.
