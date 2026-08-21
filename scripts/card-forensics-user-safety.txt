@@ -1,0 +1,1 @@
+Only the four explicit test accounts may be reset by startup ownership scripts.
