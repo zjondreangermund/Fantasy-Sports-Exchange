@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, CheckCircle2, Save, Users } from "lucide-react";
+import { Activity, AlertTriangle, ArrowLeft, CheckCircle2, Save, Users } from "lucide-react";
+import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Skeleton } from "../components/ui/skeleton";
@@ -10,6 +11,13 @@ import { apiRequest, queryClient } from "../lib/queryClient";
 import PremiumFootballCard from "../components/PremiumFootballCard";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type Lineup, type PlayerCardWithPlayer } from "../../../shared/schema";
+
+function formatDate(value: any) {
+  if (!value) return "TBD";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "TBD";
+  return date.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
 
 export default function SelectSquadPage() {
   const { toast } = useToast();
@@ -37,6 +45,27 @@ export default function SelectSquadPage() {
   useEffect(() => {
     if (lineupData?.lineup?.cardIds) setSelected(new Set(lineupData.lineup.cardIds));
   }, [lineupData?.lineup?.cardIds]);
+
+  const selectedApiPlayerIds = useMemo(() => {
+    const values = (cards || [])
+      .filter((card) => selected.has(card.id))
+      .map((card) => Number((card.player as any)?.apiFootballId || 0))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    return Array.from(new Set(values)).slice(0, 5);
+  }, [cards, selected]);
+
+  const intelligence = useQuery<any>({
+    queryKey: ["api-football-lineup-intelligence", selectedApiPlayerIds.join(",")],
+    queryFn: async () => {
+      const res = await fetch(`/api/football/lineup-intelligence/premier-league?players=${selectedApiPlayerIds.join(",")}`, { credentials: "include" });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.message || "Could not load lineup intelligence");
+      return payload;
+    },
+    enabled: selectedApiPlayerIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
 
   const saveLineup = useMutation({
     mutationFn: async (cardIds: number[]) => {
@@ -88,6 +117,8 @@ export default function SelectSquadPage() {
         </div>
       </Card>
 
+      {selectedApiPlayerIds.length ? <TeamAssistant data={intelligence.data} loading={intelligence.isLoading} linked={selectedApiPlayerIds.length} selected={selected.size} /> : null}
+
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {Array.from({ length: 12 }).map((_, index) => <Skeleton key={index} className="h-[270px] rounded-[28px] bg-white/10" />)}
@@ -112,4 +143,18 @@ export default function SelectSquadPage() {
       )}
     </div>
   );
+}
+
+function TeamAssistant({ data, loading, linked, selected }: { data: any; loading: boolean; linked: number; selected: number }) {
+  const rows = Array.isArray(data?.players) ? data.players : [];
+  return <Card className="space-y-3 border-violet-400/20 bg-violet-500/[0.06] p-4 text-white"><div className="flex flex-wrap items-center justify-between gap-2"><div><div className="flex items-center gap-2 font-black"><Activity className="h-5 w-5 text-violet-300" /> Tournament Team Assistant</div><p className="mt-1 text-xs text-white/50">Factual API-Football status checks only: current squad, injuries/suspensions, next fixture and confirmed lineup status. It does not predict fantasy results.</p></div><Badge variant="outline">{linked}/{selected} cards API-linked</Badge></div>{loading ? <Skeleton className="h-28 w-full bg-white/10" /> : rows.length ? <div className="grid gap-2 lg:grid-cols-2 xl:grid-cols-3">{rows.map((row: any) => <AssistantPlayer key={row.playerId} row={row} />)}</div> : <div className="text-sm text-white/50">No intelligence returned yet.</div>}</Card>;
+}
+
+function AssistantPlayer({ row }: { row: any }) {
+  const warnings = Array.isArray(row?.warnings) ? row.warnings : [];
+  const next = row?.nextFixture;
+  const lineup = row?.lineup?.status === "confirmed_starter" ? "Starter" : row?.lineup?.status === "confirmed_bench" ? "Bench" : row?.lineup?.status === "not_in_announced_squad" ? "Not in squad" : "Not announced";
+  const danger = warnings.some((warning: any) => warning?.level === "danger");
+  const warning = warnings.some((item: any) => item?.level === "warning");
+  return <div className={`rounded-xl border p-3 ${danger ? "border-red-400/30 bg-red-500/10" : warning ? "border-amber-400/30 bg-amber-500/10" : "border-emerald-400/20 bg-emerald-500/5"}`}><div className="flex items-center justify-between gap-2"><div className="font-black">{row?.player?.name || `Player ${row.playerId}`}</div><Badge variant="outline">{lineup}</Badge></div><div className="mt-2 text-xs text-white/60">Current squad: {row.currentSquad === false ? "No" : row.currentSquad === true ? "Yes" : "Unknown"}</div>{next ? <div className="mt-1 text-xs text-white/60">Next: {next.homeTeam?.name} vs {next.awayTeam?.name} · {formatDate(next.kickoffTime)}</div> : null}{warnings.length ? <div className="mt-2 space-y-1">{warnings.map((item: any, index: number) => <div key={`${item.code}-${index}`} className="flex items-start gap-1 text-xs"><AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /><span>{item.message}</span></div>)}</div> : <div className="mt-2 text-xs text-emerald-200">No provider availability warning.</div>}</div>;
 }
