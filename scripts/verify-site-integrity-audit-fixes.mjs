@@ -69,3 +69,9 @@ if (failures.length) {
 }
 
 console.log("Site integrity audit verified: public totals stay separate from My entries, Prize Vault uses paid qualifying entries, live stats are linked and DB-backed, invites/settlement/navigation remain intact.");
+
+// Apply the final player-card provider policy after all older build-time patches have run.
+// This keeps FPL available for Fantasy Arena scoring/gameweek mechanics while player
+// identity, portraits and visible player stats are sourced from API-Football only.
+await import("./apply-api-football-player-cards-only-v2.mjs");
+await import("./verify-api-football-player-cards-only.mjs");
