@@ -52,7 +52,7 @@ requireText(dashboard, 'key: "lineups"', "Manual lineup sync control missing");
 requireText(dashboard, 'key: "injuries"', "Manual injury sync control missing");
 requireText(dashboard, 'key: "transfers"', "Manual transfer sync control missing");
 requireText(dashboard, "Lineups stored", "Lineup coverage metric missing");
-requireText(dashboard, "Active injuries", "Injury coverage metric missing");
+requireText(dashboard, "Injury records", "Injury coverage metric missing");
 requireText(dashboard, "Transfers stored", "Transfer coverage metric missing");
 
 requireText(envExample, "API_FOOTBALL_DAILY_CAP=7000", "documented Pro safety cap missing");
