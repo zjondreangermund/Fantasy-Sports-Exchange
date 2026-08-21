@@ -36,14 +36,21 @@ else
   echo "Warning: db:push failed with exit code $DB_PUSH_STATUS; running compatibility preflight."
 fi
 
+# Refresh the current API-Football Premier League squad directory before card
+# reconciliation. The helper forces league ID 39 and uses the existing Pro
+# quota/backoff/cache service. Failure is non-destructive: FPL identity/images
+# remain available and the normal scheduler retries after the server starts.
+echo "Refreshing current Premier League API-Football player directory..."
+node scripts/refresh-epl-api-football-directory-startup.mjs
+
 # Reconcile legacy card ownership against the official current Premier League
 # FPL roster BEFORE serial canonicalization. This removes the old full-set test
 # grants only from the four accounts that received them, protects legitimate
 # signup/prize/reward/referral/trade/history cards, merges duplicate legacy
 # player identities into the canonical current EPL player row, repairs affected
-# serials and uses cached API-Football portraits when an exact current-squad
-# identity is available. If FPL itself is temporarily unavailable the script
-# safely makes no destructive changes and startup continues.
+# serials and uses API-Football portraits when an exact current-squad identity
+# is available. If FPL itself is temporarily unavailable the script safely makes
+# no destructive changes and startup continues.
 echo "Reconciling Premier League player identities and legacy card inventory..."
 node scripts/reconcile-production-card-inventory-v2.mjs
 
