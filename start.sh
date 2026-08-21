@@ -42,44 +42,43 @@ else
   echo "Warning: db:push failed with exit code $DB_PUSH_STATUS; running compatibility preflight."
 fi
 
-# Refresh the current API-Football Premier League squad directory before card
-# reconciliation. The helper forces league ID 39 and uses the existing Pro
-# quota/backoff/cache service. Failure is non-destructive: FPL identity/images
-# remain available and the normal scheduler retries after the server starts.
+# Refresh the current API-Football Premier League squad directory. This updates
+# football/player reference data only; it must not reconcile or rewrite card
+# ownership for normal users.
 echo "Refreshing current Premier League API-Football player directory..."
 node scripts/refresh-epl-api-football-directory-startup.mjs
 
-# Patch the reconciliation with a safe overflow recovery before it touches the
-# database. Old bulk/test and duplicate-player data can contain more cards than
-# the current rarity supply permits (for example two Legendary copies where the
-# current cap is one). The recovery keeps legitimate signup/prize/reward/trade
-# ownership first, removes weak legacy full-set ownership, and archives any
-# history-referenced excess card instead of deleting history or aborting deploy.
-echo "Preparing legacy card supply overflow recovery..."
-node scripts/apply-reconcile-supply-overflow-fix.mjs
+# IMPORTANT CARD OWNERSHIP SAFETY RULE:
+# Production startup must never run the old global card reconciliation/overflow
+# cleanup. Those tools remain in the repository for offline/manual diagnostics,
+# but they are intentionally absent here. Only the four explicitly named test
+# accounts may have ownership reset below.
+#
+# First produce a read-only forensic report for normal users. If a Railway backup
+# copy is supplied later via CARD_RECOVERY_SOURCE_DATABASE_URL, the same script can
+# compare it with live production. It never restores anything unless the separate
+# CARD_RECOVERY_APPLY=true flag is also supplied.
+echo "Auditing normal-user card ownership without modifying cards..."
+if ! node scripts/audit-and-recover-normal-user-cards.mjs; then
+  echo "Warning: normal-user card ownership audit could not complete; startup will continue without changing card ownership."
+fi
 
-# Reconcile legacy card ownership against the official current Premier League
-# FPL roster BEFORE serial canonicalization. This merges duplicate legacy player
-# identities into the canonical current EPL player row, repairs affected serials
-# and uses API-Football portraits when an exact current-squad identity is
-# available. If FPL itself is temporarily unavailable the script safely makes no
-# destructive changes and startup continues.
-echo "Reconciling Premier League player identities and legacy card inventory..."
-node scripts/reconcile-production-card-inventory-v2.mjs
+# Snapshot every currently owned normal-user card before the four test-account
+# reset. These snapshots exclude the four test accounts and never update/delete
+# player_cards; they provide an exact baseline for future ownership-drift checks.
+echo "Snapshotting normal-user card ownership..."
+if ! node scripts/snapshot-normal-user-card-ownership.mjs; then
+  echo "Warning: normal-user card snapshot could not be recorded; startup will continue without changing card ownership."
+fi
 
-# The four accounts that received historical full-set test grants are now reset
-# once to the same free starter state expected after signup. The reset removes all
-# previous card ownership from those four accounts only, clears their old card
-# locks/current lineup, preserves the old card rows for tournament/audit history,
-# and grants exactly five random Common current-EPL/API-Football-linked cards:
-# GK, DEF, MID, FWD and one wildcard. Common cards are not marketplace-tradable.
+# The four accounts that received historical full-set test grants are reset once
+# to the same free starter state expected after signup. This script is explicitly
+# scoped to those four accounts only. No other user's card ownership may change.
 echo "Resetting four historical test accounts to five starter Common cards..."
 node scripts/reset-four-test-accounts-to-starter-common.mjs
 
-# Repair legacy enum namespaces and canonicalize any remaining old card serials
-# for every user after the inventory cleanup. This gives the newly granted Common
-# starters and all other legitimate cards the current serial system while
-# enforcing the true rarity supply caps.
+# Repair legacy enum namespaces and canonicalize missing/invalid serial metadata.
+# This runtime preflight must not clear or reassign normal-user card ownership.
 echo "Preparing runtime database compatibility..."
 node scripts/prepare-runtime-startup.mjs
 
