@@ -3,6 +3,7 @@ import fs from "node:fs";
 
 const file = "scripts/reconcile-production-card-inventory-v2.mjs";
 const marker = "LEGACY_SUPPLY_OVERFLOW_RECOVERY_V1";
+const d = "$";
 let source = fs.readFileSync(file, "utf8");
 
 if (source.includes(marker)) {
@@ -13,11 +14,109 @@ if (source.includes(marker)) {
 const helperAnchor = "async function repairAffectedSerials(client,affectedPairs) {";
 if (!source.includes(helperAnchor)) throw new Error("Reconciliation overflow patch anchor not found: repairAffectedSerials");
 
-const helper = `// LEGACY_SUPPLY_OVERFLOW_RECOVERY_V1\nfunction strongCardProvenance(reasons) {\n  const values = Array.isArray(reasons) ? reasons.map((value) => String(value || \"\").toLowerCase()) : [];\n  return values.some((value) =>\n    value === \"signup-card\" ||\n    value === \"wallet-trade-history\" ||\n    (value.startsWith(\"fk:\") && /(prize|reward|referral|replacement|auction|market|loan|swap|forge)/.test(value))\n  );\n}\n\nasync function ensureSupplyArchivePlayer(client,sourcePlayerId,cardId) {\n  const archiveFplId = -Math.max(1,Number(cardId||0));\n  const existing = rows(await client.query(\`select id from app.players where fpl_id=$1 limit 1\`,[archiveFplId]))[0];\n  if (existing?.id) return Number(existing.id);\n  const inserted = rows(await client.query(\`\n    insert into app.players (\n      name,team,league,position,nationality,age,overall,image_url,fpl_id,code,photo,web_name,status,news,\n      now_cost,selected_by_percent,total_points,form,synced_at\n    )\n    select\n      name,team,'Legacy / Supply Archive',position,nationality,age,overall,image_url,$2,null,photo,web_name,'archived',\n      concat_ws(' ',nullif(news,''),'Historical card preserved during legacy supply repair; excluded from active Premier League mint supply.'),\n      now_cost,selected_by_percent,total_points,form,now()\n    from app.players where id=$1\n    returning id\n  \`,[Number(sourcePlayerId),archiveFplId]))[0];\n  if (!inserted?.id) throw new Error(\`Could not create legacy supply archive for card \\${cardId}\`);\n  return Number(inserted.id);\n}\n\nasync function resolveSupplyOverflow(client,playerId,rarity,cap) {\n  const targetUsers = rows(await client.query(\`\n    select id,lower(coalesce(email,'')) as email\n    from app.users\n    where lower(coalesce(email,''))=any($1::text[])\n  \`,[FULL_SET_EMAILS]));\n  const targetEmailById = new Map(targetUsers.map((user)=>[String(user.id),String(user.email||'').toLowerCase()]));\n  const protection = await protectCardIds(client,targetUsers);\n  const details = rows(await client.query(\`\n    select pc.id,pc.owner_id,pc.serial_number,pc.serial_id,pc.acquired_at,lower(coalesce(u.email,'')) as email\n    from app.player_cards pc\n    left join app.users u on u.id=pc.owner_id\n    where pc.player_id=$1 and pc.rarity::text=$2\n    order by pc.id asc\n  \`,[playerId,rarity]));\n\n  if (details.length<=cap) return { archived:0, removedFromTestUsers:0, preservedHistorical:0 };\n\n  const ranked = details.map((card)=>{\n    const ownerId = card.owner_id==null ? '' : String(card.owner_id);\n    const email = String(card.email||targetEmailById.get(ownerId)||'').toLowerCase();\n    const knownTestUser = FULL_SET_EMAILS.includes(email);\n    const reasons = protection.reason.get(Number(card.id)) || [];\n    const strong = strongCardProvenance(reasons);\n    const serial = Number(card.serial_number||0);\n    const validSerial = serial>0 && serial<=cap && String(card.serial_id||'').trim()!=='';\n    let score = 0;\n    if (ownerId && !knownTestUser) score += 1400;\n    else if (strong) score += 1200;\n    else if (ownerId) score += 250;\n    else score += 50;\n    if (validSerial) score += 120;\n    return { card, ownerId, email, knownTestUser, reasons, strong, score };\n  }).sort((a,b)=>b.score-a.score || Number(a.card.id)-Number(b.card.id));\n\n  const keepIds = new Set(ranked.slice(0,cap).map((item)=>Number(item.card.id)));\n  const overflow = ranked.filter((item)=>!keepIds.has(Number(item.card.id)));\n  let archived=0; let removedFromTestUsers=0; let preservedHistorical=0;\n\n  for (const item of overflow) {\n    const cardId = Number(item.card.id);\n    const archivePlayerId = await ensureSupplyArchivePlayer(client,playerId,cardId);\n    const removeOwnership = item.knownTestUser && !item.strong;\n    if (removeOwnership && item.ownerId) {\n      await rewriteLineupWithout(client,item.ownerId,new Set([cardId]));\n    }\n    await client.query(\`\n      update app.player_cards\n      set player_id=$1,\n          owner_id=case when $2::boolean then null else owner_id end,\n          serial_id=null,serial_number=null,max_supply=0,for_sale=false,price=0\n      where id=$3\n    \`,[archivePlayerId,removeOwnership,cardId]);\n    archived+=1;\n    if (removeOwnership) removedFromTestUsers+=1; else preservedHistorical+=1;\n    console.warn(\`[card-reconcile] Archived overflow \\${rarity} card \\${cardId} from player \\${playerId}; ownership \\${removeOwnership?'removed from legacy full-set user':'preserved as historical'}; provenance=\\${item.reasons.join(',')||'none'}\`);\n  }\n\n  return { archived,removedFromTestUsers,preservedHistorical };\n}\n\n`;
+const helper = `// LEGACY_SUPPLY_OVERFLOW_RECOVERY_V1
+function strongCardProvenance(reasons) {
+  const values = Array.isArray(reasons) ? reasons.map((value) => String(value || "").toLowerCase()) : [];
+  return values.some((value) =>
+    value === "signup-card" ||
+    value === "wallet-trade-history" ||
+    (value.startsWith("fk:") && /(prize|reward|referral|replacement|auction|market|loan|swap|forge)/.test(value))
+  );
+}
+
+async function ensureSupplyArchivePlayer(client,sourcePlayerId,cardId) {
+  const archiveFplId = -Math.max(1,Number(cardId||0));
+  const existing = rows(await client.query(\`select id from app.players where fpl_id=$1 limit 1\`,[archiveFplId]))[0];
+  if (existing?.id) return Number(existing.id);
+  const inserted = rows(await client.query(\`
+    insert into app.players (
+      name,team,league,position,nationality,age,overall,image_url,fpl_id,code,photo,web_name,status,news,
+      now_cost,selected_by_percent,total_points,form,synced_at
+    )
+    select
+      name,team,'Legacy / Supply Archive',position,nationality,age,overall,image_url,$2,null,photo,web_name,'archived',
+      concat_ws(' ',nullif(news,''),'Historical card preserved during legacy supply repair; excluded from active Premier League mint supply.'),
+      now_cost,selected_by_percent,total_points,form,now()
+    from app.players where id=$1
+    returning id
+  \`,[Number(sourcePlayerId),archiveFplId]))[0];
+  if (!inserted?.id) throw new Error(\`Could not create legacy supply archive for card ${d}{cardId}\`);
+  return Number(inserted.id);
+}
+
+async function resolveSupplyOverflow(client,playerId,rarity,cap) {
+  const targetUsers = rows(await client.query(\`
+    select id,lower(coalesce(email,'')) as email
+    from app.users
+    where lower(coalesce(email,''))=any($1::text[])
+  \`,[FULL_SET_EMAILS]));
+  const targetEmailById = new Map(targetUsers.map((user)=>[String(user.id),String(user.email||'').toLowerCase()]));
+  const protection = await protectCardIds(client,targetUsers);
+  const details = rows(await client.query(\`
+    select pc.id,pc.owner_id,pc.serial_number,pc.serial_id,pc.acquired_at,lower(coalesce(u.email,'')) as email
+    from app.player_cards pc
+    left join app.users u on u.id=pc.owner_id
+    where pc.player_id=$1 and pc.rarity::text=$2
+    order by pc.id asc
+  \`,[playerId,rarity]));
+
+  if (details.length<=cap) return { archived:0, removedFromTestUsers:0, preservedHistorical:0 };
+
+  const ranked = details.map((card)=>{
+    const ownerId = card.owner_id==null ? '' : String(card.owner_id);
+    const email = String(card.email||targetEmailById.get(ownerId)||'').toLowerCase();
+    const knownTestUser = FULL_SET_EMAILS.includes(email);
+    const reasons = protection.reason.get(Number(card.id)) || [];
+    const strong = strongCardProvenance(reasons);
+    const serial = Number(card.serial_number||0);
+    const validSerial = serial>0 && serial<=cap && String(card.serial_id||'').trim()!=='';
+    let score = 0;
+    if (ownerId && !knownTestUser) score += 1400;
+    else if (strong) score += 1200;
+    else if (ownerId) score += 250;
+    else score += 50;
+    if (validSerial) score += 120;
+    return { card, ownerId, email, knownTestUser, reasons, strong, score };
+  }).sort((a,b)=>b.score-a.score || Number(a.card.id)-Number(b.card.id));
+
+  const keepIds = new Set(ranked.slice(0,cap).map((item)=>Number(item.card.id)));
+  const overflow = ranked.filter((item)=>!keepIds.has(Number(item.card.id)));
+  let archived=0; let removedFromTestUsers=0; let preservedHistorical=0;
+
+  for (const item of overflow) {
+    const cardId = Number(item.card.id);
+    const archivePlayerId = await ensureSupplyArchivePlayer(client,playerId,cardId);
+    const removeOwnership = item.knownTestUser && !item.strong;
+    if (removeOwnership && item.ownerId) {
+      await rewriteLineupWithout(client,item.ownerId,new Set([cardId]));
+    }
+    await client.query(\`
+      update app.player_cards
+      set player_id=$1,
+          owner_id=case when $2::boolean then null else owner_id end,
+          serial_id=null,serial_number=null,max_supply=0,for_sale=false,price=0
+      where id=$3
+    \`,[archivePlayerId,removeOwnership,cardId]);
+    archived+=1;
+    if (removeOwnership) removedFromTestUsers+=1; else preservedHistorical+=1;
+    console.warn(\`[card-reconcile] Archived overflow ${d}{rarity} card ${d}{cardId} from player ${d}{playerId}; ownership ${d}{removeOwnership?'removed from legacy full-set user':'preserved as historical'}; provenance=${d}{item.reasons.join(',')||'none'}\`);
+  }
+
+  return { archived,removedFromTestUsers,preservedHistorical };
+}
+
+`;
 source = source.replace(helperAnchor, `${helper}${helperAnchor}`);
 
-const oldBlock = `    const cards=rows(await client.query(\`select id,serial_number from app.player_cards where player_id=$1 and rarity::text=$2 order by id\`,[playerId,rarity]));\n    if (cards.length>cap) throw new Error(\`Supply cap exceeded after test-card cleanup for player \${playerId} \${rarity}: \${cards.length}/\${cap}\`);`;
-const newBlock = `    let cards=rows(await client.query(\`select id,serial_number from app.player_cards where player_id=$1 and rarity::text=$2 order by id\`,[playerId,rarity]));\n    if (cards.length>cap) {\n      const overflow=await resolveSupplyOverflow(client,playerId,rarity,cap);\n      console.warn(\`[card-reconcile] Resolved supply overflow for player \${playerId} \${rarity}: archived=\${overflow.archived}, removedFromTestUsers=\${overflow.removedFromTestUsers}, preservedHistorical=\${overflow.preservedHistorical}\`);\n      cards=rows(await client.query(\`select id,serial_number from app.player_cards where player_id=$1 and rarity::text=$2 order by id\`,[playerId,rarity]));\n      if (cards.length>cap) throw new Error(\`Supply cap still exceeded after overflow recovery for player \${playerId} \${rarity}: \${cards.length}/\${cap}\`);\n    }`;
+const oldBlock = `    const cards=rows(await client.query(\`select id,serial_number from app.player_cards where player_id=$1 and rarity::text=$2 order by id\`,[playerId,rarity]));
+    if (cards.length>cap) throw new Error(\`Supply cap exceeded after test-card cleanup for player ${d}{playerId} ${d}{rarity}: ${d}{cards.length}/${d}{cap}\`);`;
+const newBlock = `    let cards=rows(await client.query(\`select id,serial_number from app.player_cards where player_id=$1 and rarity::text=$2 order by id\`,[playerId,rarity]));
+    if (cards.length>cap) {
+      const overflow=await resolveSupplyOverflow(client,playerId,rarity,cap);
+      console.warn(\`[card-reconcile] Resolved supply overflow for player ${d}{playerId} ${d}{rarity}: archived=${d}{overflow.archived}, removedFromTestUsers=${d}{overflow.removedFromTestUsers}, preservedHistorical=${d}{overflow.preservedHistorical}\`);
+      cards=rows(await client.query(\`select id,serial_number from app.player_cards where player_id=$1 and rarity::text=$2 order by id\`,[playerId,rarity]));
+      if (cards.length>cap) throw new Error(\`Supply cap still exceeded after overflow recovery for player ${d}{playerId} ${d}{rarity}: ${d}{cards.length}/${d}{cap}\`);
+    }`;
 if (!source.includes(oldBlock)) throw new Error("Reconciliation overflow patch anchor not found: supply cap failure block");
 source = source.replace(oldBlock,newBlock);
 
