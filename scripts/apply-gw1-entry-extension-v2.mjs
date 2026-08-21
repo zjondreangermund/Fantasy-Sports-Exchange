@@ -13,7 +13,10 @@ function patchFile(file, transform) {
 
 patchFile("server/routes.ts", (original) => {
   let source = original;
-  if (!source.includes("GW1_TEST_ENTRY_EXTENSION_UTC")) {
+  // The client build can run the finalizer first, which adds references to the
+  // GW1 constant before this v2 patch executes. Check for the declaration itself
+  // rather than any reference so build:server always has a defined symbol.
+  if (!source.includes("const GW1_TEST_ENTRY_EXTENSION_UTC =")) {
     const anchor = "const SEASON_END = Date.UTC(2027, 6, 1);\n";
     if (!source.includes(anchor)) throw new Error("Could not locate season constants in server/routes.ts");
     source = source.replace(anchor, `${anchor}const GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // 21:00 CAT on 21 Aug 2026\n`);
@@ -29,7 +32,7 @@ patchFile("server/routes.ts", (original) => {
 
 patchFile("server/services/scoreUpdater.ts", (original) => {
   let source = original;
-  if (!source.includes("GW1_TEST_ENTRY_EXTENSION_UTC")) {
+  if (!source.includes("const GW1_TEST_ENTRY_EXTENSION_UTC =")) {
     const anchor = "const RARITY_PRESTIGE: Record<string, number> = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };\n";
     if (!source.includes(anchor)) throw new Error("Could not locate score updater constants");
     source = source.replace(anchor, `${anchor}const GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // 21:00 CAT on 21 Aug 2026\n`);
@@ -51,7 +54,7 @@ patchFile("server/services/scoreUpdater.ts", (original) => {
 
 patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
   let source = original;
-  if (!source.includes("GW1_TEST_ENTRY_EXTENSION_UTC")) {
+  if (!source.includes("const GW1_TEST_ENTRY_EXTENSION_UTC =")) {
     const anchor = `const PREMIER_LEAGUE_KEYS = new Set([\"premierleague\", \"englishpremierleague\", \"epl\"]);\n`;
     if (!source.includes(anchor)) throw new Error("Could not locate economy-integrity constants");
     source = source.replace(anchor, `${anchor}const GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // 21:00 CAT on 21 Aug 2026\n`);
@@ -73,7 +76,7 @@ patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
 
 patchFile("scripts/sync-official-tournaments.mjs", (original) => {
   let source = original;
-  if (!source.includes("GW1_TEST_ENTRY_EXTENSION_UTC")) {
+  if (!source.includes("const GW1_TEST_ENTRY_EXTENSION_UTC =")) {
     const anchor = "const DAY_MS = 24 * 60 * 60 * 1000;\n";
     if (!source.includes(anchor)) throw new Error("Could not locate official tournament sync constants");
     source = source.replace(anchor, `${anchor}const GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // 21:00 CAT on 21 Aug 2026\n`);
