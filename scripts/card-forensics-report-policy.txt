@@ -1,0 +1,1 @@
+Forensic reports may identify candidates but must not automatically change card ownership.
