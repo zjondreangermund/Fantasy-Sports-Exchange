@@ -1,3 +1,4 @@
+import "./apply-gw1-entry-extension.mjs";
 import "./apply-admin-readonly-bypass.mjs";
 import fs from "node:fs";
 
