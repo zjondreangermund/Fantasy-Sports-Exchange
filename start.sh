@@ -54,13 +54,12 @@ node scripts/refresh-epl-api-football-directory-startup.mjs
 # but they are intentionally absent here. Only the four explicitly named test
 # accounts may have ownership reset below.
 #
-# First produce a read-only forensic report for normal users. If a Railway backup
-# copy is supplied later via CARD_RECOVERY_SOURCE_DATABASE_URL, the same script can
-# compare it with live production. It never restores anything unless the separate
-# CARD_RECOVERY_APPLY=true flag is also supplied.
+# Produce both read-only forensic reports for normal users. The wrapper fixes the
+# legacy PostgreSQL alias and normalizes snapshot JSON keys before running either
+# audit. Neither audit changes player_cards ownership.
 echo "Auditing normal-user card ownership without modifying cards..."
-if ! node scripts/audit-and-recover-normal-user-cards.mjs; then
-  echo "Warning: normal-user card ownership audit could not complete; startup will continue without changing card ownership."
+if ! node scripts/run-normal-user-card-forensics.mjs; then
+  echo "Warning: normal-user card ownership audits could not complete; startup will continue without changing card ownership."
 fi
 
 # Snapshot every currently owned normal-user card before the four test-account
