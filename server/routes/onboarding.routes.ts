@@ -1,6 +1,7 @@
 import type { Express, Response } from "express";
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { auditLogs, playerCards, userOnboarding } from "../../shared/schema.js";
 
 interface RegisterOnboardingRoutesDeps {
   requireAuth: any;
@@ -231,47 +232,44 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
     return [gk.map((p: any) => p.id), def.map((p: any) => p.id), mid.map((p: any) => p.id), fwd.map((p: any) => p.id), wildcard.map((p: any) => p.id)];
   };
 
-  const ensureStarterCards = async (userId: string, selectedPlayerIds: number[]) => {
-    const existingCards = await storage.getUserCards(userId);
-    const existingCommonByPlayerId = new Set(
-      (Array.isArray(existingCards) ? existingCards : [])
-        .filter((card: any) => String(card.rarity || "common").toLowerCase() === "common")
-        .map((card: any) => Number(card.playerId)),
+  const ensureStarterCards = async (tx: any, userId: string, selectedPlayerIds: number[]) => {
+    const existingCards = await tx
+      .select({ id: playerCards.id, playerId: playerCards.playerId })
+      .from(playerCards)
+      .where(and(eq(playerCards.ownerId, userId), eq(playerCards.rarity, "common")));
+    const existingCommonByPlayerId = new Map<number, number>(
+      existingCards.map((card: any) => [Number(card.playerId), Number(card.id)]),
     );
 
     const granted: number[] = [];
     const skipped: number[] = [];
+    const cardIds: number[] = [];
 
     for (const playerId of selectedPlayerIds) {
-      if (existingCommonByPlayerId.has(Number(playerId))) {
+      const existingCardId = existingCommonByPlayerId.get(Number(playerId));
+      if (existingCardId) {
         skipped.push(Number(playerId));
+        cardIds.push(existingCardId);
         continue;
       }
 
-      try {
-        await storage.createPlayerCard({
-          playerId,
-          ownerId: userId,
-          rarity: "common",
-          level: 1,
-          xp: 0,
-          decisiveScore: 35,
-          forSale: false,
-          price: 0,
-        } as any);
-        existingCommonByPlayerId.add(Number(playerId));
-        granted.push(Number(playerId));
-      } catch (error: any) {
-        const msg = String(error?.message || "").toLowerCase();
-        if (msg.includes("duplicate")) {
-          skipped.push(Number(playerId));
-          continue;
-        }
-        throw error;
-      }
+      const [created] = await tx.insert(playerCards).values({
+        playerId,
+        ownerId: userId,
+        rarity: "common",
+        level: 1,
+        xp: 0,
+        decisiveScore: 35,
+        forSale: false,
+        price: 0,
+      } as any).returning({ id: playerCards.id });
+      if (!created?.id) throw new Error(`Starter card could not be minted for selected player ${playerId}`);
+      existingCommonByPlayerId.set(Number(playerId), Number(created.id));
+      granted.push(Number(playerId));
+      cardIds.push(Number(created.id));
     }
 
-    return { granted, skipped, kept: selectedPlayerIds.length };
+    return { granted, skipped, cardIds, kept: selectedPlayerIds.length };
   };
 
   app.patch("/api/user/profile", requireAuth, async (req: any, res) => {
@@ -513,23 +511,58 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       const selected: number[] = req.body?.selectedPlayerIds ?? [];
 
       if (!Array.isArray(selected) || selected.length !== 5) return res.status(400).json({ message: "Select exactly 5 cards" });
+      if (selected.some((id) => !Number.isSafeInteger(id) || id <= 0)) return res.status(400).json({ message: "Selections must contain valid player IDs" });
       if (new Set(selected).size !== 5) return res.status(400).json({ message: "Duplicate selections not allowed" });
 
-      const ob = await storage.getOnboarding(userId);
-      if (!ob?.packCards?.length) return res.status(400).json({ message: "No offer exists. Create offer first." });
-      if (ob.completed) return res.json({ success: true, kept: 5, alreadyCompleted: true });
+      const result = await db.transaction(async (tx: any) => {
+        // Serialize repeated confirmations and keep the visible selection,
+        // minted cards, completion flag, and audit evidence in one transaction.
+        const ob = rowsOf(await tx.execute(sql`
+          select completed, pack_cards as "packCards", selected_cards as "selectedCards"
+          from app.user_onboarding
+          where user_id = ${userId}
+          for update
+        `))[0];
 
-      const offeredSet = new Set(ob.packCards.flat());
-      for (const id of selected) if (!offeredSet.has(id)) return res.status(400).json({ message: "Selection includes an invalid card" });
+        if (!ob?.packCards?.length) return { error: "No offer exists. Create offer first." };
+        if (ob.completed) {
+          return { success: true, kept: 5, alreadyCompleted: true, selectedPlayerIds: ob.selectedCards || [] };
+        }
 
-      for (const pack of ob.packCards) {
-        const selectedInPack = selected.filter((id) => pack.includes(id));
-        if (selectedInPack.length !== 1) return res.status(400).json({ message: "Select exactly 1 player from each pack" });
-      }
+        const offeredSet = new Set<number>(ob.packCards.flat().map(Number));
+        for (const id of selected) {
+          if (!offeredSet.has(id)) return { error: "Selection includes an invalid card" };
+        }
 
-      const grantResult = await ensureStarterCards(userId, selected);
-      await storage.updateOnboarding(userId, { selectedCards: selected, completed: true } as any);
-      res.json({ success: true, ...grantResult, kept: 5 });
+        for (const pack of ob.packCards as number[][]) {
+          const packPlayerIds = new Set(pack.map(Number));
+          const selectedInPack = selected.filter((id) => packPlayerIds.has(id));
+          if (selectedInPack.length !== 1) return { error: "Select exactly 1 player from each pack" };
+        }
+
+        const grantResult = await ensureStarterCards(tx, userId, selected);
+        const [updated] = await tx.update(userOnboarding)
+          .set({ selectedCards: selected, completed: true } as any)
+          .where(eq(userOnboarding.userId, userId))
+          .returning({ userId: userOnboarding.userId });
+        if (!updated?.userId) throw new Error("Could not persist the confirmed starter-card selection");
+
+        await tx.insert(auditLogs).values({
+          userId,
+          action: "onboarding.starter_selection_confirmed",
+          meta: {
+            selectedPlayerIds: selected,
+            starterCardIds: grantResult.cardIds,
+            mintedPlayerIds: grantResult.granted,
+            existingPlayerIds: grantResult.skipped,
+          },
+        } as any);
+
+        return { success: true, ...grantResult, selectedPlayerIds: selected, kept: 5 };
+      });
+
+      if ("error" in result && result.error) return res.status(400).json({ message: result.error });
+      return res.json(result);
     } catch (error: any) {
       console.error("Choose cards failed:", error);
       res.status(500).json({ message: "Failed to complete onboarding" });

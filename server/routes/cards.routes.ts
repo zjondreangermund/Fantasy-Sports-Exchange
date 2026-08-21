@@ -1,6 +1,5 @@
 import type { Express } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { seedDatabase } from "../seed.js";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
 import { apiFootballPhotoUrl, getApiFootballPlayerProfileSnapshot, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
@@ -60,60 +59,12 @@ async function isAdminUserForAudit(storage: any, req: any) {
 export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps) {
   const { requireAuth, storage } = deps;
 
-  const ensureStarterPlayersAvailable = async () => {
-    let playerCount = 0;
-    try {
-      playerCount = Number(await storage.getPlayerCount());
-    } catch (error) {
-      console.warn("Could not read player count before starter grant:", error);
-    }
-    if (playerCount > 0) return playerCount;
-    try {
-      console.log("No players available for starter grant. Running seed repair now...");
-      await seedDatabase();
-      playerCount = Number(await storage.getPlayerCount());
-    } catch (error) {
-      console.warn("Starter player seed repair failed:", error);
-    }
-    return playerCount;
-  };
-
-  const ensureStarterCards = async (userId: string) => {
-    const existing = await storage.getUserCards(userId);
-    if (existing.length > 0) return existing;
-    const playerCount = await ensureStarterPlayersAvailable();
-    if (!playerCount || playerCount <= 0) {
-      console.warn(`Starter grant skipped for ${userId}: no players available`);
-      return existing;
-    }
-    let starterPlayers = await storage.getRandomPlayers(12);
-    if (!Array.isArray(starterPlayers) || starterPlayers.length === 0) starterPlayers = await storage.getPlayers();
-    if (!Array.isArray(starterPlayers) || starterPlayers.length === 0) {
-      console.warn(`Starter grant skipped for ${userId}: player query returned empty`);
-      return existing;
-    }
-    let createdCount = 0;
-    for (const player of starterPlayers) {
-      if (createdCount >= 5) break;
-      const playerId = Number(player?.id);
-      if (!Number.isFinite(playerId) || playerId <= 0) continue;
-      try {
-        await storage.createPlayerCard({ playerId, ownerId: userId, rarity: "common", level: 1, xp: 0, decisiveScore: 35, last5Scores: [0, 0, 0, 0, 0], forSale: false, price: 0 } as any);
-        createdCount++;
-      } catch (error) {
-        console.warn(`Starter card grant skipped player ${playerId} for ${userId}:`, error);
-      }
-    }
-    const granted = await storage.getUserCards(userId);
-    if (granted.length === 0) console.warn(`Starter grant produced 0 cards for ${userId}; created attempts: ${createdCount}; candidates: ${starterPlayers.length}`);
-    else console.log(`Starter grant ready for ${userId}: ${granted.length} cards`);
-    return granted;
-  };
-
   const sendUserCards = async (req: any, res: any) => {
     try {
       const userId = req.authUserId;
-      const cards = await ensureStarterCards(userId);
+      // Collection is strictly read-only: starter cards are minted only after
+      // the owner confirms their exact five onboarding player selections.
+      const cards = await storage.getUserCards(userId);
       const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([fplApi.bootstrap().catch(() => null), fplApi.getLiveGameweek().catch(() => null), loadApiFootballPlayerDirectory().catch(() => [])]);
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const liveElements = Array.isArray((liveData as any)?.elements) ? (liveData as any).elements : [];

@@ -300,6 +300,11 @@ async function resetUser(client, user, eligible, globalUsed) {
 }
 
 async function main() {
+  if (process.env.ALLOW_HISTORICAL_TEST_ACCOUNT_RESET !== "true") {
+    throw new Error(
+      "Historical test-account starter resets are disabled. This destructive offline tool requires explicit ALLOW_HISTORICAL_TEST_ACCOUNT_RESET=true approval.",
+    );
+  }
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
   const client = new Client({
     connectionString: process.env.DATABASE_URL,

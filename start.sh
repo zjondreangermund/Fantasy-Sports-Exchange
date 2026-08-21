@@ -49,10 +49,9 @@ echo "Refreshing current Premier League API-Football player directory..."
 node scripts/refresh-epl-api-football-directory-startup.mjs
 
 # IMPORTANT CARD OWNERSHIP SAFETY RULE:
-# Production startup must never run the old global card reconciliation/overflow
-# cleanup. Those tools remain in the repository for offline/manual diagnostics,
-# but they are intentionally absent here. Only the four explicitly named test
-# accounts may have ownership reset below.
+# Production startup must never clear, replace, or randomly reassign anybody's
+# cards. Historical reconciliation and test-account reset tools remain available
+# for explicitly approved offline/manual use only.
 #
 # Keep the backup-gated recovery audit in its protected startup position. Repair
 # its legacy PostgreSQL reserved-word alias only inside the running container;
@@ -69,22 +68,23 @@ if ! node scripts/audit-normal-user-cards-compact.mjs; then
   echo "Warning: compact normal-user card audit could not complete; startup will continue without changing card ownership."
 fi
 
-# Snapshot every currently owned normal-user card before the four test-account
-# reset. These snapshots exclude the four test accounts and never update/delete
-# player_cards; they provide an exact baseline for future ownership-drift checks.
+# Investigate prior starter replacements without changing production data. An
+# actual restoration is separately gated by an explicitly named account, an
+# apply flag, and five independently proven original cards.
+echo "Auditing confirmed starter-card selections and historical resets (read-only)..."
+if ! node scripts/audit-starter-selection-recovery.mjs; then
+  echo "Warning: starter-card recovery audit could not complete; startup will continue without changing card ownership."
+fi
+
+# Snapshot currently owned normal-user cards. Snapshots never update/delete
+# player_cards and provide an exact baseline for future ownership-drift checks.
 echo "Snapshotting normal-user card ownership..."
 if ! node scripts/snapshot-normal-user-card-ownership.mjs; then
   echo "Warning: normal-user card snapshot could not be recorded; startup will continue without changing card ownership."
 fi
 
-# The four accounts that received historical full-set test grants are reset once
-# to the same free starter state expected after signup. This script is explicitly
-# scoped to those four accounts only. No other user's card ownership may change.
-echo "Resetting four historical test accounts to five starter Common cards..."
-node scripts/reset-four-test-accounts-to-starter-common.mjs
-
 # Repair legacy enum namespaces and canonicalize missing/invalid serial metadata.
-# This runtime preflight must not clear or reassign normal-user card ownership.
+# This runtime preflight must not clear or reassign any user's card ownership.
 echo "Preparing runtime database compatibility..."
 node scripts/prepare-runtime-startup.mjs
 
