@@ -15,6 +15,14 @@ function shortCode(seed: string) {
   const raw = Buffer.from(seed).toString("base64url").replace(/[^A-Z0-9]/gi, "").toUpperCase();
   return `FA${raw.slice(0, 8)}`;
 }
+function isCurrentPremierLeaguePlayer(player: any) {
+  const league = String(player?.league || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const fplId = Number(player?.fplId ?? player?.fpl_id ?? 0);
+  const status = String(player?.status || "a").toLowerCase();
+  return ["premierleague", "englishpremierleague", "epl"].includes(league)
+    && fplId > 0
+    && !["departed", "superseded", "unlinked"].includes(status);
+}
 
 async function ensureReferralSchema() {
   await db.execute(sql`
@@ -54,8 +62,9 @@ async function ensureCode(userId: string) {
 }
 
 async function grantRandomCommonCard(storage: any, userId: string) {
-  const players = await storage.getPlayers();
-  if (!Array.isArray(players) || players.length === 0) return null;
+  const allPlayers = await storage.getPlayers();
+  const players = (Array.isArray(allPlayers) ? allPlayers : []).filter(isCurrentPremierLeaguePlayer);
+  if (players.length === 0) return null;
   const owned = await storage.getUserCards(userId);
   const ownedCommonPlayerIds = new Set((Array.isArray(owned) ? owned : []).filter((card: any) => String(card.rarity || "") === "common").map((card: any) => Number(card.playerId)));
   const candidates = players.filter((player: any) => !ownedCommonPlayerIds.has(Number(player.id)));

@@ -174,6 +174,8 @@ jobs:
           {
             npm run test:critical-flows &&
             node --check scripts/prepare-runtime-startup.mjs &&
+            node --check scripts/reconcile-production-card-inventory-v2.mjs &&
+            node scripts/verify-epl-card-inventory-reconciliation.mjs &&
             node --check scripts/sync-official-tournaments.mjs &&
             node scripts/verify-runtime-boot-recovery.mjs &&
             node scripts/verify-tournament-lineup-integrity.mjs &&
