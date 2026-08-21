@@ -2,6 +2,7 @@ import "./apply-api-football-pro-mode.mjs";
 import "./verify-api-football-pro-mode.mjs";
 import "./apply-api-football-site-linkage.mjs";
 import "./verify-api-football-site-linkage.mjs";
+import "./verify-premier-league-only-scope.mjs";
 import fs from "node:fs";
 
 const landing = fs.readFileSync("client/src/pages/landing.tsx", "utf8");
