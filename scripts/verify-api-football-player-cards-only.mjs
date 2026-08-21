@@ -2,6 +2,18 @@
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 
+// The final policy patch is generated at build time. Keep the generated callback
+// explicitly typed so strict TypeScript builds do not infer an implicit any.
+{
+  const file = "server/routes/onboarding.routes.ts";
+  const source = fs.readFileSync(file, "utf8");
+  const next = source.replace(
+    ".map((pack: number[]) => selected.find((id) => pack.includes(id)))",
+    ".map((pack: number[]) => selected.find((id: number) => pack.includes(id)))",
+  );
+  if (next !== source) fs.writeFileSync(file, next);
+}
+
 const failures = [];
 const read = (file) => fs.readFileSync(file, "utf8");
 const requireText = (source, text, message) => { if (!source.includes(text)) failures.push(message); };
@@ -22,6 +34,7 @@ const compact = read("client/src/components/cards/PremiumFootballCard.tsx");
 const visual = read("client/src/components/cards/CollectionStableCard.tsx");
 
 requireText(onboarding, "orderedSelected = ob.packCards", "onboarding selections are not normalized to pack order");
+requireText(onboarding, "selected.find((id: number)", "ordered onboarding callback is not strictly typed");
 requireText(onboarding, "selectedCards: orderedSelected", "ordered onboarding selection is not persisted");
 requireText(cards, 'const starterSlots = ["GK", "DEF", "MID", "FWD", "UTILITY"]', "collection starter slot order is missing");
 requireText(cards, "starterOrder.get(Number(a.playerId", "collection response is not sorted by onboarding order");
