@@ -13,6 +13,21 @@ const replacements = [
     to: `// API_FOOTBALL_DATA_CENTRE_V3_PREMIER_LEAGUE_ONLY\ntype LeagueKey = "premier-league";\n\nconst COMPETITIONS: Array<{ key: LeagueKey; name: string; group: string }> = [\n  { key: "premier-league", name: "Premier League", group: "Premier League" },\n];`,
   },
   {
+    file: "server/services/apiFootballSync.ts",
+    from: `const LEAGUE_ID = Math.max(1, Number(process.env.API_FOOTBALL_LEAGUE_ID || 39));`,
+    to: `const LEAGUE_ID = 39; // Premier League only`,
+  },
+  {
+    file: "server/services/apiFootballScoringBridge.ts",
+    from: `const LEAGUE_ID = Math.max(1, Number(process.env.API_FOOTBALL_LEAGUE_ID || 39));`,
+    to: `const LEAGUE_ID = 39; // Premier League only`,
+  },
+  {
+    file: "server/routes/apiFootballAdmin.routes.ts",
+    from: `    leagueId: Math.max(1, Number(process.env.API_FOOTBALL_LEAGUE_ID || 39)),`,
+    to: `    leagueId: 39, // Premier League only`,
+  },
+  {
     file: "client/src/pages/premier-league.tsx",
     from: `  const [leagueKey, setLeagueKey] = useState<"premier-league" | "la-liga" | "bundesliga" | "serie-a" | "ligue-1">("premier-league");`,
     to: `  const leagueKey = "premier-league" as const;`,
@@ -44,18 +59,29 @@ const replacements = [
   },
   {
     file: "client/src/lib/manager-hub-config.ts",
+    from: `  leagues: "/leagues",`,
+    to: `  leagues: "/premier-league",`,
+  },
+  {
+    file: "client/src/lib/manager-hub-config.ts",
     from: `  leagues: "Leagues",`,
     to: `  leagues: "Premier League",`,
+  },
+  {
+    file: "client/src/App.tsx",
+    from: `        <Route path="/leagues" component={PremierLeaguePage} />\n`,
+    to: ``,
   },
 ];
 
 for (const { file, from, to } of replacements) {
   let source = fs.readFileSync(file, "utf8");
-  if (source.includes(to)) continue;
+  if (to && source.includes(to)) continue;
+  if (!to && !source.includes(from)) continue;
   if (!source.includes(from)) throw new Error(`Expected multi-league block not found in ${file}`);
   source = source.replace(from, to);
   fs.writeFileSync(file, source);
   console.log(`Restricted ${file} to Premier League data only.`);
 }
 
-console.log("Premier League-only API-Football scope applied across routes, data centre and navigation.");
+console.log("Premier League-only API-Football scope applied across provider sync, scoring, routes, data centre and navigation.");
