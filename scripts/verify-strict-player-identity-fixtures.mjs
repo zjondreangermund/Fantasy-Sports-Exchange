@@ -23,6 +23,8 @@ const eplPage = read("client/src/pages/premier-league.tsx");
 const main = read("client/src/main.tsx");
 const sw = read("client/public/sw.js");
 
+// FPL remains a strict internal identity/fixture/scoring source. It is deliberately
+// not the player-facing portrait/profile provider anymore.
 includesAll(fplIdentity, [
   "STRICT_PLAYER_IDENTITY_FIX_V2",
   "strongPlayerNameMatch",
@@ -30,7 +32,7 @@ includesAll(fplIdentity, [
   "playerMatchesElement(player, byStoredCode)",
   "const strongCandidates = elements.filter",
   "bTokens.slice(1).some((token) => surnamesA.has(token))",
-], "FPL strict identity resolver");
+], "FPL strict internal identity resolver");
 expect(!fplIdentity.includes("if (fplId > 0 && byId.has(fplId)) return"), "Stored FPL ids must not be trusted without checking the player name");
 expect(!fplIdentity.includes("if (code > 0 && byCode.has(code)) return"), "Stored photo codes must not be trusted without checking the player name");
 
@@ -38,16 +40,29 @@ expect(!directory.includes("normalizePlayerText(candidate.lastName),"), "API-Foo
 expect(!directory.includes("source.length === 1"), "API-Football matching must not link a card from one token");
 includesAll(directory, ["row.nameScore >= 92", "rawPosition === row.candidate.position", "best.nameScore < 92", "apiFootballPhotoUrl"], "API-Football strict resolver");
 
+// Collection/player profiles are API-Football only. Do not silently fall back to
+// FPL portraits because that reintroduces mixed identities and the old white-card/profile mismatch.
 includesAll(cards, [
   "const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl",
-  "imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
-  "verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
-  "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
-  'identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football"',
+  "imageUrl: apiFootballImage || null",
+  "verifiedImageUrl: apiFootballImage || null",
+  "identityVerified: Boolean(apiFootballPlayer)",
+  'identitySource: apiFootballPlayer ? "api-football-current-squad" : "unverified-card-data"',
+  'source: "api-football"',
+  'source: "card-fallback"',
   'imageUrl: null, verifiedImageUrl: null, identityVerified: false',
-], "Collection card enrichment");
-expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl"), "Unverified collection cards must not fall back to stale stored photos");
+], "API-Football-only Collection card enrichment");
+for (const forbidden of [
+  "matchedElement ? fplApi.playerPhotoUrl",
+  '"fpl+api-football"',
+  'source: "fpl-live"',
+  "fplApi.playerSummary",
+  "fplApi.getLiveGameweek()",
+  "fplApi.bootstrap()",
+]) expect(!cards.includes(forbidden), `Player-facing card path must not use FPL profile/image data: ${forbidden}`);
 
+// Marketplace listing enrichment can retain its existing strict identity bridge for
+// listing metadata; opening a card uses the shared API-Football-only profile engine.
 includesAll(marketplace, [
   "fplApi.bootstrap()",
   "loadApiFootballPlayerDirectory()",
@@ -57,7 +72,7 @@ includesAll(marketplace, [
   "verifiedImageUrl",
   "const identityVerified = Boolean(apiFootballPlayer || matchedElement)",
   'apiFootballPlayer ? "api-football-current-squad"',
-], "Marketplace card enrichment");
+], "Marketplace listing identity enrichment");
 expect(!marketplace.includes("imageUrl: row.player_image_url }"), "Marketplace cards must not expose raw stored portraits without verification");
 
 includesAll(images, [
@@ -76,17 +91,21 @@ includesAll(adapter, [
 
 includesAll(modal, [
   'const identityVerified = data.source !== "card-fallback"',
-  'identitySource: identityVerified ? (data.source === "api-football" ? "api-football" : "fpl") : "unverified-card-data"',
+  'identitySource: identityVerified ? "api-football" : "unverified-card-data"',
   "photo: null",
   "cutoutUrl: null",
-], "Card profile identity gate");
+  'return "API-Football verified"',
+], "API-Football card profile identity gate");
+expect(!modal.includes('data.source === "api-football" ? "api-football" : "fpl"'), "Card profile identity must not fall back to FPL");
 expect(!modal.includes("data.player?.imageUrl || card.player?.imageUrl"), "Unverified profile cards must not reuse the collection card's stale image");
 
-expect(server.includes("buildFplPlayerIndex(bootstrap).resolve({ name, team })"), "Image resolver must use the strict FPL identity resolver");
+// The generic image resolver may continue using strict FPL matching for non-card
+// internal use, but the card image chain above no longer calls it.
+expect(server.includes("buildFplPlayerIndex(bootstrap).resolve({ name, team })"), "Generic image resolver must use the strict FPL identity resolver");
 const imageRouteStart = server.indexOf('app.get("/api/player-image/resolve"');
 const imageRouteEnd = server.indexOf('app.get("/api/image-proxy"');
 const imageRoute = imageRouteStart >= 0 && imageRouteEnd > imageRouteStart ? server.slice(imageRouteStart, imageRouteEnd) : "";
-expect(!imageRoute.includes("TheSportsDB"), "Card image resolution must not fall back to a fuzzy third-party player search");
+expect(!imageRoute.includes("TheSportsDB"), "Image resolution must not fall back to a fuzzy third-party player search");
 expect(imageRoute.includes("No exact official player image link found"), "Unmatched image requests must fail safely");
 
 includesAll(eplRoutes, [
@@ -115,4 +134,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Strict provider identity links, verified-only player images and crash-safe fixture responses verified.");
+console.log("Strict identity verified: FPL remains internal for scoring/fixtures, while player-facing Collection/profile identity and portraits are API-Football only with safe fallbacks.");
