@@ -1,0 +1,1 @@
+Read-only normal-user card forensic startup flow. Never enable CARD_RECOVERY_APPLY from normal startup.
