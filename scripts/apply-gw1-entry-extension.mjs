@@ -28,6 +28,13 @@ patchFile("server/routes.ts", (original) => {
     if (!source.includes(oldDeadline)) throw new Error("Could not locate competition submission cutoff in server/routes.ts");
     source = source.replace(oldDeadline, newDeadline);
   }
+
+  const oldCompetitionPayload = `        const normalized = normalizeCompetitionRow({ ...comp, entryCount: entries.length });\n        return { ...normalized, submissionClosesAt, entryOpen: comp.status === \"open\" && Date.now() < new Date(submissionClosesAt).getTime(), entries, entryCount: entries.length, winner: comp.status === \"completed\" && entries[0] ? { userId: entries[0].userId, userName: entries[0].userName, totalScore: Number(entries[0].totalScore || 0), prizeAmount: Number(entries[0].prizeAmount || 0), prizeCardId: entries[0].prizeCardId || null, tiebreak: entries[0].tiebreak || null } : null };`;
+  const newCompetitionPayload = `        const normalized = normalizeCompetitionRow({ ...comp, entryCount: entries.length });\n        const gw1TestOpen = Number(comp.gameWeek || comp.game_week || 0) === 1\n          && Date.now() < GW1_TEST_ENTRY_EXTENSION_UTC\n          && ![\"completed\", \"cancelled\"].includes(String(comp.status || \"\").toLowerCase());\n        const effectiveStatus = gw1TestOpen ? \"open\" : String(comp.status || normalized.status || \"\");\n        return { ...normalized, status: effectiveStatus, submissionClosesAt, entryOpen: effectiveStatus === \"open\" && Date.now() < new Date(submissionClosesAt).getTime(), entries, entryCount: entries.length, winner: comp.status === \"completed\" && entries[0] ? { userId: entries[0].userId, userName: entries[0].userName, totalScore: Number(entries[0].totalScore || 0), prizeAmount: Number(entries[0].prizeAmount || 0), prizeCardId: entries[0].prizeCardId || null, tiebreak: entries[0].tiebreak || null } : null };`;
+  if (!source.includes("const gw1TestOpen = Number(comp.gameWeek")) {
+    if (!source.includes(oldCompetitionPayload)) throw new Error("Could not locate competition API entry-open payload in server/routes.ts");
+    source = source.replace(oldCompetitionPayload, newCompetitionPayload);
+  }
   return source;
 });
 
@@ -54,6 +61,33 @@ patchFile("server/services/scoreUpdater.ts", (original) => {
   if (!source.includes(newActivate)) {
     if (!source.includes(oldActivate)) throw new Error("Could not locate ScoreUpdateService activation method");
     source = source.replace(oldActivate, newActivate);
+  }
+  return source;
+});
+
+patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
+  let source = original;
+  if (!source.includes("GW1_TEST_ENTRY_EXTENSION_UTC")) {
+    const anchor = `const PREMIER_LEAGUE_KEYS = new Set([\"premierleague\", \"englishpremierleague\", \"epl\"]);\n`;
+    if (!source.includes(anchor)) throw new Error("Could not locate economy-integrity constants");
+    source = source.replace(
+      anchor,
+      `${anchor}const GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // 21:00 CAT on 21 Aug 2026\n`,
+    );
+  }
+
+  const oldResolver = `async function resolveEntryDeadline(gameWeek: number, fallbackStart: unknown): Promise<Date> {\n  const [bootstrap, fixtures] = await Promise.all([fplApi.bootstrap(), fplApi.fixturesLive()]);`;
+  const newResolver = `async function resolveEntryDeadline(gameWeek: number, fallbackStart: unknown): Promise<Date> {\n  if (Number(gameWeek) === 1) return new Date(GW1_TEST_ENTRY_EXTENSION_UTC);\n  const [bootstrap, fixtures] = await Promise.all([fplApi.bootstrap(), fplApi.fixturesLive()]);`;
+  if (!source.includes(newResolver)) {
+    if (!source.includes(oldResolver)) throw new Error("Could not locate atomic join deadline resolver");
+    source = source.replace(oldResolver, newResolver);
+  }
+
+  const oldStatusGuard = `        if (Number(competition.gameWeek || 0) !== Number(preview.gameWeek || 0)) throw new Error(\"Tournament schedule changed; reopen the entry window and try again\");\n        if (String(competition.status) !== \"open\") throw new Error(\"Tournament is not open for entries\");\n        if (Date.now() >= entryDeadline.getTime()) throw new Error(\"Gameweek entries are closed\");`;
+  const newStatusGuard = `        if (Number(competition.gameWeek || 0) !== Number(preview.gameWeek || 0)) throw new Error(\"Tournament schedule changed; reopen the entry window and try again\");\n        const gw1TestOpen = Number(competition.gameWeek || 0) === 1 && Date.now() < GW1_TEST_ENTRY_EXTENSION_UTC;\n        if (String(competition.status) !== \"open\" && !gw1TestOpen) throw new Error(\"Tournament is not open for entries\");\n        if (Date.now() >= entryDeadline.getTime()) throw new Error(\"Gameweek entries are closed\");\n        if (gw1TestOpen && String(competition.status) !== \"open\") {\n          await tx.execute(sql\`update app.competitions set status = 'open' where id = \${competitionId} and status::text not in ('completed','cancelled')\`);\n          competition.status = \"open\";\n        }`;
+  if (!source.includes("const gw1TestOpen = Number(competition.gameWeek")) {
+    if (!source.includes(oldStatusGuard)) throw new Error("Could not locate atomic join status guard");
+    source = source.replace(oldStatusGuard, newStatusGuard);
   }
   return source;
 });
@@ -85,4 +119,4 @@ patchFile("scripts/sync-official-tournaments.mjs", (original) => {
   return source;
 });
 
-console.log("GW1 test extension prepared: official paid and FREE tournament entry status stays open until 21:00 CAT on 21 Aug 2026; GW2+ keep the normal first-kickoff rule.");
+console.log("GW1 test extension prepared: paid and FREE tournament UI, atomic join validation, scoring lifecycle and official sync remain open until 21:00 CAT on 21 Aug 2026; GW2+ keep the normal first-kickoff rule.");
