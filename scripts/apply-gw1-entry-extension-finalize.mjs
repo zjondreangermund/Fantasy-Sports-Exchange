@@ -1,5 +1,19 @@
 import fs from "node:fs";
 
+// `npm run check` and `build:client` execute the site-integrity patch in the same
+// workspace. After this GW1 finalizer changes the competition response, make the
+// older settlement patch tolerate that already-finalized shape on later passes.
+const siteIntegrityFile = "scripts/apply-site-integrity-audit-fixes.mjs";
+let siteIntegrity = fs.readFileSync(siteIntegrityFile, "utf8");
+const oldSettlementApply = '  source = replaceOnce(source, competitionReturnFrom, competitionReturnTo, "competition settlement timestamp");';
+const safeSettlementApply = '  if (!source.includes("GW1_EFFECTIVE_OPEN_STATUS_V1")) {\n    source = replaceOnce(source, competitionReturnFrom, competitionReturnTo, "competition settlement timestamp");\n  }';
+if (!siteIntegrity.includes(safeSettlementApply)) {
+  if (!siteIntegrity.includes(oldSettlementApply)) throw new Error("GW1 finalizer could not make settlement audit idempotent");
+  siteIntegrity = siteIntegrity.replace(oldSettlementApply, safeSettlementApply);
+  fs.writeFileSync(siteIntegrityFile, siteIntegrity);
+  console.log("Made site-integrity settlement patch compatible with the finalized GW1 response.");
+}
+
 const file = "server/routes.ts";
 const source = fs.readFileSync(file, "utf8");
 if (source.includes("GW1_EFFECTIVE_OPEN_STATUS_V1")) {
