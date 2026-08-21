@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 
 const reconcile = fs.readFileSync("scripts/reconcile-production-card-inventory-v2.mjs", "utf8");
 const refresh = fs.readFileSync("scripts/refresh-epl-api-football-directory-startup.mjs", "utf8");
+const finalize = fs.readFileSync("scripts/finalize-full-set-test-card-cleanup.mjs", "utf8");
 const start = fs.readFileSync("start.sh", "utf8");
 const retiredGrant = fs.readFileSync("scripts/grant-test-card-teams.mjs", "utf8");
 const referrals = fs.readFileSync("server/routes/referrals.routes.ts", "utf8");
@@ -13,13 +14,18 @@ const failures = [];
 const requireText = (source, text, message) => { if (!source.includes(text)) failures.push(message); };
 const rejectText = (source, text, message) => { if (source.includes(text)) failures.push(message); };
 
-for (const file of ["scripts/reconcile-production-card-inventory-v2.mjs", "scripts/refresh-epl-api-football-directory-startup.mjs"]) {
+for (const file of [
+  "scripts/reconcile-production-card-inventory-v2.mjs",
+  "scripts/refresh-epl-api-football-directory-startup.mjs",
+  "scripts/finalize-full-set-test-card-cleanup.mjs",
+]) {
   try { execFileSync(process.execPath, ["--check", file], { stdio: "pipe" }); }
   catch (error) { failures.push(`${file} is not valid Node.js syntax: ${String(error?.stderr || error?.message || error)}`); }
 }
 
 for (const email of ["lbcplaya@gmail.com","joeberber2580@gmail.com","zaylon2580@gmail.com","zjondreangermund@gmail.com"]) {
-  requireText(reconcile, email, `known full-set grant account is not scoped: ${email}`);
+  requireText(reconcile, email, `known full-set grant account is not scoped in reconciliation: ${email}`);
+  requireText(finalize, email, `known full-set grant account is not scoped in final cleanup: ${email}`);
 }
 requireText(reconcile, "FPL_URL", "official FPL current-roster source is missing");
 requireText(reconcile, "teams.length < 20 || elements.length < 300", "destructive cleanup is not gated on a complete EPL roster");
@@ -41,11 +47,28 @@ requireText(refresh, 'process.env.API_FOOTBALL_LEAGUE_ID = "39"', "startup API-F
 requireText(refresh, 'runApiFootballSync("players")', "startup does not refresh API-Football current squads");
 requireText(refresh, "normal scheduler will retry", "API-Football startup refresh does not have a safe retry fallback");
 
+requireText(finalize, "competition_entries", "final cleanup does not preserve tournament-winning cards");
+requireText(finalize, "prize_card_id", "final cleanup does not preserve explicit winning-card IDs");
+requireText(finalize, "user_onboarding", "final cleanup does not preserve signup cards");
+requireText(finalize, "daily_login_rewards", "final cleanup does not preserve earned weekly rewards");
+requireText(finalize, "player_replacement_claims", "final cleanup does not preserve replacement cards");
+requireText(finalize, "wallet-transaction", "final cleanup does not protect cards with real wallet provenance");
+requireText(finalize, "Legacy / Test Grant Archive", "removed full-set cards are not isolated from live EPL mint supply");
+requireText(finalize, "owner_id=null", "removed full-set cards are not removed from user Collection ownership");
+requireText(finalize, "LEGACY-TEST-", "archived test cards do not receive isolated audit serials");
+requireText(finalize, "removeFromCurrentLineup", "retired full-set cards are not removed from the user's active lineup");
+rejectText(finalize, "delete from app.users", "final cleanup must never delete user accounts");
+rejectText(finalize, "delete from app.competition_entries", "final cleanup must never delete tournament history");
+
 const refreshIndex = start.indexOf("node scripts/refresh-epl-api-football-directory-startup.mjs");
 const reconcileIndex = start.indexOf("node scripts/reconcile-production-card-inventory-v2.mjs");
+const finalizeIndex = start.indexOf("node scripts/finalize-full-set-test-card-cleanup.mjs");
 const serialIndex = start.indexOf("node scripts/prepare-runtime-startup.mjs");
-if (refreshIndex < 0 || reconcileIndex < 0 || serialIndex < 0 || !(refreshIndex < reconcileIndex && reconcileIndex < serialIndex)) {
-  failures.push("startup order must be API-Football EPL directory refresh -> card reconciliation -> global serial preflight");
+if (
+  refreshIndex < 0 || reconcileIndex < 0 || finalizeIndex < 0 || serialIndex < 0
+  || !(refreshIndex < reconcileIndex && reconcileIndex < finalizeIndex && finalizeIndex < serialIndex)
+) {
+  failures.push("startup order must be API-Football refresh -> reconciliation -> final full-set ownership cleanup -> global serial preflight");
 }
 
 requireText(runtime, "WHERE pc.serial_number IS NULL OR pc.serial_number <= 0", "global legacy serial backfill is missing");
@@ -65,4 +88,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("EPL card inventory reconciliation verified: fresh API-Football EPL directory, current FPL identities, exact test-grant cleanup scope, legitimate-card provenance protections, serial repair and active-EPL reward guards are present.");
+console.log("EPL card inventory verified: fresh API-Football EPL identities, legacy supply recovery, final full-set ownership cleanup, signup/win/earned provenance protection and current serial repair are all enforced.");

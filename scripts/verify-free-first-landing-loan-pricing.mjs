@@ -3,6 +3,8 @@ import "./verify-api-football-pro-mode.mjs";
 import "./apply-api-football-site-linkage.mjs";
 import "./verify-api-football-site-linkage.mjs";
 import "./verify-premier-league-only-scope.mjs";
+import "./apply-premier-league-data-centre-only-ui.mjs";
+import "./verify-premier-league-data-centre-only-ui.mjs";
 import fs from "node:fs";
 
 const landing = fs.readFileSync("client/src/pages/landing.tsx", "utf8");
@@ -43,4 +45,4 @@ requireText(loanClient, "10% of the", "won/free floor explanation");
 
 requireText(legal, "minimum loan listing price per gameweek is 10%", "published loan minimum rule");
 
-console.log("Free-first landing and acquisition-based loan pricing verified.");
+console.log("Free-first landing, Premier League Data Centre-only layout and acquisition-based loan pricing verified.");
