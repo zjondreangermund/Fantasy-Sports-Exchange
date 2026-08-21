@@ -1,0 +1,1 @@
+Normal-user card forensic startup is read-only. The four explicit test accounts are excluded. Ownership recovery remains backup-gated and manually enabled only.
