@@ -21,7 +21,7 @@ const count = (source, text) => source.split(text).length - 1;
 
 check(competitions.includes("USER_SCOPED_TOURNAMENT_ENTRY_COUNTS_V2"), "Tournament page must keep current-user entry counts separate from public totals");
 check(competitions.includes('entryCount={entryCounts.get(Number(pinTournament.id)) || 0}'), "Private tournament card must use the current user's own entry count");
-check(competitions.includes('entryCount={entryCounts.get(Number(comp.id)) || 0}'), "Official tournament cards must use the current user's own entry count");
+check(competitions.includes('entryCount={entryCounts.get(Number(comp.id)) || 0}'), "Official tournament card must use the current user's own entry count");
 check(!competitions.includes("entryCount={tournamentEntryCount(comp)}"), "Public totals must not populate the My entries field");
 check(competitions.includes("SITE_AUDIT_INVITE_AUTO_LOOKUP_V1"), "Private invite PIN must auto-resolve on the tournament page");
 check(competitions.includes("initialInvitePin"), "Tournament page must read the PIN from /join/:pin or ?pin=");
@@ -69,3 +69,12 @@ if (failures.length) {
 }
 
 console.log("Site integrity audit verified: public totals stay separate from My entries, Prize Vault uses paid qualifying entries, live stats are linked and DB-backed, invites/settlement/navigation remain intact.");
+
+// Apply the final player-card provider policy after all older build-time patches have run.
+// Build/check scripts execute more than once in one workflow, so skip regeneration when
+// the policy marker is already present and only re-run the policy verification.
+const playerCardPolicyTarget = read("server/routes/onboarding.routes.ts");
+if (!playerCardPolicyTarget.includes("API_FOOTBALL_PLAYER_CARDS_ONLY_V2")) {
+  await import("./apply-api-football-player-cards-only-v2.mjs");
+}
+await import("./verify-api-football-player-cards-only.mjs");

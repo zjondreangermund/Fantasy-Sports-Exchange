@@ -15,6 +15,7 @@ const sync = read("server/services/apiFootballSync.ts");
 const syncRoutes = read("server/routes/apiFootballSync.routes.ts");
 const cards = read("server/routes/cards.routes.ts");
 const modal = read("client/src/components/cards/CardProfileModal.tsx");
+const stable = read("client/src/components/cards/CollectionStableCard.tsx");
 const images = read("client/src/lib/card-image.ts");
 const adapter = read("client/src/lib/fantasy-card-adapter.ts");
 const main = read("client/src/main.tsx");
@@ -47,20 +48,28 @@ expect(syncRoutes.includes('"players"'), "Manual sync centre must allow the play
 includesAll(cards, [
   "loadApiFootballPlayerDirectory",
   "resolveApiFootballPlayer",
+  "apiFootballPhotoUrl",
   "getApiFootballPlayerProfileSnapshot",
-  'apiFootballPlayer && matchedElement ? "fpl+api-football"',
   'apiFootballPlayer ? "api-football-current-squad"',
   "verifiedImageUrl",
-  "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
+  "identityVerified: Boolean(apiFootballPlayer)",
+  'source: "api-football"',
   'source: "card-fallback"',
   "last10: []",
-  'verifiedIdentity ? "API-Football current squads"',
+  'identity: "API-Football current squads"',
+  'stats: "API-Football Premier League match statistics"',
+  'fantasyPoints: "Fantasy Arena scoring"',
+], "API-Football card profile provider integration");
+for (const forbidden of [
+  '"fpl+api-football"',
+  'source: "fpl-live"',
   'stats: "Fantasy Premier League match history"',
-  "saves: Number(matchedElement.saves || 0)",
-], "Card profile provider integration");
+  "fplApi.playerSummary",
+  "fplApi.getLiveGameweek()",
+  "fplApi.bootstrap()",
+]) expect(!cards.includes(forbidden), `Player-facing card profile must not use FPL data: ${forbidden}`);
 expect(!cards.includes("opponent: `GW${index + 1}`"), "Card profiles must not fabricate ten placeholder gameweeks");
 expect(!cards.includes("last10: last10.length ? last10 : lastScoresFallback(card)"), "Official profile history must not be replaced by fake zero rows");
-expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl"), "Unverified cards must never inherit stale portraits");
 
 includesAll(modal, [
   'import { createPortal } from "react-dom"',
@@ -75,9 +84,23 @@ includesAll(modal, [
   'return "API-Football verified"',
   "verifiedImageUrl",
   'const identityVerified = data.source !== "card-fallback"',
-], "Card profile modal");
+  'label="Matches"',
+  'label="Avg Rating"',
+  '>RTG</th>',
+], "API-Football card profile modal");
 expect(!modal.includes("while (padded.length < 10)"), "Client fallback must not fabricate ten match records");
 expect(!modal.includes("data.player?.imageUrl || card.player?.imageUrl"), "Unverified profiles must not promote stale collection images");
+expect(!modal.includes('"FPL Points"'), "Player modal must not display FPL Points");
+expect(!modal.includes('label="Ownership"'), "Player modal must not display FPL ownership");
+expect(!modal.includes('label="Bonus"'), "Player modal must not display FPL bonus");
+
+includesAll(stable, [
+  "isApiFootballPortrait",
+  'mixBlendMode: apiFootballPortrait ? "multiply"',
+  "WebkitMaskImage: apiFootballPortrait",
+  '<StatChip label="RTG"',
+  '<StatChip label="MATCH"',
+], "API-Football card face");
 
 includesAll(images, [
   "verifiedImageUrl?: string | null",
@@ -101,4 +124,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Verified player identities, official match histories, goalkeeper stats and full-screen profile modal behavior are wired correctly.");
+console.log("Verified API-Football player identities, Premier League match histories, goalkeeper stats, portrait fading and full-screen profile behavior are wired correctly; FPL remains outside player-facing profiles.");

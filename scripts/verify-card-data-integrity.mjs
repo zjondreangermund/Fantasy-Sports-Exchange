@@ -18,6 +18,8 @@ const stableCard = read("client/src/components/cards/CollectionStableCard.tsx");
 const main = read("client/src/main.tsx");
 const serviceWorker = read("client/public/sw.js");
 
+// FPL remains an internal current-roster/gameweek/scoring identity source. It must
+// stay strict even though player-facing card profiles now use API-Football only.
 includesAll(identity, [
   '1: "GK"',
   '2: "DEF"',
@@ -45,26 +47,29 @@ includesAll(sync, [
 ], "FPL database synchronization");
 expect(!sync.includes('where fpl_id = ${fplId}\n       returning id'), "Player sync must not update only rows that already have an FPL id");
 
+// Player-facing collection/profile enrichment is API-Football only. FPL calls in
+// this route would reintroduce the mixed provider stats the UI intentionally removed.
 includesAll(cards, [
-  "buildFplPlayerIndex",
-  "const matchedElement = fplIndex.resolve(player)",
-  "const canonical = matchedElement ? fplIndex.canonical(matchedElement) : null",
-  "totalPoints: Number(matchedElement.total_points || 0)",
-  "form = matchedElement",
-  "currentPosition",
   "loadApiFootballPlayerDirectory",
   "resolveApiFootballPlayer",
+  "apiFootballPhotoUrl",
+  "getApiFootballPlayerProfileSnapshot",
   "verifiedImageUrl",
-  "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
+  'identitySource: apiFootballPlayer ? "api-football-current-squad"',
+  'source: "api-football"',
+  'stats: "API-Football Premier League match statistics"',
+  'fantasyPoints: "Fantasy Arena scoring"',
+  'const starterSlots = ["GK", "DEF", "MID", "FWD", "UTILITY"]',
+  "starterOrder.get(Number(a.playerId",
+], "API-Football card enrichment");
+for (const forbidden of [
+  "fplApi.bootstrap()",
+  "fplApi.getLiveGameweek()",
+  "fplApi.playerSummary",
+  'source: "fpl-live"',
   'stats: "Fantasy Premier League match history"',
-  "cleanSheets: Number(row.clean_sheets || 0)",
-  "yellowCards: Number(row.yellow_cards || 0)",
-  "redCards: Number(row.red_cards || 0)",
-], "Card API enrichment");
-expect(!cards.includes("elementByNameTeam"), "Card API must not require a stale database team to match an FPL player");
-expect(!cards.includes("player: { ...player, overall: averageScore }"), "Card API must not replace official overall with an average of fallback scores");
+]) expect(!cards.includes(forbidden), `Player-facing card route must not use FPL profile data: ${forbidden}`);
 expect(!cards.includes("last10: last10.length ? last10 : lastScoresFallback(card)"), "Card profiles must not substitute fabricated fallback matches for empty official history");
-expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl"), "Unverified cards must not reuse stale stored portraits");
 expect(!cards.includes("player.form ?? card.decisiveScore"), "Card responses must not present decisive score as official form");
 expect(!cards.includes("player.overall || card.decisiveScore"), "Card responses must not present decisive score as official overall");
 
@@ -75,7 +80,6 @@ includesAll(adapter, [
   "isVerifiedPlayerIdentity",
   "const identityVerified = isVerifiedPlayerIdentity(player)",
   "const statsVerified = identityVerified",
-  "const rating = statsVerified ? finiteNumber(player?.overall) : 0",
   "rating,",
   "form,",
   "statsVerified,",
@@ -85,13 +89,18 @@ expect(!adapter.includes("last5Scores.reduce"), "Season points must not be inven
 
 includesAll(stableCard, [
   "const statsVerified = player.statsVerified !== false",
-  'const ovr: number | string = statsVerified ? numberStat(player.rating) : "—"',
+  'const rating: number | string = statsVerified ? decimalStat(player.rating) : "—"',
   'const points: number | string = statsVerified ? numberStat(player.totalPoints) : "—"',
-  'const form: number | string = statsVerified ? decimalStat(player.form) : "—"',
+  'const matches: number | string = statsVerified ? numberStat((player as any).matchesPlayed) : "—"',
+  '<StatChip label="RTG" value={rating}',
+  '<StatChip label="PTS" value={points}',
+  '<StatChip label="MATCH" value={matches}',
+  "isApiFootballPortrait",
+  'mixBlendMode: apiFootballPortrait ? "multiply"',
+  "WebkitMaskImage: apiFootballPortrait",
   "value: number | string",
-], "Stable card stat display");
-expect(!stableCard.includes("player.totalPoints || player.form || player.rating"), "PTS must never fall back to FORM or OVR");
-expect(!stableCard.includes("player.form || player.rating"), "FORM must never fall back to OVR");
+], "Stable card API-Football stat display");
+expect(!stableCard.includes("player.totalPoints || player.form || player.rating"), "PTS must never fall back to FORM or rating");
 
 expect(main.includes('"fantasy-site-v18-lion-jpg"'), "Client cache key must match the active service worker cache.");
 expect(serviceWorker.includes('const CACHE_NAME = "fantasy-site-v18-lion-jpg"'), "Service worker cache key must match the active service worker cache.");
@@ -102,4 +111,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Card teams, positions, official season totals, form, verified identities and profile stats are wired to canonical providers without fabricated fallbacks.");
+console.log("Card data integrity verified: FPL stays internal for roster/gameweek/scoring while player-facing identity, portraits and profile stats use API-Football without fabricated fallbacks.");
