@@ -5,6 +5,7 @@ const sync = read("server/services/apiFootballSync.ts");
 const syncRoutes = read("server/routes/apiFootballSync.routes.ts");
 const adminRoutes = read("server/routes/apiFootballAdmin.routes.ts");
 const dashboard = read("client/src/pages/admin-live-data.tsx");
+const envExample = read(".env.example");
 
 function requireText(source, text, label) {
   if (!source.includes(text)) throw new Error(`API-Football Pro verification failed: ${label}`);
@@ -35,7 +36,7 @@ requireText(sync, 'setInterval(() => safeRun("lineups"), LINEUPS_POLL_MINUTES * 
 requireText(sync, 'setInterval(() => safeRun("injuries"), INJURY_SYNC_MINUTES * 60000)', "injury scheduler missing");
 requireText(sync, 'setInterval(() => safeRun("transfers"), TRANSFER_SYNC_HOURS * 3600000)', "transfer scheduler missing");
 requireText(sync, "API_FOOTBALL_PRO_SUMMARY_V1", "Pro quota summary missing");
-requireText(sync, "providerDaily", "provider quota summary contract missing");
+requireText(sync, "dailyLimit: budget.providerLimit", "provider quota summary contract missing");
 rejectText(sync, "Math.min(90", "old 90-request cap remains in sync service");
 
 requireText(syncRoutes, '"lineups", "injuries", "transfers"', "manual Pro sync routes missing");
@@ -53,5 +54,9 @@ requireText(dashboard, 'key: "transfers"', "Manual transfer sync control missing
 requireText(dashboard, "Lineups stored", "Lineup coverage metric missing");
 requireText(dashboard, "Active injuries", "Injury coverage metric missing");
 requireText(dashboard, "Transfers stored", "Transfer coverage metric missing");
+
+requireText(envExample, "API_FOOTBALL_DAILY_CAP=7000", "documented Pro safety cap missing");
+requireText(envExample, "API_FOOTBALL_LIVE_POLL_MINUTES=1", "documented one-minute live polling missing");
+requireText(envExample, "API_FOOTBALL_EMERGENCY_RESERVE=500", "documented reserve missing");
 
 console.log("API-Football Pro mode verified: provider quotas are detected, the 7,000-call safety cap and 500-call reserve are protected, live polling can run every minute, full-season fixtures plus lineups/injuries/transfers sync into the database, and Admin Live Data exposes Pro controls and coverage.");
