@@ -65,7 +65,8 @@ requireText(finalize, "active-competition-lock:", "active competition-locked tes
 requireText(finalize, "deferredLockedTestCards", "final cleanup does not report deferred locked test cards");
 requireText(lockSafety, "completed','cancelled", "lock safety does not release completed/cancelled competition locks");
 requireText(lockSafety, "expires_at <= now()", "lock safety does not release expired locks");
-requireText(lockSafety, "not exists (select 1 from app.competitions", "lock safety does not release orphaned competition locks");
+requireText(lockSafety, "and not exists (", "lock safety does not release orphaned competition locks");
+requireText(lockSafety, "source.replace(userLoopAnchor, () => replacement)", "generated lock-safety SQL is not inserted literally");
 rejectText(finalize, "delete from app.users", "final cleanup must never delete user accounts");
 rejectText(finalize, "delete from app.competition_entries", "final cleanup must never delete tournament history");
 
