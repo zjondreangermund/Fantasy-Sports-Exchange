@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 
 const reconcile = fs.readFileSync("scripts/reconcile-production-card-inventory-v2.mjs", "utf8");
 const refresh = fs.readFileSync("scripts/refresh-epl-api-football-directory-startup.mjs", "utf8");
@@ -11,6 +12,11 @@ const runtime = fs.readFileSync("scripts/prepare-runtime-startup.mjs", "utf8");
 const failures = [];
 const requireText = (source, text, message) => { if (!source.includes(text)) failures.push(message); };
 const rejectText = (source, text, message) => { if (source.includes(text)) failures.push(message); };
+
+for (const file of ["scripts/reconcile-production-card-inventory-v2.mjs", "scripts/refresh-epl-api-football-directory-startup.mjs"]) {
+  try { execFileSync(process.execPath, ["--check", file], { stdio: "pipe" }); }
+  catch (error) { failures.push(`${file} is not valid Node.js syntax: ${String(error?.stderr || error?.message || error)}`); }
+}
 
 for (const email of ["lbcplaya@gmail.com","joeberber2580@gmail.com","zaylon2580@gmail.com","zjondreangermund@gmail.com"]) {
   requireText(reconcile, email, `known full-set grant account is not scoped: ${email}`);
