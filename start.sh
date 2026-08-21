@@ -61,12 +61,20 @@ node scripts/apply-reconcile-supply-overflow-fix.mjs
 echo "Reconciling Premier League player identities and legacy card inventory..."
 node scripts/reconcile-production-card-inventory-v2.mjs
 
+# The final test-card cleanup must respect active competition locks. Expired,
+# cancelled and completed competition locks are released; cards still referenced
+# by a live/closed tournament are deferred until that tournament settles/cancels
+# so no submitted lineup or tournament history is altered and startup never dies
+# on the database's prevent_locked_card_transfer guard.
+echo "Preparing locked-card safety for final test-card cleanup..."
+node scripts/apply-finalize-locked-card-safety.mjs
+
 # The old full-set test grant left many cards attached to the four accounts even
 # after generic history/FK protection prevented deletion. Finalize those accounts
 # by keeping signup cards, tournament-winning cards and other explicit earned or
-# purchased provenance only. Everything else is unowned and moved to an isolated
-# legacy archive identity so Collection counts and active mint supply are clean
-# without breaking immutable tournament/audit references.
+# purchased provenance only. Unlocked leftovers are unowned and moved to an
+# isolated legacy archive identity; actively competition-locked leftovers are
+# reported as deferred and will be removed automatically on a later startup.
 echo "Finalizing old full-set test-card ownership..."
 node scripts/finalize-full-set-test-card-cleanup.mjs
 
