@@ -43,6 +43,15 @@ fi
 echo "Refreshing current Premier League API-Football player directory..."
 node scripts/refresh-epl-api-football-directory-startup.mjs
 
+# Patch the reconciliation with a safe overflow recovery before it touches the
+# database. Old bulk/test and duplicate-player data can contain more cards than
+# the current rarity supply permits (for example two Legendary copies where the
+# current cap is one). The recovery keeps legitimate signup/prize/reward/trade
+# ownership first, removes weak legacy full-set ownership, and archives any
+# history-referenced excess card instead of deleting history or aborting deploy.
+echo "Preparing legacy card supply overflow recovery..."
+node scripts/apply-reconcile-supply-overflow-fix.mjs
+
 # Reconcile legacy card ownership against the official current Premier League
 # FPL roster BEFORE serial canonicalization. This removes the old full-set test
 # grants only from the four accounts that received them, protects legitimate
