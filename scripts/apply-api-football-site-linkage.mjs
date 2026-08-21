@@ -1,3 +1,4 @@
+import "./apply-premier-league-only.mjs";
 import fs from "node:fs";
 
 function patchFile(file, transform) {
@@ -72,4 +73,4 @@ patchFile("client/src/pages/premier-league.tsx", (original) => {
   return source;
 });
 
-console.log("Linked API-Football Pro match intelligence, leaderboards, clubs and player histories into the public site.");
+console.log("Linked API-Football Pro Premier League match intelligence, leaderboards, clubs and player histories into the public site.");
