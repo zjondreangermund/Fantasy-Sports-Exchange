@@ -2,6 +2,7 @@
 import fs from "node:fs";
 
 const reconcile = fs.readFileSync("scripts/reconcile-production-card-inventory-v2.mjs", "utf8");
+const refresh = fs.readFileSync("scripts/refresh-epl-api-football-directory-startup.mjs", "utf8");
 const start = fs.readFileSync("start.sh", "utf8");
 const retiredGrant = fs.readFileSync("scripts/grant-test-card-teams.mjs", "utf8");
 const referrals = fs.readFileSync("server/routes/referrals.routes.ts", "utf8");
@@ -30,9 +31,16 @@ requireText(reconcile, "for_sale=false,price=0", "historical/non-current cards a
 rejectText(reconcile, "delete from app.users", "reconciliation must never delete user accounts");
 rejectText(reconcile, "delete from app.competition_entries", "reconciliation must never delete tournament entry history");
 
+requireText(refresh, 'process.env.API_FOOTBALL_LEAGUE_ID = "39"', "startup API-Football directory refresh is not locked to EPL league 39");
+requireText(refresh, 'runApiFootballSync("players")', "startup does not refresh API-Football current squads");
+requireText(refresh, "normal scheduler will retry", "API-Football startup refresh does not have a safe retry fallback");
+
+const refreshIndex = start.indexOf("node scripts/refresh-epl-api-football-directory-startup.mjs");
 const reconcileIndex = start.indexOf("node scripts/reconcile-production-card-inventory-v2.mjs");
 const serialIndex = start.indexOf("node scripts/prepare-runtime-startup.mjs");
-if (reconcileIndex < 0 || serialIndex < 0 || reconcileIndex >= serialIndex) failures.push("card reconciliation must run before global serial preflight");
+if (refreshIndex < 0 || reconcileIndex < 0 || serialIndex < 0 || !(refreshIndex < reconcileIndex && reconcileIndex < serialIndex)) {
+  failures.push("startup order must be API-Football EPL directory refresh -> card reconciliation -> global serial preflight");
+}
 
 requireText(runtime, "WHERE pc.serial_number IS NULL OR pc.serial_number <= 0", "global legacy serial backfill is missing");
 requireText(runtime, "player_cards_serial_supply_guard", "runtime supply guard is missing");
@@ -51,4 +59,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("EPL card inventory reconciliation verified: current FPL identities, exact test-grant cleanup scope, legitimate-card provenance protections, API-Football linking, serial repair and active-EPL reward guards are present.");
+console.log("EPL card inventory reconciliation verified: fresh API-Football EPL directory, current FPL identities, exact test-grant cleanup scope, legitimate-card provenance protections, serial repair and active-EPL reward guards are present.");
