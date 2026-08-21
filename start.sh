@@ -36,8 +36,20 @@ else
   echo "Warning: db:push failed with exit code $DB_PUSH_STATUS; running compatibility preflight."
 fi
 
-# Repair legacy enum namespaces and canonicalize card serials before the server
-# seed path can touch those records. This step is idempotent and fails closed.
+# Reconcile legacy card ownership against the official current Premier League
+# FPL roster BEFORE serial canonicalization. This removes the old full-set test
+# grants only from the four accounts that received them, protects legitimate
+# signup/prize/reward/referral/trade/history cards, merges duplicate legacy
+# player identities into the canonical current EPL player row, repairs affected
+# serials and uses cached API-Football portraits when an exact current-squad
+# identity is available. If FPL itself is temporarily unavailable the script
+# safely makes no destructive changes and startup continues.
+echo "Reconciling Premier League player identities and legacy card inventory..."
+node scripts/reconcile-production-card-inventory-v2.mjs
+
+# Repair legacy enum namespaces and canonicalize any remaining old card serials
+# for every user after the inventory cleanup. This step is idempotent and fails
+# closed if a remaining card cannot be assigned within the true rarity supply.
 echo "Preparing runtime database compatibility..."
 node scripts/prepare-runtime-startup.mjs
 
