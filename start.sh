@@ -53,19 +53,26 @@ echo "Preparing legacy card supply overflow recovery..."
 node scripts/apply-reconcile-supply-overflow-fix.mjs
 
 # Reconcile legacy card ownership against the official current Premier League
-# FPL roster BEFORE serial canonicalization. This removes the old full-set test
-# grants only from the four accounts that received them, protects legitimate
-# signup/prize/reward/referral/trade/history cards, merges duplicate legacy
-# player identities into the canonical current EPL player row, repairs affected
-# serials and uses API-Football portraits when an exact current-squad identity
-# is available. If FPL itself is temporarily unavailable the script safely makes
-# no destructive changes and startup continues.
+# FPL roster BEFORE serial canonicalization. This merges duplicate legacy player
+# identities into the canonical current EPL player row, repairs affected serials
+# and uses API-Football portraits when an exact current-squad identity is
+# available. If FPL itself is temporarily unavailable the script safely makes no
+# destructive changes and startup continues.
 echo "Reconciling Premier League player identities and legacy card inventory..."
 node scripts/reconcile-production-card-inventory-v2.mjs
 
+# The old full-set test grant left many cards attached to the four accounts even
+# after generic history/FK protection prevented deletion. Finalize those accounts
+# by keeping signup cards, tournament-winning cards and other explicit earned or
+# purchased provenance only. Everything else is unowned and moved to an isolated
+# legacy archive identity so Collection counts and active mint supply are clean
+# without breaking immutable tournament/audit references.
+echo "Finalizing old full-set test-card ownership..."
+node scripts/finalize-full-set-test-card-cleanup.mjs
+
 # Repair legacy enum namespaces and canonicalize any remaining old card serials
-# for every user after the inventory cleanup. This step is idempotent and fails
-# closed if a remaining card cannot be assigned within the true rarity supply.
+# for every user after the inventory cleanup. This gives surviving legitimate old
+# cards the current serial system while enforcing the true rarity supply caps.
 echo "Preparing runtime database compatibility..."
 node scripts/prepare-runtime-startup.mjs
 
