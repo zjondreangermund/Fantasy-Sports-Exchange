@@ -1,0 +1,1 @@
+Read-only forensic runner: no player_cards ownership mutations.
