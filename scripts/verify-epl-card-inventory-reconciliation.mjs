@@ -7,6 +7,7 @@ const reconcile = fs.readFileSync("scripts/reconcile-production-card-inventory-v
 const refresh = fs.readFileSync("scripts/refresh-epl-api-football-directory-startup.mjs", "utf8");
 const finalize = fs.readFileSync("scripts/finalize-full-set-test-card-cleanup.mjs", "utf8");
 const lockSafety = fs.readFileSync("scripts/apply-finalize-locked-card-safety.mjs", "utf8");
+const economy = fs.readFileSync("server/routes/economyIntegrity.routes.ts", "utf8");
 const start = fs.readFileSync("start.sh", "utf8");
 const retiredGrant = fs.readFileSync("scripts/grant-test-card-teams.mjs", "utf8");
 const referrals = fs.readFileSync("server/routes/referrals.routes.ts", "utf8");
@@ -60,11 +61,20 @@ requireText(finalize, "Legacy / Test Grant Archive", "removed full-set cards are
 requireText(finalize, "owner_id=null", "removed full-set cards are not removed from user Collection ownership");
 requireText(finalize, "LEGACY-TEST-", "archived test cards do not receive isolated audit serials");
 requireText(finalize, "removeFromCurrentLineup", "retired full-set cards are not removed from the user's active lineup");
-requireText(finalize, "FINAL_FULL_SET_LOCK_SAFETY_V1", "final cleanup is missing competition-lock safety");
-requireText(finalize, "active-competition-lock:", "active competition-locked test cards are not deferred safely");
+requireText(finalize, "FINAL_FULL_SET_LOCK_SAFETY_V2", "final cleanup is missing all-active-lock safety");
+requireText(finalize, "active-card-lock:", "active locked test cards are not deferred safely");
 requireText(finalize, "deferredLockedTestCards", "final cleanup does not report deferred locked test cards");
+
+// The transfer trigger blocks on ANY active card_locks row by card_id. Cleanup must
+// therefore mirror that exact scope instead of filtering by lock user/reason.
+requireText(economy, "where cl.card_id = old.id", "database lock guard no longer keys active locks by card_id");
+requireText(economy, "cl.expires_at is null or cl.expires_at > now()", "database lock guard active-window semantics changed");
+requireText(lockSafety, "join app.player_cards locked_pc on locked_pc.id=cl.card_id", "lock safety does not inspect all active locks on currently owned cards");
+requireText(lockSafety, "where locked_pc.owner_id=$1", "lock safety does not scope active locks through current card ownership");
+requireText(lockSafety, "coalesce(cl.reason::text,'unknown') as reason", "lock safety does not preserve arbitrary active lock reasons for diagnostics");
+requireText(lockSafety, "active-card-lock:", "lock safety still assumes competition-only active locks");
 requireText(lockSafety, "completed','cancelled", "lock safety does not release completed/cancelled competition locks");
-requireText(lockSafety, "expires_at <= now()", "lock safety does not release expired locks");
+requireText(lockSafety, "expires_at <= now()", "lock safety does not release expired competition locks");
 requireText(lockSafety, "and not exists (", "lock safety does not release orphaned competition locks");
 requireText(lockSafety, "source.replace(userLoopAnchor, () => replacement)", "generated lock-safety SQL is not inserted literally");
 rejectText(finalize, "delete from app.users", "final cleanup must never delete user accounts");
@@ -99,4 +109,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("EPL card inventory verified: fresh API-Football EPL identities, legacy supply recovery, locked-card-safe final full-set cleanup, signup/win/earned provenance protection and current serial repair are all enforced.");
+console.log("EPL card inventory verified: fresh API-Football EPL identities, legacy supply recovery, all-active-lock-safe final full-set cleanup, signup/win/earned provenance protection and current serial repair are all enforced.");
