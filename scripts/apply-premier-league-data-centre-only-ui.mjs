@@ -24,7 +24,9 @@ const close = '          </Tabs>';
 const end = source.lastIndexOf(close);
 if (end < start) throw new Error("Premier League Data Centre-only patch could not find the legacy outer tabs closing tag");
 
-const replacement = `          {/* ${marker} */}\n          <FootballDataCentre />`;
+// Keep the original API linkage marker/value as comments so the upstream linkage
+// patch and verifier remain idempotent on later npm check/build invocations.
+const replacement = `          {/* API_FOOTBALL_SITE_TAB_V1 compatibility: value="data-centre" */}\n          {/* ${marker} */}\n          <FootballDataCentre />`;
 source = `${source.slice(0, start)}${replacement}${source.slice(end + close.length)}`;
 source = source.replace("Top 5 Leagues", "Premier League");
 source = source.replace(
