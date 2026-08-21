@@ -1,0 +1,1 @@
+Read-only compact card audit. No ownership changes.

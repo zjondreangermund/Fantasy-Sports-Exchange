@@ -1,0 +1,1 @@
+No player_cards writes are performed by the compact audit.
