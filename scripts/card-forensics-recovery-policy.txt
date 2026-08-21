@@ -1,0 +1,1 @@
+Do not guess or remint missing normal-user cards. Recover only from exact backup or snapshot evidence and never overwrite a current owner.
