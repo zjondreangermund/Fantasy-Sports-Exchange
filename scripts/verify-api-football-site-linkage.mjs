@@ -9,6 +9,9 @@ const centre = read("client/src/components/FootballDataCentre.tsx");
 const premiumCard = read("client/src/components/cards/PremiumFootballCard.tsx");
 const playerIntel = read("client/src/components/PlayerIntelligencePanel.tsx");
 const squadPage = read("client/src/pages/select-squad.tsx");
+const sidebar = read("client/src/components/app-sidebar.tsx");
+const liveDock = read("client/src/components/LivePulseDock.tsx");
+const routeScene = read("client/src/components/RouteSceneBackground.tsx");
 
 const failures = [];
 const requireText = (source, text, message) => { if (!source.includes(text)) failures.push(message); };
@@ -16,7 +19,9 @@ const rejectText = (source, text, message) => { if (source.includes(text)) failu
 
 requireText(sync, "API_FOOTBALL_PUBLIC_PROVIDER_V1", "central quota-aware provider export is missing");
 requireText(sync, "export async function fetchApiFootballProvider", "site routes cannot reuse Pro quota/backoff provider");
-requireText(route, "API_FOOTBALL_FULL_INTELLIGENCE_V2", "full-intelligence route marker missing");
+requireText(route, "API_FOOTBALL_PREMIER_LEAGUE_ONLY_V3", "Premier League-only route marker missing");
+requireText(route, 'export type FootballLeagueKey = "premier-league";', "football routes are not locked to Premier League");
+requireText(route, '"premier-league": { id: 39, name: "Premier League"', "Premier League API-Football league mapping is missing");
 
 for (const endpoint of [
   'app.get("/api/football/coverage/:leagueKey"',
@@ -70,10 +75,29 @@ requireText(route, "app.api_football_site_cache", "public API-Football data must
 rejectText(route, 'cachedProvider("odds"', "betting odds must not be exposed by Fantasy Arena's football data centre");
 rejectText(route, 'cachedProvider("odds/live"', "live betting odds must not be exposed by Fantasy Arena's football data centre");
 
+for (const forbidden of [
+  "la-liga",
+  "bundesliga",
+  "serie-a",
+  "ligue-1",
+  "champions-league",
+  "europa-league",
+  "conference-league",
+  "fa-cup",
+  "efl-cup",
+  "world-cup",
+]) {
+  rejectText(route, `\"${forbidden}\"`, `non-Premier-League backend mapping remains: ${forbidden}`);
+  rejectText(centre, `\"${forbidden}\"`, `non-Premier-League UI option remains: ${forbidden}`);
+}
+
 requireText(index, 'registerFootballDataRoutes } from "./routes/footballData.routes.js"', "football data routes are not imported at runtime");
 requireText(index, "registerFootballDataRoutes(app);", "football data routes are not registered at runtime");
 requireText(page, 'value="data-centre"', "Premier League page is missing the Pro Data Centre tab");
 requireText(page, "<FootballDataCentre />", "Premier League page is not rendering the Pro Data Centre");
+requireText(page, "Premier League", "Premier League page title is missing");
+rejectText(page, "Top 5 Leagues", "old Top 5 Leagues title remains on Premier League page");
+rejectText(page, '"la-liga"', "Premier League page still carries other league state");
 
 for (const marker of [
   "Match Centre",
@@ -98,32 +122,24 @@ for (const marker of [
   "Trophy cabinet",
   "Injury & suspension history",
   "Management career",
-]) requireText(centre, marker, `Data Centre UI is missing: ${marker}`);
+]) requireText(centre, marker, `Premier League Data Centre UI is missing: ${marker}`);
 
-for (const league of [
-  "premier-league",
-  "la-liga",
-  "bundesliga",
-  "serie-a",
-  "ligue-1",
-  "champions-league",
-  "europa-league",
-  "conference-league",
-  "fa-cup",
-  "efl-cup",
-  "world-cup",
-]) requireText(centre, `key: "${league}"`, `Data Centre competition selector is missing ${league}`);
+requireText(centre, 'type LeagueKey = "premier-league";', "Data Centre is not locked to Premier League");
+requireText(centre, '{ key: "premier-league", name: "Premier League"', "Premier League Data Centre selector/config is missing");
+requireText(sidebar, '{ title: "Premier League", href: "/premier-league"', "sidebar still labels the page generically as Leagues");
+requireText(liveDock, '>Premier League</Button>', "live dock still labels the route as Live Leagues");
+requireText(routeScene, 'label: "PREMIER LEAGUE"', "Premier League route scene still uses multi-league wording");
 
 requireText(premiumCard, "PlayerIntelligencePanel", "PremiumFootballCard does not expose player intelligence");
 requireText(premiumCard, "Player intelligence", "card intelligence action is missing");
-requireText(playerIntel, "/api/football/player-intelligence/premier-league/", "card intelligence does not use API-Football player intelligence route");
+requireText(playerIntel, "/api/football/player-intelligence/premier-league/", "card intelligence does not use Premier League API-Football player intelligence route");
 requireText(squadPage, "Tournament Team Assistant", "squad selection is missing the tournament team assistant");
-requireText(squadPage, "/api/football/lineup-intelligence/premier-league", "tournament team assistant is not linked to API-Football");
+requireText(squadPage, "/api/football/lineup-intelligence/premier-league", "tournament team assistant is not linked to Premier League API-Football");
 
 if (failures.length) {
-  console.error("API-Football site linkage verification failed:");
+  console.error("API-Football Premier League-only linkage verification failed:");
   failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
 
-console.log("API-Football full intelligence verified: standings, rounds, detailed/half-time match data, visual lineups, league availability, squads, transfers, stadiums, coaches, advanced player form, card intelligence and tournament team assistance are linked through cached quota-aware routes; betting odds remain intentionally excluded.");
+console.log("API-Football Premier League-only intelligence verified: standings, rounds, match/half-time data, lineups, injuries, squads, transfers, stadiums, coaches, advanced player form, card intelligence and tournament team assistance remain available for EPL only; other leagues/cups and betting odds are excluded.");
