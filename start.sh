@@ -61,26 +61,19 @@ node scripts/apply-reconcile-supply-overflow-fix.mjs
 echo "Reconciling Premier League player identities and legacy card inventory..."
 node scripts/reconcile-production-card-inventory-v2.mjs
 
-# The final test-card cleanup must respect active competition locks. Expired,
-# cancelled and completed competition locks are released; cards still referenced
-# by a live/closed tournament are deferred until that tournament settles/cancels
-# so no submitted lineup or tournament history is altered and startup never dies
-# on the database's prevent_locked_card_transfer guard.
-echo "Preparing locked-card safety for final test-card cleanup..."
-node scripts/apply-finalize-locked-card-safety.mjs
-
-# The old full-set test grant left many cards attached to the four accounts even
-# after generic history/FK protection prevented deletion. Finalize those accounts
-# by keeping signup cards, tournament-winning cards and other explicit earned or
-# purchased provenance only. Unlocked leftovers are unowned and moved to an
-# isolated legacy archive identity; actively competition-locked leftovers are
-# reported as deferred and will be removed automatically on a later startup.
-echo "Finalizing old full-set test-card ownership..."
-node scripts/finalize-full-set-test-card-cleanup.mjs
+# The four accounts that received historical full-set test grants are now reset
+# once to the same free starter state expected after signup. The reset removes all
+# previous card ownership from those four accounts only, clears their old card
+# locks/current lineup, preserves the old card rows for tournament/audit history,
+# and grants exactly five random Common current-EPL/API-Football-linked cards:
+# GK, DEF, MID, FWD and one wildcard. Common cards are not marketplace-tradable.
+echo "Resetting four historical test accounts to five starter Common cards..."
+node scripts/reset-four-test-accounts-to-starter-common.mjs
 
 # Repair legacy enum namespaces and canonicalize any remaining old card serials
-# for every user after the inventory cleanup. This gives surviving legitimate old
-# cards the current serial system while enforcing the true rarity supply caps.
+# for every user after the inventory cleanup. This gives the newly granted Common
+# starters and all other legitimate cards the current serial system while
+# enforcing the true rarity supply caps.
 echo "Preparing runtime database compatibility..."
 node scripts/prepare-runtime-startup.mjs
 
