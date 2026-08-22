@@ -118,21 +118,15 @@ async function restoreConfirmedAccount(client, account) {
     return { restored: false, reason: "selection-not-proven-by-five-packs" };
   }
 
+  const allPackPlayerIds = positiveIds(proof.packs.flat());
   const players = rows(await client.query(`
     select id, name, team, position::text as position, league
     from app.players
     where id=any($1::int[])
-  `, [proof.selectedPlayerIds]));
+  `, [allPackPlayerIds]));
   const byPlayerId = new Map(players.map((player) => [Number(player.id), player]));
-  if (players.length !== 5) return { restored: false, reason: "selected-player-row-missing" };
-  for (let index = 0; index < REQUIRED_POSITIONS.length; index += 1) {
-    const player = byPlayerId.get(proof.selectedPlayerIds[index]);
-    if (normalizePosition(player?.position) !== REQUIRED_POSITIONS[index]) {
-      return {
-        restored: false,
-        reason: `pack-position-mismatch-${index + 1}-${normalizePosition(player?.position) || "missing"}`,
-      };
-    }
+  if (proof.selectedPlayerIds.some((playerId) => !byPlayerId.has(playerId))) {
+    return { restored: false, reason: "selected-player-row-missing" };
   }
 
   await backupAccount(client, account);
@@ -143,7 +137,7 @@ async function restoreConfirmedAccount(client, account) {
       and rarity::text='common'
       and player_id=any($2::int[])
     order by acquired_at asc nulls last, id
-  `, [account.user_id, proof.selectedPlayerIds]));
+  `, [account.user_id, allPackPlayerIds]));
   const cardByPlayerId = new Map();
   for (const card of existing) {
     const playerId = Number(card.player_id);
@@ -151,8 +145,8 @@ async function restoreConfirmedAccount(client, account) {
   }
 
   const mintedPlayerIds = [];
-  for (const playerId of proof.selectedPlayerIds) {
-    if (cardByPlayerId.has(playerId)) continue;
+  const ensureCommonCard = async (playerId) => {
+    if (cardByPlayerId.has(playerId)) return;
     const created = rows(await client.query(`
       insert into app.player_cards
         (player_id, owner_id, rarity, level, xp, decisive_score, for_sale, price)
@@ -162,10 +156,41 @@ async function restoreConfirmedAccount(client, account) {
     if (!created?.id) throw new Error(`Could not restore selected player ${playerId} for ${account.email}`);
     cardByPlayerId.set(playerId, Number(created.id));
     mintedPlayerIds.push(playerId);
+  };
+
+  for (const playerId of proof.selectedPlayerIds) {
+    await ensureCommonCard(playerId);
   }
 
   const starterCardIds = proof.selectedPlayerIds.map((playerId) => cardByPlayerId.get(playerId));
-  const lineup = await ensureEligibleLineup(client, account.user_id, starterCardIds);
+  const lineupPlayerIds = [];
+  const eligibilitySubstitutePlayerIds = [];
+  for (let index = 0; index < REQUIRED_POSITIONS.length; index += 1) {
+    const selectedPlayerId = proof.selectedPlayerIds[index];
+    const requiredPosition = REQUIRED_POSITIONS[index];
+    if (normalizePosition(byPlayerId.get(selectedPlayerId)?.position) === requiredPosition) {
+      lineupPlayerIds.push(selectedPlayerId);
+      continue;
+    }
+
+    const alternatives = proof.packs[index]
+      .filter((playerId) => normalizePosition(byPlayerId.get(playerId)?.position) === requiredPosition)
+      .sort((left, right) => {
+        const leftOwned = cardByPlayerId.has(left) ? 0 : 1;
+        const rightOwned = cardByPlayerId.has(right) ? 0 : 1;
+        return leftOwned - rightOwned || left - right;
+      });
+    const substitutePlayerId = alternatives[0];
+    if (!substitutePlayerId) {
+      return { restored: false, reason: `no-current-${requiredPosition}-in-original-pack-${index + 1}` };
+    }
+    await ensureCommonCard(substitutePlayerId);
+    lineupPlayerIds.push(substitutePlayerId);
+    eligibilitySubstitutePlayerIds.push(substitutePlayerId);
+  }
+  lineupPlayerIds.push(proof.selectedPlayerIds[4]);
+  const lineupCardIds = lineupPlayerIds.map((playerId) => cardByPlayerId.get(playerId));
+  const lineup = await ensureEligibleLineup(client, account.user_id, lineupCardIds);
   await client.query(`
     insert into app.audit_logs (user_id, action, meta)
     values ($1, 'admin.confirmed_starter_selection_restored', $2::jsonb)
@@ -176,6 +201,7 @@ async function restoreConfirmedAccount(client, account) {
     starterCardIds,
     mintedPlayerIds,
     existingPlayerIds: proof.selectedPlayerIds.filter((id) => !mintedPlayerIds.includes(id)),
+    eligibilitySubstitutePlayerIds,
     lineupUpdated: lineup.updated,
     lineupCardIds: lineup.cardIds,
     previousLineupCardIds: lineup.beforeCardIds,
@@ -185,7 +211,9 @@ async function restoreConfirmedAccount(client, account) {
     `STARTER_RESTORE_CONFIRMED email=${account.email}`
     + ` selectedPlayerIds=${proof.selectedPlayerIds.join(",")}`
     + ` starterCardIds=${starterCardIds.join(",")}`
-    + ` minted=${mintedPlayerIds.length} lineupUpdated=${lineup.updated}`,
+    + ` minted=${mintedPlayerIds.length}`
+    + ` eligibilitySubstitutes=${eligibilitySubstitutePlayerIds.join(",") || "none"}`
+    + ` lineupUpdated=${lineup.updated}`,
   );
   return { restored: true, minted: mintedPlayerIds.length, lineupUpdated: lineup.updated };
 }
