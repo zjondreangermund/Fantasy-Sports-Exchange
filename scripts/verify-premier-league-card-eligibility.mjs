@@ -37,6 +37,7 @@ requireText(reconciliation, "bootstrap.elements.length < 300", "Replacement mint
 requireText(reconciliation, "directory.length >= 250 && directoryTeams >= 15", "Replacement minting must require a healthy independent API-Football roster.");
 requireText(reconciliation, "app.departed_player_card_replacements", "Replacement cards must be tracked in a permanent idempotency ledger.");
 requireText(reconciliation, "$5::integer", "FPL identity parameters must be explicitly typed for PostgreSQL startup reconciliation.");
+requireText(reconciliation, "providerConflicts", "Duplicate legacy player rows must not violate unique official-provider identifiers.");
 requireText(reconciliation, "source_card_id integer primary key", "Only one replacement may be minted for each departed player card.");
 requireText(reconciliation, "p.position=$2::public.position", "Replacement players must have the same position as the original card.");
 requireText(reconciliation, "$3::public.rarity", "Replacement players must have the same rarity as the original card.");

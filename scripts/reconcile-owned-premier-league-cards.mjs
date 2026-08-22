@@ -99,6 +99,19 @@ async function ensureReplacementLedger(client) {
 async function repairActivePlayer(client, playerId, identity, element) {
   const canonicalPosition = positionOf(identity.position);
   if (!canonicalPosition) throw new Error(`Invalid official position for player ${playerId}`);
+  const requestedFplId = element ? Number(element.id || 0) || null : null;
+  const requestedCode = element ? Number(element.code || 0) || null : null;
+  const providerConflicts = rows(await client.query(`
+    select fpl_id,code from app.players
+    where id<>$3 and (($1::integer is not null and fpl_id=$1::integer)
+      or ($2::integer is not null and code=$2::integer))
+  `, [requestedFplId, requestedCode, playerId]));
+  const usableFplId = providerConflicts.some((player) => Number(player.fpl_id || 0) === requestedFplId)
+    ? null
+    : requestedFplId;
+  const usableCode = providerConflicts.some((player) => Number(player.code || 0) === requestedCode)
+    ? null
+    : requestedCode;
   const updated = await client.query(`
     update app.players
     set name=$2, team=$3, league='Premier League', position=$4::public.position,
@@ -119,8 +132,8 @@ async function repairActivePlayer(client, playerId, identity, element) {
     String(identity.name || "").trim(),
     String(identity.team || "").trim(),
     canonicalPosition,
-    element ? Number(element.id || 0) || null : null,
-    element ? Number(element.code || 0) || null : null,
+    usableFplId,
+    usableCode,
     element ? String(element.web_name || identity.name || "").trim() || null : null,
     element ? String(element.status || "a") : "a",
     element ? String(element.news || "") : "",
