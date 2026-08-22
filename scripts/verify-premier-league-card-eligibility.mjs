@@ -26,6 +26,8 @@ requireText(cards, '"fpl-fallback"', "FPL must remain available as the identity 
 requireText(enrichment, 'league: identityVerified ? "Premier League" : player.league', "Shared card enrichment must retain verified Premier League eligibility.");
 requireText(client, "premierLeagueEligible === true", "The squad picker must include verified Premier League players even when old stored metadata is stale.");
 requireText(client, "candidateRows.map(({ card, reason })", "The squad picker must display unavailable cards with their individual reason.");
+requireText(client, "All owned cards are shown", "The picker must not hide a card merely because its official position differs from the current slot.");
+requireText(client, "is required in this slot", "Position mismatches must be explicitly explained to the user.");
 requireText(client, "already used in another entry in this tournament", "The squad picker must explain tournament card locks.");
 requireText(client, "listed on the marketplace", "The squad picker must explain marketplace exclusions.");
 requireText(client, "not linked to a current Premier League squad", "The squad picker must explain identity exclusions.");
