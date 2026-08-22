@@ -3,6 +3,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { storage } from "../storage.js";
 import { fplApi } from "../services/fplApi.js";
+import { buildFplPlayerIndex } from "../services/fplPlayerIdentity.js";
+import { loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 import { ScoreUpdateService } from "../services/scoreUpdater.js";
 import { rankCompetitionEntries } from "../services/tournamentRules.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
@@ -189,6 +191,11 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       `))[0];
       if (!preview) return res.status(404).json({ message: "Tournament not found" });
       const entryDeadline = await resolveEntryDeadline(Number(preview.gameWeek || 0), preview.startDate);
+      const [officialBootstrap, apiFootballDirectory] = await Promise.all([
+        fplApi.bootstrap(),
+        loadApiFootballPlayerDirectory().catch(() => []),
+      ]);
+      const officialPlayerIndex = buildFplPlayerIndex(officialBootstrap);
 
       const entry = await db.transaction(async (tx) => {
         const competition = rowsOf(await tx.execute(sql`
@@ -213,10 +220,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           order by selected.card_id
         `);
 
-        const cards = rowsOf(await tx.execute(sql`
+        const storedCards = rowsOf(await tx.execute(sql`
           select pc.id, pc.owner_id as "ownerId", pc.rarity::text as rarity,
             pc.for_sale as "forSale", pc.player_id as "playerId",
-            p.position::text as position, p.league as league
+            p.position::text as position, p.league as league,
+            p.name as "playerName", p.team as team, p.fpl_id as "fplId",
+            p.code as code, p.web_name as "webName"
           from app.player_cards pc
           join app.players p on p.id = pc.player_id
           where pc.id in (
@@ -225,6 +234,25 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           )
           for update of pc
         `));
+        const cards = storedCards.map((card) => {
+          const officialPlayer = officialPlayerIndex.resolve({
+            name: card.playerName,
+            team: card.team,
+            position: card.position,
+            fplId: card.fplId,
+            code: card.code,
+            webName: card.webName,
+          });
+          const canonical = officialPlayer ? officialPlayerIndex.canonical(officialPlayer) : null;
+          const apiFootballPlayer = resolveApiFootballPlayer({ ...card, name: card.playerName, ...(canonical || {}) }, apiFootballDirectory);
+          if (!apiFootballPlayer && !canonical) return card;
+          return {
+            ...card,
+            league: "Premier League",
+            position: apiFootballPlayer?.position || canonical?.position || card.position,
+            selectionProvider: apiFootballPlayer ? "API-Football" : "FPL fallback",
+          };
+        });
         const cardById = new Map(cards.map((card) => [Number(card.id), card]));
         const orderedCards = cardIds.map((cardId: number) => cardById.get(cardId));
 
@@ -237,12 +265,14 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         if (new Set(cards.map((card) => Number(card.playerId))).size !== 5) {
           throw new Error("Lineup must use 5 different players");
         }
-        if (cards.some((card) => !isPremierLeague(card.league))) {
-          throw new Error("Premier League tournaments only accept Premier League player cards.");
+        const ineligiblePlayer = cards.find((card) => !isPremierLeague(card.league));
+        if (ineligiblePlayer) {
+          throw new Error(`Premier League tournaments only accept Premier League player cards. ${ineligiblePlayer.playerName || "This player"} cannot be selected because no current API-Football or FPL fallback link was found.`);
         }
         for (let index = 0; index < TOURNAMENT_REQUIRED_POSITIONS.length; index += 1) {
           if (String(orderedCards[index]?.position || "").toUpperCase() !== TOURNAMENT_REQUIRED_POSITIONS[index]) {
-            throw new Error("Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player.");
+            const card = orderedCards[index];
+            throw new Error(`Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player. ${card?.playerName || "This player"} is linked as ${card?.position || "unknown position"} by ${card?.selectionProvider || "stored card data"}; ${TOURNAMENT_REQUIRED_POSITIONS[index]} is required in this slot.`);
           }
         }
         const utilityPosition = String(orderedCards[4]?.position || "").toUpperCase();

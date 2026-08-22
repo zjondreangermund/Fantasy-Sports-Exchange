@@ -14,6 +14,7 @@ function forbidText(source, pattern, message) {
 }
 
 requireText(client, "isPremierLeague(card.player?.league)", "Tournament card picker must filter player cards to the Premier League.");
+requireText(client, "premierLeagueEligible === true", "Verified current Premier League players must remain selectable when legacy league metadata is stale.");
 requireText(client, "const slotDefinitions", "Tournament entry must define guided lineup slots.");
 requireText(client, "Goalkeeper", "Guided lineup must begin with a goalkeeper slot.");
 requireText(client, "Defender", "Guided lineup must include a defender slot.");
@@ -33,6 +34,7 @@ forbidText(client, "disabled={entered", "Existing entries must not disable the t
 requireText(rules, 'TOURNAMENT_UTILITY_POSITIONS = ["DEF", "MID", "FWD"]', "Shared rules must define Utility as DEF, MID or FWD.");
 
 requireText(server, "p.league as league", "Server validation must load each player's league.");
+requireText(server, "officialPlayerIndex.resolve", "Server validation must accept players securely matched to the current official Premier League roster.");
 requireText(server, "Premier League tournaments only accept Premier League player cards.", "Server validation must reject non-Premier-League cards.");
 requireText(server, "TOURNAMENT_REQUIRED_POSITIONS", "Server validation must enforce the guided formation.");
 requireText(server, "Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player.", "Server must enforce ordered formation slots.");

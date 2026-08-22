@@ -203,6 +203,7 @@ export function buildFplPlayerIndex(bootstrap: any) {
     name: fplPlayerFullName(element),
     webName: String(element?.web_name || fplPlayerFullName(element)).trim(),
     team: teamNameOf(element),
+    league: "Premier League",
     position: fplPlayerPosition(element),
     fplId: Number(element?.id || 0),
     code: Number(element?.code || 0) || null,

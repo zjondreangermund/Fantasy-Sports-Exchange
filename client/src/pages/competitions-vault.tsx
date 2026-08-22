@@ -58,6 +58,9 @@ const normalizeLeague = (value: unknown) => String(value || "").toLowerCase().re
 const isPremierLeague = (value: unknown) => ["premierleague", "englishpremierleague", "epl"].includes(normalizeLeague(value));
 const playerPosition = (card: PlayerCardWithPlayer | undefined | null) => String(card?.player?.position || "").toUpperCase() as Position;
 const isUtilityPosition = (value: unknown) => TOURNAMENT_UTILITY_POSITIONS.includes(String(value || "").toUpperCase() as typeof TOURNAMENT_UTILITY_POSITIONS[number]);
+const isCurrentPremierLeagueCard = (card: PlayerCardWithPlayer) => isPremierLeague(card.player?.league)
+  || (card.player as any)?.premierLeagueEligible === true;
+const playerEligibilityMessage = (card: PlayerCardWithPlayer) => String((card.player as any)?.selectionEligibility?.message || "").trim();
 const dateLabel = (value: unknown) => {
   const d = new Date(String(value || ""));
   return Number.isFinite(d.getTime()) ? d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "Fixture controlled";
@@ -167,11 +170,7 @@ export default function CompetitionsVaultPage() {
     return ids;
   }, [competitionById, entries, selected?.id]);
 
-  const tournamentCards = useMemo(
-    () => myCards.filter((card) => !card.forSale && isCardRarityAllowedInTournament(card.rarity, selectedTier) && isPremierLeague(card.player?.league) && !unavailableCardIds.has(Number(card.id))),
-    [myCards, selectedTier, unavailableCardIds],
-  );
-  const cardById = useMemo(() => new Map(tournamentCards.map((card) => [Number(card.id), card])), [tournamentCards]);
+  const cardById = useMemo(() => new Map(myCards.map((card) => [Number(card.id), card])), [myCards]);
   const selectedCards = lineupSlots.map((cardId) => cardId ? cardById.get(Number(cardId)) || null : null);
   const selectedIds = lineupSlots.filter((id): id is number => Number.isInteger(id));
   const selectedPlayerIds = new Set(selectedCards.filter(Boolean).map((card) => Number(card!.playerId)));
@@ -180,26 +179,32 @@ export default function CompetitionsVaultPage() {
   const firstEmptySlot = lineupSlots.findIndex((cardId) => !cardId);
   const currentSlotCard = activeSlot === null ? null : selectedCards[activeSlot];
   const activePosition = activeSlot === null || activeSlot === 4 ? null : slotDefinitions[activeSlot].position;
-  const candidateCards = activeSlot === null ? [] : tournamentCards.filter((card) => {
+  const candidateRows = activeSlot === null ? [] : myCards.filter((card) => {
+    const position = playerPosition(card);
+    return activeSlot === 4 ? isUtilityPosition(position) : !activePosition || position === activePosition;
+  }).map((card) => {
     const cardId = Number(card.id);
     const playerId = Number(card.playerId);
     const currentCardId = lineupSlots[activeSlot];
     const currentPlayerId = currentSlotCard ? Number(currentSlotCard.playerId) : null;
-    const position = playerPosition(card);
-    if (activeSlot === 4 && !isUtilityPosition(position)) return false;
-    if (activePosition && position !== activePosition) return false;
-    if (selectedIds.includes(cardId) && cardId !== currentCardId) return false;
-    if (selectedPlayerIds.has(playerId) && playerId !== currentPlayerId) return false;
-    return true;
+    let reason: string | null = null;
+    if (card.forSale) reason = "Unavailable: listed on the marketplace.";
+    else if (!isCardRarityAllowedInTournament(card.rarity, selectedTier)) reason = `Unavailable: ${String(card.rarity).toUpperCase()} rarity is not allowed in this ${selectedTier.toUpperCase()} tournament.`;
+    else if (!isCurrentPremierLeagueCard(card)) reason = playerEligibilityMessage(card) || "Unavailable: this player is not linked to a current Premier League squad by API-Football or the FPL fallback.";
+    else if (unavailableCardIds.has(cardId)) reason = "Unavailable: this card is already used in another entry in this tournament.";
+    else if (selectedIds.includes(cardId) && cardId !== currentCardId) reason = "Unavailable: this card is already selected in your lineup.";
+    else if (selectedPlayerIds.has(playerId) && playerId !== currentPlayerId) reason = "Unavailable: another card for this player is already selected.";
+    return { card, reason };
   }).sort((a, b) => {
-    const aExact = tier(a.rarity) === selectedTier ? 1 : 0;
-    const bExact = tier(b.rarity) === selectedTier ? 1 : 0;
-    return bExact - aExact || Number(b.player?.overall || 0) - Number(a.player?.overall || 0);
+    if (Boolean(a.reason) !== Boolean(b.reason)) return a.reason ? 1 : -1;
+    const aExact = tier(a.card.rarity) === selectedTier ? 1 : 0;
+    const bExact = tier(b.card.rarity) === selectedTier ? 1 : 0;
+    return bExact - aExact || Number(b.card.player?.overall || 0) - Number(a.card.player?.overall || 0);
   });
-
   const validLineup = lineupSlots.every(Boolean)
     && new Set(selectedIds).size === 5
     && selectedCards.every(Boolean)
+    && selectedCards.every((card) => card && !card.forSale && isCurrentPremierLeagueCard(card) && isCardRarityAllowedInTournament(card.rarity, selectedTier) && !unavailableCardIds.has(Number(card.id)))
     && slotDefinitions.slice(0, 4).every((slot, index) => playerPosition(selectedCards[index]) === slot.position)
     && isUtilityPosition(playerPosition(selectedCards[4]))
     && new Set(selectedCards.map((card) => Number(card?.playerId))).size === 5
@@ -322,7 +327,7 @@ export default function CompetitionsVaultPage() {
 
       <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) closeBuilder(); }}><DialogContent className="max-h-[94vh] w-[min(96vw,1280px)] max-w-7xl overflow-hidden border-white/10 bg-slate-950 p-0 text-white"><div className="flex max-h-[94vh] min-h-0 flex-col"><DialogHeader className="border-b border-white/10 px-5 py-4 sm:px-6"><DialogTitle>Enter {selected?.name}</DialogTitle><div className="mt-2 flex flex-wrap gap-2 text-xs text-white/55"><Badge className="bg-purple-500/15 text-purple-200">{selectedTier.toUpperCase()}</Badge><Badge className="bg-emerald-500/15 text-emerald-200"><ShieldCheck className="mr-1 h-3.5 w-3.5" />Premier League only</Badge><Badge className="bg-sky-500/15 text-sky-200"><Users className="mr-1 h-3.5 w-3.5" />Multiple teams allowed</Badge><Badge className="bg-amber-500/15 text-amber-100">{selectedRequirement.shortLabel}</Badge></div></DialogHeader>
         {selected ? <div className="grid min-h-0 flex-1 gap-0 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(420px,.72fr)] lg:overflow-hidden"><section className="min-w-0 border-b border-white/10 p-4 sm:p-5 lg:overflow-y-auto lg:border-b-0 lg:border-r"><div className="rounded-2xl border border-white/10 bg-white/5 p-4"><div className="text-[10px] font-black uppercase tracking-[.2em] text-purple-300">Step {activeSlot === null ? 5 : activeSlot + 1} of 5</div><h3 className="mt-1 text-xl font-black">{activeSlotTitle}</h3><p className="mt-1 text-sm text-white/50">Select GK, DEF, MID and FWD in order. The fifth Utility slot may use any unused outfield player: DEF, MID or FWD. {selectedRequirement.description}</p></div>
-          {activeSlot === null ? <div className={`mt-4 rounded-2xl border p-5 text-center ${selectedRarityValidation.valid ? "border-emerald-300/20 bg-emerald-500/10" : "border-amber-300/25 bg-amber-500/10"}`}><CheckCircle2 className={`mx-auto h-8 w-8 ${selectedRarityValidation.valid ? "text-emerald-300" : "text-amber-300"}`} /><div className="mt-2 font-black">{selectedRarityValidation.valid ? "Your five-player team is ready" : "Rarity requirement not met"}</div><div className="mt-1 text-sm text-white/55">{selectedRarityValidation.valid ? "Choose a captain in the lineup panel, then submit the team." : selectedRarityValidation.message}</div></div> : candidateCards.length ? <div className="mt-4 grid max-h-[56vh] grid-cols-1 gap-4 overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-3 sm:grid-cols-2 md:grid-cols-3">{candidateCards.map((card) => <div key={card.id} className="relative mx-auto"><CardThumbnail card={card} size="sm" selected={Number(lineupSlots[activeSlot]) === Number(card.id)} selectable onClick={() => chooseCard(card)} /></div>)}</div> : <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-500/10 p-5 text-center text-amber-100">No unused eligible {activeSlot === 4 ? "DEF, MID or FWD" : activePosition || "Premier League"} card is available for this slot.</div>}
+          {activeSlot === null ? <div className={`mt-4 rounded-2xl border p-5 text-center ${selectedRarityValidation.valid ? "border-emerald-300/20 bg-emerald-500/10" : "border-amber-300/25 bg-amber-500/10"}`}><CheckCircle2 className={`mx-auto h-8 w-8 ${selectedRarityValidation.valid ? "text-emerald-300" : "text-amber-300"}`} /><div className="mt-2 font-black">{selectedRarityValidation.valid ? "Your five-player team is ready" : "Rarity requirement not met"}</div><div className="mt-1 text-sm text-white/55">{selectedRarityValidation.valid ? "Choose a captain in the lineup panel, then submit the team." : selectedRarityValidation.message}</div></div> : candidateRows.length ? <div className="mt-4 grid max-h-[56vh] grid-cols-1 gap-4 overflow-y-auto rounded-2xl border border-white/10 bg-black/20 p-3 sm:grid-cols-2 md:grid-cols-3">{candidateRows.map(({ card, reason }) => <div key={card.id} className={`relative mx-auto ${reason ? "opacity-60" : ""}`}><CardThumbnail card={card} size="sm" selected={Number(lineupSlots[activeSlot]) === Number(card.id)} selectable={!reason} onClick={() => { if (!reason) chooseCard(card); }} />{reason ? <div className="mt-2 max-w-48 rounded-lg border border-amber-300/20 bg-amber-400/10 px-2.5 py-2 text-center text-[11px] font-bold leading-snug text-amber-100">{reason}</div> : <div className="mt-2 text-center text-[11px] font-bold text-emerald-200">Available • {String((card.player as any)?.selectionEligibility?.provider || "Premier League").replace("api-football", "API-Football").replace("fpl-fallback", "FPL fallback")}</div>}</div>)}</div> : <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-500/10 p-5 text-center text-amber-100">Your collection contains no {activeSlot === 4 ? "DEF, MID or FWD" : activePosition || "eligible"} card for this slot.</div>}
         </section><section className="min-w-0 bg-black/20 p-4 sm:p-5 lg:overflow-y-auto"><div className="flex items-center justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[.2em] text-white/40">Your squad</div><h3 className="mt-1 text-xl font-black">Selected lineup</h3></div><Badge className="bg-white/10 text-white">{selectedIds.length}/5</Badge></div><div className="mt-3 rounded-xl border border-purple-300/20 bg-purple-500/10 p-3 text-xs text-purple-100"><b>{selectedTierCount}/{selectedRequirement.requiredTournamentRarityCards} required {selectedTier} cards selected.</b><div className="mt-1 text-purple-100/65">{selectedRequirement.shortLabel}</div></div><div className="mt-4 grid grid-cols-1 gap-2.5">{slotDefinitions.map((slot, index) => <LineupSlotCard key={slot.short} slotLabel={slot.label} slotShort={slot.short} card={selectedCards[index]} active={activeSlot === index} captain={Boolean(selectedCards[index] && Number(selectedCards[index]?.id) === Number(captainId))} lockedEmpty={Boolean(!lineupSlots[index] && index !== firstEmptySlot)} onOpen={() => openSlot(index)} captainEnabled={validLineup} onCaptain={() => selectedCards[index] && setCaptainId(Number(selectedCards[index]!.id))} />)}</div><div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/55"><div className="flex items-center gap-2 font-black text-white"><Lock className="h-4 w-4 text-purple-300" />Submission is final</div><p className="mt-1">You may enter again with five different, unused cards. Submitted cards remain locked until settlement or cancellation.</p></div></section></div> : null}
         <DialogFooter className="border-t border-white/10 bg-slate-950 px-5 py-4 sm:px-6"><Button variant="outline" onClick={closeBuilder}>Cancel</Button><Button onClick={() => joinMutation.mutate()} disabled={!validLineup || !captainId || joinMutation.isPending}>{joinMutation.isPending ? "Submitting…" : `Submit team • ${money(selected?.entryFee ?? selected?.entry_fee)}`}</Button></DialogFooter></div></DialogContent></Dialog>
     </main>

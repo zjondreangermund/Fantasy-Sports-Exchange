@@ -78,7 +78,16 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         const canonical = matchedElement ? fplIndex.canonical(matchedElement) : null;
         const apiFootballPlayer = resolveApiFootballPlayer({ ...player, ...(canonical || {}) }, apiFootballDirectory);
         const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
-        const currentPosition = canonical?.position || String(player.position || "MID");
+        const identityVerified = Boolean(apiFootballPlayer || matchedElement);
+        const currentPosition = apiFootballPlayer?.position || canonical?.position || String(player.position || "MID");
+        const outsidePremierLeague = !identityVerified
+          && (String(player.league || "").toLowerCase() === "outside premier league"
+            || String(player.status || "").toLowerCase() === "departed");
+        const selectionProvider = apiFootballPlayer
+          ? "api-football"
+          : matchedElement
+            ? "fpl-fallback"
+            : null;
         let last5Scores = Array.isArray(card.last5Scores) ? card.last5Scores.map((value: any) => Number(value || 0)).slice(0, 5) : [];
         if (liveElement) {
           const mappedStats = mapFplStatsToPlayerStats(liveElement);
@@ -101,18 +110,31 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
           player: {
             ...player,
             ...(canonical || {}),
-            name: canonical?.name || apiFootballPlayer?.name || player.name,
-            // FPL is the tournament position authority. Keep the stored
-            // position as the fallback so Collection labels match server-side
-            // lineup validation even if API-Football has a stale/misclassified
-            // squad position.
-            team: canonical?.team || apiFootballPlayer?.team || player.team,
-            position: canonical?.position || player.position || apiFootballPlayer?.position,
+            name: apiFootballPlayer?.name || canonical?.name || player.name,
+            team: apiFootballPlayer?.team || canonical?.team || player.team,
+            league: identityVerified ? "Premier League" : player.league,
+            position: currentPosition,
             nationality: apiFootballPlayer?.nationality || player.nationality,
             apiFootballId: apiFootballPlayer?.apiPlayerId || null,
             imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
             verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
             identityVerified: Boolean(apiFootballPlayer || matchedElement),
+            premierLeagueEligible: identityVerified,
+            premierLeagueStatus: identityVerified
+              ? "active"
+              : outsidePremierLeague
+                ? "outside-premier-league"
+                : "unverified",
+            selectionEligibility: {
+              eligible: identityVerified,
+              provider: selectionProvider,
+              code: identityVerified ? "eligible" : outsidePremierLeague ? "outside-premier-league" : "identity-unlinked",
+              message: identityVerified
+                ? `Eligible: linked by ${selectionProvider === "api-football" ? "API-Football current squads" : "FPL fallback"}.`
+                : outsidePremierLeague
+                  ? `${player.name} is outside the Premier League; use the same-position replacement card in this collection.`
+                  : `${player.name} is not linked to API-Football or the FPL fallback yet.`,
+            },
             identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
             totalPoints,
             form,
@@ -189,6 +211,24 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         .orderBy(desc(transactions.createdAt))
         .limit(1);
       const lastSaleValue = Number(lastSaleTransaction?.grossAmount || lastSaleTransaction?.amount || 0) || null;
+      const replacementTable = await db.execute(sql`select to_regclass('app.departed_player_card_replacements') as name`);
+      const replacementTableRows = Array.isArray((replacementTable as any)?.rows) ? (replacementTable as any).rows : [];
+      let departureReplacement: any = null;
+      if (replacementTableRows[0]?.name) {
+        const replacementResult = await db.execute(sql`
+          select replacement.id as "cardId", replacement.serial_id as "serialId",
+            replacement.rarity::text as rarity, replacement_player.id as "playerId",
+            replacement_player.name as "playerName", replacement_player.team,
+            replacement_player.position::text as position
+          from app.departed_player_card_replacements link
+          join app.player_cards replacement on replacement.id=link.replacement_card_id
+          join app.players replacement_player on replacement_player.id=replacement.player_id
+          where link.source_card_id=${cardId}
+          limit 1
+        `);
+        const replacementRows = Array.isArray((replacementResult as any)?.rows) ? (replacementResult as any).rows : [];
+        departureReplacement = replacementRows[0] || null;
+      }
       const [bootstrap, apiFootballDirectory] = await Promise.all([
         fplApi.bootstrap().catch(() => null),
         loadApiFootballPlayerDirectory().catch(() => []),
@@ -202,10 +242,26 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
 
       if (!matchedElement) {
         if (apiSnapshot) return res.json({ ...apiSnapshot, stats: { ...apiSnapshot.stats, value: lastSaleValue } });
+        const outsidePremierLeague = String(player.league || "").toLowerCase() === "outside premier league"
+          || String(player.status || "").toLowerCase() === "departed";
         return res.json({
           source: "card-fallback",
-          providers: { identity: "Unverified legacy card data", stats: "No official match link" },
-          player: { name: player.name, team: player.team, position: player.position, imageUrl: null, verifiedImageUrl: null, identityVerified: false, identitySource: "unverified-card-data" },
+          replacement: departureReplacement,
+          providers: { identity: outsidePremierLeague ? "Outside Premier League" : "Unverified legacy card data", stats: "No official match link" },
+          player: {
+            name: player.name,
+            team: player.team,
+            league: player.league,
+            position: player.position,
+            status: player.status,
+            news: player.news || (outsidePremierLeague ? `${player.name} is no longer in a current Premier League squad.` : ""),
+            imageUrl: null,
+            verifiedImageUrl: null,
+            identityVerified: false,
+            premierLeagueEligible: false,
+            premierLeagueStatus: outsidePremierLeague ? "outside-premier-league" : "unverified",
+            identitySource: "unverified-card-data",
+          },
           last10: [],
           stats: { matchesPlayed: 0, minutes: 0, goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0, bonus: 0, totalPoints: 0, selectedBy: null, value: lastSaleValue, saves: 0, averageRating: null },
         });
