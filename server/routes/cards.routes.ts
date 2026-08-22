@@ -211,6 +211,24 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         .orderBy(desc(transactions.createdAt))
         .limit(1);
       const lastSaleValue = Number(lastSaleTransaction?.grossAmount || lastSaleTransaction?.amount || 0) || null;
+      const replacementTable = await db.execute(sql`select to_regclass('app.departed_player_card_replacements') as name`);
+      const replacementTableRows = Array.isArray((replacementTable as any)?.rows) ? (replacementTable as any).rows : [];
+      let departureReplacement: any = null;
+      if (replacementTableRows[0]?.name) {
+        const replacementResult = await db.execute(sql`
+          select replacement.id as "cardId", replacement.serial_id as "serialId",
+            replacement.rarity::text as rarity, replacement_player.id as "playerId",
+            replacement_player.name as "playerName", replacement_player.team,
+            replacement_player.position::text as position
+          from app.departed_player_card_replacements link
+          join app.player_cards replacement on replacement.id=link.replacement_card_id
+          join app.players replacement_player on replacement_player.id=replacement.player_id
+          where link.source_card_id=${cardId}
+          limit 1
+        `);
+        const replacementRows = Array.isArray((replacementResult as any)?.rows) ? (replacementResult as any).rows : [];
+        departureReplacement = replacementRows[0] || null;
+      }
       const [bootstrap, apiFootballDirectory] = await Promise.all([
         fplApi.bootstrap().catch(() => null),
         loadApiFootballPlayerDirectory().catch(() => []),
@@ -228,6 +246,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
           || String(player.status || "").toLowerCase() === "departed";
         return res.json({
           source: "card-fallback",
+          replacement: departureReplacement,
           providers: { identity: outsidePremierLeague ? "Outside Premier League" : "Unverified legacy card data", stats: "No official match link" },
           player: {
             name: player.name,

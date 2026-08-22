@@ -11,6 +11,15 @@ export type CardProfileData = {
   source: "fpl-live" | "api-football" | "card-fallback";
   season?: number | null;
   providers?: { identity?: string; stats?: string; fantasyPoints?: string };
+  replacement?: {
+    cardId: number;
+    serialId?: string | null;
+    rarity?: string;
+    playerId: number;
+    playerName: string;
+    team: string;
+    position: string;
+  } | null;
   player: {
     name?: string;
     webName?: string;
@@ -199,7 +208,7 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
                   <span className="rounded-xl bg-white/[.08] px-3 py-2">{team}</span>
                   <span className={`rounded-xl px-3 py-2 ${outsidePremierLeague ? "bg-rose-400/15 text-rose-100" : data.source === "card-fallback" ? "bg-amber-400/10 text-amber-100" : "bg-cyan-400/10 text-cyan-100"}`}>{sourceLabel(data)}</span>
                 </div>
-                {outsidePremierLeague ? <p className="mt-3 rounded-xl border border-rose-300/20 bg-rose-400/10 p-3 text-xs text-rose-100">This player is no longer in the Premier League. An eligible player card in the same position and rarity has been added to your collection.</p> : null}
+                {outsidePremierLeague ? <p className="mt-3 rounded-xl border border-rose-300/20 bg-rose-400/10 p-3 text-xs text-rose-100">{data.replacement ? `This player is no longer in the Premier League. Replacement: ${data.replacement.playerName} (${data.replacement.position}, ${data.replacement.team}) — card #${data.replacement.cardId}.` : "This player is no longer in the Premier League. No replacement card is recorded yet."}</p> : null}
                 {data.providers?.identity ? <p className="mt-3 text-[11px] text-white/45">Identity: {data.providers.identity}</p> : null}
                 {data.player?.news ? <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs text-amber-100">{data.player.news}</p> : null}
               </div>

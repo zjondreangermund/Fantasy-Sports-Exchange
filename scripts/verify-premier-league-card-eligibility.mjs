@@ -31,6 +31,8 @@ requireText(client, "listed on the marketplace", "The squad picker must explain 
 requireText(client, "not linked to a current Premier League squad", "The squad picker must explain identity exclusions.");
 requireText(server, "officialPlayerIndex.resolve", "Tournament entry validation must independently resolve players against the official current roster.");
 requireText(profile, "Outside Premier League", "Departed players must be clearly labeled in the card profile.");
+requireText(profile, "No replacement card is recorded yet", "Departed-player profiles must not falsely claim that a replacement was minted.");
+requireText(cards, "departureReplacement", "The card profile API must identify the exact replacement card when one was minted.");
 requireText(reconciliation, "bootstrap.elements.length < 300", "Replacement minting must stop unless the official FPL roster is complete.");
 requireText(reconciliation, "directory.length >= 250 && directoryTeams >= 15", "Replacement minting must require a healthy independent API-Football roster.");
 requireText(reconciliation, "app.departed_player_card_replacements", "Replacement cards must be tracked in a permanent idempotency ledger.");
