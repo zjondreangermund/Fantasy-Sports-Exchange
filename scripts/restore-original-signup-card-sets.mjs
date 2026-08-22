@@ -178,6 +178,23 @@ async function restoreAccount(client, email, keepCardIds) {
   return { released };
 }
 
+async function preflightAccount(client, email, keepCardIds) {
+  const cards = rows(await client.query(`
+    select pc.id,pc.player_id,pc.owner_id,pc.rarity::text as rarity,
+           p.name,p.position::text as position
+    from app.player_cards pc
+    left join app.players p on p.id=pc.player_id
+    where pc.id=any($1::int[])
+    order by array_position($1::int[],pc.id)
+  `, [keepCardIds]));
+  const rendered = cards.map((card) => (
+    `${Number(card.id)}:${Number(card.player_id)}:${String(card.name || "missing").replace(/\s+/g,"_")}:${String(card.position || "none")}`
+  )).join("|");
+  const eligible = cards.length === 5 && Boolean(eligibleOrder(cards));
+  console.log(`ORIGINAL_SIGNUP_PREFLIGHT email=${email} eligible=${eligible} cards=${rendered || "none"}`);
+  return eligible;
+}
+
 async function verifyResetOnlyAccount(client, email) {
   const cards = rows(await client.query(`
     select pc.id,p.position::text as position
@@ -230,6 +247,14 @@ async function main() {
       await client.query("commit");
       console.log(`ORIGINAL_SIGNUP_CLEANUP_ALREADY_APPLIED repairKey=${REPAIR_KEY} details=${JSON.stringify(already.details || {})}`);
       return;
+    }
+
+    const invalidPositionSets = [];
+    for (const [email, keepCardIds] of TARGETS) {
+      if (!(await preflightAccount(client, email, keepCardIds))) invalidPositionSets.push(email);
+    }
+    if (invalidPositionSets.length) {
+      throw new Error(`Original card position repair required for: ${invalidPositionSets.join(",")}`);
     }
 
     let releasedCards = 0;
