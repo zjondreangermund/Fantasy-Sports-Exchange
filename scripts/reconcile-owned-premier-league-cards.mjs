@@ -102,16 +102,16 @@ async function repairActivePlayer(client, playerId, identity, element) {
   const updated = await client.query(`
     update app.players
     set name=$2, team=$3, league='Premier League', position=$4::public.position,
-      fpl_id=coalesce($5,fpl_id), code=coalesce($6,code),
-      web_name=coalesce($7,web_name), status=$8, news=$9, synced_at=now()
+      fpl_id=coalesce($5::integer,fpl_id), code=coalesce($6::integer,code),
+      web_name=coalesce($7::text,web_name), status=$8, news=$9, synced_at=now()
     where id=$1
       and (
         name is distinct from $2 or team is distinct from $3
         or league is distinct from 'Premier League'
         or position::text is distinct from $4
-        or ($5 is not null and fpl_id is distinct from $5)
-        or ($6 is not null and code is distinct from $6)
-        or ($7 is not null and web_name is distinct from $7)
+        or ($5::integer is not null and fpl_id is distinct from $5::integer)
+        or ($6::integer is not null and code is distinct from $6::integer)
+        or ($7::text is not null and web_name is distinct from $7::text)
         or status is distinct from $8 or news is distinct from $9
       )
   `, [
