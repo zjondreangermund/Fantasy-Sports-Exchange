@@ -1,44 +1,40 @@
-name: Apply strict position identity source repair
+name: Position Locked Player Identity
 
 on:
-  push:
-    branches:
-      - fix/strict-position-identity-links
+  pull_request:
+    branches: [ main ]
     paths:
-      - 'scripts/apply-strict-position-identity-links.mjs'
-      - 'scripts/verify-position-locked-player-identity.mjs'
       - 'server/services/fplPlayerIdentity.ts'
       - 'server/services/apiFootballPlayerDirectory.ts'
       - 'client/src/components/cards/PremiumFootballCard.tsx'
+      - 'scripts/apply-strict-position-identity-links.mjs'
+      - 'scripts/verify-position-locked-player-identity.mjs'
+      - '.github/workflows/apply-strict-position-identity-links.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'server/services/fplPlayerIdentity.ts'
+      - 'server/services/apiFootballPlayerDirectory.ts'
+      - 'client/src/components/cards/PremiumFootballCard.tsx'
+      - 'scripts/apply-strict-position-identity-links.mjs'
+      - 'scripts/verify-position-locked-player-identity.mjs'
       - '.github/workflows/apply-strict-position-identity-links.yml'
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  apply-and-commit:
+  position-identity-regression:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: fix/strict-position-identity-links
-          fetch-depth: 0
-      - name: Apply position-locked identity repair
-        run: node scripts/apply-strict-position-identity-links.mjs
-      - name: Verify position-locked identity repair
+      - name: Verify committed source is position locked
         run: node scripts/verify-position-locked-player-identity.mjs
-      - name: Commit repaired source when needed
-        shell: bash
+      - name: Prove repair is idempotent
         run: |
-          set -euo pipefail
-          git diff --check
-          if git diff --quiet; then
-            echo 'Source already normalized.'
-            exit 0
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add server/services/fplPlayerIdentity.ts server/services/apiFootballPlayerDirectory.ts client/src/components/cards/PremiumFootballCard.tsx
-          git commit -m 'Lock player identity resolution to football position'
-          git push origin HEAD:fix/strict-position-identity-links
+          node scripts/apply-strict-position-identity-links.mjs
+          node scripts/verify-position-locked-player-identity.mjs
+          git diff --exit-code
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+      - name: Type-check client and server
+        run: npx tsc --noEmit
