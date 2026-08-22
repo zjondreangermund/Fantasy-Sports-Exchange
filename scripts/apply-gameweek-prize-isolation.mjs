@@ -205,8 +205,8 @@ const isPrizeVaultTournament = (comp: Tournament) => {
   );
   source = replaceOnce(
     source,
-    '    const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";\n    const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;',
-    '    const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";\n    const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;\n    const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mapFplStatsToPlayerStats(liveElement), currentPosition)?.total_score || 0) : 0;\n    const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;',
+    '    const currentPosition = apiFootballPlayer?.position || canonical?.position || String(player.position || "") || "MID";\n    const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;',
+    '    const currentPosition = apiFootballPlayer?.position || canonical?.position || String(player.position || "") || "MID";\n    const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;\n    const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mapFplStatsToPlayerStats(liveElement), currentPosition)?.total_score || 0) : 0;\n    const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;',
     "Current gameweek points calculation",
     "const currentGameweekPoints = liveElement",
   );
@@ -288,4 +288,3 @@ const isPrizeVaultTournament = (comp: Tournament) => {
 }
 
 console.log("[gameweek-isolation] Free cups separated from Prize Vault; current-GW points and rollover isolation applied.");
-
