@@ -7,7 +7,7 @@ import { ScoreUpdateService } from "../services/scoreUpdater.js";
 import { rankCompetitionEntries } from "../services/tournamentRules.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
-import { TOURNAMENT_REQUIRED_POSITIONS, validateTournamentRarityLineup } from "../../shared/game-rules.js";
+import { TOURNAMENT_REQUIRED_POSITIONS, TOURNAMENT_UTILITY_POSITIONS, validateTournamentRarityLineup } from "../../shared/game-rules.js";
 import {
   getWalletPostingIntegrityReport,
   postWalletAmountExactlyOnce,
@@ -244,6 +244,10 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           if (String(orderedCards[index]?.position || "").toUpperCase() !== TOURNAMENT_REQUIRED_POSITIONS[index]) {
             throw new Error("Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player.");
           }
+        }
+        const utilityPosition = String(orderedCards[4]?.position || "").toUpperCase();
+        if (!TOURNAMENT_UTILITY_POSITIONS.includes(utilityPosition as typeof TOURNAMENT_UTILITY_POSITIONS[number])) {
+          throw new Error("Utility player must be an unused defender, midfielder or forward.");
         }
         const rarityValidation = validateTournamentRarityLineup(cards.map((card) => card.rarity), competition.tier);
         if (!rarityValidation.valid) throw new Error(rarityValidation.message);
