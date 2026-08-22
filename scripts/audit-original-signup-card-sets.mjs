@@ -137,6 +137,49 @@ async function historicalEvidence(client, account) {
   return evidence;
 }
 
+async function historicalLineups(client, account) {
+  const cutoff = account.reset_at || account.backup_at;
+  const lineups = [];
+  const add = (value, source) => {
+    const cardIds = positiveIds(value);
+    if (cardIds.length === 5) lineups.push({ cardIds, source });
+  };
+
+  if (await tableExists(client, "app.competition_entries")) {
+    const entries = rows(await client.query(`
+      select lineup_card_ids, joined_at
+      from app.competition_entries
+      where user_id=$1 and joined_at < $2::timestamptz
+      order by joined_at, id
+    `, [account.user_id, cutoff]));
+    for (const entry of entries) add(entry.lineup_card_ids, "competition-entry-lineup");
+  }
+
+  if (await tableExists(client, "app.audit_logs")) {
+    const audit = rows(await client.query(`
+      select action, meta
+      from app.audit_logs
+      where user_id=$1 and created_at < $2::timestamptz
+      order by created_at, id
+    `, [account.user_id, cutoff]));
+    for (const event of audit) {
+      const meta = asObject(event.meta);
+      for (const field of ["lineupCardIds", "previousLineupCardIds", "starterCardIds", "cardIds"]) {
+        add(meta[field], `audit-lineup:${event.action}:${field}`);
+      }
+    }
+  }
+
+  const unique = new Map();
+  for (const lineup of lineups) {
+    const key = lineup.cardIds.join(",");
+    const existing = unique.get(key);
+    if (existing) existing.sources.push(lineup.source);
+    else unique.set(key, { cardIds: lineup.cardIds, sources: [lineup.source] });
+  }
+  return [...unique.values()];
+}
+
 function orderedSignupSlots(onboarding, wasReset) {
   const packs = Array.isArray(onboarding.pack_cards)
     ? onboarding.pack_cards.map(positiveIds)
@@ -187,6 +230,8 @@ async function auditAccount(client, account, allPlayers, playerById) {
   const windowStart = new Date(createdAtMs - SIGNUP_WINDOW_BEFORE_MS);
   const windowEnd = new Date(createdAtMs + SIGNUP_WINDOW_AFTER_MS);
   const evidence = await historicalEvidence(client, account);
+  const priorLineups = await historicalLineups(client, account);
+  const backupLineup = positiveIds(asObject(account.lineup).card_ids);
 
   const currentCards = rows(await client.query(`
     select pc.id, pc.player_id, pc.owner_id, pc.rarity::text as rarity, pc.acquired_at,
@@ -209,19 +254,45 @@ async function auditAccount(client, account, allPlayers, playerById) {
   const equivalentPlayerIds = allPlayers
     .filter((candidate) => expectedPlayers.some((expected) => identityScore(expected, candidate) >= 95))
     .map((player) => Number(player.id));
-  const knownCardIds = positiveIds([...backupIds, ...currentIds, ...evidence.keys()]);
-  const candidateCards = equivalentPlayerIds.length ? rows(await client.query(`
+  const knownCardIds = positiveIds([
+    ...backupIds,
+    ...currentIds,
+    ...evidence.keys(),
+    ...priorLineups.flatMap((lineup) => lineup.cardIds),
+  ]);
+  const candidateCards = (equivalentPlayerIds.length || knownCardIds.length) ? rows(await client.query(`
     select pc.id, pc.player_id, pc.owner_id, pc.rarity::text as rarity, pc.acquired_at,
            p.name, p.web_name, p.team, p.position::text as position, p.fpl_id, p.code
     from app.player_cards pc
     join app.players p on p.id=pc.player_id
-    where pc.player_id=any($1::int[])
+    where (
+      pc.player_id=any($1::int[])
       and (
         pc.id=any($2::int[])
         or (pc.acquired_at >= $3::timestamp and pc.acquired_at <= $4::timestamp)
       )
+    ) or pc.id=any($2::int[])
     order by pc.acquired_at, pc.id
-  `, [equivalentPlayerIds, knownCardIds.length ? knownCardIds : [0], windowStart, windowEnd])) : [];
+  `, [equivalentPlayerIds.length ? equivalentPlayerIds : [0], knownCardIds.length ? knownCardIds : [0], windowStart, windowEnd])) : [];
+
+  const cardById = new Map(candidateCards.map((card) => [Number(card.id), card]));
+  const validOriginalLineup = (cardIds, requiresHistory) => {
+    const ids = positiveIds(cardIds);
+    if (ids.length !== 5) return false;
+    const cards = ids.map((id) => cardById.get(id));
+    if (cards.some((card) => !card || String(card.rarity) !== "common")) return false;
+    if (cards.some((card) => card.owner_id != null && String(card.owner_id) !== String(account.user_id))) return false;
+    const times = cards.map((card) => new Date(card.acquired_at).getTime());
+    if (times.some((time) => !Number.isFinite(time) || time < windowStart.getTime() || time > windowEnd.getTime())) return false;
+    if (Math.max(...times) - Math.min(...times) > CLUSTER_MS) return false;
+    if (requiresHistory && cards.some((card) => !evidence.has(Number(card.id)))) return false;
+    return true;
+  };
+
+  const authoritativeLineups = account.was_reset
+    ? priorLineups.filter((lineup) => validOriginalLineup(lineup.cardIds, true))
+    : (validOriginalLineup(backupLineup, false) ? [{ cardIds: backupLineup, sources: ["pre-repair-lineup-snapshot"] }] : []);
+  const distinctAuthoritative = new Map(authoritativeLineups.map((lineup) => [lineup.cardIds.join(","), lineup]));
 
   const evidenceTimes = candidateCards
     .filter((card) => evidence.has(Number(card.id)))
@@ -267,14 +338,33 @@ async function auditAccount(client, account, allPlayers, playerById) {
     }).filter(Boolean).sort((left, right) => right.proofScore - left.proofScore || left.cardId - right.cardId);
   });
 
-  const assignment = findExactAssignment(slotCandidates);
+  let assignment = findExactAssignment(slotCandidates);
+  let authority = "identity-plus-signup-cluster";
+  if (distinctAuthoritative.size === 1) {
+    const exactLineup = [...distinctAuthoritative.values()][0];
+    assignment = {
+      cards: exactLineup.cardIds.map((cardId) => {
+        const card = cardById.get(cardId);
+        return {
+          cardId,
+          playerId: Number(card?.player_id || 0),
+          player: String(card?.name || card?.web_name || ""),
+          acquiredAt: iso(card?.acquired_at),
+        };
+      }),
+      score: Number.MAX_SAFE_INTEGER,
+    };
+    authority = exactLineup.sources.join("+");
+  }
   const status = assignment ? "exact" : "unresolved";
   console.log(
     `ORIGINAL_SIGNUP_ACCOUNT email=${account.email} status=${status}`
     + ` reset=${account.was_reset} createdAt=${iso(account.user_created_at)}`
     + ` backupAt=${iso(account.backup_at)} backupCards=${backupIds.size}`
     + ` currentCards=${currentIds.size} addedAfterBackup=${addedAfterBackupIds.join(",") || "none"}`
-    + ` evidenceCards=${[...evidence.keys()].join(",") || "none"}`,
+    + ` evidenceCards=${[...evidence.keys()].join(",") || "none"}`
+    + ` backupLineup=${backupLineup.join(",") || "none"}`
+    + ` historicalLineups=${priorLineups.map((lineup) => lineup.cardIds.join(",")).join("|") || "none"}`,
   );
 
   slotCandidates.forEach((candidates, index) => {
@@ -301,7 +391,8 @@ async function auditAccount(client, account, allPlayers, playerById) {
     + ` keepCardIds=${keepIds.join(",")}`
     + ` keepPlayerIds=${assignment.cards.map((card) => card.playerId).join(",")}`
     + ` extraCurrentCardIds=${extraIds.join(",") || "none"}`
-    + ` repairAddedCardIds=${addedAfterBackupIds.join(",") || "none"}`,
+    + ` repairAddedCardIds=${addedAfterBackupIds.join(",") || "none"}`
+    + ` authority=${authority}`,
   );
   return { exact: true, email: account.email, keepIds, extraIds };
 }
@@ -329,7 +420,7 @@ async function main() {
     const playerById = new Map(allPlayers.map((player) => [Number(player.id), player]));
     const accounts = rows(await client.query(`
       select b.user_id::text, lower(coalesce(b.email,u.email,'')) as email,
-             b.onboarding, b.owned_cards, b.created_at as backup_at,
+             b.onboarding, b.lineup, b.owned_cards, b.created_at as backup_at,
              u.created_at as user_created_at,
              exists (
                select 1 from app.audit_logs al
