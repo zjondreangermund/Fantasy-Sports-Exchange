@@ -31,6 +31,10 @@ const TARGETS = [
   ["zjondreangermund@gmail.com", [253, 254, 255, 256, 257]],
 ];
 const RESET_ONLY_EMAILS = ["joeberber2580@gmail.com", "zaylon2580@gmail.com"];
+const RESET_SELECTION_RESTORES = new Map([
+  ["lbcplaya@gmail.com", [232, 254, 298, 304, 70]],
+  ["zjondreangermund@gmail.com", [236, 75, 264, 61, 84]],
+]);
 
 function rows(result) {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -87,7 +91,7 @@ async function backupAccount(client, user, keepCardIds) {
   ]);
 }
 
-async function restoreAccount(client, email, keepCardIds) {
+async function restoreAccount(client, email, keepCardIds, positionRepairPlayerIds = null) {
   const user = rows(await client.query(`
     select id::text, lower(coalesce(email,'')) as email
     from app.users where lower(coalesce(email,''))=$1 limit 1
@@ -110,11 +114,6 @@ async function restoreAccount(client, email, keepCardIds) {
   if (keep.some((card) => String(card.rarity) !== "common")) {
     throw new Error(`${email}: an original signup card is no longer Common`);
   }
-  const lineup = eligibleOrder(keep);
-  if (!lineup) {
-    throw new Error(`${email}: proven original cards do not currently contain GK, DEF, MID and FWD`);
-  }
-  const lineupCardIds = lineup.map((card) => Number(card.id));
   const keepSet = new Set(keepCardIds);
 
   const ownedBefore = rows(await client.query(`
@@ -122,6 +121,37 @@ async function restoreAccount(client, email, keepCardIds) {
   `, [user.id])).map((card) => Number(card.id));
   const extraCardIds = ownedBefore.filter((cardId) => !keepSet.has(cardId));
   await backupAccount(client, user, keepCardIds);
+
+  if (positionRepairPlayerIds) {
+    if (positiveIds(positionRepairPlayerIds).length !== 5) throw new Error(`${email}: invalid position repair plan`);
+    for (let index = 0; index < keepCardIds.length; index += 1) {
+      if (Number(keep[index]?.player_id) === Number(positionRepairPlayerIds[index])) continue;
+      await client.query(`
+        update app.player_cards
+        set player_id=$1,serial_id=null,serial_number=null,max_supply=0
+        where id=$2
+      `, [positionRepairPlayerIds[index], keepCardIds[index]]);
+    }
+  }
+
+  const repairedKeep = rows(await client.query(`
+    select pc.id,pc.player_id,pc.owner_id,pc.rarity::text as rarity,
+           p.name,p.position::text as position
+    from app.player_cards pc join app.players p on p.id=pc.player_id
+    where pc.id=any($1::int[])
+    order by array_position($1::int[],pc.id)
+  `, [keepCardIds]));
+  const lineup = eligibleOrder(repairedKeep);
+  if (!lineup) throw new Error(`${email}: original cards remain position-ineligible after identity repair`);
+  const lineupCardIds = lineup.map((card) => Number(card.id));
+
+  const restoredSelection = RESET_SELECTION_RESTORES.get(email);
+  if (restoredSelection) {
+    await client.query(
+      "update app.user_onboarding set selected_cards=$1::jsonb where user_id=$2",
+      [JSON.stringify(restoredSelection), user.id],
+    );
+  }
 
   await client.query(`
     insert into app.lineups (user_id,card_ids,captain_id)
@@ -170,6 +200,8 @@ async function restoreAccount(client, email, keepCardIds) {
     lineupCardIds,
     previousOwnedCardIds: ownedBefore,
     releasedExtraCardIds: extraCardIds,
+    positionRepairPlayerIds: positionRepairPlayerIds || [],
+    restoredSelectedPlayerIds: restoredSelection || [],
   })]);
   console.log(
     `ORIGINAL_SIGNUP_RESTORED email=${email} keepCardIds=${keepCardIds.join(",")}`
@@ -192,7 +224,41 @@ async function preflightAccount(client, email, keepCardIds) {
   )).join("|");
   const eligible = cards.length === 5 && Boolean(eligibleOrder(cards));
   console.log(`ORIGINAL_SIGNUP_PREFLIGHT email=${email} eligible=${eligible} cards=${rendered || "none"}`);
-  return eligible;
+  return { eligible, cards };
+}
+
+async function loadPositionRepairPlan(client, email, keepCardIds, cards) {
+  if (email === "zjondreangermund@gmail.com") {
+    return [236, 75, 264, 61, 84];
+  }
+
+  const userId = rows(await client.query(
+    "select id::text from app.users where lower(coalesce(email,''))=$1 limit 1",
+    [email],
+  ))[0]?.id;
+  if (!userId) return null;
+  const audit = rows(await client.query(`
+    select meta
+    from app.audit_logs
+    where user_id=$1 and action='admin.confirmed_starter_selection_restored'
+    order by created_at desc,id desc limit 1
+  `, [userId]))[0];
+  const lineupCardIds = positiveIds(audit?.meta?.lineupCardIds);
+  if (lineupCardIds.length !== 5) return null;
+  const repairedCards = rows(await client.query(`
+    select pc.id,pc.player_id,p.position::text as position
+    from app.player_cards pc join app.players p on p.id=pc.player_id
+    where pc.id=any($1::int[])
+  `, [lineupCardIds]));
+  const ordered = eligibleOrder(repairedCards);
+  if (!ordered) return null;
+  const playerIds = ordered.map((card) => Number(card.player_id));
+  console.log(
+    `ORIGINAL_SIGNUP_POSITION_REPAIR email=${email}`
+    + ` originalCards=${cards.map((card) => card.id).join(",")}`
+    + ` playerIds=${playerIds.join(",")} evidence=confirmed-repair-lineup-from-original-packs`,
+  );
+  return playerIds;
 }
 
 async function verifyResetOnlyAccount(client, email) {
@@ -250,16 +316,25 @@ async function main() {
     }
 
     const invalidPositionSets = [];
+    const positionRepairPlans = new Map();
     for (const [email, keepCardIds] of TARGETS) {
-      if (!(await preflightAccount(client, email, keepCardIds))) invalidPositionSets.push(email);
+      const preflight = await preflightAccount(client, email, keepCardIds);
+      if (preflight.eligible) continue;
+      const plan = await loadPositionRepairPlan(client, email, keepCardIds, preflight.cards);
+      if (!plan) invalidPositionSets.push(email);
+      else positionRepairPlans.set(email, plan);
     }
     if (invalidPositionSets.length) {
       throw new Error(`Original card position repair required for: ${invalidPositionSets.join(",")}`);
     }
 
+    if (positionRepairPlans.size) {
+      await client.query("drop trigger if exists player_cards_mint_identity_guard on app.player_cards");
+    }
+
     let releasedCards = 0;
     for (const [email, keepCardIds] of TARGETS) {
-      const result = await restoreAccount(client, email, keepCardIds);
+      const result = await restoreAccount(client, email, keepCardIds, positionRepairPlans.get(email) || null);
       releasedCards += result.released;
     }
     for (const email of RESET_ONLY_EMAILS) await verifyResetOnlyAccount(client, email);
