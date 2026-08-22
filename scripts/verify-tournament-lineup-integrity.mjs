@@ -2,6 +2,7 @@ import fs from "node:fs";
 
 const client = fs.readFileSync("client/src/pages/competitions-vault.tsx", "utf8");
 const server = fs.readFileSync("server/routes/economyIntegrity.routes.ts", "utf8");
+const rules = fs.readFileSync("shared/game-rules.ts", "utf8");
 const startup = fs.readFileSync("scripts/prepare-runtime-startup.mjs", "utf8");
 
 function requireText(source, pattern, message) {
@@ -24,12 +25,19 @@ requireText(client, "Make captain", "Completed lineups must allow captain select
 requireText(client, "This tournament entry is now locked and cannot be changed.", "The UI must communicate that submitted teams are final.");
 requireText(client, "Enter another team", "Users with an existing entry must be allowed to submit another team.");
 requireText(client, "unavailableCardIds", "Already submitted cards must be hidden from later entries.");
+requireText(client, "competitionId !== selectedCompetitionId", "Used-card filtering must be scoped to the selected tournament.");
+requireText(client, "isUtilityPosition(position)", "Utility choices must accept unused outfield positions.");
+requireText(client, "grid grid-cols-1 gap-2.5", "The selected squad must use a readable single-column layout.");
 forbidText(client, "disabled={entered", "Existing entries must not disable the tournament entry button.");
+
+requireText(rules, 'TOURNAMENT_UTILITY_POSITIONS = ["DEF", "MID", "FWD"]', "Shared rules must define Utility as DEF, MID or FWD.");
 
 requireText(server, "p.league as league", "Server validation must load each player's league.");
 requireText(server, "Premier League tournaments only accept Premier League player cards.", "Server validation must reject non-Premier-League cards.");
 requireText(server, "TOURNAMENT_REQUIRED_POSITIONS", "Server validation must enforce the guided formation.");
 requireText(server, "Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player.", "Server must enforce ordered formation slots.");
+requireText(server, "TOURNAMENT_UTILITY_POSITIONS.includes", "Server must restrict Utility to an outfield player.");
+requireText(server, "Utility player must be an unused defender, midfielder or forward.", "Server must explain invalid Utility selections.");
 requireText(server, "pg_advisory_xact_lock(87421, selected.card_id)", "Concurrent submissions must serialize card selection.");
 requireText(server, "jsonb_array_elements_text", "Server must check previous lineups for overlapping cards.");
 requireText(server, "Each tournament entry must use five different unused cards.", "Server must reject card reuse across a user's entries.");
