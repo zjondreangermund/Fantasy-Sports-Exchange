@@ -1,6 +1,8 @@
 import fs from "node:fs";
+import vm from "node:vm";
 
 const identity = fs.readFileSync("server/services/fplPlayerIdentity.ts", "utf8");
+const apiDirectory = fs.readFileSync("server/services/apiFootballPlayerDirectory.ts", "utf8");
 const cards = fs.readFileSync("server/routes/cards.routes.ts", "utf8");
 const enrichment = fs.readFileSync("server/services/playerCardEnrichment.ts", "utf8");
 const client = fs.readFileSync("client/src/pages/competitions-vault.tsx", "utf8");
@@ -15,6 +17,57 @@ function requireText(source, expected, message) {
 
 function rejectText(source, forbidden, message) {
   if (source.includes(forbidden)) throw new Error(message);
+}
+
+const normalizerSource = apiDirectory.match(/export function normalizeApiFootballPosition\(value: unknown\): CanonicalPlayerPosition \{[\s\S]*?\n\}/)?.[0];
+if (!normalizerSource) throw new Error("The shared API-Football position normalizer is missing.");
+const positionSandbox = {};
+vm.runInNewContext(
+  normalizerSource.replace(
+    "export function normalizeApiFootballPosition(value: unknown): CanonicalPlayerPosition",
+    "globalThis.normalizeApiFootballPosition = function(value)",
+  ),
+  positionSandbox,
+);
+for (const [providerPosition, expectedPosition] of [
+  ["GK", "GK"], ["DEF", "DEF"], ["MID", "MID"], ["FWD", "FWD"],
+  ["Goalkeeper", "GK"], ["Defender", "DEF"], ["Midfielder", "MID"], ["Attacker", "FWD"],
+]) {
+  const actualPosition = positionSandbox.normalizeApiFootballPosition(providerPosition);
+  if (actualPosition !== expectedPosition) {
+    throw new Error(`API-Football position ${providerPosition} must remain ${expectedPosition}; received ${actualPosition}.`);
+  }
+}
+requireText(apiDirectory, "rawPosition === row.candidate.position", "API-Football identity matches must respect the verified player position.");
+rejectText(apiDirectory, "rawPosition === row.candidate.position || row.nameScore >= 105", "A similar name must never override a goalkeeper, defender or forward position mismatch.");
+const resolverStart = apiDirectory.indexOf("function tokenSet(value: unknown)");
+const resolverEnd = apiDirectory.indexOf("function numberOf(value: unknown)", resolverStart);
+if (resolverStart < 0 || resolverEnd <= resolverStart) {
+  throw new Error("The API-Football identity resolver could not be isolated for position-mismatch regression checks.");
+}
+const resolverSandbox = {
+  normalizePlayerText(value) {
+    return String(value || "").toLowerCase().normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  },
+};
+const resolverSource = apiDirectory.slice(resolverStart, resolverEnd)
+  .replace(/:\s*(?:unknown|string|any|ApiFootballDirectoryPlayer(?:\[\])?)(?=[,)])/g, "")
+  .replace("export function resolveApiFootballPlayer(", "globalThis.resolveApiFootballPlayer = function(");
+vm.runInNewContext(resolverSource, resolverSandbox);
+const goalkeeper = { name: "Emiliano Martínez Romero", team: "Aston Villa", position: "GK" };
+const unrelatedMidfielder = {
+  name: "Emiliano Martínez Romero", firstName: "Emiliano", lastName: "Martínez Romero",
+  team: "Manchester United", position: "MID", apiPlayerId: 101,
+};
+const correctGoalkeeper = {
+  ...unrelatedMidfielder, team: "Aston Villa", position: "GK", apiPlayerId: 202,
+};
+if (resolverSandbox.resolveApiFootballPlayer(goalkeeper, [unrelatedMidfielder]) !== null) {
+  throw new Error("An API-Football midfielder was incorrectly accepted for an Aston Villa goalkeeper card.");
+}
+if (resolverSandbox.resolveApiFootballPlayer(goalkeeper, [unrelatedMidfielder, correctGoalkeeper])?.apiPlayerId !== 202) {
+  throw new Error("The correct API-Football goalkeeper was not selected when a same-name midfielder also existed.");
 }
 
 requireText(identity, 'league: "Premier League"', "Official FPL identities must include their verified Premier League eligibility.");

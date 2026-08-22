@@ -113,10 +113,10 @@ export function apiFootballSeasonNow() {
 
 export function normalizeApiFootballPosition(value: unknown): CanonicalPlayerPosition {
   const normalized = String(value || "").trim().toLowerCase();
-  if (normalized === "g" || normalized.includes("goalkeeper") || normalized.includes("keeper")) return "GK";
-  if (normalized === "d" || normalized.includes("defender") || normalized.includes("back")) return "DEF";
-  if (normalized === "m" || normalized.includes("midfielder") || normalized.includes("midfield")) return "MID";
-  if (normalized === "f" || normalized.includes("attacker") || normalized.includes("forward") || normalized.includes("striker")) return "FWD";
+  if (normalized === "gk" || normalized === "g" || normalized.includes("goalkeeper") || normalized.includes("keeper")) return "GK";
+  if (normalized === "def" || normalized === "d" || normalized.includes("defender") || normalized.includes("back")) return "DEF";
+  if (normalized === "mid" || normalized === "m" || normalized.includes("midfielder") || normalized.includes("midfield")) return "MID";
+  if (normalized === "fwd" || normalized === "f" || normalized.includes("attacker") || normalized.includes("forward") || normalized.includes("striker")) return "FWD";
   return "MID";
 }
 
@@ -307,7 +307,7 @@ export function resolveApiFootballPlayer(player: any, directory: ApiFootballDire
     const teamScore = teamCompatibility(player?.team, candidate.team);
     const positionScore = rawPosition && rawPosition === candidate.position ? 10 : 0;
     return { candidate, score: nameScore + teamScore + positionScore, nameScore, teamScore };
-  }).filter((row) => row.nameScore >= 92 && (!rawPosition || rawPosition === row.candidate.position || row.nameScore >= 105)).sort((a, b) => b.score - a.score);
+  }).filter((row) => row.nameScore >= 92 && (!rawPosition || rawPosition === row.candidate.position)).sort((a, b) => b.score - a.score);
 
   const best = scored[0];
   if (!best || best.nameScore < 92) return null;

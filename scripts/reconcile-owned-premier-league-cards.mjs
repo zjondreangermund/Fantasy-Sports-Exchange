@@ -295,7 +295,8 @@ async function main() {
         item.element,
       );
       updatedPlayerIds.add(item.card.playerId);
-      if (item.card.email === "zjondreangermund@gmail.com" || /fernandes/i.test(item.card.name)) {
+      if (["zjondreangermund@gmail.com", "zaylon2018@gmail.com"].includes(item.card.email)
+          || /fernandes|mart[ií]nez|romero/i.test(item.card.name)) {
         const identity = item.apiPlayer || item.canonical;
         console.log(`PREMIER_LEAGUE_CARD_LINKED email=${item.card.email} card=${item.card.cardId} player="${identity.name}" team="${identity.team}" position=${identity.position} league="Premier League"`);
       }
