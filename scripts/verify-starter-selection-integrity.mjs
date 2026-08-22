@@ -8,6 +8,9 @@ const cards = fs.readFileSync("server/routes/cards.routes.ts", "utf8");
 const onboarding = fs.readFileSync("server/routes/onboarding.routes.ts", "utf8");
 const reset = fs.readFileSync("scripts/reset-four-test-accounts-to-starter-common.mjs", "utf8");
 const recovery = fs.readFileSync("scripts/audit-starter-selection-recovery.mjs", "utf8");
+const restore = fs.readFileSync("scripts/restore-confirmed-starter-selections.mjs", "utf8");
+const enrichment = fs.readFileSync("server/services/playerCardEnrichment.ts", "utf8");
+const marketplace = fs.readFileSync("server/routes/marketplace.routes.ts", "utf8");
 
 assert.doesNotMatch(
   start,
@@ -32,14 +35,30 @@ assert.ok(chooseStart >= 0, "starter confirmation endpoint is missing");
 const chooseHandler = onboarding.slice(chooseStart);
 assert.match(chooseHandler, /await\s+db\.transaction\(/, "starter minting and selection persistence must share a transaction");
 assert.match(chooseHandler, /from\s+app\.user_onboarding[\s\S]*?for\s+update/, "starter confirmation must lock its onboarding record");
-assert.match(chooseHandler, /await\s+ensureStarterCards\(tx,\s*userId,\s*selected\)/, "only the user's confirmed selections may be minted");
-assert.match(chooseHandler, /selectedCards:\s*selected,\s*completed:\s*true/, "the exact confirmed player IDs must be persisted");
+assert.match(chooseHandler, /const orderedSelected =/, "confirmed selections must be normalized into pack order");
+assert.match(chooseHandler, /await\s+ensureStarterCards\(tx,\s*userId,\s*orderedSelected\)/, "only the user's pack-ordered confirmed selections may be minted");
+assert.match(chooseHandler, /selectedCards:\s*orderedSelected,\s*completed:\s*true/, "the exact pack-ordered player IDs must be persisted");
 assert.match(chooseHandler, /onboarding\.starter_selection_confirmed/, "confirmed selections need a durable account audit event");
 assert.match(chooseHandler, /starterCardIds:\s*grantResult\.cardIds/, "confirmed starter-card IDs need durable recovery evidence");
+assert.match(chooseHandler, /INSERT INTO app\.lineups/, "signup confirmation must create an immediately eligible lineup");
+assert.match(chooseHandler, /lineupOrder:\s*\["GK",\s*"DEF",\s*"MID",\s*"FWD",\s*"UTILITY"\]/, "starter audit evidence must record eligible lineup order");
 
 assert.match(recovery, /await\s+client\.query\("begin read only"\)/, "starter-recovery diagnostics must run in a read-only database transaction");
 assert.doesNotMatch(recovery, /(?:update|delete\s+from|insert\s+into)\s+app\.player_cards/i, "recovery diagnostics must never mutate card ownership");
 assert.match(recovery, /action=manual-approval-required/, "restoring detached cards must require explicit approval");
+
+assert.match(start, /node scripts\/restore-confirmed-starter-selections\.mjs/, "production startup must run the approved one-time confirmed-selection restoration");
+assert.match(restore, /starter_selection_restoration_backups/, "restoration must take a reversible pre-change account snapshot");
+assert.match(restore, /selection-not-proven-by-five-packs/, "normal-user restoration must require five-pack selection proof");
+assert.match(restore, /admin\.test_account_starter_reset/, "overwritten reset selections must be handled separately");
+assert.match(restore, /where id=\$2 and owner_id is null/, "historical recovery must never overwrite another card owner");
+assert.match(restore, /remainingConfirmedMismatches > 0/, "restoration must fail if a proven signup selection is still missing");
+assert.doesNotMatch(restore, /delete\s+from\s+app\.player_cards/i, "restoration must never delete cards");
+assert.doesNotMatch(restore, /set\s+owner_id\s*=\s*null/i, "restoration must never clear card ownership");
+
+assert.match(cards, /position:\s*canonical\?\.position\s*\|\|\s*player\.position\s*\|\|\s*apiFootballPlayer\?\.position/, "Collection must display the tournament-authoritative position");
+assert.match(enrichment, /const currentPosition = canonical\?\.position \|\| String\(player\.position \|\| ""\) \|\| apiFootballPlayer\?\.position/, "shared card enrichment must prefer FPL/stored tournament positions");
+assert.match(marketplace, /position:\s*canonical\?\.position\s*\|\|\s*storedPlayer\.position\s*\|\|\s*apiFootballPlayer\?\.position/, "Marketplace must display the tournament-authoritative position");
 
 // The Railway server build transforms the starter-offer generator before
 // compiling. Execute that transform against an in-memory filesystem to prove

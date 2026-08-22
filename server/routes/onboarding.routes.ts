@@ -540,25 +540,44 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
           if (selectedInPack.length !== 1) return { error: "Select exactly 1 player from each pack" };
         }
 
-        const grantResult = await ensureStarterCards(tx, userId, selected);
+        // Persist the lineup in pack order: GK, DEF, MID, FWD, Utility. The
+        // request order is not trusted because Sets and client interactions can
+        // otherwise leave a valid selection unusable for tournament entry.
+        const orderedSelected = (ob.packCards as number[][]).map((pack) => {
+          const packPlayerIds = new Set(pack.map(Number));
+          return selected.find((id) => packPlayerIds.has(id))!;
+        });
+
+        const grantResult = await ensureStarterCards(tx, userId, orderedSelected);
         const [updated] = await tx.update(userOnboarding)
-          .set({ selectedCards: selected, completed: true } as any)
+          .set({ selectedCards: orderedSelected, completed: true } as any)
           .where(eq(userOnboarding.userId, userId))
           .returning({ userId: userOnboarding.userId });
         if (!updated?.userId) throw new Error("Could not persist the confirmed starter-card selection");
+
+        const lineupCardIds = JSON.stringify(grantResult.cardIds);
+        const captainId = grantResult.cardIds[3] || grantResult.cardIds[0];
+        await tx.execute(sql`
+          INSERT INTO app.lineups (user_id, card_ids, captain_id)
+          VALUES (${userId}, ${lineupCardIds}::jsonb, ${captainId})
+          ON CONFLICT (user_id) DO UPDATE
+            SET card_ids=excluded.card_ids, captain_id=excluded.captain_id
+        `);
 
         await tx.insert(auditLogs).values({
           userId,
           action: "onboarding.starter_selection_confirmed",
           meta: {
-            selectedPlayerIds: selected,
+            selectedPlayerIds: orderedSelected,
             starterCardIds: grantResult.cardIds,
             mintedPlayerIds: grantResult.granted,
             existingPlayerIds: grantResult.skipped,
+            lineupCardIds: grantResult.cardIds,
+            lineupOrder: ["GK", "DEF", "MID", "FWD", "UTILITY"],
           },
         } as any);
 
-        return { success: true, ...grantResult, selectedPlayerIds: selected, kept: 5 };
+        return { success: true, ...grantResult, selectedPlayerIds: orderedSelected, kept: 5 };
       });
 
       if ("error" in result && result.error) return res.status(400).json({ message: result.error });
