@@ -301,13 +301,16 @@ function teamCompatibility(rawTeam: unknown, candidateTeam: string) {
 
 export function resolveApiFootballPlayer(player: any, directory: ApiFootballDirectoryPlayer[]) {
   const rawNames = [player?.name, player?.webName, player?.web_name].filter(Boolean);
-  const rawPosition = String(player?.position || "").toUpperCase();
+  const storedPosition = String(player?.position || "").trim().toUpperCase();
+  const rawPosition = (["GK", "DEF", "MID", "FWD"] as const).includes(storedPosition as any)
+    ? storedPosition as CanonicalPlayerPosition
+    : "";
   const scored = directory.map((candidate) => {
     const nameScore = Math.max(0, ...rawNames.map((name) => nameCompatibility(name, candidate)));
     const teamScore = teamCompatibility(player?.team, candidate.team);
     const positionScore = rawPosition && rawPosition === candidate.position ? 10 : 0;
     return { candidate, score: nameScore + teamScore + positionScore, nameScore, teamScore };
-  }).filter((row) => row.nameScore >= 92 && (!rawPosition || rawPosition === row.candidate.position || row.nameScore >= 105)).sort((a, b) => b.score - a.score);
+  }).filter((row) => row.nameScore >= 92 && (!rawPosition || rawPosition === row.candidate.position)).sort((a, b) => b.score - a.score);
 
   const best = scored[0];
   if (!best || best.nameScore < 92) return null;
