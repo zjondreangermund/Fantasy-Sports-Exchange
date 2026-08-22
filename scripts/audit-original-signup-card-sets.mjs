@@ -221,6 +221,59 @@ function findExactAssignment(slotCandidates) {
   return ranked[0];
 }
 
+function combinationsOfFive(ids) {
+  const values = positiveIds(ids);
+  const output = [];
+  const walk = (start, current) => {
+    if (current.length === 5) {
+      output.push([...current]);
+      return;
+    }
+    for (let index = start; index <= values.length - (5 - current.length); index += 1) {
+      current.push(values[index]);
+      walk(index + 1, current);
+      current.pop();
+    }
+  };
+  walk(0, []);
+  return output;
+}
+
+function bestSlotOrder(cardIds, slots, cardById, playerById) {
+  const ids = positiveIds(cardIds);
+  if (ids.length !== 5 || slots.length !== 5) return null;
+  const cards = ids.map((id) => cardById.get(id));
+  if (cards.some((card) => !card)) return null;
+  const permutations = enumerateAssignments(
+    Array.from({ length: 5 }, () => cards.map((card) => ({ cardId: Number(card.id), card }))),
+  );
+  const ranked = permutations.map((items) => {
+    let strongMatches = 0;
+    const scores = items.map((item, slotIndex) => {
+      const expected = slots[slotIndex].map((id) => playerById.get(id)).filter(Boolean);
+      const cardPlayer = { ...item.card, id: Number(item.card.player_id) };
+      const score = bestIdentityScore(expected, cardPlayer);
+      if (score >= 95) strongMatches += 1;
+      return score;
+    });
+    return {
+      cardIds: items.map((item) => item.cardId),
+      score: scores.reduce((sum, score) => sum + score, 0),
+      strongMatches,
+      key: items.map((item) => item.cardId).join(","),
+    };
+  }).sort((left, right) => (
+    right.strongMatches - left.strongMatches
+    || right.score - left.score
+    || left.key.localeCompare(right.key)
+  ));
+  if (!ranked.length || ranked[0].strongMatches < 4) return null;
+  if (ranked.length > 1
+      && ranked[0].strongMatches === ranked[1].strongMatches
+      && ranked[0].score === ranked[1].score) return null;
+  return ranked[0];
+}
+
 async function auditAccount(client, account, allPlayers, playerById) {
   const onboarding = asObject(account.onboarding);
   const backupCards = Array.isArray(account.owned_cards) ? account.owned_cards : [];
@@ -291,8 +344,23 @@ async function auditAccount(client, account, allPlayers, playerById) {
 
   const authoritativeLineups = account.was_reset
     ? priorLineups.filter((lineup) => validOriginalLineup(lineup.cardIds, true))
-    : (validOriginalLineup(backupLineup, false) ? [{ cardIds: backupLineup, sources: ["pre-repair-lineup-snapshot"] }] : []);
-  const distinctAuthoritative = new Map(authoritativeLineups.map((lineup) => [lineup.cardIds.join(","), lineup]));
+    : [
+      ...(validOriginalLineup(backupLineup, false)
+        ? [{ cardIds: backupLineup, sources: ["pre-repair-lineup-snapshot"] }]
+        : []),
+      ...combinationsOfFive([...backupIds])
+        .filter((cardIds) => validOriginalLineup(cardIds, false))
+        .map((cardIds) => ({ cardIds, sources: ["pre-repair-five-card-signup-cluster"] })),
+    ];
+  const distinctAuthoritative = new Map();
+  for (const lineup of authoritativeLineups) {
+    const setKey = [...lineup.cardIds].sort((left, right) => left - right).join(",");
+    const ordered = bestSlotOrder(lineup.cardIds, slots, cardById, playerById);
+    if (!ordered) continue;
+    const existing = distinctAuthoritative.get(setKey);
+    if (existing) existing.sources.push(...lineup.sources);
+    else distinctAuthoritative.set(setKey, { ...lineup, cardIds: ordered.cardIds, orderScore: ordered.score, strongMatches: ordered.strongMatches });
+  }
 
   const evidenceTimes = candidateCards
     .filter((card) => evidence.has(Number(card.id)))
@@ -340,8 +408,18 @@ async function auditAccount(client, account, allPlayers, playerById) {
 
   let assignment = findExactAssignment(slotCandidates);
   let authority = "identity-plus-signup-cluster";
-  if (distinctAuthoritative.size === 1) {
-    const exactLineup = [...distinctAuthoritative.values()][0];
+  if (distinctAuthoritative.size) {
+    const rankedAuthority = [...distinctAuthoritative.values()].sort((left, right) => (
+      right.strongMatches - left.strongMatches
+      || right.orderScore - left.orderScore
+      || left.cardIds.join(",").localeCompare(right.cardIds.join(","))
+    ));
+    const exactLineup = rankedAuthority[0];
+    const runnerUp = rankedAuthority[1];
+    const uniqueAuthority = !runnerUp
+      || exactLineup.strongMatches > runnerUp.strongMatches
+      || exactLineup.orderScore > runnerUp.orderScore;
+    if (uniqueAuthority) {
     assignment = {
       cards: exactLineup.cardIds.map((cardId) => {
         const card = cardById.get(cardId);
@@ -355,6 +433,7 @@ async function auditAccount(client, account, allPlayers, playerById) {
       score: Number.MAX_SAFE_INTEGER,
     };
     authority = exactLineup.sources.join("+");
+    }
   }
   const status = assignment ? "exact" : "unresolved";
   console.log(
@@ -392,6 +471,7 @@ async function auditAccount(client, account, allPlayers, playerById) {
     + ` keepPlayerIds=${assignment.cards.map((card) => card.playerId).join(",")}`
     + ` extraCurrentCardIds=${extraIds.join(",") || "none"}`
     + ` repairAddedCardIds=${addedAfterBackupIds.join(",") || "none"}`
+    + ` signupPlayerIds=${slots.map((slot) => slot.length === 1 ? slot[0] : "unknown").join(",")}`
     + ` authority=${authority}`,
   );
   return { exact: true, email: account.email, keepIds, extraIds };
