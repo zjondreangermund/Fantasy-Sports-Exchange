@@ -1,0 +1,41 @@
+name: Position Locked Player Identity
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'server/services/fplPlayerIdentity.ts'
+      - 'server/services/apiFootballPlayerDirectory.ts'
+      - 'client/src/components/cards/PremiumFootballCard.tsx'
+      - 'scripts/reconcile-owned-premier-league-cards.mjs'
+      - 'scripts/apply-strict-position-identity-links.mjs'
+      - 'scripts/verify-position-locked-player-identity.mjs'
+      - '.github/workflows/position-locked-player-identity.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'server/services/fplPlayerIdentity.ts'
+      - 'server/services/apiFootballPlayerDirectory.ts'
+      - 'client/src/components/cards/PremiumFootballCard.tsx'
+      - 'scripts/reconcile-owned-premier-league-cards.mjs'
+      - 'scripts/apply-strict-position-identity-links.mjs'
+      - 'scripts/verify-position-locked-player-identity.mjs'
+      - '.github/workflows/position-locked-player-identity.yml'
+  workflow_dispatch:
+
+jobs:
+  position-identity-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify committed source is position locked
+        run: node scripts/verify-position-locked-player-identity.mjs
+      - name: Reproduce Premier League provider collision regression
+        run: node scripts/verify-premier-league-card-eligibility.mjs
+      - name: Prove repair is idempotent
+        run: |
+          node scripts/apply-strict-position-identity-links.mjs
+          node scripts/verify-position-locked-player-identity.mjs
+          node scripts/verify-premier-league-card-eligibility.mjs
+          git diff --exit-code
