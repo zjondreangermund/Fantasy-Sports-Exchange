@@ -11,6 +11,7 @@ const recovery = fs.readFileSync("scripts/audit-starter-selection-recovery.mjs",
 const restore = fs.readFileSync("scripts/restore-confirmed-starter-selections.mjs", "utf8");
 const enrichment = fs.readFileSync("server/services/playerCardEnrichment.ts", "utf8");
 const marketplace = fs.readFileSync("server/routes/marketplace.routes.ts", "utf8");
+const gameweekPatch = fs.readFileSync("scripts/apply-gameweek-prize-isolation.mjs", "utf8");
 
 assert.doesNotMatch(
   start,
@@ -59,6 +60,8 @@ assert.doesNotMatch(restore, /set\s+owner_id\s*=\s*null/i, "restoration must nev
 assert.match(cards, /position:\s*canonical\?\.position\s*\|\|\s*player\.position\s*\|\|\s*apiFootballPlayer\?\.position/, "Collection must display the tournament-authoritative position");
 assert.match(enrichment, /const currentPosition = canonical\?\.position \|\| String\(player\.position \|\| ""\) \|\| apiFootballPlayer\?\.position/, "shared card enrichment must prefer FPL/stored tournament positions");
 assert.match(marketplace, /position:\s*canonical\?\.position\s*\|\|\s*storedPlayer\.position\s*\|\|\s*apiFootballPlayer\?\.position/, "Marketplace must display the tournament-authoritative position");
+assert.match(gameweekPatch, /const currentPosition = canonical\?\.position \|\| String\(player\.position \|\| ""\) \|\| apiFootballPlayer\?\.position \|\| "MID"/, "gameweek build transform must preserve tournament-authoritative position precedence");
+assert.doesNotMatch(gameweekPatch, /const currentPosition = apiFootballPlayer\?\.position \|\| canonical\?\.position/, "gameweek build transform must not restore stale API-Football position precedence");
 
 // The Railway server build transforms the starter-offer generator before
 // compiling. Execute that transform against an in-memory filesystem to prove
