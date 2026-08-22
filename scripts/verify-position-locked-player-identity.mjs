@@ -10,6 +10,7 @@ const expect = (condition, message) => { if (!condition) failures.push(message);
 const fpl = read("server/services/fplPlayerIdentity.ts");
 const api = read("server/services/apiFootballPlayerDirectory.ts");
 const premium = read("client/src/components/cards/PremiumFootballCard.tsx");
+const reconcile = read("scripts/reconcile-owned-premier-league-cards.mjs");
 
 expect(fpl.includes("STRICT_PLAYER_IDENTITY_FIX_V3_POSITION_LOCK"), "FPL position-lock version marker missing");
 expect(fpl.includes("function positionCompatible(player: any, element: any): boolean"), "FPL hard position helper missing");
@@ -24,6 +25,10 @@ expect(!api.includes("rawPosition === row.candidate.position || row.nameScore >=
 expect(premium.includes("const profilePositionMatches = !payloadPosition || !profilePosition || payloadPosition === profilePosition;"), "Card/profile position consistency guard missing");
 expect(premium.includes("const useProfileIdentity = identityVerified && profilePositionMatches;"), "Card profile identity is not gated by position agreement");
 expect(premium.includes("position: useProfileIdentity ? (data.player?.position || player.position) : player.position"), "Card face can still override the lineup payload with a conflicting profile position");
+
+expect(reconcile.includes("PLAYER_POSITION_REPAIR_BLOCKED"), "Production startup reconciliation does not log blocked cross-position repair attempts");
+expect(reconcile.includes("if (storedPosition && storedPosition !== canonicalPosition)"), "Production startup reconciliation can still rewrite a known player position");
+expect(reconcile.includes("return 0;"), "Blocked startup position repair does not stop before database mutation");
 
 // Regression model: exact names do NOT overrule a known position.
 const positionCompatible = (stored, candidate) => !stored || stored === candidate;
@@ -40,4 +45,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Player identity is position-locked across FPL fallback, API-Football and card-profile rendering.");
+console.log("Player identity is position-locked across FPL fallback, API-Football, card-profile rendering and startup reconciliation.");
