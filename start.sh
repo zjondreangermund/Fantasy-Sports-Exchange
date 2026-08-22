@@ -97,6 +97,12 @@ if ! node scripts/audit-original-signup-card-sets.mjs; then
   echo "Warning: original signup card reconstruction could not complete; startup will continue without changing card ownership."
 fi
 
+# Apply the one-time, rollback-backed ownership correction approved by the
+# operator. Every target is pinned to five proven historical card IDs; the
+# transaction aborts unless those exact cards form an eligible squad.
+echo "Restoring exact original signup card sets and removing all extras..."
+node scripts/restore-original-signup-card-sets.mjs
+
 # Snapshot currently owned normal-user cards. Snapshots never update/delete
 # player_cards and provide an exact baseline for future ownership-drift checks.
 echo "Snapshotting normal-user card ownership..."
