@@ -33,7 +33,7 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
       apiFootballDirectory,
     );
     const identityVerified = Boolean(apiFootballPlayer || matchedElement);
-    const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
+    const currentPosition = apiFootballPlayer?.position || canonical?.position || String(player.position || "") || "MID";
     const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
     const form = matchedElement ? Number(matchedElement.form || 0) : null;
     const overall = matchedElement ? overallFromFplElement(matchedElement) : null;
@@ -62,8 +62,9 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
       player: {
         ...player,
         ...(canonical || {}),
-        name: canonical?.name || apiFootballPlayer?.name || player.name,
-        team: canonical?.team || apiFootballPlayer?.team || player.team,
+        name: apiFootballPlayer?.name || canonical?.name || player.name,
+        team: apiFootballPlayer?.team || canonical?.team || player.team,
+        league: identityVerified ? "Premier League" : player.league,
         position: currentPosition,
         nationality: apiFootballPlayer?.nationality || player.nationality,
         apiFootballId: apiFootballPlayer?.apiPlayerId || null,
@@ -73,6 +74,26 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
         imageUrl: verifiedImageUrl,
         verifiedImageUrl,
         identityVerified,
+        premierLeagueEligible: identityVerified,
+        premierLeagueStatus: identityVerified
+          ? "active"
+          : String(player.league || "").toLowerCase() === "outside premier league"
+            ? "outside-premier-league"
+            : "unverified",
+        selectionEligibility: {
+          eligible: identityVerified,
+          provider: apiFootballPlayer ? "api-football" : matchedElement ? "fpl-fallback" : null,
+          code: identityVerified
+            ? "eligible"
+            : String(player.league || "").toLowerCase() === "outside premier league"
+              ? "outside-premier-league"
+              : "identity-unlinked",
+          message: identityVerified
+            ? `Eligible: linked by ${apiFootballPlayer ? "API-Football current squads" : "FPL fallback"}.`
+            : String(player.league || "").toLowerCase() === "outside premier league"
+              ? `${player.name} is outside the Premier League; use the same-position replacement card.`
+              : `${player.name} is not linked to API-Football or the FPL fallback yet.`,
+        },
         identitySource:
           apiFootballPlayer && matchedElement
             ? "fpl+api-football"

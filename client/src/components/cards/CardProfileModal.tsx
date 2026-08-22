@@ -15,12 +15,15 @@ export type CardProfileData = {
     name?: string;
     webName?: string;
     team?: string;
+    league?: string;
     position?: string;
     imageUrl?: string;
     status?: string;
     news?: string;
     nationality?: string;
     apiFootballId?: number;
+    premierLeagueEligible?: boolean;
+    premierLeagueStatus?: "active" | "outside-premier-league" | "unverified";
   };
   last10: Array<{
     gameweek: number;
@@ -98,9 +101,10 @@ function money(value?: number | null) {
 }
 
 function sourceLabel(data: CardProfileData) {
+  if (data.player?.premierLeagueStatus === "outside-premier-league") return "Outside Premier League";
   if (data.source === "api-football") return "API-Football verified";
-  if (data.source === "fpl-live" && data.providers?.identity?.includes("API-Football")) return "FPL + API verified";
-  if (data.source === "fpl-live") return "FPL live linked";
+  if (data.source === "fpl-live" && data.providers?.identity?.includes("API-Football")) return "API-Football linked • FPL stats";
+  if (data.source === "fpl-live") return "FPL fallback linked";
   return "Awaiting official link";
 }
 
@@ -136,6 +140,8 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
   const displayName = data.player?.name || card.player?.name || "Unknown Player";
   const team = data.player?.team || card.player?.team || "Fantasy Arena";
   const position = data.player?.position || card.player?.position || "N/A";
+  const outsidePremierLeague = data.player?.premierLeagueStatus === "outside-premier-league"
+    || String(data.player?.league || card.player?.league || "").toLowerCase() === "outside premier league";
   const identityVerified = data.source !== "card-fallback";
   const verifiedImage = identityVerified ? data.player?.imageUrl || undefined : undefined;
   const profileCard = {
@@ -191,8 +197,9 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
                 <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-white/80">
                   <span className="rounded-xl bg-white/[.08] px-3 py-2">{position}</span>
                   <span className="rounded-xl bg-white/[.08] px-3 py-2">{team}</span>
-                  <span className={`rounded-xl px-3 py-2 ${data.source === "card-fallback" ? "bg-amber-400/10 text-amber-100" : "bg-cyan-400/10 text-cyan-100"}`}>{sourceLabel(data)}</span>
+                  <span className={`rounded-xl px-3 py-2 ${outsidePremierLeague ? "bg-rose-400/15 text-rose-100" : data.source === "card-fallback" ? "bg-amber-400/10 text-amber-100" : "bg-cyan-400/10 text-cyan-100"}`}>{sourceLabel(data)}</span>
                 </div>
+                {outsidePremierLeague ? <p className="mt-3 rounded-xl border border-rose-300/20 bg-rose-400/10 p-3 text-xs text-rose-100">This player is no longer in the Premier League. An eligible player card in the same position and rarity has been added to your collection.</p> : null}
                 {data.providers?.identity ? <p className="mt-3 text-[11px] text-white/45">Identity: {data.providers.identity}</p> : null}
                 {data.player?.news ? <p className="mt-3 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs text-amber-100">{data.player.news}</p> : null}
               </div>
