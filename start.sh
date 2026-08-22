@@ -76,6 +76,19 @@ if ! node scripts/audit-starter-selection-recovery.mjs; then
   echo "Warning: starter-card recovery audit could not complete; startup will continue without changing card ownership."
 fi
 
+# Restore only selections that are still proven by a completed onboarding row
+# containing exactly one chosen player from each of its five original packs.
+# The one-time repair takes a rollback snapshot first, never removes owned cards,
+# never overwrites another owner, and separately uses reset audit evidence for
+# the four historically damaged test accounts.
+echo "Restoring proven signup starter selections and eligible lineup order..."
+node scripts/restore-confirmed-starter-selections.mjs
+
+echo "Verifying starter-card selections after restoration (read-only)..."
+if ! node scripts/audit-starter-selection-recovery.mjs; then
+  echo "Warning: post-restoration starter-card audit could not complete; startup will continue."
+fi
+
 # Snapshot currently owned normal-user cards. Snapshots never update/delete
 # player_cards and provide an exact baseline for future ownership-drift checks.
 echo "Snapshotting normal-user card ownership..."

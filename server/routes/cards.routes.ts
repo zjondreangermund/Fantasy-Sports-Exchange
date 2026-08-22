@@ -102,8 +102,12 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
             ...player,
             ...(canonical || {}),
             name: canonical?.name || apiFootballPlayer?.name || player.name,
-            team: apiFootballPlayer?.team || canonical?.team || player.team,
-            position: apiFootballPlayer?.position || canonical?.position || player.position,
+            // FPL is the tournament position authority. Keep the stored
+            // position as the fallback so Collection labels match server-side
+            // lineup validation even if API-Football has a stale/misclassified
+            // squad position.
+            team: canonical?.team || apiFootballPlayer?.team || player.team,
+            position: canonical?.position || player.position || apiFootballPlayer?.position,
             nationality: apiFootballPlayer?.nationality || player.nationality,
             apiFootballId: apiFootballPlayer?.apiPlayerId || null,
             imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
@@ -237,8 +241,8 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         player: {
           ...canonical,
           name: canonical?.name,
-          team: verifiedIdentity?.team || canonical?.team,
-          position: verifiedIdentity?.position || canonical?.position,
+          team: canonical?.team || verifiedIdentity?.team,
+          position: canonical?.position || player.position || verifiedIdentity?.position,
           imageUrl: verifiedImageUrl,
           verifiedImageUrl,
           nationality: verifiedIdentity?.nationality,

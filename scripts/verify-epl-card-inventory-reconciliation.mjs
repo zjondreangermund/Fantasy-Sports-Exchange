@@ -8,6 +8,7 @@ const reset = fs.readFileSync("scripts/reset-four-test-accounts-to-starter-commo
 const snapshot = fs.readFileSync("scripts/snapshot-normal-user-card-ownership.mjs", "utf8");
 const recovery = fs.readFileSync("scripts/audit-and-recover-normal-user-cards.mjs", "utf8");
 const starterRecovery = fs.readFileSync("scripts/audit-starter-selection-recovery.mjs", "utf8");
+const starterRestore = fs.readFileSync("scripts/restore-confirmed-starter-selections.mjs", "utf8");
 const start = fs.readFileSync("start.sh", "utf8");
 const retiredGrant = fs.readFileSync("scripts/grant-test-card-teams.mjs", "utf8");
 const referrals = fs.readFileSync("server/routes/referrals.routes.ts", "utf8");
@@ -27,6 +28,7 @@ for (const file of [
   "scripts/snapshot-normal-user-card-ownership.mjs",
   "scripts/audit-and-recover-normal-user-cards.mjs",
   "scripts/audit-starter-selection-recovery.mjs",
+  "scripts/restore-confirmed-starter-selections.mjs",
   "scripts/verify-starter-selection-integrity.mjs",
 ]) {
   try { execFileSync(process.execPath, ["--check", file], { stdio: "pipe" }); }
@@ -105,6 +107,18 @@ rejectText(starterRecovery.toLowerCase(), "update app.player_cards", "starter re
 rejectText(starterRecovery.toLowerCase(), "delete from app.player_cards", "starter recovery audit must never delete player_cards");
 rejectText(starterRecovery.toLowerCase(), "insert into app.player_cards", "starter recovery audit must never mint player_cards");
 
+// The approved one-time restoration is evidence-bound and reversible. Normal
+// users require one recorded selection from each original pack; reset accounts
+// use only their reset audit record or independent historical ownership proof.
+requireText(starterRestore, "starter_selection_restoration_backups", "starter restoration does not capture a rollback snapshot");
+requireText(starterRestore, "selection-not-proven-by-five-packs", "starter restoration can run without original pack proof");
+requireText(starterRestore, "admin.test_account_starter_reset", "starter restoration does not distinguish overwritten reset accounts");
+requireText(starterRestore, "admin.proven_historical_starter_card_restored", "proven historical reset cards are not audited");
+requireText(starterRestore, "where id=$2 and owner_id is null", "starter restoration can overwrite another card owner");
+requireText(starterRestore, "remainingConfirmedMismatches > 0", "starter restoration does not verify all proven selections afterward");
+rejectText(starterRestore.toLowerCase(), "delete from app.player_cards", "starter restoration must never delete cards");
+rejectText(starterRestore.toLowerCase(), "set owner_id=null", "starter restoration must never clear card ownership");
+
 // Collection endpoints are read-only: opening the vault must never mint random
 // cards, seed players, or alter the user's confirmed signup selections.
 requireText(cards, "const cards = await storage.getUserCards(userId);", "Collection no longer reads the existing owned cards directly");
@@ -121,19 +135,23 @@ requireText(onboarding, "await db.transaction(async (tx: any)", "starter selecti
 requireText(onboarding, "for update", "starter selection is not protected against concurrent confirmation");
 requireText(onboarding, "onboarding.starter_selection_confirmed", "confirmed starter choices do not have a durable audit trail");
 requireText(onboarding, "starterCardIds: grantResult.cardIds", "confirmed starter-card IDs are missing from recovery evidence");
+requireText(onboarding, "const orderedSelected =", "confirmed starter selections are not normalized into pack order");
+requireText(onboarding, "INSERT INTO app.lineups", "confirmed signup does not create an eligible default lineup");
+requireText(onboarding, 'lineupOrder: ["GK", "DEF", "MID", "FWD", "UTILITY"]', "starter lineup audit order is missing");
 requireText(marketplace, "isMarketplaceTradableRarity", "marketplace tradable-rarity guard is missing");
 requireText(marketplace, "Common cards cannot be traded", "marketplace no longer blocks Common card trading");
 
 const refreshIndex = start.indexOf("node scripts/refresh-epl-api-football-directory-startup.mjs");
 const auditIndex = start.indexOf("node scripts/audit-and-recover-normal-user-cards.mjs");
 const starterAuditIndex = start.indexOf("node scripts/audit-starter-selection-recovery.mjs");
+const starterRestoreIndex = start.indexOf("node scripts/restore-confirmed-starter-selections.mjs");
 const snapshotIndex = start.indexOf("node scripts/snapshot-normal-user-card-ownership.mjs");
 const serialIndex = start.indexOf("node scripts/prepare-runtime-startup.mjs");
 if (
-  refreshIndex < 0 || auditIndex < 0 || starterAuditIndex < 0 || snapshotIndex < 0 || serialIndex < 0
-  || !(refreshIndex < auditIndex && auditIndex < starterAuditIndex && starterAuditIndex < snapshotIndex && snapshotIndex < serialIndex)
+  refreshIndex < 0 || auditIndex < 0 || starterAuditIndex < 0 || starterRestoreIndex < 0 || snapshotIndex < 0 || serialIndex < 0
+  || !(refreshIndex < auditIndex && auditIndex < starterAuditIndex && starterAuditIndex < starterRestoreIndex && starterRestoreIndex < snapshotIndex && snapshotIndex < serialIndex)
 ) {
-  failures.push("startup order must be API-Football refresh -> normal-user audit -> read-only starter recovery audit -> normal-user snapshot -> serial preflight");
+  failures.push("startup order must be API-Football refresh -> normal-user audit -> read-only starter audit -> evidence-bound starter restore -> normal-user snapshot -> serial preflight");
 }
 rejectText(start, "node scripts/finalize-full-set-test-card-cleanup.mjs", "obsolete full-set finalizer is still allowed at startup");
 rejectText(start, "node scripts/apply-finalize-locked-card-safety.mjs", "obsolete finalizer lock patch is still in the startup path");

@@ -103,6 +103,16 @@ async function auditResetAccount(client, account) {
   `, [account.user_id]));
 
   const evidence = await ownershipEvidence(client, account.user_id, account.reset_at);
+  const offeredPlayers = offeredPlayerIds.length ? rows(await client.query(`
+    select id::bigint as player_id, name as player_name, team as player_team,
+           position::text as position
+    from app.players
+    where id=any($1::int[])
+    order by id
+  `, [offeredPlayerIds])) : [];
+  const offeredPlayerById = new Map(
+    offeredPlayers.map((player) => [Number(player.player_id), player]),
+  );
   const historicalCards = offeredPlayerIds.length ? rows(await client.query(`
     select pc.id::bigint as card_id, pc.player_id::bigint as player_id,
            pc.owner_id::text as current_owner_id, pc.rarity::text as rarity,
@@ -141,6 +151,26 @@ async function auditResetAccount(client, account) {
     + ` originalOfferPlayers=${offeredPlayerIds.length} provenCandidates=${candidates.length}`
     + ` exactRecovery=${exactRecovery}`,
   );
+
+  for (let packIndex = 0; packIndex < packCards.length; packIndex += 1) {
+    for (const playerId of packCards[packIndex]) {
+      const player = offeredPlayerById.get(playerId) || {};
+      const availableCards = historicalCards
+        .filter((card) => Number(card.player_id) === playerId)
+        .map((card) => {
+          const cardEvidence = [...(evidence.get(Number(card.card_id)) || [])];
+          const owner = card.current_owner_id == null ? "unowned" : "already-owned";
+          return `${Number(card.card_id)}:${owner}:${cardEvidence.join("+") || "no-evidence"}`;
+        });
+      console.log(
+        `STARTER_RECOVERY_OFFER email=${account.email} pack=${packIndex + 1}`
+        + ` playerId=${playerId} player=${JSON.stringify(String(player.player_name || ""))}`
+        + ` team=${JSON.stringify(String(player.player_team || ""))}`
+        + ` position=${String(player.position || "")}`
+        + ` historicalCards=${availableCards.join(",") || "none"}`,
+      );
+    }
+  }
 
   for (const pack of perPack) {
     for (const candidate of pack.candidates) {

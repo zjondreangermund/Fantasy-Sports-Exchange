@@ -33,7 +33,7 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
       apiFootballDirectory,
     );
     const identityVerified = Boolean(apiFootballPlayer || matchedElement);
-    const currentPosition = apiFootballPlayer?.position || canonical?.position || String(player.position || "MID");
+    const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
     const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
     const form = matchedElement ? Number(matchedElement.form || 0) : null;
     const overall = matchedElement ? overallFromFplElement(matchedElement) : null;
@@ -63,7 +63,7 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
         ...player,
         ...(canonical || {}),
         name: canonical?.name || apiFootballPlayer?.name || player.name,
-        team: apiFootballPlayer?.team || canonical?.team || player.team,
+        team: canonical?.team || apiFootballPlayer?.team || player.team,
         position: currentPosition,
         nationality: apiFootballPlayer?.nationality || player.nationality,
         apiFootballId: apiFootballPlayer?.apiPlayerId || null,
