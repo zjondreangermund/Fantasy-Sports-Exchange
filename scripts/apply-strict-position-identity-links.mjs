@@ -65,4 +65,19 @@ function replaceRequired(source, before, after, label) {
   write(file, source);
 }
 
+// Defence in depth for the production startup reconciler. Even if a future
+// provider resolver regresses, the database repair itself may never rewrite an
+// already-known GK/DEF/MID/FWD player row into another position automatically.
+{
+  const file = "scripts/reconcile-owned-premier-league-cards.mjs";
+  let source = read(file);
+  source = replaceRequired(
+    source,
+    `async function repairActivePlayer(client, playerId, identity, element) {\n  const canonicalPosition = positionOf(identity.position);\n  if (!canonicalPosition) throw new Error(\`Invalid official position for player \${playerId}\`);\n  const requestedFplId = element ? Number(element.id || 0) || null : null;`,
+    `async function repairActivePlayer(client, playerId, identity, element) {\n  const canonicalPosition = positionOf(identity.position);\n  if (!canonicalPosition) throw new Error(\`Invalid official position for player \${playerId}\`);\n  const currentPlayer = rows(await client.query(\`\n    select position::text as position, name, team\n    from app.players where id=$1 limit 1\n  \`, [playerId]))[0];\n  const storedPosition = positionOf(currentPlayer?.position);\n  if (storedPosition && storedPosition !== canonicalPosition) {\n    console.warn(\n      \`PLAYER_POSITION_REPAIR_BLOCKED playerId=\${playerId}\`\n      + \` stored=\${storedPosition} provider=\${canonicalPosition}\`\n      + \` storedName=\"\${String(currentPlayer?.name || "")}\"\`\n      + \` providerName=\"\${String(identity?.name || "")}\"\`,\n    );\n    return 0;\n  }\n  const requestedFplId = element ? Number(element.id || 0) || null : null;`,
+    "startup player position mutation guard",
+  );
+  write(file, source);
+}
+
 console.log("Strict player-position identity lock applied: provider name matches cannot cross GK/DEF/MID/FWD boundaries.");
