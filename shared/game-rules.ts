@@ -3,6 +3,7 @@
 
 export const TOURNAMENT_LINEUP_SLOTS = ["GK", "DEF", "MID", "FWD", "UTILITY"] as const;
 export const TOURNAMENT_REQUIRED_POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
+export const TOURNAMENT_UTILITY_POSITIONS = ["DEF", "MID", "FWD"] as const;
 export const TOURNAMENT_CARD_COUNT = 5;
 export const CAPTAIN_MULTIPLIER = 1.1;
 export const CAPTAIN_BONUS_PERCENT = 10;
