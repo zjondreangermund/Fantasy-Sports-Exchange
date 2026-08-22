@@ -10,7 +10,7 @@ const REPAIR_ACTIONS = [
   "admin.proven_historical_starter_card_restored",
 ];
 const SIGNUP_WINDOW_BEFORE_MS = 60 * 60 * 1000;
-const SIGNUP_WINDOW_AFTER_MS = 24 * 60 * 60 * 1000;
+const SIGNUP_WINDOW_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 const CLUSTER_MS = 2 * 60 * 1000;
 
 function rows(result) {
@@ -287,7 +287,7 @@ async function auditAccount(client, account, allPlayers, playerById) {
   const backupLineup = positiveIds(asObject(account.lineup).card_ids);
 
   const currentCards = rows(await client.query(`
-    select pc.id, pc.player_id, pc.owner_id, pc.rarity::text as rarity, pc.acquired_at,
+    select pc.id, pc.player_id, pc.owner_id, pc.rarity::text as rarity, pc.serial_id, pc.acquired_at,
            p.name, p.web_name, p.team, p.position::text as position, p.fpl_id, p.code
     from app.player_cards pc
     join app.players p on p.id=pc.player_id
@@ -348,7 +348,7 @@ async function auditAccount(client, account, allPlayers, playerById) {
     ...priorLineups.flatMap((lineup) => lineup.cardIds),
   ]);
   const candidateCards = (equivalentPlayerIds.length || knownCardIds.length) ? rows(await client.query(`
-    select pc.id, pc.player_id, pc.owner_id, pc.rarity::text as rarity, pc.acquired_at,
+    select pc.id, pc.player_id, pc.owner_id, pc.rarity::text as rarity, pc.serial_id, pc.acquired_at,
            p.name, p.web_name, p.team, p.position::text as position, p.fpl_id, p.code
     from app.player_cards pc
     join app.players p on p.id=pc.player_id
@@ -461,6 +461,7 @@ async function auditAccount(client, account, allPlayers, playerById) {
           cardId,
           playerId: Number(card?.player_id || 0),
           player: String(card?.name || card?.web_name || ""),
+          serial: String(card?.serial_id || "none"),
           acquiredAt: iso(card?.acquired_at),
         };
       }),
@@ -504,6 +505,7 @@ async function auditAccount(client, account, allPlayers, playerById) {
     `ORIGINAL_SIGNUP_EXACT email=${account.email}`
     + ` keepCardIds=${keepIds.join(",")}`
     + ` keepPlayerIds=${assignment.cards.map((card) => card.playerId).join(",")}`
+    + ` keepSerials=${assignment.cards.map((card) => card.serial || cardById.get(card.cardId)?.serial_id || "none").join(",")}`
     + ` extraCurrentCardIds=${extraIds.join(",") || "none"}`
     + ` repairAddedCardIds=${addedAfterBackupIds.join(",") || "none"}`
     + ` signupPlayerIds=${slots.map((slot) => slot.length === 1 ? slot[0] : "unknown").join(",")}`
