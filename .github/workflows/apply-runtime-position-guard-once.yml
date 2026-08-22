@@ -1,0 +1,34 @@
+name: Apply runtime position guard once
+
+on:
+  push:
+    branches: [ fix/strict-position-identity-links ]
+    paths:
+      - 'scripts/apply-strict-position-identity-links.mjs'
+      - 'scripts/reconcile-owned-premier-league-cards.mjs'
+      - '.github/workflows/apply-runtime-position-guard-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/strict-position-identity-links
+          fetch-depth: 0
+      - run: node scripts/apply-strict-position-identity-links.mjs
+      - run: node scripts/verify-position-locked-player-identity.mjs
+      - shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/reconcile-owned-premier-league-cards.mjs
+          git commit -m 'Block cross-position startup identity rewrites'
+          git push origin HEAD:fix/strict-position-identity-links
