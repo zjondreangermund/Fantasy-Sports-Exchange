@@ -297,8 +297,42 @@ async function auditAccount(client, account, allPlayers, playerById) {
   const currentIds = new Set(currentCards.map((card) => Number(card.id)));
   const addedAfterBackupIds = [...currentIds].filter((cardId) => !backupIds.has(cardId));
 
+  const logInventory = async (reason) => {
+    const ids = positiveIds([
+      ...backupIds,
+      ...currentIds,
+      ...priorLineups.flatMap((lineup) => lineup.cardIds),
+    ]);
+    if (!ids.length) return;
+    const inventory = rows(await client.query(`
+      select pc.id, pc.player_id, pc.owner_id, pc.rarity::text as rarity,
+             pc.serial_id, pc.acquired_at, p.name, p.web_name, p.team,
+             p.position::text as position, p.fpl_id, p.code
+      from app.player_cards pc
+      left join app.players p on p.id=pc.player_id
+      where pc.id=any($1::int[])
+      order by pc.acquired_at, pc.id
+    `, [ids]));
+    for (const card of inventory) {
+      console.log(
+        `ORIGINAL_SIGNUP_INVENTORY email=${account.email} reason=${reason}`
+        + ` cardId=${Number(card.id)} playerId=${Number(card.player_id)}`
+        + ` player=${JSON.stringify(String(card.name || card.web_name || ""))}`
+        + ` team=${JSON.stringify(String(card.team || ""))}`
+        + ` position=${String(card.position || "none")} rarity=${String(card.rarity || "none")}`
+        + ` serial=${String(card.serial_id || "none")} acquiredAt=${iso(card.acquired_at)}`
+        + ` owner=${card.owner_id == null ? "unowned" : String(card.owner_id) === String(account.user_id) ? "owned" : "other"}`,
+      );
+    }
+  };
+
   if (!slots) {
-    console.log(`ORIGINAL_SIGNUP_ACCOUNT email=${account.email} status=unresolved reason=invalid-five-pack-selection backupCards=${backupIds.size} currentCards=${currentIds.size}`);
+    console.log(
+      `ORIGINAL_SIGNUP_ACCOUNT email=${account.email} status=unresolved reason=invalid-five-pack-selection`
+      + ` backupCards=${backupIds.size} currentCards=${currentIds.size}`
+      + ` historicalLineups=${priorLineups.map((lineup) => lineup.cardIds.join(",")).join("|") || "none"}`,
+    );
+    await logInventory("invalid-five-pack-selection");
     return { exact: false, email: account.email };
   }
 
@@ -459,6 +493,7 @@ async function auditAccount(client, account, allPlayers, playerById) {
   });
 
   if (!assignment) {
+    await logInventory("no-unique-five-card-proof");
     console.log(`ORIGINAL_SIGNUP_UNRESOLVED email=${account.email} reason=no-unique-five-card-proof currentIds=${[...currentIds].join(",") || "none"}`);
     return { exact: false, email: account.email };
   }
