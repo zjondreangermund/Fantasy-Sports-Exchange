@@ -89,6 +89,14 @@ if ! node scripts/audit-starter-selection-recovery.mjs; then
   echo "Warning: post-restoration starter-card audit could not complete; startup will continue."
 fi
 
+# Reconstruct the actual five signup cards from the rollback snapshot, original
+# pack choices, acquisition timestamps and historical ownership evidence. This
+# audit is transaction-level read-only and never changes card ownership.
+echo "Reconstructing original signup card sets from rollback evidence (read-only)..."
+if ! node scripts/audit-original-signup-card-sets.mjs; then
+  echo "Warning: original signup card reconstruction could not complete; startup will continue without changing card ownership."
+fi
+
 # Snapshot currently owned normal-user cards. Snapshots never update/delete
 # player_cards and provide an exact baseline for future ownership-drift checks.
 echo "Snapshotting normal-user card ownership..."
