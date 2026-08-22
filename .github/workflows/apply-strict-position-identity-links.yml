@@ -1,0 +1,44 @@
+name: Apply strict position identity source repair
+
+on:
+  push:
+    branches:
+      - fix/strict-position-identity-links
+    paths:
+      - 'scripts/apply-strict-position-identity-links.mjs'
+      - 'scripts/verify-position-locked-player-identity.mjs'
+      - 'server/services/fplPlayerIdentity.ts'
+      - 'server/services/apiFootballPlayerDirectory.ts'
+      - 'client/src/components/cards/PremiumFootballCard.tsx'
+      - '.github/workflows/apply-strict-position-identity-links.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/strict-position-identity-links
+          fetch-depth: 0
+      - name: Apply position-locked identity repair
+        run: node scripts/apply-strict-position-identity-links.mjs
+      - name: Verify position-locked identity repair
+        run: node scripts/verify-position-locked-player-identity.mjs
+      - name: Commit repaired source when needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git diff --quiet; then
+            echo 'Source already normalized.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server/services/fplPlayerIdentity.ts server/services/apiFootballPlayerDirectory.ts client/src/components/cards/PremiumFootballCard.tsx
+          git commit -m 'Lock player identity resolution to football position'
+          git push origin HEAD:fix/strict-position-identity-links
