@@ -14,15 +14,26 @@ const LEAGUE_ID = Math.max(1, Number(process.env.API_FOOTBALL_LEAGUE_ID || 39));
 
 const DETAILED_FIELDS = [
   "completed_passes",
+  "total_passes",
+  "pass_accuracy",
+  "match_rating",
+  "rating_samples",
   "key_passes",
   "tackles",
   "interceptions",
   "duels_won",
+  "duels_total",
   "shots_on_target",
+  "shots_total",
   "successful_dribbles",
+  "dribbles_attempted",
   "blocks",
   "fouls_drawn",
   "fouls_committed",
+  "penalties_won",
+  "penalties_conceded",
+  "penalties_scored",
+  "offsides",
 ] as const;
 
 export type DetailedScoringContext = {

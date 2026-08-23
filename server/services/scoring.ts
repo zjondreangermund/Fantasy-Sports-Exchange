@@ -1,4 +1,4 @@
-import { PLAYER_SCORE_RULES } from "../../shared/game-rules.js";
+import { PLAYER_SCORE_RULES, SCORE_PRECISION_DECIMALS } from "../../shared/game-rules.js";
 
 /**
  * Canonical Fantasy Arena scoring engine.
@@ -31,15 +31,26 @@ export interface PlayerStats {
   threat: string;
   ict_index: string;
   completed_passes: number;
+  total_passes: number;
+  pass_accuracy: number;
+  match_rating: number;
+  rating_samples: number;
   key_passes: number;
   tackles: number;
   interceptions: number;
   duels_won: number;
+  duels_total: number;
   shots_on_target: number;
+  shots_total: number;
   successful_dribbles: number;
+  dribbles_attempted: number;
   blocks: number;
   fouls_drawn: number;
   fouls_committed: number;
+  penalties_won: number;
+  penalties_conceded: number;
+  penalties_scored: number;
+  offsides: number;
   detailed_stats_available: boolean;
   provider: "fpl" | "api-football" | "hybrid";
 }
@@ -61,6 +72,17 @@ export interface ScoringResult {
     bonus: number;
   };
   reasons: ScoringReason[];
+  football_metrics: {
+    match_rating: number;
+    goals: number;
+    assists: number;
+    key_passes: number;
+    shots_on_target: number;
+    defensive_actions: number;
+    goalkeeper_saves: number;
+    completed_passes: number;
+    minutes: number;
+  };
   is_all_around: boolean;
   data_source: "official-fpl-fallback" | "official-fpl-plus-api-football";
 }
@@ -83,15 +105,22 @@ export const SCORE_RULES = {
     { event: "60+ minutes", points: `+${p.minutes60Plus} performance base` },
     { event: "30–59 minutes", points: `+${p.minutes30To59} performance base` },
     { event: "1–29 minutes", points: `+${p.minutes1To29} performance base` },
+    { event: "Every exact minute played", points: `+${p.minutePlayed} each` },
     { event: "Key / crucial pass", points: `+${d.keyPass} each` },
-    { event: "Completed passes", points: `+1 per ${d.completedPassesPerPoint}, max +${d.completedPassesMax}` },
+    { event: "Completed passes", points: `+1 / ${d.completedPassesPerPoint} for every pass, max +${d.completedPassesMax}` },
+    { event: "Passing accuracy", points: `+${d.passingAccuracyPercent} per percentage point` },
+    { event: "API-Football match rating", points: `rating × ${d.matchRating}` },
     { event: "Successful tackle", points: `+${d.tackle} each` },
     { event: "Interception", points: `+${d.interception} each` },
     { event: "Duel won", points: `+${d.duelWon} each` },
     { event: "Shot on target", points: `+${d.shotOnTarget} each` },
+    { event: "Shot off target", points: `+${d.shotOffTarget} each` },
     { event: "Successful dribble", points: `+${d.successfulDribble} each` },
     { event: "Defensive block", points: `+${d.block} each` },
     { event: "Foul won", points: `+${d.foulDrawn} each` },
+    { event: "Individual goalkeeper save", points: `+${d.goalkeeperSave} each` },
+    { event: "Penalty won", points: `+${d.penaltyWon} each` },
+    { event: "Penalty scored", points: `+${d.penaltyScored} each` },
     { event: "FPL fallback ICT", points: `up to +${f.ictMax}` },
     { event: "FPL fallback BPS", points: `up to +${f.bpsMax}` },
     { event: "FPL bonus", points: `+${p.fplBonusMultiplier} per bonus point` },
@@ -99,6 +128,10 @@ export const SCORE_RULES = {
   ],
   negative: [
     { event: "Foul committed", points: `${d.foulCommitted}` },
+    { event: "Duel lost", points: `${d.duelLost}` },
+    { event: "Unsuccessful dribble", points: `${d.unsuccessfulDribble}` },
+    { event: "Penalty conceded", points: `${d.penaltyConceded}` },
+    { event: "Offside", points: `${d.offside}` },
     { event: "Yellow card", points: `${n.yellowCard}` },
     { event: "Red card", points: `${n.redCard}` },
     { event: "Own goal", points: `${n.ownGoal}` },
@@ -120,7 +153,7 @@ function numberOf(value: unknown) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function round(value: number, decimals = 2) {
+function round(value: number, decimals = SCORE_PRECISION_DECIMALS) {
   const factor = 10 ** decimals;
   return Math.round((value + Number.EPSILON) * factor) / factor;
 }
@@ -142,6 +175,8 @@ export function calculatePlayerScore(stats: PlayerStats, position: string): Scor
   let bonus = 0;
   const reasons: ScoringReason[] = [];
   const normalizedPosition = String(position || "").toUpperCase();
+  const ratingSamples = Math.max(numberOf(stats.rating_samples), numberOf(stats.match_rating) > 0 ? 1 : 0);
+  const matchRating = ratingSamples > 0 ? numberOf(stats.match_rating) / ratingSamples : 0;
 
   const goalPoints = numberOf(stats.goals_scored) * p.goal;
   const assistPoints = numberOf(stats.assists) * p.assist;
@@ -175,19 +210,45 @@ export function calculatePlayerScore(stats: PlayerStats, position: string): Scor
   const minutesPoints = minutes >= 60 ? p.minutes60Plus : minutes >= 30 ? p.minutes30To59 : minutes > 0 ? p.minutes1To29 : 0;
   performance += minutesPoints;
   addReason(reasons, `${minutes} minutes played`, minutesPoints, "performance");
+  const exactMinutesPoints = minutes * p.minutePlayed;
+  performance += exactMinutesPoints;
+  addReason(reasons, `${minutes} exact playing minutes`, exactMinutesPoints, "performance");
+
+  if (normalizedPosition === "GK") {
+    const individualSavePoints = numberOf(stats.saves) * d.goalkeeperSave;
+    performance += individualSavePoints;
+    addReason(reasons, `${numberOf(stats.saves)} individual goalkeeper save(s)`, individualSavePoints, "performance");
+  }
 
   if (stats.detailed_stats_available) {
+    const completedPasses = numberOf(stats.completed_passes);
+    const totalPasses = numberOf(stats.total_passes);
+    const accuracy = totalPasses > 0
+      ? clamp(completedPasses / totalPasses * 100, 0, 100)
+      : clamp(numberOf(stats.pass_accuracy), 0, 100);
+    const duelsLost = Math.max(numberOf(stats.duels_total) - numberOf(stats.duels_won), 0);
+    const shotsOffTarget = Math.max(numberOf(stats.shots_total) - numberOf(stats.shots_on_target), 0);
+    const unsuccessfulDribbles = Math.max(numberOf(stats.dribbles_attempted) - numberOf(stats.successful_dribbles), 0);
     const detailedParts = [
-      ["Completed passes", Math.min(d.completedPassesMax, Math.floor(numberOf(stats.completed_passes) / d.completedPassesPerPoint))],
+      ["Completed passes", Math.min(d.completedPassesMax, completedPasses / d.completedPassesPerPoint)],
+      ["Passing accuracy", accuracy * d.passingAccuracyPercent],
+      ["API-Football match rating", matchRating * d.matchRating],
       ["Key / crucial passes", numberOf(stats.key_passes) * d.keyPass],
       ["Successful tackles", numberOf(stats.tackles) * d.tackle],
       ["Interceptions", numberOf(stats.interceptions) * d.interception],
       ["Duels won", numberOf(stats.duels_won) * d.duelWon],
+      ["Duels lost", duelsLost * d.duelLost],
       ["Shots on target", numberOf(stats.shots_on_target) * d.shotOnTarget],
+      ["Shots off target", shotsOffTarget * d.shotOffTarget],
       ["Successful dribbles", numberOf(stats.successful_dribbles) * d.successfulDribble],
+      ["Unsuccessful dribbles", unsuccessfulDribbles * d.unsuccessfulDribble],
       ["Defensive blocks", numberOf(stats.blocks) * d.block],
       ["Fouls won", numberOf(stats.fouls_drawn) * d.foulDrawn],
       ["Fouls committed", numberOf(stats.fouls_committed) * d.foulCommitted],
+      ["Penalties won", numberOf(stats.penalties_won) * d.penaltyWon],
+      ["Penalties conceded", numberOf(stats.penalties_conceded) * d.penaltyConceded],
+      ["Penalties scored", numberOf(stats.penalties_scored) * d.penaltyScored],
+      ["Offsides", numberOf(stats.offsides) * d.offside],
     ] as const;
     for (const [label, points] of detailedParts) {
       performance += points;
@@ -195,9 +256,9 @@ export function calculatePlayerScore(stats: PlayerStats, position: string): Scor
     }
   } else {
     const ictIndex = Number.parseFloat(String(stats.ict_index || "0")) || 0;
-    const ictPoints = Math.min(f.ictMax, Math.floor(ictIndex / f.ictPerPoint));
+    const ictPoints = Math.min(f.ictMax, ictIndex / f.ictPerPoint);
     const bps = numberOf(stats.bps);
-    const bpsPoints = Math.min(f.bpsMax, Math.floor(bps / f.bpsPerPoint));
+    const bpsPoints = Math.min(f.bpsMax, bps / f.bpsPerPoint);
     performance += ictPoints + bpsPoints;
     addReason(reasons, `FPL ICT fallback ${ictIndex}`, ictPoints, "performance");
     addReason(reasons, `FPL BPS fallback ${bps}`, bpsPoints, "performance");
@@ -237,12 +298,23 @@ export function calculatePlayerScore(stats: PlayerStats, position: string): Scor
   }
   bonus = clamp(round(bonus), c.bonusMin, c.bonusMax);
 
-  const total_score = clamp(round(decisive + performance + penalties + bonus, 1), c.finalMin, c.finalMax);
+  const total_score = clamp(round(decisive + performance + penalties + bonus), c.finalMin, c.finalMax);
   return {
     player_id: 0,
     total_score,
     breakdown: { decisive, performance, penalties, bonus },
     reasons,
+    football_metrics: {
+      match_rating: round(matchRating),
+      goals: numberOf(stats.goals_scored),
+      assists: numberOf(stats.assists),
+      key_passes: numberOf(stats.key_passes),
+      shots_on_target: numberOf(stats.shots_on_target),
+      defensive_actions: numberOf(stats.tackles) + numberOf(stats.interceptions) + numberOf(stats.blocks),
+      goalkeeper_saves: normalizedPosition === "GK" ? numberOf(stats.saves) : 0,
+      completed_passes: numberOf(stats.completed_passes),
+      minutes,
+    },
     is_all_around: total_score >= 60,
     data_source: stats.detailed_stats_available ? "official-fpl-plus-api-football" : "official-fpl-fallback",
   };
@@ -256,24 +328,38 @@ export function calculateLineupScore(cardScores: ScoringResult[], captainId: num
     const isCaptain = captainCardId > 0 && (Number(score.card_id || 0) === captainCardId || Number(score.player_id || 0) === captainCardId);
     totalScore += isCaptain ? baseScore * 1.1 : baseScore;
   }
-  return Math.round(totalScore);
+  return round(totalScore);
 }
 
 function emptyDetailedStats(): Pick<PlayerStats,
-  "completed_passes" | "key_passes" | "tackles" | "interceptions" | "duels_won" |
-  "shots_on_target" | "successful_dribbles" | "blocks" | "fouls_drawn" | "fouls_committed"
+  "completed_passes" | "total_passes" | "pass_accuracy" | "match_rating" | "rating_samples" |
+  "key_passes" | "tackles" | "interceptions" | "duels_won" | "duels_total" |
+  "shots_on_target" | "shots_total" | "successful_dribbles" | "dribbles_attempted" |
+  "blocks" | "fouls_drawn" | "fouls_committed" | "penalties_won" |
+  "penalties_conceded" | "penalties_scored" | "offsides"
 > {
   return {
     completed_passes: 0,
+    total_passes: 0,
+    pass_accuracy: 0,
+    match_rating: 0,
+    rating_samples: 0,
     key_passes: 0,
     tackles: 0,
     interceptions: 0,
     duels_won: 0,
+    duels_total: 0,
     shots_on_target: 0,
+    shots_total: 0,
     successful_dribbles: 0,
+    dribbles_attempted: 0,
     blocks: 0,
     fouls_drawn: 0,
     fouls_committed: 0,
+    penalties_won: 0,
+    penalties_conceded: 0,
+    penalties_scored: 0,
+    offsides: 0,
   };
 }
 
@@ -315,20 +401,33 @@ export function mapApiFootballStatisticsToDetailedStats(stat: any): Partial<Play
   const shots = stat?.shots || {};
   const dribbles = stat?.dribbles || {};
   const fouls = stat?.fouls || {};
+  const penalty = stat?.penalty || {};
   const totalPasses = numberOf(passes.total);
   const accuracy = passAccuracy(passes.accuracy);
   const completedPasses = accuracy > 0 ? Math.round(totalPasses * accuracy / 100) : totalPasses;
+  const matchRating = clamp(numberOf(stat?.games?.rating), 0, 10);
   return {
     completed_passes: completedPasses,
+    total_passes: totalPasses,
+    pass_accuracy: accuracy,
+    match_rating: matchRating,
+    rating_samples: matchRating > 0 ? 1 : 0,
     key_passes: numberOf(passes.key),
     tackles: numberOf(tackles.total),
     interceptions: numberOf(tackles.interceptions),
     duels_won: numberOf(duels.won),
+    duels_total: numberOf(duels.total),
     shots_on_target: numberOf(shots.on),
+    shots_total: numberOf(shots.total),
     successful_dribbles: numberOf(dribbles.success),
+    dribbles_attempted: numberOf(dribbles.attempts),
     blocks: numberOf(tackles.blocks),
     fouls_drawn: numberOf(fouls.drawn),
     fouls_committed: numberOf(fouls.committed),
+    penalties_won: numberOf(penalty.won),
+    penalties_conceded: numberOf(penalty.committed ?? penalty.commited),
+    penalties_scored: numberOf(penalty.scored),
+    offsides: numberOf(stat?.offsides),
     detailed_stats_available: true,
     provider: "api-football",
   };
@@ -369,15 +468,26 @@ export function mergePlayerStatsWithDetailedStats(base: PlayerStats, detailed?: 
   return {
     ...base,
     completed_passes: numberOf(detailed.completed_passes),
+    total_passes: numberOf(detailed.total_passes),
+    pass_accuracy: numberOf(detailed.pass_accuracy),
+    match_rating: numberOf(detailed.match_rating),
+    rating_samples: numberOf(detailed.rating_samples),
     key_passes: numberOf(detailed.key_passes),
     tackles: numberOf(detailed.tackles),
     interceptions: numberOf(detailed.interceptions),
     duels_won: numberOf(detailed.duels_won),
+    duels_total: numberOf(detailed.duels_total),
     shots_on_target: numberOf(detailed.shots_on_target),
+    shots_total: numberOf(detailed.shots_total),
     successful_dribbles: numberOf(detailed.successful_dribbles),
+    dribbles_attempted: numberOf(detailed.dribbles_attempted),
     blocks: numberOf(detailed.blocks),
     fouls_drawn: numberOf(detailed.fouls_drawn),
     fouls_committed: numberOf(detailed.fouls_committed),
+    penalties_won: numberOf(detailed.penalties_won),
+    penalties_conceded: numberOf(detailed.penalties_conceded),
+    penalties_scored: numberOf(detailed.penalties_scored),
+    offsides: numberOf(detailed.offsides),
     detailed_stats_available: true,
     provider: "hybrid",
   };

@@ -3,6 +3,7 @@ import { CheckCircle2, Info, ShieldCheck, Trophy } from "lucide-react";
 import {
   CAPTAIN_BONUS_PERCENT,
   PLAYER_SCORE_RULES,
+  SCORE_PRECISION_DECIMALS,
 } from "../../../shared/game-rules";
 
 type ScoreRow = {
@@ -23,6 +24,7 @@ const rows: ScoreRow[] = [
   { group: "Core", event: "Played 60 minutes or more", applies: "All positions", points: `+${p.minutes60Plus}` },
   { group: "Core", event: "Played 30–59 minutes", applies: "All positions", points: `+${p.minutes30To59}` },
   { group: "Core", event: "Played 1–29 minutes", applies: "All positions", points: `+${p.minutes1To29}` },
+  { group: "Core", event: "Every exact minute played", applies: "All positions", points: `+${p.minutePlayed} each`, note: "Added on top of the appearance band so 89 and 90 minutes do not score identically." },
   { group: "Core", event: "Goal scored", applies: "All positions", points: `+${p.goal} each` },
   { group: "Core", event: "Assist", applies: "All positions", points: `+${p.assist} each` },
   { group: "Core", event: "Clean sheet", applies: "Goalkeeper", points: `+${p.cleanSheetGoalkeeper}` },
@@ -30,20 +32,30 @@ const rows: ScoreRow[] = [
   { group: "Core", event: "Clean sheet", applies: "Midfielder", points: `+${p.cleanSheetMidfielder}` },
   { group: "Core", event: "Penalty saved", applies: "Goalkeeper", points: `+${p.penaltySaveGoalkeeper} each` },
   { group: "Core", event: "Every 3 saves", applies: "Goalkeeper", points: `+${p.everyThreeSavesGoalkeeper}` },
+  { group: "Core", event: "Every individual goalkeeper save", applies: "Goalkeeper", points: `+${d.goalkeeperSave} each`, note: "Awarded alongside the existing bonus for every third save." },
 
   { group: "Detailed performance", event: "Key / crucial pass", applies: "All positions", points: `+${d.keyPass} each`, note: "A pass recorded by the detailed match provider as creating a direct shooting opportunity." },
-  { group: "Detailed performance", event: `Every ${d.completedPassesPerPoint} completed passes`, applies: "All positions", points: "+1", note: `Capped at +${d.completedPassesMax} per player per gameweek.` },
+  { group: "Detailed performance", event: "Every completed pass", applies: "All positions", points: `+${(1 / d.completedPassesPerPoint).toFixed(4)} each`, note: `Every pass counts fractionally; capped at +${d.completedPassesMax} per player per gameweek.` },
+  { group: "Detailed performance", event: "Passing accuracy", applies: "All positions", points: `+${d.passingAccuracyPercent} per %`, note: "A player completing 80% of passes receives +0.88 points." },
+  { group: "Detailed performance", event: "Official API-Football match rating", applies: "All positions", points: `rating × ${d.matchRating}`, note: "Uses the official 0–10 match rating; multiple matches use their average." },
   { group: "Detailed performance", event: "Successful tackle", applies: "Outfield players", points: `+${d.tackle} each` },
   { group: "Detailed performance", event: "Interception", applies: "Outfield players", points: `+${d.interception} each` },
   { group: "Detailed performance", event: "Duel won", applies: "Outfield players", points: `+${d.duelWon} each` },
+  { group: "Detailed performance", event: "Duel lost", applies: "Outfield players", points: String(d.duelLost) },
   { group: "Detailed performance", event: "Shot on target", applies: "Outfield players", points: `+${d.shotOnTarget} each` },
+  { group: "Detailed performance", event: "Shot off target", applies: "Outfield players", points: `+${d.shotOffTarget} each` },
   { group: "Detailed performance", event: "Successful dribble", applies: "Outfield players", points: `+${d.successfulDribble} each` },
+  { group: "Detailed performance", event: "Unsuccessful dribble", applies: "Outfield players", points: String(d.unsuccessfulDribble) },
   { group: "Detailed performance", event: "Defensive block", applies: "All positions", points: `+${d.block} each` },
   { group: "Detailed performance", event: "Foul won", applies: "All positions", points: `+${d.foulDrawn} each` },
   { group: "Detailed performance", event: "Foul committed", applies: "All positions", points: String(d.foulCommitted), note: "This reduces the performance component before its cap is applied." },
+  { group: "Detailed performance", event: "Penalty won", applies: "All positions", points: `+${d.penaltyWon} each` },
+  { group: "Detailed performance", event: "Penalty scored", applies: "All positions", points: `+${d.penaltyScored} each`, note: "Awarded in addition to the ordinary goal points." },
+  { group: "Detailed performance", event: "Penalty conceded", applies: "All positions", points: String(d.penaltyConceded) },
+  { group: "Detailed performance", event: "Offside", applies: "Outfield players", points: String(d.offside) },
 
-  { group: "Fallback", event: "FPL ICT fallback", applies: "Only when detailed stats are unavailable", points: `+1 per ${f.ictPerPoint}`, note: `Maximum +${f.ictMax}. It is never added together with detailed action points.` },
-  { group: "Fallback", event: "FPL BPS fallback", applies: "Only when detailed stats are unavailable", points: `+1 per ${f.bpsPerPoint}`, note: `Maximum +${f.bpsMax}. It is never added together with detailed action points.` },
+  { group: "Fallback", event: "FPL ICT fallback", applies: "Only when detailed stats are unavailable", points: `ICT ÷ ${f.ictPerPoint}`, note: `Fractions are preserved. Maximum +${f.ictMax}; never added together with detailed action points.` },
+  { group: "Fallback", event: "FPL BPS fallback", applies: "Only when detailed stats are unavailable", points: `BPS ÷ ${f.bpsPerPoint}`, note: `Fractions are preserved. Maximum +${f.bpsMax}; never added together with detailed action points.` },
   { group: "Core", event: "Official FPL bonus point", applies: "All positions", points: `×${p.fplBonusMultiplier}`, note: "Each official FPL bonus point is multiplied by this value." },
   { group: "Core", event: "Multi-category contribution", applies: "All positions", points: `+${p.multiCategoryContribution}`, note: "Awarded when a player records at least two of: goal, assist or clean sheet." },
 
@@ -74,14 +86,14 @@ export default function ScoringRulesPage() {
             <div>
               <div className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200/70">Fantasy Arena Trust Centre</div>
               <h1 className="mt-2 text-3xl font-black sm:text-5xl">Scoring Rules</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">Fantasy Arena scores five-card lineups from official Premier League data. Detailed match actions such as crucial passes, tackles and interceptions are counted when API-Football statistics are available.</p>
-              <div className="mt-3 text-xs text-white/35">Last updated: 6 August 2026</div>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">Fantasy Arena scores five-card lineups from official Premier League data. Every minute, completed pass, match rating and verified match action contributes to a precise four-decimal score.</p>
+              <div className="mt-3 text-xs text-white/35">Last updated: 23 August 2026</div>
             </div>
           </div>
         </section>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
-          <RuleCard title="Detailed actions count" text="Key passes, completed passes, tackles, interceptions, duels, shots, dribbles, blocks and fouls feed the real tournament score." />
+          <RuleCard title="Every action counts" text="Exact minutes, official ratings, every pass, passing accuracy, tackles, duels, shots, dribbles and penalty involvement all shape your score." />
           <RuleCard title="No double counting" text="When detailed match actions are present, they replace the ICT/BPS fallback. Both methods are never added together." />
           <RuleCard title={`Captain bonus +${CAPTAIN_BONUS_PERCENT}%`} text="The captain adds a 10% bonus to the lineup total. The card's own score remains unchanged." />
         </div>
@@ -117,6 +129,10 @@ export default function ScoringRulesPage() {
 
         <section className="mt-5 rounded-2xl border border-violet-300/15 bg-violet-400/[.06] p-5 sm:p-6">
           <div className="flex gap-3"><Info className="mt-0.5 h-5 w-5 shrink-0 text-violet-200" /><div><h2 className="font-black">Score component limits</h2><p className="mt-2 text-sm leading-6 text-white/55">Decisive actions are capped at {c.decisiveMin}–{c.decisiveMax}; performance at {c.performanceMin}–{c.performanceMax}; penalties at {c.penaltiesMin}–{c.penaltiesMax}; bonus at {c.bonusMin}–{c.bonusMax}; and the final card score at {c.finalMin}–{c.finalMax}.</p></div></div>
+        </section>
+
+        <section className="mt-5 rounded-2xl border border-emerald-300/15 bg-emerald-400/[.06] p-5 sm:p-6">
+          <div className="flex gap-3"><Info className="mt-0.5 h-5 w-5 shrink-0 text-emerald-200" /><div><h2 className="font-black">Precise scoring and fair tie-breakers</h2><p className="mt-2 text-sm leading-6 text-white/55">Player scores, captain bonuses and lineup totals are kept to {SCORE_PRECISION_DECIMALS} decimal places. If teams still finish level, the winner is decided by captain score, combined official match ratings, goals, assists, key passes, shots on target, defensive actions, goalkeeper saves, completed passes, minutes played, lower squad value, card XP, rarity prestige and finally the earlier lineup submission.</p></div></div>
         </section>
 
         <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-5 text-sm text-white/48">

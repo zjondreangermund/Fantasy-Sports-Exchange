@@ -42,6 +42,15 @@ type RankedEntry = any & {
   tiebreak?: {
     totalScore: number;
     captainPoints: number;
+    providerRatingTotal: number;
+    goalsScored: number;
+    assists: number;
+    keyPasses: number;
+    shotsOnTarget: number;
+    defensiveActions: number;
+    goalkeeperSaves: number;
+    completedPasses: number;
+    minutesPlayed: number;
     squadValue: number;
     totalXp: number;
     rarityPrestige: number;
@@ -92,6 +101,15 @@ export async function buildEntryTiebreak(storage: any, entry: any) {
     return {
       totalScore: toNumber(entry?.totalScore, toNumber(snapshot.totalScore)),
       captainPoints: toNumber(snapshot.captainBasePoints),
+      providerRatingTotal: toNumber(snapshot.providerRatingTotal),
+      goalsScored: toNumber(snapshot.goalsScored),
+      assists: toNumber(snapshot.assists),
+      keyPasses: toNumber(snapshot.keyPasses),
+      shotsOnTarget: toNumber(snapshot.shotsOnTarget),
+      defensiveActions: toNumber(snapshot.defensiveActions),
+      goalkeeperSaves: toNumber(snapshot.goalkeeperSaves),
+      completedPasses: toNumber(snapshot.completedPasses),
+      minutesPlayed: toNumber(snapshot.minutesPlayed),
       squadValue: toNumber(snapshot.squadValue),
       totalXp: toNumber(snapshot.totalXp),
       rarityPrestige: toNumber(snapshot.rarityPrestige),
@@ -111,6 +129,15 @@ export async function buildEntryTiebreak(storage: any, entry: any) {
   return {
     totalScore: toNumber(entry?.totalScore),
     captainPoints: captain ? cardPoints(captain) : 0,
+    providerRatingTotal: 0,
+    goalsScored: 0,
+    assists: 0,
+    keyPasses: 0,
+    shotsOnTarget: 0,
+    defensiveActions: 0,
+    goalkeeperSaves: 0,
+    completedPasses: 0,
+    minutesPlayed: 0,
     squadValue: validCards.reduce((sum: number, card: any) => sum + cardValue(card), 0),
     totalXp: validCards.reduce((sum: number, card: any) => sum + toNumber(card?.xp), 0),
     rarityPrestige: validCards.reduce((sum: number, card: any) => sum + rarityPrestige(card), 0),
@@ -126,6 +153,15 @@ export function compareTiebreak(a: RankedEntry, b: RankedEntry) {
   const bt = b.tiebreak || {};
   if (toNumber(bt.totalScore) !== toNumber(at.totalScore)) return toNumber(bt.totalScore) - toNumber(at.totalScore);
   if (toNumber(bt.captainPoints) !== toNumber(at.captainPoints)) return toNumber(bt.captainPoints) - toNumber(at.captainPoints);
+  if (toNumber(bt.providerRatingTotal) !== toNumber(at.providerRatingTotal)) return toNumber(bt.providerRatingTotal) - toNumber(at.providerRatingTotal);
+  if (toNumber(bt.goalsScored) !== toNumber(at.goalsScored)) return toNumber(bt.goalsScored) - toNumber(at.goalsScored);
+  if (toNumber(bt.assists) !== toNumber(at.assists)) return toNumber(bt.assists) - toNumber(at.assists);
+  if (toNumber(bt.keyPasses) !== toNumber(at.keyPasses)) return toNumber(bt.keyPasses) - toNumber(at.keyPasses);
+  if (toNumber(bt.shotsOnTarget) !== toNumber(at.shotsOnTarget)) return toNumber(bt.shotsOnTarget) - toNumber(at.shotsOnTarget);
+  if (toNumber(bt.defensiveActions) !== toNumber(at.defensiveActions)) return toNumber(bt.defensiveActions) - toNumber(at.defensiveActions);
+  if (toNumber(bt.goalkeeperSaves) !== toNumber(at.goalkeeperSaves)) return toNumber(bt.goalkeeperSaves) - toNumber(at.goalkeeperSaves);
+  if (toNumber(bt.completedPasses) !== toNumber(at.completedPasses)) return toNumber(bt.completedPasses) - toNumber(at.completedPasses);
+  if (toNumber(bt.minutesPlayed) !== toNumber(at.minutesPlayed)) return toNumber(bt.minutesPlayed) - toNumber(at.minutesPlayed);
   if (toNumber(at.squadValue) !== toNumber(bt.squadValue)) return toNumber(at.squadValue) - toNumber(bt.squadValue);
   if (toNumber(bt.totalXp) !== toNumber(at.totalXp)) return toNumber(bt.totalXp) - toNumber(at.totalXp);
   if (toNumber(bt.rarityPrestige) !== toNumber(at.rarityPrestige)) return toNumber(bt.rarityPrestige) - toNumber(at.rarityPrestige);
@@ -141,6 +177,15 @@ export function tiebreakReason(winner: RankedEntry, runnerUp?: RankedEntry) {
   const r = runnerUp.tiebreak || {};
   if (toNumber(w.totalScore) !== toNumber(r.totalScore)) return "Highest fantasy points";
   if (toNumber(w.captainPoints) !== toNumber(r.captainPoints)) return "Captain points tiebreak";
+  if (toNumber(w.providerRatingTotal) !== toNumber(r.providerRatingTotal)) return "Combined match ratings tiebreak";
+  if (toNumber(w.goalsScored) !== toNumber(r.goalsScored)) return "Goals scored tiebreak";
+  if (toNumber(w.assists) !== toNumber(r.assists)) return "Assists tiebreak";
+  if (toNumber(w.keyPasses) !== toNumber(r.keyPasses)) return "Key passes tiebreak";
+  if (toNumber(w.shotsOnTarget) !== toNumber(r.shotsOnTarget)) return "Shots on target tiebreak";
+  if (toNumber(w.defensiveActions) !== toNumber(r.defensiveActions)) return "Defensive actions tiebreak";
+  if (toNumber(w.goalkeeperSaves) !== toNumber(r.goalkeeperSaves)) return "Goalkeeper saves tiebreak";
+  if (toNumber(w.completedPasses) !== toNumber(r.completedPasses)) return "Completed passes tiebreak";
+  if (toNumber(w.minutesPlayed) !== toNumber(r.minutesPlayed)) return "Minutes played tiebreak";
   if (toNumber(w.squadValue) !== toNumber(r.squadValue)) return "Lower squad value tiebreak";
   if (toNumber(w.totalXp) !== toNumber(r.totalXp)) return "Card XP tiebreak";
   if (toNumber(w.rarityPrestige) !== toNumber(r.rarityPrestige)) return "Rarity prestige tiebreak";
@@ -174,6 +219,15 @@ export function economyConfigPayload() {
     tiebreakRules: [
       "Fantasy points",
       "Captain points",
+      "Combined official match ratings",
+      "Goals scored",
+      "Assists",
+      "Key passes",
+      "Shots on target",
+      "Defensive actions",
+      "Goalkeeper saves",
+      "Completed passes",
+      "Minutes played",
       "Lower squad value",
       "Card XP",
       "Rarity prestige",
