@@ -45,27 +45,54 @@ function replaceRegex(source, pattern, replacement, label) {
     return cards.map((card) => {
       if (!card?.player) return this.zeroScore(card);
       const elementId = this.resolveFplElementId(card.player, identityMap);
+      const officialElement = elementId ? identityMap.byId.get(elementId) : null;
+      if (!officialElement) return this.zeroScore(card, 0, \`\${String(card.player.name || "This player")} could not be matched securely to an official Premier League player.\`);
       const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
-      if (!fplStats) return this.zeroScore(card, elementId);
-      const score = calculatePlayerScore(fplStats, card.player.position);
-      return { ...score, card_id: card.id, player_id: card.playerId, element_id: elementId };
+      if (!fplStats) return this.zeroScore(card, elementId, "Official gameweek statistics have not been published for this verified player yet.");
+      const canonical = identityMap.canonical(officialElement);
+      const score = calculatePlayerScore(fplStats, canonical.position);
+      return {
+        ...score,
+        card_id: card.id,
+        player_id: card.playerId,
+        element_id: elementId,
+        identity_status: "verified",
+        identity_message: \`Verified official Premier League player: \${canonical.name}.\`,
+        identity_provider: "fpl-fallback",
+        official_player_name: canonical.name,
+        official_team: canonical.team,
+        official_position: canonical.position,
+        minutes_played: Number(fplStats.minutes || 0),
+      };
     });
   }`,
     `  private buildCardScores(cards: any[], identityMap: IdentityMap, playerStatsMap: Map<any, any>, detailedContext: DetailedScoringContext) {
     return cards.map((card) => {
       if (!card?.player) return this.zeroScore(card);
       const elementId = this.resolveFplElementId(card.player, identityMap);
+      const officialElement = elementId ? identityMap.byId.get(elementId) : null;
+      if (!officialElement) return this.zeroScore(card, 0, \`\${String(card.player.name || "This player")} could not be matched securely to an official Premier League player.\`);
       const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
-      if (!fplStats) return this.zeroScore(card, elementId);
-      const detailedStats = resolveDetailedStatsForPlayer(card.player, detailedContext);
+      if (!fplStats) return this.zeroScore(card, elementId, "Official gameweek statistics have not been published for this verified player yet.");
+      const canonical = identityMap.canonical(officialElement);
+      const verifiedPlayer = { ...card.player, ...canonical };
+      const detailedStats = resolveDetailedStatsForPlayer(verifiedPlayer, detailedContext);
       const combinedStats = mergePlayerStatsWithDetailedStats(fplStats, detailedStats);
-      const score = calculatePlayerScore(combinedStats, card.player.position);
+      const verifiedPosition = String((detailedStats as any)?.api_position || canonical.position);
+      const score = calculatePlayerScore(combinedStats, verifiedPosition);
       return {
         ...score,
         card_id: card.id,
         player_id: card.playerId,
         element_id: elementId,
         api_player_id: Number((detailedStats as any)?.api_player_id || 0),
+        identity_status: "verified",
+        identity_message: \`Verified official Premier League player: \${canonical.name}.\`,
+        identity_provider: detailedStats ? "api-football+fpl" : "fpl-fallback",
+        official_player_name: canonical.name,
+        official_team: canonical.team,
+        official_position: verifiedPosition,
+        minutes_played: Number(combinedStats.minutes || 0),
       };
     });
   }`,

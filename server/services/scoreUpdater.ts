@@ -14,11 +14,12 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { fplApi } from "./fplApi.js";
+import { buildFplPlayerIndex } from "./fplPlayerIdentity.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats, calculateLineupScore } from "./scoring.js";
 
 const RARITY_PRESTIGE: Record<string, number> = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };
 
-type IdentityMap = { byNameTeam: Map<string, number>; byWebTeam: Map<string, number> };
+type IdentityMap = ReturnType<typeof buildFplPlayerIndex>;
 
 type CompetitionScoreResult = {
   updatedCount: number;
@@ -42,36 +43,31 @@ export class ScoreUpdateService {
   constructor(storage: any) { this.storage = storage; }
   isAutoUpdateEnabled() { return Boolean(this.updateInterval); }
 
-  private zeroScore(card: any, elementId = 0) {
-    return { card_id: card?.id || 0, player_id: card?.playerId || 0, element_id: elementId, total_score: 0, breakdown: { decisive: 0, performance: 0, penalties: 0, bonus: 0 }, reasons: [], is_all_around: false };
+  private zeroScore(card: any, elementId = 0, reason = "Player identity could not be securely linked to the official Premier League roster.") {
+    return {
+      card_id: card?.id || 0,
+      player_id: card?.playerId || 0,
+      element_id: elementId,
+      total_score: 0,
+      breakdown: { decisive: 0, performance: 0, penalties: 0, bonus: 0 },
+      reasons: [],
+      is_all_around: false,
+      identity_status: elementId > 0 ? "awaiting-gameweek-data" : "identity-unlinked",
+      identity_message: reason,
+      official_player_name: String(card?.player?.name || "Unknown player"),
+      official_team: String(card?.player?.team || ""),
+      official_position: String(card?.player?.position || ""),
+      minutes_played: 0,
+    };
   }
 
-  private normalize(text: string) { return String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim(); }
-
   private buildFplIdentityMap(bootstrap: any): IdentityMap {
-    const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
-    const elements = Array.isArray(bootstrap?.elements) ? bootstrap.elements : [];
-    const teamNameById = new Map<number, string>();
-    for (const team of teams) teamNameById.set(Number(team.id), this.normalize(String(team.name || team.short_name || "")));
-    const byNameTeam = new Map<string, number>();
-    const byWebTeam = new Map<string, number>();
-    for (const element of elements) {
-      const teamNorm = teamNameById.get(Number(element.team)) || "";
-      const fullName = this.normalize(`${String(element.first_name || "")} ${String(element.second_name || "")}`);
-      const webName = this.normalize(String(element.web_name || ""));
-      if (fullName && teamNorm) byNameTeam.set(`${fullName}::${teamNorm}`, Number(element.id));
-      if (webName && teamNorm) byWebTeam.set(`${webName}::${teamNorm}`, Number(element.id));
-    }
-    return { byNameTeam, byWebTeam };
+    return buildFplPlayerIndex(bootstrap);
   }
 
   private resolveFplElementId(player: any, identityMap: IdentityMap) {
-    const explicit = Number(player?.externalId || player?.fplId || 0);
-    if (explicit > 0) return explicit;
-    const teamNorm = this.normalize(String(player?.team || ""));
-    const nameNorm = this.normalize(String(player?.name || player?.webName || ""));
-    if (!teamNorm || !nameNorm) return 0;
-    return identityMap.byNameTeam.get(`${nameNorm}::${teamNorm}`) || identityMap.byWebTeam.get(`${nameNorm}::${teamNorm}`) || 0;
+    const verifiedElement = identityMap.resolve(player);
+    return Number(verifiedElement?.id || 0);
   }
 
   private calculateXpFromElement(element: any) { return Number(element?.goals_scored || 0) * 45 + Number(element?.assists || 0) * 28 + Number(element?.starts || 0) * 12 + Math.floor(Number(element?.minutes || 0) / 20); }
@@ -90,10 +86,25 @@ export class ScoreUpdateService {
     return cards.map((card) => {
       if (!card?.player) return this.zeroScore(card);
       const elementId = this.resolveFplElementId(card.player, identityMap);
+      const officialElement = elementId ? identityMap.byId.get(elementId) : null;
+      if (!officialElement) return this.zeroScore(card, 0, `${String(card.player.name || "This player")} could not be matched securely to an official Premier League player.`);
       const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
-      if (!fplStats) return this.zeroScore(card, elementId);
-      const score = calculatePlayerScore(fplStats, card.player.position);
-      return { ...score, card_id: card.id, player_id: card.playerId, element_id: elementId };
+      if (!fplStats) return this.zeroScore(card, elementId, "Official gameweek statistics have not been published for this verified player yet.");
+      const canonical = identityMap.canonical(officialElement);
+      const score = calculatePlayerScore(fplStats, canonical.position);
+      return {
+        ...score,
+        card_id: card.id,
+        player_id: card.playerId,
+        element_id: elementId,
+        identity_status: "verified",
+        identity_message: `Verified official Premier League player: ${canonical.name}.`,
+        identity_provider: "fpl-fallback",
+        official_player_name: canonical.name,
+        official_team: canonical.team,
+        official_position: canonical.position,
+        minutes_played: Number(fplStats.minutes || 0),
+      };
     });
   }
 
@@ -207,7 +218,10 @@ export class ScoreUpdateService {
       completedPasses: 0,
       minutesPlayed: 0,
     });
-    const unresolvedCardIds = cardScores.filter((score: any) => Number(score?.element_id || 0) <= 0).map((score: any) => Number(score?.card_id || 0)).filter(Boolean);
+    const unresolvedCardIds = cardScores
+      .filter((score: any) => Number(score?.element_id || 0) <= 0 || String(score?.identity_status || "") !== "verified")
+      .map((score: any) => Number(score?.card_id || 0))
+      .filter(Boolean);
     const complete = cards.length === 5 && cardScores.length === 5 && unresolvedCardIds.length === 0;
     const updatedAt = new Date().toISOString();
     return {
@@ -248,6 +262,13 @@ export class ScoreUpdateService {
         score: toNumber(score?.total_score),
         breakdown: score?.breakdown || null,
         footballMetrics: score?.football_metrics || null,
+        identityStatus: String(score?.identity_status || "identity-unlinked"),
+        identityMessage: String(score?.identity_message || "Player identity has not been verified."),
+        identityProvider: score?.identity_provider || null,
+        officialPlayerName: String(score?.official_player_name || ""),
+        officialTeam: String(score?.official_team || ""),
+        officialPosition: String(score?.official_position || ""),
+        minutesPlayed: Number(score?.minutes_played || 0),
         reasons: Array.isArray(score?.reasons) ? score.reasons : [],
       })),
     };
@@ -286,6 +307,24 @@ export class ScoreUpdateService {
         const lineupCardIds = Array.isArray(entry?.lineupCardIds) ? entry.lineupCardIds.map(Number).filter((id: number) => Number.isInteger(id) && id > 0) : [];
         const cards = (await Promise.all(lineupCardIds.map((cardId: number) => this.storage.getPlayerCardWithPlayer(cardId, entry.userId)))).filter(Boolean);
         const cardScores = this.buildCardScores(cards, identityMap, playerStatsMap);
+        const previousScoresByCard = new Map<number, any>(
+          (Array.isArray(previousSnapshot.cardScores) ? previousSnapshot.cardScores : [])
+            .map((score: any) => [Number(score?.cardId || 0), score]),
+        );
+        const recoveredScores = cardScores.filter((score: any) => {
+          const previous = previousScoresByCard.get(Number(score?.card_id || 0));
+          return previous && toNumber(previous.score) <= 0 && toNumber(score?.total_score) > 0 && toNumber(score?.minutes_played) > 0;
+        });
+        if (recoveredScores.length > 0) {
+          console.info(`[scoring] Recovered verified player points for entry ${entry.id}: ${recoveredScores.map((score: any) => `${score.official_player_name} (${score.minutes_played} min, ${score.total_score} pts)`).join("; ")}`);
+        }
+        for (const score of cardScores) {
+          if (String(score?.identity_status || "") === "verified") continue;
+          const previous = previousScoresByCard.get(Number(score?.card_id || 0));
+          if (String(previous?.identityStatus || "") !== String(score?.identity_status || "")) {
+            console.warn(`[scoring] Card ${Number(score?.card_id || 0)} cannot score: ${String(score?.identity_message || "Official player identity unavailable.")}`);
+          }
+        }
         const snapshot = this.scoringSnapshot(entry, cards, cardScores, gameWeek, final, settlementAt);
         snapshot.unresolvedCardIds.forEach((id: number) => unresolved.add(id));
         if (!snapshot.complete) allComplete = false;
