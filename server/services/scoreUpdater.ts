@@ -106,12 +106,13 @@ export class ScoreUpdateService {
       const xp = this.calculateXpFromElement(element);
       const level = this.levelFromXp(xp);
       const latestScore = Math.max(0, Math.min(100, Number(score.total_score || 0)));
-      const updates: Record<string, any> = { xp, level, decisiveScore: latestScore };
+      const storedCardScore = Math.round(latestScore);
+      const updates: Record<string, any> = { xp, level, decisiveScore: storedCardScore };
       if (final) updates.last5Scores = this.nextLast5Scores(card.last5Scores, latestScore);
       const currentLast5 = Array.isArray(card.last5Scores) ? card.last5Scores.map((value: any) => Number(value || 0)) : [];
       const unchanged = Number(card.xp || 0) === xp
         && Number(card.level || 1) === level
-        && Number(card.decisiveScore || 35) === latestScore
+        && Number(card.decisiveScore || 35) === storedCardScore
         && (!final || JSON.stringify(currentLast5) === JSON.stringify(updates.last5Scores));
       if (!unchanged) await this.storage.updatePlayerCard(card.id, updates);
     }));
