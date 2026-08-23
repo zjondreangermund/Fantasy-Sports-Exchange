@@ -360,7 +360,18 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         return createdEntry;
       });
 
-      return res.json({ success: true, message: "Successfully submitted tournament team", entryId: entry.id });
+      let scoreRefresh: { updatedEntries: number; skipped: boolean } | null = null;
+      try {
+        const result = await new ScoreUpdateService(storage).updateCompetition(competitionId);
+        scoreRefresh = {
+          updatedEntries: Number(result.updatedCount || 0),
+          skipped: Boolean(result.skipped),
+        };
+      } catch (error: any) {
+        console.warn(`[scoring] Immediate scoring refresh failed for new tournament entry ${entry.id}; the scheduled refresh will retry:`, error?.message || error);
+      }
+
+      return res.json({ success: true, message: "Successfully submitted tournament team", entryId: entry.id, scoreRefresh });
     } catch (error: any) {
       const message = error?.message || "Failed to join tournament";
       const validationMessages = [
