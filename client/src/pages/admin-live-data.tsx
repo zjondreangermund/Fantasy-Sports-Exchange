@@ -5,6 +5,7 @@ import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { queryClient } from "../lib/queryClient";
 import { useToast } from "../hooks/use-toast";
 
@@ -172,16 +173,26 @@ export default function AdminLiveDataPage() {
           <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{fixtureRows.map((row: any) => { const id = Number(row?.fixture?.id || 0); const home = row?.teams?.home; const away = row?.teams?.away; const active = selectedFixtureId === id; return <button key={id} onClick={() => setSelectedFixtureId(id)} className={`rounded-2xl border p-4 text-left transition ${active ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25 hover:border-white/25"}`}><div className="flex items-center justify-between gap-2"><Badge variant="outline">{row?.fixture?.status?.short || "NS"}</Badge><span className="text-[10px] text-white/40">Fixture #{id}</span></div><div className="mt-3 font-black">{home?.name || "Home"} vs {away?.name || "Away"}</div><div className="mt-1 text-xs text-white/45">{fmtDate(row?.fixture?.date)}</div><div className="mt-1 text-xs text-white/35">{row?.league?.round || "Round unavailable"}</div></button>; })}</div>
         </Card>
 
-        {selectedFixtureId && <Card className="min-w-0 border-white/10 bg-white/[.06] p-4 text-white sm:p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex items-center gap-2 text-xl font-black"><Activity className="h-5 w-5 text-emerald-200" />Player scoring preview</div><p className="mt-1 text-sm text-white/45">{selectedFixture?.teams?.home?.name || "Home"} vs {selectedFixture?.teams?.away?.name || "Away"} • The large number is the calculated Fantasy Arena score, not the provider rating.</p></div><Badge className={players.data?.cached ? "bg-emerald-500/20 text-emerald-100" : "bg-cyan-500/20 text-cyan-100"}>{players.data?.cached ? "Cached stats" : "Fresh stats"}</Badge></div>
-          {players.isFetching ? <div className="mt-5 p-8 text-center text-white/45">Loading player statistics…</div> : <div className="mt-5 grid gap-4 xl:grid-cols-2">{teams.map((team: any) => <section key={team?.team?.id || team?.team?.name} className="min-w-0 rounded-2xl border border-white/10 bg-black/25 p-4"><div className="flex items-center gap-3"><img src={team?.team?.logo || "/players/fallback.svg"} alt="" className="h-10 w-10 object-contain" /><div><div className="font-black">{team?.team?.name || "Team"}</div><div className="text-xs text-white/40">{asArray(team?.players).length} player records</div></div></div><div className="mt-4 space-y-2">{asArray(team?.players).map((row: any) => <PlayerScoreDetails key={row?.player?.id} row={row} />)}</div></section>)}</div>}
-        </Card>}
+        <Dialog open={Boolean(selectedFixtureId)} onOpenChange={(open) => { if (!open) setSelectedFixtureId(null); }}>
+          <DialogContent className="max-h-[92dvh] w-[min(96vw,1240px)] max-w-6xl gap-0 overflow-hidden border-white/10 bg-[#080d1f] p-0 text-white">
+            <DialogHeader className="border-b border-white/10 px-5 py-4 sm:px-6">
+              <div className="text-[10px] font-black uppercase tracking-[.18em] text-cyan-200">Premier League fixture</div>
+              <DialogTitle className="mt-1 flex items-center gap-2 text-xl"><Activity className="h-5 w-5 text-emerald-200" />Player scoring preview</DialogTitle>
+              <p className="text-sm text-white/50">{selectedFixture?.teams?.home?.name || "Home"} vs {selectedFixture?.teams?.away?.name || "Away"} • Select a player for the complete scoring breakdown.</p>
+            </DialogHeader>
+            <div className="max-h-[calc(92dvh-120px)] overflow-y-auto overscroll-contain p-4 sm:p-5">
+              <Badge className={players.data?.cached ? "bg-emerald-500/20 text-emerald-100" : "bg-cyan-500/20 text-cyan-100"}>{players.data?.cached ? "Cached stats" : "Fresh stats"}</Badge>
+              {players.isFetching ? <div className="mt-5 p-8 text-center text-white/45">Loading player statistics…</div> : <div className="mt-5 grid gap-4 xl:grid-cols-2">{teams.map((team: any) => <section key={team?.team?.id || team?.team?.name} className="min-w-0 rounded-2xl border border-white/10 bg-black/25 p-4"><div className="flex items-center gap-3"><img src={team?.team?.logo || "/players/fallback.svg"} alt="" className="h-10 w-10 object-contain" /><div><div className="font-black">{team?.team?.name || "Team"}</div><div className="text-xs text-white/40">{asArray(team?.players).length} player records</div></div></div><div className="mt-4 max-h-[48dvh] space-y-2 overflow-y-auto pr-1">{asArray(team?.players).map((row: any) => <PlayerScoreDetails key={row?.player?.id} row={row} />)}</div></section>)}</div>}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </main>
   );
 }
 
 function PlayerScoreDetails({ row }: { row: any }) {
+  const [open, setOpen] = useState(false);
   const statistic = row?.statistic || {};
   const player = row?.player || {};
   const preview = row?.fantasyArenaPreview || {};
@@ -190,20 +201,30 @@ function PlayerScoreDetails({ row }: { row: any }) {
   const providerRating = statistic?.games?.rating;
   const score = numberValue(preview.score);
 
-  return <details className="rounded-xl border border-white/10 bg-white/[.03] p-3 open:border-cyan-300/30 open:bg-cyan-300/[.04]">
-    <summary className="cursor-pointer list-none">
+  return <>
+    <button type="button" onClick={() => setOpen(true)} className="w-full rounded-xl border border-white/10 bg-white/[.03] p-3 text-left transition hover:border-cyan-300/35 hover:bg-cyan-300/[.05]">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0"><div className="truncate font-bold">{player.name || `Player ${player.id}`}</div><div className="text-xs text-white/40">{statistic?.games?.position || "-"} • {statistic?.games?.minutes || 0} min • API rating {providerRating || "-"}</div></div>
         <div className="text-right"><div className="text-lg font-black text-cyan-200">{score.toFixed(1)}</div><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/35">FA score</div></div>
       </div>
-    </summary>
-    <div className="mt-3 grid grid-cols-3 gap-2"><ScoreTile label="Official score" value={preview.score} /><ScoreTile label="Decisive" value={preview.decisiveScore} /><ScoreTile label="All-around" value={preview.allAroundScore} /></div>
-    <div className="mt-3 text-[10px] font-black uppercase tracking-[.14em] text-white/35">Raw match statistics</div>
-    <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4"><RawStat label="Minutes" value={statistic?.games?.minutes} /><RawStat label="Goals" value={statistic?.goals?.total} /><RawStat label="Assists" value={statistic?.goals?.assists} /><RawStat label="Shots on target" value={statistic?.shots?.on} /><RawStat label="Key passes" value={statistic?.passes?.key} /><RawStat label="Tackles" value={statistic?.tackles?.total} /><RawStat label="Interceptions" value={statistic?.tackles?.interceptions} /><RawStat label="Duels won" value={statistic?.duels?.won} /><RawStat label="Saves" value={statistic?.goals?.saves} /><RawStat label="Yellow cards" value={statistic?.cards?.yellow} /><RawStat label="Red cards" value={statistic?.cards?.red} /><RawStat label="Penalty saves" value={statistic?.penalty?.saved} /></div>
-    <div className="mt-3 text-[10px] font-black uppercase tracking-[.14em] text-white/35">Fantasy Arena point contributions</div>
-    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3"><Contribution label="Appearance" value={decisive.appearance} /><Contribution label="Goals" value={decisive.goals} /><Contribution label="Assists" value={decisive.assists} /><Contribution label="Penalty saves" value={decisive.penaltySaves} /><Contribution label="Penalty misses" value={decisive.penaltyMisses} /><Contribution label="Red cards" value={decisive.redCards} /><Contribution label="Passing" value={allAround.passes} /><Contribution label="Key passes" value={allAround.keyPasses} /><Contribution label="Tackles" value={allAround.tackles} /><Contribution label="Interceptions" value={allAround.interceptions} /><Contribution label="Duels won" value={allAround.duelsWon} /><Contribution label="Shots on target" value={allAround.shotsOnTarget} /><Contribution label="Saves" value={allAround.saves} /><Contribution label="Yellow cards" value={allAround.yellowCards} /></div>
-    <p className="mt-3 text-xs leading-5 text-white/40">The provider rating is shown only as reference. Tournament rankings use the Fantasy Arena score calculated from the stored match statistics above.</p>
-  </details>;
+    </button>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-h-[88dvh] w-[min(94vw,760px)] max-w-3xl border-white/10 bg-[#080d1f] text-white">
+        <DialogHeader>
+          <div className="text-[10px] font-black uppercase tracking-[.18em] text-cyan-200">Official player scoring</div>
+          <DialogTitle className="mt-1 text-xl">{player.name || `Player ${player.id}`}</DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[calc(88dvh-120px)] overflow-y-auto overscroll-contain pr-1">
+          <div className="grid grid-cols-3 gap-2"><ScoreTile label="Official score" value={preview.score} /><ScoreTile label="Decisive" value={preview.decisiveScore} /><ScoreTile label="All-around" value={preview.allAroundScore} /></div>
+          <div className="mt-4 text-[10px] font-black uppercase tracking-[.14em] text-white/45">Raw match statistics</div>
+          <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4"><RawStat label="Minutes" value={statistic?.games?.minutes} /><RawStat label="Goals" value={statistic?.goals?.total} /><RawStat label="Assists" value={statistic?.goals?.assists} /><RawStat label="Shots on target" value={statistic?.shots?.on} /><RawStat label="Key passes" value={statistic?.passes?.key} /><RawStat label="Tackles" value={statistic?.tackles?.total} /><RawStat label="Interceptions" value={statistic?.tackles?.interceptions} /><RawStat label="Duels won" value={statistic?.duels?.won} /><RawStat label="Saves" value={statistic?.goals?.saves} /><RawStat label="Yellow cards" value={statistic?.cards?.yellow} /><RawStat label="Red cards" value={statistic?.cards?.red} /><RawStat label="Penalty saves" value={statistic?.penalty?.saved} /></div>
+          <div className="mt-4 text-[10px] font-black uppercase tracking-[.14em] text-white/45">Fantasy Arena point contributions</div>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3"><Contribution label="Appearance" value={decisive.appearance} /><Contribution label="Goals" value={decisive.goals} /><Contribution label="Assists" value={decisive.assists} /><Contribution label="Penalty saves" value={decisive.penaltySaves} /><Contribution label="Penalty misses" value={decisive.penaltyMisses} /><Contribution label="Red cards" value={decisive.redCards} /><Contribution label="Passing" value={allAround.passes} /><Contribution label="Key passes" value={allAround.keyPasses} /><Contribution label="Tackles" value={allAround.tackles} /><Contribution label="Interceptions" value={allAround.interceptions} /><Contribution label="Duels won" value={allAround.duelsWon} /><Contribution label="Shots on target" value={allAround.shotsOnTarget} /><Contribution label="Saves" value={allAround.saves} /><Contribution label="Yellow cards" value={allAround.yellowCards} /></div>
+          <p className="mt-4 text-xs leading-5 text-white/40">The provider rating is shown only as reference. Tournament rankings use the Fantasy Arena score calculated from the stored match statistics above.</p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>;
 }
 
 function Metric({ label, value, good }: { label: string; value: any; good: boolean }) {

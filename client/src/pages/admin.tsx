@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Skeleton } from "../components/ui/skeleton";
 import AdminBackofficePanel from "../components/admin/AdminBackofficePanel";
 import AdminIntegrityPanel from "../components/admin/AdminIntegrityPanel";
@@ -96,6 +97,9 @@ export default function AdminPage() {
   const [cardPage, setCardPage] = useState(1);
   const [lookupInput, setLookupInput] = useState("");
   const [lookupTerm, setLookupTerm] = useState("");
+  const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [cardDialogOpen, setCardDialogOpen] = useState(false);
+  const [workspacePanel, setWorkspacePanel] = useState<"transactions" | "withdrawals" | "backoffice" | "integrity" | "tournaments" | null>(null);
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<AdminStats>({ queryKey: ["/api/admin/stats"] });
   const { data: usersResponse, refetch: refetchUsers } = useQuery<{ users: UserRow[]; total: number }>({ queryKey: ["/api/admin/users?limit=100"] });
@@ -141,6 +145,18 @@ export default function AdminPage() {
     setActivityUserId(userId);
     setCardPage(1);
     setActiveTab("users");
+    setCardDialogOpen(false);
+    setUserDialogOpen(true);
+  };
+
+  const openCardLookup = (term: string) => {
+    const normalized = term.trim();
+    if (!normalized) return;
+    setLookupInput(normalized);
+    setLookupTerm(normalized);
+    setUserDialogOpen(false);
+    setActiveTab("cards");
+    setCardDialogOpen(true);
   };
 
   const refreshAll = () => {
@@ -166,14 +182,14 @@ export default function AdminPage() {
   return (
     <main className="admin-page min-h-full overflow-x-hidden bg-slate-950 px-3 pb-[calc(9rem+env(safe-area-inset-bottom,0px))] pt-4 text-white sm:px-6 lg:px-8">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(59,130,246,.22),transparent_32%),radial-gradient(circle_at_85%_18%,rgba(168,85,247,.18),transparent_30%),linear-gradient(180deg,#020617,#020617)]" />
-      <div className="relative mx-auto max-w-7xl space-y-5">
-        <section className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-4 backdrop-blur-xl sm:p-6">
+      <div className="relative mx-auto max-w-7xl space-y-4">
+        <section className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-4 backdrop-blur-xl sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[.22em] text-cyan-100">
                 <Shield className="h-3.5 w-3.5" /> Admin Command Center
               </div>
-              <h1 className="mt-3 text-3xl font-black sm:text-5xl">Fantasy Arena Control Room</h1>
+              <h1 className="mt-2 text-2xl font-black sm:text-4xl">Fantasy Arena Control Room</h1>
               <p className="mt-2 text-sm text-slate-300">Complete card ownership, searchable user timelines and transaction-level activity details.</p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -198,7 +214,7 @@ export default function AdminPage() {
         </section>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
+          <TabsList className="sticky top-0 z-20 flex h-auto w-full flex-wrap justify-start gap-2 rounded-2xl border border-white/10 bg-slate-950/95 p-2 backdrop-blur">
             <TabsTrigger value="users" className="min-h-11 rounded-full border border-white/15 bg-black/30 px-4 text-white"><Users className="mr-2 h-4 w-4" />User Review</TabsTrigger>
             <TabsTrigger value="cards" className="min-h-11 rounded-full border border-white/15 bg-black/30 px-4 text-white"><CreditCard className="mr-2 h-4 w-4" />Card Lookup</TabsTrigger>
             <TabsTrigger value="activity" className="min-h-11 rounded-full border border-white/15 bg-black/30 px-4 text-white"><Activity className="mr-2 h-4 w-4" />Activity</TabsTrigger>
@@ -206,7 +222,7 @@ export default function AdminPage() {
             <TabsTrigger value="ops" className="min-h-11 rounded-full border border-white/15 bg-black/30 px-4 text-white"><Building2 className="mr-2 h-4 w-4" />Ops</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="users" className="mt-5 grid gap-4 lg:grid-cols-[.78fr_1.22fr]">
+          <TabsContent value="users" className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
             <Card className="border-white/10 bg-white/[0.06] p-4 text-white">
               <SectionTitle icon={Search} title="Find a user" subtitle="Search by name, team, email or user ID." />
               <div className="mt-4 flex gap-2">
@@ -214,7 +230,7 @@ export default function AdminPage() {
                 <Button onClick={() => setUserSearchTerm(userSearchInput.trim())} disabled={searchingUsers}>Search</Button>
               </div>
               <div className="mt-4 text-xs font-black uppercase tracking-[.14em] text-white/40">Online now</div>
-              <div className="mt-2 space-y-2">
+              <div className="mt-2 max-h-40 space-y-2 overflow-y-auto pr-1">
                 {onlineDetailed.slice(0, 10).map((row) => (
                   <button key={row.userId} onClick={() => selectUser(String(row.userId))} className="w-full rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-left">
                     <b>🟢 {row.user?.managerTeamName || row.user?.name || row.user?.email || row.userId}</b>
@@ -222,7 +238,7 @@ export default function AdminPage() {
                   </button>
                 ))}
               </div>
-              <div className="mt-4 max-h-[42rem] space-y-2 overflow-y-auto pr-1">
+              <div className="mt-4 max-h-[min(40dvh,26rem)] space-y-2 overflow-y-auto pr-1">
                 {shownUsers.map((u) => (
                   <button key={u.id} onClick={() => selectUser(u.id)} className={`w-full rounded-xl border p-3 text-left ${selectedUserId === u.id ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25"}`}>
                     <div className="flex justify-between gap-2">
@@ -237,40 +253,13 @@ export default function AdminPage() {
             </Card>
 
             <Card className="border-white/10 bg-white/[0.06] p-4 text-white">
-              <SectionTitle icon={Eye} title="Complete user snapshot" subtitle="All cards are available with filters and pagination — not only the newest 100." />
-              {!selectedUserId ? (
-                <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-8 text-center text-white/45">Select a user.</div>
-              ) : (
-                <div className="mt-4 space-y-4">
-                  <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-                    <div className="text-xl font-black">{selectedUserDetails?.user?.managerTeamName || selectedUserDetails?.user?.name || selectedUserDetails?.user?.email || selectedUserId}</div>
-                    <div className="mt-1 text-xs text-white/45">{selectedUserDetails?.user?.email || selectedUserId}</div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    <Mini label="Total cards" value={cardData?.total || 0} />
-                    <Mini label="Showing" value={cards.length} />
-                    <Mini label="Transactions" value={asArray(selectedUserDetails?.recentTransactions).length} />
-                    <Mini label="Wallet" value={money(selectedUserDetails?.wallet?.balance || 0)} />
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-4">
-                    <Input value={cardSearch} onChange={(e) => { setCardSearch(e.target.value); setCardPage(1); }} placeholder="Player, team, serial or card ID" className="border-white/10 bg-black/35" />
-                    <select value={cardRarity} onChange={(e) => { setCardRarity(e.target.value); setCardPage(1); }} className="min-h-10 rounded-md border border-white/10 bg-black/35 px-3"><option value="all">All rarities</option><option>common</option><option>rare</option><option>unique</option><option>epic</option><option>legendary</option></select>
-                    <select value={cardStatus} onChange={(e) => { setCardStatus(e.target.value); setCardPage(1); }} className="min-h-10 rounded-md border border-white/10 bg-black/35 px-3"><option value="all">All status</option><option value="owned">Not listed</option><option value="listed">Listed</option></select>
-                    <select value={cardSort} onChange={(e) => { setCardSort(e.target.value); setCardPage(1); }} className="min-h-10 rounded-md border border-white/10 bg-black/35 px-3"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="player">Player name</option><option value="rarity">Rarity</option></select>
-                  </div>
-                  <div className="flex flex-wrap gap-2">{asArray(cardData?.rarityCounts).map((r: any) => <Badge key={r.rarity} variant="outline" className="border-white/15 text-white/70">{r.rarity}: {r.count}</Badge>)}</div>
-                  <div className="max-h-[38rem] overflow-y-auto rounded-xl border border-white/10">
-                    {cardsLoading ? <div className="p-6 text-center text-white/45">Loading cards…</div> : cards.map((card) => (
-                      <div key={card.id} className="grid grid-cols-[60px_1fr_auto] items-center gap-3 border-b border-white/10 bg-black/20 p-3 last:border-b-0">
-                        <button onClick={() => { setLookupInput(String(card.id)); setLookupTerm(String(card.id)); setActiveTab("cards"); }} className="flex h-14 w-14 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-xs font-black text-cyan-100 hover:bg-cyan-300/20">#{card.id}</button>
-                        <div className="min-w-0"><div className="truncate font-black">{card.playerName || "Unknown player"}</div><div className="truncate text-xs text-white/45">{card.team || "Unknown team"} • {card.position || "-"} • {card.serialId || "No serial"}</div><div className="mt-1 text-[10px] text-white/35">Acquired {timeAgo(card.acquiredAt)} • Level {card.level || 1} • XP {card.xp || 0}</div></div>
-                        <div className="text-right"><Badge>{card.rarity}</Badge><div className="mt-2 text-xs text-white/50">{card.forSale ? `Listed ${money(card.price)}` : "Owned"}</div></div>
-                      </div>
-                    ))}
-                  </div>
-                  <Pager page={cardData?.page || 1} pages={cardData?.pages || 1} onPage={setCardPage} label={`${cardData?.total || 0} cards`} />
-                </div>
-              )}
+              <SectionTitle icon={Eye} title="Instant user review" subtitle="Select a user to open cards, wallet details and filters in a centered popup." />
+              {selectedUserId ? <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-4">
+                <div className="truncate font-black">{selectedUserDetails?.user?.managerTeamName || selectedUserDetails?.user?.name || selectedUserDetails?.user?.email || selectedUserId}</div>
+                <div className="mt-1 truncate text-xs text-white/55">{selectedUserDetails?.user?.email || selectedUserId}</div>
+                <div className="mt-3 grid grid-cols-2 gap-2"><Mini label="Cards" value={cardData?.total || 0} /><Mini label="Wallet" value={money(selectedUserDetails?.wallet?.balance || 0)} /></div>
+                <Button onClick={() => setUserDialogOpen(true)} className="mt-4 w-full"><Eye className="mr-2 h-4 w-4" />Open user details</Button>
+              </div> : <div className="mt-4 rounded-xl border border-dashed border-white/15 bg-black/20 p-6 text-center text-sm text-white/45">Choose any user from the list. Their full profile opens immediately without page scrolling.</div>}
             </Card>
           </TabsContent>
 
@@ -278,12 +267,21 @@ export default function AdminPage() {
             <Card className="border-white/10 bg-white/[0.06] p-4 text-white sm:p-6">
               <SectionTitle icon={CreditCard} title="Card ownership lookup" subtitle="Enter a card ID such as #255968 or a complete serial number to see its current owner and reward history." />
               <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                <Input value={lookupInput} onChange={(e) => setLookupInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && setLookupTerm(lookupInput.trim())} placeholder="#255968 or card serial" className="min-h-11 border-white/10 bg-black/35" />
-                <Button className="min-h-11 sm:min-w-36" onClick={() => setLookupTerm(lookupInput.trim())} disabled={!lookupInput.trim() || lookupLoading}><Search className="mr-2 h-4 w-4" />{lookupLoading ? "Searching…" : "Find card"}</Button>
+                <Input value={lookupInput} onChange={(e) => setLookupInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && openCardLookup(lookupInput)} placeholder="#255968 or card serial" className="min-h-11 border-white/10 bg-black/35" />
+                <Button className="min-h-11 sm:min-w-36" onClick={() => openCardLookup(lookupInput)} disabled={!lookupInput.trim() || lookupLoading}><Search className="mr-2 h-4 w-4" />{lookupLoading ? "Searching…" : "Find card"}</Button>
               </div>
 
               {lookupError && <div className="mt-4 rounded-xl border border-red-400/20 bg-red-500/10 p-4 text-sm text-red-100">{String((lookupError as Error).message || "Card lookup failed")}</div>}
 
+              {lookupData?.card ? <Button variant="outline" onClick={() => setCardDialogOpen(true)} className="mt-4 border-cyan-300/25 bg-cyan-300/10 text-cyan-100"><Eye className="mr-2 h-4 w-4" />Reopen {lookupData.card.playerName || "card"} details</Button> : <p className="mt-4 text-sm text-white/45">Card ownership and reward history open instantly in a popup.</p>}
+              <Dialog open={cardDialogOpen} onOpenChange={setCardDialogOpen}>
+                <DialogContent className="max-h-[92dvh] w-[min(96vw,1120px)] max-w-6xl gap-0 overflow-hidden border-white/10 bg-[#080d1f] p-0 text-white">
+                  <DialogHeader className="border-b border-white/10 px-5 py-4">
+                    <div className="text-[10px] font-black uppercase tracking-[.18em] text-cyan-200">Card ownership and history</div>
+                    <DialogTitle className="mt-1 text-xl">{lookupData?.card?.playerName || (lookupLoading ? "Finding card…" : "Card details")}</DialogTitle>
+                  </DialogHeader>
+                  <div className="max-h-[calc(92dvh-92px)] overflow-y-auto overscroll-contain px-5 pb-5">
+                  {lookupLoading ? <div className="p-8 text-center text-white/50">Loading card ownership and reward history…</div> : null}
               {lookupData?.card && (
                 <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_.9fr]">
                   <div className="rounded-2xl border border-cyan-300/20 bg-gradient-to-br from-cyan-400/10 via-blue-500/5 to-purple-500/10 p-5">
@@ -325,6 +323,9 @@ export default function AdminPage() {
                   </div>
                 </div>
               )}
+                  </div>
+                </DialogContent>
+              </Dialog>
             </Card>
           </TabsContent>
 
@@ -337,25 +338,80 @@ export default function AdminPage() {
                 <select value={activitySource} onChange={(e) => { setActivitySource(e.target.value); setActivityPage(1); }} className="min-h-10 rounded-md border border-white/10 bg-black/35 px-3"><option value="all">All sources</option><option value="transaction">Transactions</option><option value="audit">Audit</option></select>
                 <Button onClick={() => refetchActivity()}><Search className="mr-2 h-4 w-4" />Search</Button>
               </div>
-              <div className="mt-4 space-y-3">{activityLoading ? <div className="p-8 text-center text-white/45">Loading activity…</div> : activity.map((item) => <ActivityCard key={item.id} item={item} onUser={() => item.userId && selectUser(String(item.userId))} />)}</div>
+              <div className="mt-4 max-h-[min(52dvh,34rem)] space-y-3 overflow-y-auto pr-1">{activityLoading ? <div className="p-8 text-center text-white/45">Loading activity…</div> : activity.map((item) => <ActivityCard key={item.id} item={item} onUser={() => item.userId && selectUser(String(item.userId))} />)}</div>
               <Pager page={activityData?.page || 1} pages={activityData?.pages || 1} onPage={setActivityPage} label={`${activityData?.total || 0} events`} />
             </Card>
           </TabsContent>
 
-          <TabsContent value="finance" className="mt-5 space-y-4">
-            <AdminTransactionExplorer />
-            <Card className="border-white/10 bg-white/[0.06] p-4 text-white"><SectionTitle icon={Wallet} title="Withdrawals" /><div className="mt-4 space-y-2">{asArray(withdrawals).map((wr) => <div key={wr.id} className="rounded-xl border border-white/10 bg-black/25 p-3"><b>{wr.userName || wr.email || wr.userId}</b><div className="text-xs text-white/45">{money(wr.amount)} • Fee {money(wr.fee)} • Net {money(wr.netAmount)} • {wr.status}</div></div>)}</div></Card>
+          <TabsContent value="finance" className="mt-4 grid gap-4 md:grid-cols-2">
+            <WorkspaceLauncher icon={CreditCard} title="Transaction explorer" subtitle="Search payments, transaction timelines and platform fees in a focused popup." onOpen={() => setWorkspacePanel("transactions")} />
+            <WorkspaceLauncher icon={Wallet} title="Withdrawal requests" subtitle={`${asArray(withdrawals).length} withdrawal request(s) available for review.`} onOpen={() => setWorkspacePanel("withdrawals")} />
           </TabsContent>
 
-          <TabsContent value="ops" className="mt-5 space-y-4">
-            <AdminBackofficePanel />
-            <AdminIntegrityPanel />
-            <Card className="border-white/10 bg-white/[0.06] p-4 text-white"><SectionTitle icon={Trophy} title="Tournaments" /><div className="mt-4 grid gap-2 md:grid-cols-2">{allCompetitions.map((c) => <div key={c.id} className="rounded-xl border border-white/10 bg-black/25 p-3"><b>{c.name}</b><div className="text-xs text-white/45">GW{c.gameWeek} • {c.tier} • {c.status} • {c.entryCount || 0} entries</div></div>)}</div></Card>
+          <TabsContent value="ops" className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <WorkspaceLauncher icon={Building2} title="Backoffice management" subtitle="Open tournament management, operational controls and administration tools." onOpen={() => setWorkspacePanel("backoffice")} />
+            <WorkspaceLauncher icon={Shield} title="Integrity and security" subtitle="Review risk signals, platform integrity and protected operational checks." onOpen={() => setWorkspacePanel("integrity")} />
+            <WorkspaceLauncher icon={Trophy} title="Tournament directory" subtitle={`${allCompetitions.length} tournament(s), with gameweeks, rarity and live entry totals.`} onOpen={() => setWorkspacePanel("tournaments")} />
           </TabsContent>
         </Tabs>
+
+        <Dialog open={userDialogOpen && Boolean(selectedUserId)} onOpenChange={setUserDialogOpen}>
+          <DialogContent className="max-h-[92dvh] w-[min(96vw,1120px)] max-w-6xl gap-0 overflow-hidden border-white/10 bg-[#080d1f] p-0 text-white">
+            <DialogHeader className="border-b border-white/10 px-5 py-4">
+              <div className="text-[10px] font-black uppercase tracking-[.18em] text-cyan-200">Complete user snapshot</div>
+              <DialogTitle className="mt-1 text-xl">{selectedUserDetails?.user?.managerTeamName || selectedUserDetails?.user?.name || selectedUserDetails?.user?.email || selectedUserId}</DialogTitle>
+              <div className="text-xs text-white/50">{selectedUserDetails?.user?.email || selectedUserId}</div>
+            </DialogHeader>
+            <div className="max-h-[calc(92dvh-105px)] space-y-4 overflow-y-auto overscroll-contain p-5">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <Mini label="Total cards" value={cardData?.total || 0} />
+                <Mini label="Showing" value={cards.length} />
+                <Mini label="Transactions" value={asArray(selectedUserDetails?.recentTransactions).length} />
+                <Mini label="Wallet" value={money(selectedUserDetails?.wallet?.balance || 0)} />
+              </div>
+              <div className="grid gap-2 md:grid-cols-4">
+                <Input value={cardSearch} onChange={(e) => { setCardSearch(e.target.value); setCardPage(1); }} placeholder="Player, team, serial or card ID" className="border-white/10 bg-black/35" />
+                <select value={cardRarity} onChange={(e) => { setCardRarity(e.target.value); setCardPage(1); }} className="min-h-10 rounded-md border border-white/10 bg-black/35 px-3"><option value="all">All rarities</option><option>common</option><option>rare</option><option>unique</option><option>epic</option><option>legendary</option></select>
+                <select value={cardStatus} onChange={(e) => { setCardStatus(e.target.value); setCardPage(1); }} className="min-h-10 rounded-md border border-white/10 bg-black/35 px-3"><option value="all">All status</option><option value="owned">Not listed</option><option value="listed">Listed</option></select>
+                <select value={cardSort} onChange={(e) => { setCardSort(e.target.value); setCardPage(1); }} className="min-h-10 rounded-md border border-white/10 bg-black/35 px-3"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="player">Player name</option><option value="rarity">Rarity</option></select>
+              </div>
+              <div className="flex flex-wrap gap-2">{asArray(cardData?.rarityCounts).map((r: any) => <Badge key={r.rarity} variant="outline" className="border-white/15 text-white/70">{r.rarity}: {r.count}</Badge>)}</div>
+              <div className="max-h-[44dvh] overflow-y-auto rounded-xl border border-white/10">
+                {cardsLoading ? <div className="p-6 text-center text-white/45">Loading cards…</div> : cards.map((card) => (
+                  <div key={card.id} className="grid grid-cols-[52px_1fr_auto] items-center gap-3 border-b border-white/10 bg-black/20 p-3 last:border-b-0">
+                    <button onClick={() => openCardLookup(String(card.id))} className="flex h-12 w-12 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-xs font-black text-cyan-100 hover:bg-cyan-300/20">#{card.id}</button>
+                    <div className="min-w-0"><div className="truncate font-black">{card.playerName || "Unknown player"}</div><div className="truncate text-xs text-white/45">{card.team || "Unknown team"} • {card.position || "-"} • {card.serialId || "No serial"}</div><div className="mt-1 text-[10px] text-white/35">Acquired {timeAgo(card.acquiredAt)} • Level {card.level || 1} • XP {card.xp || 0}</div></div>
+                    <div className="text-right"><Badge>{card.rarity}</Badge><div className="mt-2 text-xs text-white/50">{card.forSale ? `Listed ${money(card.price)}` : "Owned"}</div></div>
+                  </div>
+                ))}
+              </div>
+              <Pager page={cardData?.page || 1} pages={cardData?.pages || 1} onPage={setCardPage} label={`${cardData?.total || 0} cards`} />
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={Boolean(workspacePanel)} onOpenChange={(open) => { if (!open) setWorkspacePanel(null); }}>
+          <DialogContent className="max-h-[92dvh] w-[min(96vw,1280px)] max-w-7xl gap-0 overflow-hidden border-white/10 bg-[#080d1f] p-0 text-white">
+            <DialogHeader className="border-b border-white/10 px-5 py-4">
+              <div className="text-[10px] font-black uppercase tracking-[.18em] text-cyan-200">Admin workspace</div>
+              <DialogTitle className="mt-1 text-xl">{{ transactions: "Transaction explorer", withdrawals: "Withdrawal requests", backoffice: "Backoffice management", integrity: "Integrity and security", tournaments: "Tournament directory" }[workspacePanel || "transactions"]}</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[calc(92dvh-88px)] overflow-y-auto overscroll-contain p-4 sm:p-5">
+              {workspacePanel === "transactions" ? <AdminTransactionExplorer /> : null}
+              {workspacePanel === "backoffice" ? <AdminBackofficePanel /> : null}
+              {workspacePanel === "integrity" ? <AdminIntegrityPanel /> : null}
+              {workspacePanel === "withdrawals" ? <div className="space-y-2">{asArray(withdrawals).length ? asArray(withdrawals).map((wr) => <div key={wr.id} className="rounded-xl border border-white/10 bg-black/25 p-3"><b>{wr.userName || wr.email || wr.userId}</b><div className="text-xs text-white/45">{money(wr.amount)} • Fee {money(wr.fee)} • Net {money(wr.netAmount)} • {wr.status}</div></div>) : <div className="rounded-xl border border-dashed border-white/15 p-6 text-center text-white/45">No withdrawal requests are available.</div>}</div> : null}
+              {workspacePanel === "tournaments" ? <div className="grid gap-2 md:grid-cols-2">{allCompetitions.map((c) => <div key={c.id} className="rounded-xl border border-white/10 bg-black/25 p-3"><b>{c.name}</b><div className="text-xs text-white/45">GW{c.gameWeek} • {c.tier} • {c.status} • {c.entryCount || 0} entries</div></div>)}</div> : null}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </main>
   );
+}
+
+function WorkspaceLauncher({ icon: Icon, title, subtitle, onOpen }: { icon: any; title: string; subtitle: string; onOpen: () => void }) {
+  return <button type="button" onClick={onOpen} className="rounded-2xl border border-white/10 bg-white/[.06] p-5 text-left text-white transition hover:border-cyan-300/35 hover:bg-cyan-300/[.06]"><div className="flex items-center gap-3"><span className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-2 text-cyan-100"><Icon className="h-5 w-5" /></span><span className="font-black">{title}</span></div><div className="mt-3 text-sm leading-6 text-white/50">{subtitle}</div><div className="mt-4 text-xs font-black uppercase tracking-[.13em] text-cyan-200">Open workspace →</div></button>;
 }
 
 function SectionTitle({ icon: Icon, title, subtitle }: { icon: any; title: string; subtitle?: string }) {
