@@ -18,6 +18,10 @@ import { buildFplPlayerIndex } from "./fplPlayerIdentity.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats, calculateLineupScore } from "./scoring.js";
 
 const RARITY_PRESTIGE: Record<string, number> = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };
+const SCORE_REFRESH_INTERVAL_MS = Math.max(
+  15_000,
+  Math.min(120_000, Number(process.env.TOURNAMENT_SCORE_REFRESH_SECONDS || 30) * 1000),
+);
 
 type IdentityMap = ReturnType<typeof buildFplPlayerIndex>;
 
@@ -39,6 +43,7 @@ function asObject(value: unknown): Record<string, any> { return value && typeof 
 export class ScoreUpdateService {
   private storage: any;
   private updateInterval: NodeJS.Timeout | null = null;
+  private scheduledUpdateInFlight = false;
 
   constructor(storage: any) { this.storage = storage; }
   isAutoUpdateEnabled() { return Boolean(this.updateInterval); }
@@ -80,6 +85,28 @@ export class ScoreUpdateService {
     const fplCost = toNumber(card?.player?.nowCost);
     if (fplCost > 0) return fplCost;
     return toNumber(card?.player?.overall, 50);
+  }
+
+  private async loadSubmittedLineupCards(entry: any, lineupCardIds: number[]) {
+    return Promise.all(lineupCardIds.map(async (cardId: number) => {
+      const ownedCard = await this.storage.getPlayerCardWithPlayer(cardId, entry.userId);
+      if (ownedCard) return ownedCard;
+
+      // Ownership was validated and the card was locked when this lineup was
+      // submitted. Historical scoring must follow that immutable submitted ID,
+      // even if a later ownership repair made marketplace visibility disagree.
+      const submittedCard = await this.storage.getPlayerCard(cardId);
+      const submittedPlayer = submittedCard?.playerId
+        ? await this.storage.getPlayer(Number(submittedCard.playerId))
+        : undefined;
+      if (!submittedCard || !submittedPlayer) {
+        console.error(`[scoring] Submitted card ${cardId} is missing its player for tournament entry ${entry.id}; its points cannot be verified.`);
+        return null;
+      }
+
+      console.warn(`[scoring] Recovered immutable submitted card ${cardId} for entry ${entry.id} after its current ownership no longer matched the original entrant.`);
+      return { ...submittedCard, player: submittedPlayer };
+    }));
   }
 
   private buildCardScores(cards: any[], identityMap: IdentityMap, playerStatsMap: Map<any, any>) {
@@ -305,7 +332,10 @@ export class ScoreUpdateService {
         }
 
         const lineupCardIds = Array.isArray(entry?.lineupCardIds) ? entry.lineupCardIds.map(Number).filter((id: number) => Number.isInteger(id) && id > 0) : [];
-        const cards = (await Promise.all(lineupCardIds.map((cardId: number) => this.storage.getPlayerCardWithPlayer(cardId, entry.userId)))).filter(Boolean);
+        const cards = (await this.loadSubmittedLineupCards(entry, lineupCardIds)).filter(Boolean);
+        const resolvedCardIds = new Set(cards.map((card: any) => Number(card?.id || 0)));
+        const missingCardIds = lineupCardIds.filter((cardId: number) => !resolvedCardIds.has(cardId));
+        missingCardIds.forEach((cardId: number) => unresolved.add(cardId));
         const cardScores = this.buildCardScores(cards, identityMap, playerStatsMap);
         const previousScoresByCard = new Map<number, any>(
           (Array.isArray(previousSnapshot.cardScores) ? previousSnapshot.cardScores : [])
@@ -326,6 +356,16 @@ export class ScoreUpdateService {
           }
         }
         const snapshot = this.scoringSnapshot(entry, cards, cardScores, gameWeek, final, settlementAt);
+        if (missingCardIds.length > 0) {
+          snapshot.unresolvedCardIds = [...new Set([...snapshot.unresolvedCardIds, ...missingCardIds])];
+          snapshot.complete = false;
+          allComplete = false;
+          if (previousSnapshot.complete === true && Number(previousSnapshot.gameWeek || 0) === gameWeek) {
+            console.error(`[scoring] Preserving the last complete verified score for entry ${entry.id}; submitted cards ${missingCardIds.join(", ")} could not be loaded.`);
+            updatedCount += 1;
+            continue;
+          }
+        }
         snapshot.unresolvedCardIds.forEach((id: number) => unresolved.add(id));
         if (!snapshot.complete) allComplete = false;
         if (persistCards) await this.persistCardScores(cards, cardScores, bootstrapElementById, final);
@@ -352,9 +392,20 @@ export class ScoreUpdateService {
 
   startAutoUpdates() {
     if (this.updateInterval) { console.log("Score updates already running"); return; }
-    console.log("🔄 Starting automatic Premier League score updates (every 5 minutes)");
-    this.updateAllActiveCompetitions().catch(err => console.error("Initial score update failed:", err));
-    this.updateInterval = setInterval(() => this.updateAllActiveCompetitions().catch(err => console.error("Scheduled score update failed:", err)), 5 * 60 * 1000);
+    console.log(`🔄 Starting automatic Premier League score updates (every ${SCORE_REFRESH_INTERVAL_MS / 1000} seconds; concurrent updates are deduplicated)`);
+    const runScheduledUpdate = async (label: string) => {
+      if (this.scheduledUpdateInFlight) return;
+      this.scheduledUpdateInFlight = true;
+      try {
+        await this.updateAllActiveCompetitions();
+      } catch (error) {
+        console.error(`${label} score update failed:`, error);
+      } finally {
+        this.scheduledUpdateInFlight = false;
+      }
+    };
+    void runScheduledUpdate("Initial");
+    this.updateInterval = setInterval(() => void runScheduledUpdate("Scheduled"), SCORE_REFRESH_INTERVAL_MS);
   }
 
   stopAutoUpdates() { if (this.updateInterval) { clearInterval(this.updateInterval); this.updateInterval = null; console.log("⏹️ Stopped automatic score updates"); } }

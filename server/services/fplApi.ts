@@ -4,16 +4,22 @@
  */
 
 const FPL_BASE = "https://fantasy.premierleague.com/api";
+const LIVE_REFRESH_MS = Math.max(
+  15_000,
+  Math.min(120_000, Number(process.env.FPL_LIVE_REFRESH_SECONDS || 30) * 1000),
+);
 
 const CACHE_TTL = {
   bootstrap: 12 * 60 * 60 * 1000,
   fixtures: 4 * 60 * 60 * 1000,
-  fixturesLive: 60 * 1000,
+  fixturesLive: LIVE_REFRESH_MS,
+  liveGameweek: LIVE_REFRESH_MS,
   playerSummary: 15 * 60 * 1000,
 };
 
 type CacheEntry<T> = { ts: number; data: T };
 const cache: Record<string, CacheEntry<any> | undefined> = {};
+const pendingRequests: Record<string, Promise<any> | undefined> = {};
 
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${FPL_BASE}${path}`, { headers: { "user-agent": "Mozilla/5.0" } });
@@ -23,11 +29,21 @@ async function fetchJson<T>(path: string): Promise<T> {
 
 async function cached<T>(key: string, ttl: number, fn: () => Promise<T>): Promise<T> {
   const hit = cache[key];
-  const now = Date.now();
-  if (hit && now - hit.ts < ttl) return hit.data as T;
-  const data = await fn();
-  cache[key] = { ts: now, data };
-  return data;
+  if (hit && Date.now() - hit.ts < ttl) return hit.data as T;
+
+  const pending = pendingRequests[key];
+  if (pending) return pending as Promise<T>;
+
+  const request = fn()
+    .then((data) => {
+      cache[key] = { ts: Date.now(), data };
+      return data;
+    })
+    .finally(() => {
+      delete pendingRequests[key];
+    });
+  pendingRequests[key] = request;
+  return request;
 }
 
 function normalizeStatusLabel(status: string, chanceThis?: number | null, chanceNext?: number | null) {
@@ -94,7 +110,7 @@ export const fplApi = {
   },
 
   async getCurrentGameweek() { const b = await this.bootstrap(); const current = b.events?.find((e: any) => e.is_current); return current?.id || 1; },
-  async getLiveGameweek(eventId?: number) { const id = eventId || (await this.getCurrentGameweek()); return cached(`live_${id}`, 60 * 1000, () => fetchJson<any>(`/event/${id}/live/`)); },
+  async getLiveGameweek(eventId?: number) { const id = eventId || (await this.getCurrentGameweek()); return cached(`live_${id}`, CACHE_TTL.liveGameweek, () => fetchJson<any>(`/event/${id}/live/`)); },
 
   async getLiveGames() {
     try {

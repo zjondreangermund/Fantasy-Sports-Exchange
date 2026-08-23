@@ -6,6 +6,8 @@ const generatedCard = fs.readFileSync("scripts/apply-gameweek-prize-isolation.mj
 const freeWindow = fs.readFileSync("scripts/apply-gw1-entry-extension.mjs", "utf8");
 const startup = fs.readFileSync("start.sh", "utf8");
 const scoreUpdater = fs.readFileSync("server/services/scoreUpdater.ts", "utf8");
+const fplApi = fs.readFileSync("server/services/fplApi.ts", "utf8");
+const economyRoutes = fs.readFileSync("server/routes/economyIntegrity.routes.ts", "utf8");
 
 function requireText(source, expected, message) {
   if (!source.includes(expected)) throw new Error(message);
@@ -26,6 +28,17 @@ requireText(routes, "saved?.breakdown || calculated?.breakdown", "Submitted team
 requireText(routes, "Array.isArray(saved?.reasons)", "Submitted teams must expose each player's recorded scoring actions.");
 requireText(routes, "fplApi.getLiveGameweek(Number(entry.gameWeek || 1))", "Team scoring must load the tournament's actual gameweek.");
 requireText(routes, "captainBonus", "Submitted-team scoring must include the captain bonus.");
+requireText(routes, "calculatedTotalScore", "A submitted team's visible total must equal its verified player contributions.");
+requireText(routes, "scoreReconciliationRequired", "Stale stored team scores must be detectable instead of silently showing zero.");
+requireText(scoreUpdater, "loadSubmittedLineupCards", "Tournament scoring must resolve every immutable submitted card ID.");
+requireText(scoreUpdater, "this.storage.getPlayerCard(cardId)", "Historical submitted cards must not disappear behind marketplace visibility filters.");
+requireText(scoreUpdater, "Preserving the last complete verified score", "Incomplete card lookups must never overwrite a verified team total.");
+requireText(scoreUpdater, "TOURNAMENT_SCORE_REFRESH_SECONDS || 30", "Live tournament scores must refresh every 30 seconds by default.");
+requireText(scoreUpdater, "scheduledUpdateInFlight", "Frequent scoring jobs must not overlap.");
+requireText(fplApi, "FPL_LIVE_REFRESH_SECONDS || 30", "Official live gameweek data must refresh every 30 seconds.");
+requireText(fplApi, "pendingRequests[key]", "Concurrent official live-data requests must share a single provider call.");
+requireText(fplApi, "CACHE_TTL.liveGameweek", "Gameweek scores must use the shortened official live-data cache.");
+requireText(economyRoutes, "Immediate scoring refresh failed for new tournament entry", "New tournament teams must be scored immediately after submission.");
 requireText(scoreUpdater, "const storedCardScore = Math.round(latestScore);", "Integer card columns must not receive fractional official player scores.");
 requireText(scoreUpdater, "decisiveScore: storedCardScore", "Card display scores must be rounded before database persistence.");
 requireText(scoreUpdater, "score: toNumber(score?.total_score)", "Official tournament scoring snapshots must preserve exact fractional player points.");
@@ -41,6 +54,7 @@ requireText(page, "Open all", "Tournament cards need an Open all leaderboard act
 requireText(page, "How points were earned", "Player scoring actions must be visible in submitted teams.");
 requireText(page, "maximumFractionDigits: 4", "Tournament standings must show precise four-decimal scores.");
 requireText(page, "player.identityStatus !== \"verified\"", "Unverified or refreshing player scores must explain their status to users.");
+requireText(page, "const LIVE_SCORE_REFRESH_MS = 15_000", "Visible tournament standings must refresh every 15 seconds.");
 requireText(page, "<TournamentLeaderboardPreview comp={comp} />", "The tournament card must render its leaderboard.");
 requireText(generatedCard, "<TournamentLeaderboardPreview comp={comp} />", "The build-generated tournament card must retain its leaderboard.");
 

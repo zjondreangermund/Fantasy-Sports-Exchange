@@ -22,6 +22,7 @@ import { Activity, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, Chevron
 import { useToast } from "../hooks/use-toast";
 
 const rarityOrder: TournamentRarity[] = ["common", "rare", "unique", "epic", "legendary"];
+const LIVE_SCORE_REFRESH_MS = 15_000;
 const rarityTheme: Record<TournamentRarity, { accent: string; glow: string; gradient: string }> = {
   common: { accent: "#60a5fa", glow: "rgba(59,130,246,.45)", gradient: "from-blue-500/25 via-slate-900/70 to-black" },
   rare: { accent: "#168cff", glow: "rgba(22,140,255,.48)", gradient: "from-blue-500/25 via-slate-900/70 to-black" },
@@ -146,7 +147,7 @@ export default function CompetitionsVaultPage() {
       const data = await res.json();
       return Array.isArray(data) ? data : data.competitions || [];
     },
-    refetchInterval: 30000,
+    refetchInterval: LIVE_SCORE_REFRESH_MS,
   });
   const { data: prizeVault } = useQuery<VaultPayload>({
     queryKey: ["/api/prize-vault"],
@@ -172,7 +173,7 @@ export default function CompetitionsVaultPage() {
       const res = await fetch("/api/competitions/my-entries", { credentials: "include" });
       return res.ok ? res.json() : [];
     },
-    refetchInterval: 30000,
+    refetchInterval: LIVE_SCORE_REFRESH_MS,
   });
 
   const official = useMemo(
@@ -452,7 +453,8 @@ function TournamentLeaderboardPreview({ comp }: { comp: Tournament }) {
       return response.json();
     },
     enabled: open && competitionId > 0,
-    refetchInterval: open ? 30000 : false,
+    refetchInterval: open ? LIVE_SCORE_REFRESH_MS : false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: team, isLoading: teamLoading, isError: teamError } = useQuery<TournamentTeamDetails>({
@@ -466,7 +468,8 @@ function TournamentLeaderboardPreview({ comp }: { comp: Tournament }) {
       return response.json();
     },
     enabled: open && competitionId > 0 && Number(selectedEntry?.entryId || 0) > 0,
-    refetchInterval: open && selectedEntry ? 30000 : false,
+    refetchInterval: open && selectedEntry ? LIVE_SCORE_REFRESH_MS : false,
+    refetchOnWindowFocus: true,
   });
 
   const openEntry = (entry: TournamentLeaderboardEntry) => {
