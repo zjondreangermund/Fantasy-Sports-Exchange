@@ -401,8 +401,11 @@ async function syncLive(): Promise<{ calls: number; records: number; details: an
       and coalesce(status_short,'NS') not in ('FT','AET','PEN','PST','CANC','ABD','AWD','WO')
   `))[0]?.count || 0);
   if (!possibleLive) return { calls: 0, records: 0, details: { reason: "No scheduled live window" } };
-  const payload = await providerGet("fixtures", { league: LEAGUE_ID, season: seasonNow(), live: "all" });
-  const fixtures = Array.isArray(payload?.response) ? payload.response : [];
+  // API_FOOTBALL_VALID_LIVE_FILTER_V1: `live=all` must be sent on its own;
+  // scope the returned rows to Premier League league 39 before persisting.
+  const payload = await providerGet("fixtures", { live: "all" });
+  const fixtures = (Array.isArray(payload?.response) ? payload.response : [])
+    .filter((row: any) => Number(row?.league?.id || 0) === LEAGUE_ID);
   return { calls: 1, records: await upsertFixtures(fixtures), details: { possibleLive } };
 }
 
