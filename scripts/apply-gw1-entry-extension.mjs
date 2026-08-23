@@ -1,10 +1,15 @@
 import fs from "node:fs";
 
-const CUTOFF_ISO = "2026-08-22T19:00:00.000Z"; // 21:00 Namibia/CAT (UTC+2)
+const CUTOFF_ISO = "2026-08-23T21:59:59.000Z"; // 23:59:59 Namibia/CAT on 23 Aug 2026 (UTC+2)
+const CUTOFF_COMMENT = "23:59:59 CAT on 23 Aug 2026";
 
 function patchFile(file, transform) {
   const source = fs.readFileSync(file, "utf8");
-  const next = transform(source);
+  const refreshedSource = source.replace(
+    /const FREE_GW1_TEST_ENTRY_EXTENSION_UTC = Date\.parse\("[^"]+"\);[^\n]*/g,
+    `const FREE_GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse("${CUTOFF_ISO}"); // ${CUTOFF_COMMENT}`,
+  );
+  const next = transform(refreshedSource);
   if (next !== source) {
     fs.writeFileSync(file, next);
     console.log(`Applied FREE GW1 test window to ${file}.`);
@@ -18,7 +23,7 @@ patchFile("server/routes.ts", (original) => {
     if (!source.includes(anchor)) throw new Error("Could not locate season constants in server/routes.ts");
     source = source.replace(
       anchor,
-      `${anchor}const FREE_GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // 21:00 CAT on 22 Aug 2026\n`,
+      `${anchor}const FREE_GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // ${CUTOFF_COMMENT}\n`,
     );
   }
 
@@ -48,7 +53,7 @@ patchFile("server/services/scoreUpdater.ts", (original) => {
     if (!source.includes(anchor)) throw new Error("Could not locate score updater constants");
     source = source.replace(
       anchor,
-      `${anchor}const FREE_GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // 21:00 CAT on 22 Aug 2026\n`,
+      `${anchor}const FREE_GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // ${CUTOFF_COMMENT}\n`,
     );
   }
 
@@ -103,7 +108,7 @@ patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
     if (!source.includes(anchor)) throw new Error("Could not locate economy-integrity constants");
     source = source.replace(
       anchor,
-      `${anchor}const FREE_GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // 21:00 CAT on 22 Aug 2026\n`,
+      `${anchor}const FREE_GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // ${CUTOFF_COMMENT}\n`,
     );
   }
 
@@ -147,7 +152,7 @@ patchFile("scripts/sync-free-card-tournaments.mjs", (original) => {
     if (!source.includes(anchor)) throw new Error("Could not locate FREE cup season constant");
     source = source.replace(
       anchor,
-      `${anchor}const FREE_GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // 21:00 CAT on 22 Aug 2026\n`,
+      `${anchor}const FREE_GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"${CUTOFF_ISO}\"); // ${CUTOFF_COMMENT}\n`,
     );
   }
 
@@ -167,4 +172,4 @@ patchFile("scripts/sync-free-card-tournaments.mjs", (original) => {
   return source;
 });
 
-console.log("FREE GW1 cups prepared for entries and live score refreshes until 21:00 CAT on 22 Aug 2026. Paid tournaments, completed/cancelled cups and GW2+ keep their normal lifecycle.");
+console.log("FREE GW1 cups prepared for entries and live score refreshes until 23:59:59 CAT on 23 Aug 2026. Paid tournaments, completed/cancelled cups and GW2+ keep their normal lifecycle.");

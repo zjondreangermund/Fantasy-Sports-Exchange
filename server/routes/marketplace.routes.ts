@@ -10,6 +10,7 @@ import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
 import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
+import { calculatePlayerScore, mapFplStatsToPlayerStats } from "../services/scoring.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
@@ -131,7 +132,213 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
   });
 
   app.get("/api/user-tournaments/pin/:pin", requireAuth, async (req: any, res) => { try { await ensureTournamentSchema(); const pin = normalizePin(req.params.pin); if (!pin) return res.status(400).json({ message: "PIN required" }); const result = await db.execute(sql`select c.*, count(ce.id)::int as entry_count from app.competitions c left join app.competition_entries ce on ce.competition_id = c.id where c.join_pin = ${pin} group by c.id limit 1`); const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : []; if (!rows[0]) return res.status(404).json({ message: "Tournament PIN not found" }); return res.json({ tournament: rows[0] }); } catch (error: any) { console.error("Failed to find tournament PIN:", error); return res.status(500).json({ message: error?.message || "Failed to find tournament" }); } });
-  app.get("/api/competitions/:id/leaderboard", requireAuth, async (req: any, res) => { try { const competitionId = Number(req.params.id); if (!Number.isInteger(competitionId) || competitionId <= 0) return res.status(400).json({ message: "Valid competition ID required" }); const viewerId = String(req.authUserId || ""); const result = await db.execute(sql`with ranked as (select ce.id as "entryId", ce.user_id as "userId", coalesce(u.manager_team_name, u.name, u.email, 'Manager') as "teamName", coalesce(ce.total_score, 0)::float as "totalScore", ce.lineup_card_ids as "lineupCardIds", ce.captain_id as "captainId", ce.joined_at as "joinedAt", rank() over (order by coalesce(ce.total_score, 0) desc, ce.joined_at asc, ce.id asc) as rank from app.competition_entries ce left join app.users u on u.id = ce.user_id where ce.competition_id = ${competitionId}) select * from ranked order by rank asc, "joinedAt" asc limit 200`); const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : []; return res.json({ leaderboard: rows, viewerEntry: rows.find((r: any) => String(r.userId) === viewerId) || null }); } catch (error: any) { console.error("Failed to fetch competition leaderboard:", error); return res.status(500).json({ message: error?.message || "Failed to fetch leaderboard" }); } });
+  app.get("/api/competitions/:id/leaderboard", requireAuth, async (req: any, res) => {
+    try {
+      const competitionId = Number(req.params.id);
+      if (!Number.isInteger(competitionId) || competitionId <= 0) {
+        return res.status(400).json({ message: "Valid competition ID required" });
+      }
+      const requestedPage = Number(req.query?.page || 1);
+      const requestedPageSize = Number(req.query?.pageSize || 100);
+      const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+      const pageSize = Number.isInteger(requestedPageSize)
+        ? Math.max(1, Math.min(requestedPageSize, 100))
+        : 100;
+      const offset = (page - 1) * pageSize;
+      const viewerId = String(req.authUserId || "");
+      const result = await db.execute(sql`
+        with ranked as (
+          select
+            ce.id as "entryId",
+            ce.user_id as "userId",
+            coalesce(u.manager_team_name, u.name, u.email, 'Manager') as "teamName",
+            coalesce(ce.total_score, 0)::float as "totalScore",
+            ce.lineup_card_ids as "lineupCardIds",
+            ce.captain_id as "captainId",
+            ce.joined_at as "joinedAt",
+            row_number() over (
+              order by
+                coalesce(ce.total_score, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'captainBasePoints', '')::float, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'squadValue', '')::float, 0) asc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'totalXp', '')::float, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'rarityPrestige', '')::float, 0) desc,
+                ce.joined_at asc,
+                ce.id asc
+            )::int as rank
+          from app.competition_entries ce
+          left join app.users u on u.id = ce.user_id
+          where ce.competition_id = ${competitionId}
+        ), paginated as (
+          select * from ranked order by rank asc limit ${pageSize} offset ${offset}
+        )
+        select
+          coalesce(
+            (select jsonb_agg(to_jsonb(paginated) order by paginated.rank) from paginated),
+            '[]'::jsonb
+          ) as leaderboard,
+          (select count(*)::int from ranked) as "totalEntries",
+          (
+            select to_jsonb(viewer)
+            from ranked viewer
+            where viewer."userId" = ${viewerId}
+            order by viewer.rank asc
+            limit 1
+          ) as "viewerEntry"
+      `);
+      const payload = rowsFromResult(result)[0] || {};
+      const totalEntries = Number(payload.totalEntries || 0);
+      return res.json({
+        leaderboard: Array.isArray(payload.leaderboard) ? payload.leaderboard : [],
+        viewerEntry: payload.viewerEntry || null,
+        totalEntries,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(totalEntries / pageSize)),
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch competition leaderboard:", error);
+      return res.status(500).json({ message: error?.message || "Failed to fetch leaderboard" });
+    }
+  });
+
+  app.get("/api/competitions/:id/entries/:entryId", requireAuth, async (req: any, res) => {
+    try {
+      const competitionId = Number(req.params.id);
+      const entryId = Number(req.params.entryId);
+      if (!Number.isInteger(competitionId) || competitionId <= 0
+          || !Number.isInteger(entryId) || entryId <= 0) {
+        return res.status(400).json({ message: "Valid tournament and team IDs are required" });
+      }
+
+      const entryResult = await db.execute(sql`
+        select
+          ce.id as "entryId",
+          ce.user_id as "userId",
+          coalesce(u.manager_team_name, u.name, u.email, 'Manager') as "teamName",
+          coalesce(ce.total_score, 0)::float as "totalScore",
+          ce.lineup_card_ids as "lineupCardIds",
+          ce.captain_id as "captainId",
+          coalesce(ce.tiebreak_meta, '{}'::jsonb) as "tiebreakMeta",
+          ce.joined_at as "joinedAt",
+          c.name as "competitionName",
+          c.game_week as "gameWeek",
+          c.status::text as "competitionStatus"
+        from app.competition_entries ce
+        join app.competitions c on c.id = ce.competition_id
+        left join app.users u on u.id = ce.user_id
+        where ce.competition_id = ${competitionId} and ce.id = ${entryId}
+        limit 1
+      `);
+      const entry = rowsFromResult(entryResult)[0];
+      if (!entry) return res.status(404).json({ message: "Tournament team not found" });
+
+      const lineupCardIds = Array.isArray(entry.lineupCardIds)
+        ? entry.lineupCardIds.map(Number).filter((id: number) => Number.isInteger(id) && id > 0)
+        : [];
+      const cardsResult = await db.execute(sql`
+        select
+          pc.id as "cardId",
+          pc.player_id as "playerId",
+          pc.rarity::text as rarity,
+          pc.serial_id as "serialId",
+          p.name,
+          p.team,
+          p.position::text as position,
+          p.league,
+          p.fpl_id as "fplId",
+          p.code,
+          p.web_name as "webName",
+          p.image_url as "imageUrl",
+          ordered.ordinality::int as "lineupOrder"
+        from jsonb_array_elements_text(${JSON.stringify(lineupCardIds)}::jsonb)
+          with ordinality as ordered(card_id, ordinality)
+        join app.player_cards pc on pc.id = ordered.card_id::integer
+        join app.players p on p.id = pc.player_id
+        order by ordered.ordinality asc
+      `);
+      const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([
+        fplApi.bootstrap().catch(() => null),
+        fplApi.getLiveGameweek(Number(entry.gameWeek || 1)).catch(() => null),
+        loadApiFootballPlayerDirectory().catch(() => []),
+      ]);
+      const fplIndex = buildFplPlayerIndex(bootstrap || {});
+      const liveByElementId = new Map<number, any>(
+        (Array.isArray(liveData?.elements) ? liveData.elements : [])
+          .map((element: any) => [Number(element.id), element]),
+      );
+      const snapshot = entry.tiebreakMeta?.scoring && Number(entry.tiebreakMeta.scoring.gameWeek || 0) === Number(entry.gameWeek || 0)
+        ? entry.tiebreakMeta.scoring
+        : null;
+      const savedScores = new Map<number, any>(
+        (Array.isArray(snapshot?.cardScores) ? snapshot.cardScores : [])
+          .map((score: any) => [Number(score.cardId), score]),
+      );
+      const captainId = Number(entry.captainId || 0);
+      const players = rowsFromResult(cardsResult).map((card: any) => {
+        const matchedElement = fplIndex.resolve(card);
+        const canonical = matchedElement ? fplIndex.canonical(matchedElement) : null;
+        const apiPlayer = resolveApiFootballPlayer({ ...card, ...(canonical || {}) }, apiFootballDirectory);
+        const position = apiPlayer?.position || canonical?.position || String(card.position || "");
+        const elementId = Number(matchedElement?.id || 0);
+        const liveElement = elementId ? liveByElementId.get(elementId) : null;
+        const calculated = liveElement
+          ? calculatePlayerScore(mapFplStatsToPlayerStats(liveElement), position)
+          : null;
+        const saved = savedScores.get(Number(card.cardId));
+        const points = Number(saved?.score ?? calculated?.total_score ?? 0);
+        const captain = Number(card.cardId) === captainId;
+        const captainBonus = captain
+          ? Number(snapshot?.captainBonus ?? Math.round(points * 0.1 * 100) / 100)
+          : 0;
+        const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";
+
+        return {
+          cardId: Number(card.cardId),
+          playerId: Number(card.playerId),
+          name: apiPlayer?.name || canonical?.name || String(card.name || "Unknown player"),
+          team: apiPlayer?.team || canonical?.team || String(card.team || "Unknown club"),
+          position,
+          rarity: String(card.rarity || "common"),
+          serialId: card.serialId || null,
+          imageUrl: apiImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
+          apiFootballId: apiPlayer?.apiPlayerId || null,
+          elementId: elementId || null,
+          captain,
+          points,
+          captainBonus,
+          contribution: Math.round((points + captainBonus) * 100) / 100,
+          breakdown: saved?.breakdown || calculated?.breakdown || {
+            decisive: 0, performance: 0, penalties: 0, bonus: 0,
+          },
+          reasons: Array.isArray(saved?.reasons)
+            ? saved.reasons
+            : Array.isArray(calculated?.reasons)
+              ? calculated.reasons
+              : [],
+          minutes: Number(liveElement?.stats?.minutes || 0),
+          source: saved ? "official-gameweek-snapshot" : calculated ? "live-fpl-fallback" : "awaiting-match-data",
+        };
+      });
+
+      return res.json({
+        entryId: Number(entry.entryId),
+        competitionId,
+        competitionName: String(entry.competitionName || "Tournament"),
+        gameWeek: Number(entry.gameWeek || 0),
+        teamName: String(entry.teamName || "Manager"),
+        totalScore: Number(entry.totalScore || 0),
+        captainId,
+        captainBonus: Number(snapshot?.captainBonus || 0),
+        updatedAt: snapshot?.updatedAt || null,
+        finalized: Boolean(snapshot?.final),
+        players,
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch tournament team scoring:", error);
+      return res.status(500).json({ message: error?.message || "Failed to fetch team scoring" });
+    }
+  });
   app.get("/api/marketplace", async (_req, res) => {
     try {
       const [result, bootstrap, apiFootballDirectory] = await Promise.all([
