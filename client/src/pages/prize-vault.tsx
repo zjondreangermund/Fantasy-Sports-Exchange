@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { CheckCircle2, Flame, Gift, Lock, ShieldCheck, Sparkles, Trophy, Users, Zap } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { PremiumPrizeArtwork } from "../components/prize-vault/PremiumPrizeArtwork";
 
 type VaultItem = {
@@ -165,8 +166,6 @@ export default function PrizeVaultPage() {
           </div>
         </section>
 
-        {selected ? <Spotlight item={selected} /> : null}
-
         <footer className="grid gap-3 border-t border-white/10 bg-black/25 px-4 py-5 sm:grid-cols-2 sm:px-7 lg:grid-cols-4">
           <Info icon={Sparkles} title="Every Gameweek" text="Progress resets; the full ladder remains." />
           <Info icon={ShieldCheck} title="Funded First" text="A reward unlocks only after funding is met." />
@@ -174,6 +173,17 @@ export default function PrizeVaultPage() {
           <Info icon={Flame} title="Highest Prize Wins" text="Lower unlocked prizes fall away." />
         </footer>
       </div>
+      <Dialog open={Boolean(selectedId && selected)} onOpenChange={(open) => { if (!open) setSelectedId(""); }}>
+        <DialogContent className="max-h-[92dvh] w-[min(96vw,1180px)] max-w-6xl gap-0 overflow-hidden border-white/10 bg-[#080d1f] p-0 text-white">
+          <DialogHeader className="border-b border-white/10 px-5 py-4 sm:px-6">
+            <div className="text-[10px] font-black uppercase tracking-[.2em] text-purple-200">Prize details</div>
+            <DialogTitle className="mt-1 text-xl">{selected?.title || "Prize Vault"}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[calc(92dvh-90px)] overflow-y-auto overscroll-contain">
+            {selected ? <Spotlight item={selected} /> : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

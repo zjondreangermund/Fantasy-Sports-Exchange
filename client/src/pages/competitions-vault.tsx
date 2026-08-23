@@ -472,6 +472,7 @@ function TournamentLeaderboardPreview({ comp }: { comp: Tournament }) {
     setOpen(true);
   };
   const totalPages = Math.max(1, Number(leaderboard?.totalPages || 1));
+  const expandedPlayer = team?.players.find((player) => Number(player.cardId) === Number(expandedCardId || 0)) || null;
 
   return <>
     <section className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-3.5">
@@ -567,18 +568,29 @@ function TournamentLeaderboardPreview({ comp }: { comp: Tournament }) {
                             <div className="shrink-0 text-right"><div className="text-base font-black text-emerald-200">{scoreLabel(player.points)}</div><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/40">points</div></div>
                             {expanded ? <ChevronUp className="h-4 w-4 text-white/45" /> : <ChevronDown className="h-4 w-4 text-white/45" />}
                           </button>
-                          {expanded ? <div className="border-t border-white/10 bg-black/20 p-3">
-                            <div className="grid grid-cols-2 gap-2"><ScoreCategory label="Decisive" points={player.breakdown.decisive} /><ScoreCategory label="Performance" points={player.breakdown.performance} /><ScoreCategory label="Penalties" points={player.breakdown.penalties} /><ScoreCategory label="Bonus" points={player.breakdown.bonus} /></div>
-                            <div className="mt-3 text-[10px] font-black uppercase tracking-[.15em] text-white/45">How points were earned</div>
-                            {player.reasons.length ? <div className="mt-2 space-y-1.5">{player.reasons.map((reason, index) => <div key={`${reason.label}-${index}`} className="flex items-center justify-between gap-2 rounded-lg border border-white/[.07] bg-white/[.035] px-2.5 py-2 text-xs"><span className="min-w-0 flex-1 text-white/75">{reason.label}</span><span className={`shrink-0 font-black ${Number(reason.points) < 0 ? "text-rose-300" : "text-emerald-200"}`}>{Number(reason.points) > 0 ? "+" : ""}{scoreLabel(reason.points)}</span></div>)}</div> : <div className="mt-2 rounded-lg border border-dashed border-white/10 px-2.5 py-3 text-xs text-white/50">No scoring actions recorded for this player yet.</div>}
-                            {player.captain ? <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-500/10 px-2.5 py-2 text-xs font-bold text-amber-100">Captain contribution: {scoreLabel(player.points)} + {scoreLabel(player.captainBonus)} bonus = {scoreLabel(player.contribution)} points</div> : null}
-                          </div> : null}
                         </div>;
                       })}</div>
                     </> : null}
             </section>
           </div>
         </div>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={Boolean(expandedPlayer)} onOpenChange={(value) => { if (!value) setExpandedCardId(null); }}>
+      <DialogContent className="max-h-[88dvh] w-[min(94vw,680px)] max-w-2xl gap-0 overflow-hidden border-white/10 bg-[#080d1f] p-0 text-white">
+        <DialogHeader className="border-b border-white/10 px-5 py-4">
+          <div className="text-[10px] font-black uppercase tracking-[.18em] text-cyan-200">Official player scoring</div>
+          <DialogTitle className="mt-1 text-xl">{expandedPlayer?.name || "Player points"}</DialogTitle>
+          <div className="text-xs text-white/50">{expandedPlayer?.position} • {expandedPlayer?.team} • {expandedPlayer?.minutes || 0} minutes</div>
+        </DialogHeader>
+        {expandedPlayer ? <div className="max-h-[calc(88dvh-105px)] overflow-y-auto overscroll-contain p-5">
+          <div className="mb-4 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4"><div className="text-[10px] font-black uppercase tracking-[.15em] text-emerald-100/70">Player total</div><div className="mt-1 text-3xl font-black text-emerald-200">{scoreLabel(expandedPlayer.points)} points</div></div>
+          <div className="grid grid-cols-2 gap-2"><ScoreCategory label="Decisive" points={expandedPlayer.breakdown.decisive} /><ScoreCategory label="Performance" points={expandedPlayer.breakdown.performance} /><ScoreCategory label="Penalties" points={expandedPlayer.breakdown.penalties} /><ScoreCategory label="Bonus" points={expandedPlayer.breakdown.bonus} /></div>
+          <div className="mt-4 text-[10px] font-black uppercase tracking-[.15em] text-white/45">How points were earned</div>
+          {expandedPlayer.reasons.length ? <div className="mt-2 space-y-1.5">{expandedPlayer.reasons.map((reason, index) => <div key={`${reason.label}-${index}`} className="flex items-center justify-between gap-2 rounded-lg border border-white/[.07] bg-white/[.035] px-2.5 py-2 text-xs"><span className="min-w-0 flex-1 text-white/75">{reason.label}</span><span className={`shrink-0 font-black ${Number(reason.points) < 0 ? "text-rose-300" : "text-emerald-200"}`}>{Number(reason.points) > 0 ? "+" : ""}{scoreLabel(reason.points)}</span></div>)}</div> : <div className="mt-2 rounded-lg border border-dashed border-white/10 px-2.5 py-3 text-xs text-white/50">No scoring actions recorded for this player yet.</div>}
+          {expandedPlayer.captain ? <div className="mt-4 rounded-lg border border-amber-300/20 bg-amber-500/10 px-2.5 py-2 text-xs font-bold text-amber-100"><Crown className="mr-1 inline h-3.5 w-3.5" />Captain contribution: {scoreLabel(expandedPlayer.points)} + {scoreLabel(expandedPlayer.captainBonus)} bonus = {scoreLabel(expandedPlayer.contribution)} points</div> : null}
+        </div> : null}
       </DialogContent>
     </Dialog>
   </>;

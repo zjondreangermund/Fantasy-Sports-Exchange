@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { X, Activity, BarChart3, CalendarDays, Shield, Star, TrendingUp, Clock, Award, Zap } from "lucide-react";
@@ -126,6 +126,7 @@ function officialStat(data: CardProfileData, value: unknown, decimals = 0): stri
 
 export default function CardProfileModal({ card, onClose }: { card: PlayerCardWithPlayer; onClose: () => void }) {
   const { setOpen, setOpenMobile } = useSidebar();
+  const [profileView, setProfileView] = useState<"overview" | "matches" | "season">("overview");
   const fallback = fallbackData(card);
   const { data = fallback, isLoading } = useQuery<CardProfileData>({
     queryKey: ["/api/cards/profile", card.id],
@@ -143,6 +144,14 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
     document.documentElement.classList.add("card-profile-open");
     return () => document.documentElement.classList.remove("card-profile-open");
   }, [setOpen, setOpenMobile]);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
 
   const history = Array.isArray(data.last10) ? data.last10 : [];
   const peak = maxPoints(history);
@@ -184,10 +193,16 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
   const totalPointsLabel = data.source === "fpl-live" ? "FPL Points" : data.source === "api-football" ? "Arena Score" : "Points";
 
   const modal = (
-    <div className="player-profile-modal fixed inset-0 z-[300] overflow-y-auto overflow-x-hidden bg-black/88 p-3 backdrop-blur-xl sm:p-6" role="dialog" aria-modal="true" aria-label={`${displayName} card profile`}>
-      <div className="mx-auto min-h-full w-full max-w-6xl py-4 sm:py-8">
-        <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#080d1f]/98 shadow-[0_30px_100px_rgba(0,0,0,.82)]">
-          <div className="relative flex items-center justify-between overflow-hidden border-b border-white/10 px-4 py-3 sm:px-5">
+    <div
+      className="player-profile-modal fixed inset-0 z-[300] grid place-items-center overflow-hidden bg-black/88 p-3 backdrop-blur-xl sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${displayName} card profile`}
+      onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
+    >
+      <div className="mx-auto w-full max-w-6xl">
+        <div className="flex max-h-[92dvh] min-h-0 flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#080d1f]/98 shadow-[0_30px_100px_rgba(0,0,0,.82)]">
+          <div className="relative flex shrink-0 items-center justify-between overflow-hidden border-b border-white/10 px-4 py-3 sm:px-5">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,.20),transparent_32%),radial-gradient(circle_at_80%_0%,rgba(168,85,247,.18),transparent_30%)]" />
             <div className="relative min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[.2em] text-cyan-200">Live Card Profile</p>
@@ -196,9 +211,9 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
             <button onClick={onClose} className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[.06] text-white hover:bg-white/10"><X className="h-5 w-5" /></button>
           </div>
 
-          <div className="grid min-w-0 gap-4 p-4 lg:grid-cols-[320px_1fr] lg:p-5">
-            <aside className="min-w-0 space-y-4">
-              <div className="flex justify-center rounded-[1.6rem] border border-white/10 bg-white/[.04] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.08)]">
+          <div className="grid min-h-0 min-w-0 flex-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[290px_minmax(0,1fr)] lg:overflow-hidden lg:p-5">
+            <aside className="min-w-0 space-y-3 lg:overflow-y-auto lg:pr-1">
+              <div className="flex max-h-[260px] justify-center overflow-hidden rounded-[1.6rem] border border-white/10 bg-white/[.04] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,.08)] lg:max-h-none">
                 <CollectionStableCard player={fantasyCard} size="md" showPrice={Boolean(card.forSale)} />
               </div>
               <div className="rounded-[1.4rem] border border-white/10 bg-black/25 p-4">
@@ -221,15 +236,31 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
               </div>
             </aside>
 
-            <section className="min-w-0 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="min-h-0 min-w-0 space-y-4 lg:overflow-y-auto lg:pr-1">
+              <div className="sticky top-0 z-10 flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-[#080d1f]/95 p-2 backdrop-blur">
+                {([
+                  { key: "overview", label: "Overview", icon: BarChart3 },
+                  { key: "matches", label: "Match log", icon: Clock },
+                  { key: "season", label: "Season stats", icon: Activity },
+                ] as const).map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setProfileView(key)}
+                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-black transition ${profileView === key ? "bg-cyan-400/15 text-cyan-100" : "text-white/55 hover:bg-white/[.06] hover:text-white"}`}
+                  >
+                    <Icon className="h-4 w-4" />{label}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
                 <HeroStat icon={<Star className="h-4 w-4" />} label={totalPointsLabel} value={officialStat(data, data.stats.totalPoints)} />
                 <HeroStat icon={<TrendingUp className="h-4 w-4" />} label="Ownership" value={data.stats.selectedBy ? `${data.stats.selectedBy}%` : "—"} />
                 <HeroStat icon={<Zap className="h-4 w-4" />} label="Last Arena Sale" value={money(data.stats.value)} />
                 <HeroStat icon={<Award className="h-4 w-4" />} label={data.source === "api-football" ? "Avg Rating" : "Bonus"} value={data.source === "api-football" ? officialStat(data, data.stats.averageRating, 1) : officialStat(data, data.stats.bonus)} />
               </div>
 
-              <div className="rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
+              {profileView === "overview" ? <div className="rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                   <div><h3 className="flex items-center gap-2 text-lg font-black text-white"><BarChart3 className="h-5 w-5 text-cyan-200" /> Last 10 Match Output</h3><p className="text-sm text-white/45">Only official linked matches are shown. No placeholder games are invented.</p></div>
                   {isLoading ? <span className="text-xs text-white/45">Checking official providers...</span> : null}
@@ -244,10 +275,9 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
                 ) : (
                   <div className="grid min-h-44 place-items-center rounded-2xl border border-dashed border-white/10 bg-black/20 p-6 text-center"><div><p className="font-black text-white">No verified match records yet</p><p className="mt-1 max-w-md text-sm text-white/45">This card is not securely linked to official match history yet, or the current season has not started. Zero-value placeholder games have been removed.</p></div></div>
                 )}
-              </div>
+              </div> : null}
 
-              <div className="grid min-w-0 gap-4 xl:grid-cols-[1fr_310px]">
-                <div className="min-w-0 rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
+              {profileView === "matches" ? <div className="min-w-0 rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
                   <h3 className="mb-4 flex items-center gap-2 text-lg font-black text-white"><Clock className="h-5 w-5 text-cyan-200" /> Match Log</h3>
                   <div className="player-stats-scroll rounded-2xl border border-white/10 bg-black/20" data-mobile-x-scroll="true">
                     <table className="min-w-[760px] text-left text-xs">
@@ -257,11 +287,11 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
                       </tbody>
                     </table>
                   </div>
-                </div>
+              </div> : null}
 
-                <div className="rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
+              {profileView === "season" ? <div className="rounded-[1.5rem] border border-white/10 bg-white/[.045] p-4">
                   <h3 className="mb-4 flex items-center gap-2 text-lg font-black text-white"><Activity className="h-5 w-5 text-emerald-200" /> Season Stats</h3>
-                  <div className="space-y-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     <Stat icon={<CalendarDays className="h-4 w-4" />} label="Starts" value={officialStat(data, data.stats.matchesPlayed)} />
                     <Stat icon={<Activity className="h-4 w-4" />} label="Minutes" value={officialStat(data, data.stats.minutes)} />
                     <Stat icon={<Star className="h-4 w-4" />} label="Goals" value={officialStat(data, data.stats.goals)} />
@@ -272,8 +302,7 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
                     <Stat icon={<Activity className="h-4 w-4" />} label="Red cards" value={officialStat(data, data.stats.redCards)} />
                     <Stat icon={<Award className="h-4 w-4" />} label="Bonus" value={officialStat(data, data.stats.bonus)} />
                   </div>
-                </div>
-              </div>
+              </div> : null}
             </section>
           </div>
         </div>
