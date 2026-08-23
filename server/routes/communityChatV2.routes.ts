@@ -274,10 +274,19 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
       const limit = Math.max(10, Math.min(100, Number(req.query?.limit || 60) || 60));
       const before = Math.max(0, Number(req.query?.before || 0) || 0);
       const where = before > 0 ? sql`WHERE m.id < ${before}` : sql``;
-      const result = await db.execute(sql`${messageSelect(where)} ORDER BY m.id DESC LIMIT ${limit}`);
-      const messages = rowsOf(result).map((row) => toMessage(row, userId)).reverse();
-      res.setHeader("Cache-Control", "private, no-store");
-      return res.json({ messages });
+      const result = await db.execute(sql`${messageSelect(where)} ORDER BY m.id DESC LIMIT ${limit + 1}`);
+      const rows = rowsOf(result);
+      const hasMore = rows.length > limit;
+      const messages = rows.slice(0, limit).map((row) => toMessage(row, userId)).reverse();
+      res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      return res.json({
+        messages,
+        hasMore,
+        nextBefore: hasMore ? Number(messages[0]?.id || 0) || null : null,
+        latestMessageId: Number(messages[messages.length - 1]?.id || 0) || null,
+      });
     } catch (error) {
       console.error("Community Live fetch failed:", error);
       return res.status(500).json({ message: "Failed to load Community Live" });
@@ -293,7 +302,7 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
       }
       const message = await loadMessage(messageId, String(req.authUserId || ""));
       if (!message) return res.status(404).json({ message: "Community message not found" });
-      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
       return res.json({ message });
     } catch (error) {
       console.error("Community Live message lookup failed:", error);
