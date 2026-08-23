@@ -19,6 +19,11 @@ import { Card } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { apiRequest, queryClient } from "../lib/queryClient";
+import {
+  communityMentionOpenEvent,
+  openCommunityMention,
+  type NotificationCache,
+} from "../lib/notifications";
 
 const quickHelp = [
   { label: "Fees", keywords: ["fee", "deposit", "withdraw"], answer: "Tournament fees are shown before entry. Marketplace sales charge 8%, deposits below N$200 charge 2%, and Fantasy Arena charges no withdrawal fee." },
@@ -47,11 +52,27 @@ type ChatMessage = {
   canEdit?: boolean;
   canDelete?: boolean;
 };
-type CurrentUser = { id?: string; managerTeamName?: string | null; name?: string | null };
+type CurrentUser = {
+  id?: string;
+  managerTeamName?: string | null;
+  name?: string | null;
+  email?: string | null;
+};
 type AdminCheck = { isAdmin: boolean };
+type MarketplaceListing = {
+  id?: number;
+  cardId?: number;
+  price?: number;
+  rarity?: string;
+  player?: { name?: string };
+  ownerName?: string;
+  ownerUsername?: string;
+};
 
+// COMMUNITY_MENTION_NOTIFICATION_V1: retain the canonical SSE-backed chat widget during production builds.
 const chatQueryKey = ["/community-live/messages"] as const;
 const lastSeenStorageKey = "fantasy_arena_community_chat_last_seen_v2";
+const seenListingsStorageKey = "fantasy_arena_seen_listing_ids_v2";
 
 function localArenaAnswer(message: string) {
   const text = message.toLowerCase();
@@ -82,6 +103,59 @@ function errorMessage(error: unknown) {
   return raw.replace(/^\d+:\s*/, "") || "The community action could not be completed.";
 }
 
+function MarketplaceListingActivity() {
+  const [notice, setNotice] = useState<MarketplaceListing | null>(null);
+  const { data = [] } = useQuery<MarketplaceListing[]>({
+    queryKey: ["/api/marketplace"],
+    queryFn: async () => {
+      const response = await fetch("/api/marketplace", { credentials: "include" });
+      if (!response.ok) return [];
+      const payload = await response.json();
+      return Array.isArray(payload) ? payload : payload.listings || payload.cards || [];
+    },
+    refetchInterval: 12_000,
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    if (!data.length) return;
+    let seen: number[] = [];
+    try {
+      seen = JSON.parse(window.localStorage.getItem(seenListingsStorageKey) || "[]");
+    } catch {
+      seen = [];
+    }
+    const ids = data.map((listing) => Number(listing.id ?? listing.cardId ?? 0)).filter(Boolean);
+    if (!seen.length) {
+      window.localStorage.setItem(seenListingsStorageKey, JSON.stringify(ids.slice(0, 250)));
+      return;
+    }
+    const fresh = data.find((listing) => !seen.includes(Number(listing.id ?? listing.cardId ?? 0)));
+    window.localStorage.setItem(
+      seenListingsStorageKey,
+      JSON.stringify(Array.from(new Set([...ids, ...seen])).slice(0, 250)),
+    );
+    if (!fresh) return;
+    setNotice(fresh);
+    const timer = window.setTimeout(() => setNotice(null), 6500);
+    return () => window.clearTimeout(timer);
+  }, [data]);
+
+  if (!notice) return null;
+  return (
+    <div className="fixed bottom-24 right-4 z-[96] w-[min(355px,calc(100vw-2rem))] rounded-2xl border border-emerald-200/20 bg-slate-950/84 p-4 text-white shadow-2xl backdrop-blur-2xl sm:bottom-5">
+      <button onClick={() => setNotice(null)} className="absolute right-2 top-2 p-1 text-white/45" aria-label="Close listing alert">
+        <X className="h-4 w-4" />
+      </button>
+      <p className="text-[10px] font-black uppercase tracking-[.18em] text-emerald-300">New card listed</p>
+      <p className="mt-1 font-bold">{notice.player?.name || "Player card"}</p>
+      <p className="mt-1 text-xs text-white/55">
+        {notice.ownerName || notice.ownerUsername || "Arena manager"} • N${Number(notice.price || 0).toFixed(2)}
+      </p>
+    </div>
+  );
+}
+
 export default function FloatingSupportWidget() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<WidgetMode>("community");
@@ -93,10 +167,20 @@ export default function FloatingSupportWidget() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
   const [lastSeenId, setLastSeenId] = useState(() => Number(window.localStorage.getItem(lastSeenStorageKey) || 0) || 0);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const { data: user } = useQuery<CurrentUser>({ queryKey: ["/api/user"] });
   const { data: adminCheck } = useQuery<AdminCheck>({ queryKey: ["/api/admin/check"], retry: false });
+  const { data: notificationInbox } = useQuery<NotificationCache>({
+    queryKey: ["/api/notifications"],
+    queryFn: async () => {
+      const response = await fetch("/api/notifications", { credentials: "include" });
+      if (!response.ok) return { notifications: [], unreadCount: 0 };
+      return response.json();
+    },
+    refetchInterval: 10_000,
+  });
   const { data: messages = [], isLoading } = useQuery<ChatMessage[]>({
     queryKey: chatQueryKey,
     queryFn: async () => {
@@ -122,11 +206,19 @@ export default function FloatingSupportWidget() {
           canDelete: Boolean((adminCheck?.isAdmin || (user?.id && raw.userId === user.id)) && !raw.deletedAt),
         };
         queryClient.setQueryData<ChatMessage[]>(chatQueryKey, (current) => mergeMessage(current, incoming));
+        const currentHandle = mentionHandle(
+          user?.managerTeamName || user?.name || user?.email?.split("@")[0] || "",
+        ).toLocaleLowerCase("en");
+        if (incoming.userId !== user?.id && incoming.mentions?.some(
+          (handle) => String(handle).toLocaleLowerCase("en") === currentHandle,
+        )) {
+          void queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+        }
       } catch { /* ignore malformed stream events */ }
     };
     stream.addEventListener("community-message", onMessage);
     return () => { stream.removeEventListener("community-message", onMessage); stream.close(); };
-  }, [adminCheck?.isAdmin, user?.id]);
+  }, [adminCheck?.isAdmin, user?.email, user?.id, user?.managerTeamName, user?.name]);
 
   const latestId = messages[messages.length - 1]?.id || 0;
   const unreadCount = useMemo(
@@ -134,6 +226,44 @@ export default function FloatingSupportWidget() {
     [lastSeenId, messages, user?.id],
   );
   const latestPreview = messages[messages.length - 1];
+  const unreadMentions = useMemo(
+    () => (Array.isArray(notificationInbox?.notifications) ? notificationInbox.notifications : [])
+      .filter((notification) => !notification.read
+        && notification.notificationKind === "community_mention"
+        && Number(notification.communityMessageId || 0) > 0),
+    [notificationInbox?.notifications],
+  );
+  const latestMention = unreadMentions[0];
+
+  useEffect(() => {
+    const openMention = async (event: Event) => {
+      const messageId = Number((event as CustomEvent<{ messageId?: number }>).detail?.messageId || 0);
+      if (!Number.isInteger(messageId) || messageId <= 0) return;
+
+      setMode("community");
+      setHighlightedMessageId(messageId);
+      setOpen(true);
+
+      const existing = queryClient.getQueryData<ChatMessage[]>(chatQueryKey);
+      if (Array.isArray(existing) && existing.some((message) => message.id === messageId)) return;
+
+      try {
+        const response = await fetch(`/community-live/messages/${messageId}`, {
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error("The mentioned message is no longer available.");
+        const payload = await response.json();
+        if (payload?.message) {
+          queryClient.setQueryData<ChatMessage[]>(chatQueryKey, (current) => mergeMessage(current, payload.message));
+        }
+      } catch (error) {
+        setChatError(error instanceof Error ? error.message : "Unable to load your mention.");
+      }
+    };
+
+    window.addEventListener(communityMentionOpenEvent, openMention);
+    return () => window.removeEventListener(communityMentionOpenEvent, openMention);
+  }, []);
 
   useEffect(() => {
     if (!open || mode !== "community" || latestId <= 0) return;
@@ -143,9 +273,26 @@ export default function FloatingSupportWidget() {
 
   useEffect(() => {
     if (!open || mode !== "community") return;
-    const timer = window.setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }), 60);
+    const timer = window.setTimeout(() => {
+      if (highlightedMessageId) {
+        const target = scrollRef.current?.querySelector<HTMLElement>(
+          `[data-community-message-id="${highlightedMessageId}"]`,
+        );
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
+      }
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }, 80);
     return () => window.clearTimeout(timer);
-  }, [messages.length, mode, open]);
+  }, [highlightedMessageId, messages, mode, open]);
+
+  useEffect(() => {
+    if (!highlightedMessageId) return;
+    const timer = window.setTimeout(() => setHighlightedMessageId(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [highlightedMessageId]);
 
   const sendMutation = useMutation({
     mutationFn: async ({ message, replyToId }: { message: string; replyToId?: number | null }) =>
@@ -202,7 +349,9 @@ export default function FloatingSupportWidget() {
   };
 
   return (
-    <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-3 z-[90] sm:bottom-4 sm:right-4">
+    <>
+      <MarketplaceListingActivity />
+      <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-3 z-[90] sm:bottom-4 sm:right-4">
       {open ? (
         <Card className="mb-2 flex max-h-[min(76dvh,640px)] w-[min(calc(100vw-1.5rem),410px)] flex-col overflow-hidden border-white/15 bg-slate-950/82 text-white shadow-[0_24px_80px_rgba(0,0,0,.58)] backdrop-blur-2xl sm:mb-3">
           <div className="flex items-center justify-between border-b border-white/10 bg-white/[.035] px-3 py-2.5">
@@ -226,8 +375,8 @@ export default function FloatingSupportWidget() {
                   const canDelete = Boolean(!message.deletedAt && (own || adminCheck?.isAdmin));
                   const editing = editingId === message.id;
                   return (
-                    <div key={message.id} className={`group flex ${own ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[90%] rounded-2xl border px-3 py-2 ${own ? "border-cyan-200/20 bg-cyan-300/12" : "border-white/10 bg-white/[.055]"} ${message.deletedAt ? "opacity-55" : ""}`}>
+                    <div key={message.id} data-community-message-id={message.id} className={`group flex ${own ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[90%] rounded-2xl border px-3 py-2 ${highlightedMessageId === message.id ? "border-amber-200/80 bg-amber-300/15 ring-2 ring-amber-200/55" : own ? "border-cyan-200/20 bg-cyan-300/12" : "border-white/10 bg-white/[.055]"} ${message.deletedAt ? "opacity-55" : ""}`}>
                         {message.replyTo ? <div className="mb-2 rounded-xl border-l-2 border-cyan-300/45 bg-black/25 px-2 py-1.5 text-[10px] text-white/48"><span className="font-black text-cyan-200/70">{message.replyTo.teamName}</span><p className="mt-0.5 line-clamp-2">{message.replyTo.message}</p></div> : null}
                         <div className="mb-1 flex items-center gap-2 text-[10px]"><button type="button" onClick={() => addMention(message)} disabled={own || Boolean(message.deletedAt)} className={`max-w-[180px] truncate font-black ${own ? "text-cyan-200" : "text-white/65 hover:text-cyan-200"}`}>{own ? "You" : message.teamName || "Arena Manager"}</button><span className="text-white/30">{formatMessageTime(message.createdAt)}</span>{message.editedAt ? <span className="text-white/25">edited</span> : null}</div>
                         {editing ? <div className="space-y-2"><textarea value={editingText} onChange={(event) => setEditingText(event.target.value.slice(0, 280))} rows={3} className="w-full resize-none rounded-xl border border-white/10 bg-black/30 p-2 text-sm text-white outline-none focus:border-cyan-300/40" /><div className="flex justify-end gap-2"><button onClick={() => { setEditingId(null); setEditingText(""); }} className="text-[10px] font-bold text-white/45">Cancel</button><button onClick={() => editMutation.mutate({ id: message.id, message: editingText.trim() })} disabled={!editingText.trim() || editMutation.isPending} className="rounded-lg bg-cyan-300 px-2 py-1 text-[10px] font-black text-slate-950">Save</button></div></div> : <p className={`whitespace-pre-wrap break-words text-sm leading-5 ${message.deletedAt ? "italic text-white/45" : "text-white/90"}`}>{message.message}</p>}
@@ -250,9 +399,10 @@ export default function FloatingSupportWidget() {
         </Card>
       ) : null}
 
-      {!open && latestPreview ? <button type="button" onClick={() => { setMode("community"); setOpen(true); }} className="mb-2 block max-w-[290px] rounded-2xl border border-white/12 bg-slate-950/58 px-3 py-2 text-left text-white shadow-xl backdrop-blur-xl transition hover:bg-slate-950/78" data-help="Open Community Live to read and reply to public manager messages."><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.12em] text-cyan-200"><span className="h-2 w-2 rounded-full bg-emerald-400" />Community Live{unreadCount ? <span className="rounded-full bg-cyan-300 px-1.5 py-0.5 text-[9px] text-slate-950">{unreadCount}</span> : null}</div><p className="mt-1 truncate text-xs text-white/55"><span className="font-bold text-white/72">{latestPreview.teamName}:</span> {latestPreview.message}</p></button> : null}
+      {!open && latestMention ? <button type="button" onClick={() => { void openCommunityMention(latestMention); }} className="mb-2 block max-w-[310px] rounded-2xl border border-amber-200/35 bg-slate-950/88 px-3 py-2.5 text-left text-white shadow-xl backdrop-blur-xl transition hover:border-amber-200/60" data-help="Open the exact Community Live message that mentioned you."><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.12em] text-amber-200"><AtSign className="h-3.5 w-3.5" />You were mentioned{unreadMentions.length > 1 ? <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[9px] text-slate-950">{unreadMentions.length}</span> : null}</div><p className="mt-1 truncate text-xs text-white/70">{String(latestMention.message || "Open your message")}</p></button> : !open && latestPreview ? <button type="button" onClick={() => { setMode("community"); setOpen(true); }} className="mb-2 block max-w-[290px] rounded-2xl border border-white/12 bg-slate-950/58 px-3 py-2 text-left text-white shadow-xl backdrop-blur-xl transition hover:bg-slate-950/78" data-help="Open Community Live to read and reply to public manager messages."><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.12em] text-cyan-200"><span className="h-2 w-2 rounded-full bg-emerald-400" />Community Live{unreadCount ? <span className="rounded-full bg-cyan-300 px-1.5 py-0.5 text-[9px] text-slate-950">{unreadCount}</span> : null}</div><p className="mt-1 truncate text-xs text-white/55"><span className="font-bold text-white/72">{latestPreview.teamName}:</span> {latestPreview.message}</p></button> : null}
 
-      <div className="flex justify-end gap-2"><Button size="icon" aria-label="Open Arena help" className="h-10 w-10 rounded-full border border-violet-200/20 bg-violet-500/75 shadow-xl backdrop-blur-xl hover:bg-violet-400 sm:h-11 sm:w-11" onClick={() => { setMode("help"); setOpen(true); }}><HelpCircle className="h-4 w-4" /></Button><Button size="icon" aria-label="Open Community Live" className="relative h-11 w-11 rounded-full border border-cyan-200/25 bg-cyan-400/80 text-slate-950 shadow-xl backdrop-blur-xl hover:bg-cyan-300 sm:h-12 sm:w-12" onClick={() => { setMode("community"); setOpen((value) => mode === "community" ? !value : true); }}>{open && mode === "community" ? <Bot className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}{unreadCount && !(open && mode === "community") ? <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-rose-500 px-1 text-[10px] font-black leading-5 text-white">{Math.min(99, unreadCount)}</span> : null}</Button></div>
-    </div>
+      <div className="flex justify-end gap-2"><Button size="icon" aria-label="Open Arena help" className="h-10 w-10 rounded-full border border-violet-200/20 bg-violet-500/75 shadow-xl backdrop-blur-xl hover:bg-violet-400 sm:h-11 sm:w-11" onClick={() => { setMode("help"); setOpen(true); }}><HelpCircle className="h-4 w-4" /></Button><Button size="icon" aria-label="Open Community Live" className="relative h-11 w-11 rounded-full border border-cyan-200/25 bg-cyan-400/80 text-slate-950 shadow-xl backdrop-blur-xl hover:bg-cyan-300 sm:h-12 sm:w-12" onClick={() => { if (latestMention && !open) { void openCommunityMention(latestMention); return; } setMode("community"); setOpen((value) => mode === "community" ? !value : true); }}>{open && mode === "community" ? <Bot className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}{(unreadMentions.length || unreadCount) && !(open && mode === "community") ? <span className={`absolute -right-1 -top-1 min-w-5 rounded-full px-1 text-[10px] font-black leading-5 text-white ${unreadMentions.length ? "bg-amber-500" : "bg-rose-500"}`}>{Math.min(99, unreadMentions.length || unreadCount)}</span> : null}</Button></div>
+      </div>
+    </>
   );
 }

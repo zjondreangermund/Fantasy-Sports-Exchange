@@ -1,6 +1,8 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "../hooks/use-toast";
+import { ToastAction } from "./ui/toast";
+import { openCommunityMention } from "../lib/notifications";
 
 type NotificationItem = {
   id: number;
@@ -9,6 +11,8 @@ type NotificationItem = {
   message: string;
   read: boolean;
   createdAt: string | null;
+  communityMessageId?: number | null;
+  notificationKind?: string | null;
 };
 
 type NotificationResponse = {
@@ -31,17 +35,30 @@ export default function FloatingEventNotifications() {
   });
 
   React.useEffect(() => {
-    const winnerMessages = (Array.isArray(data?.notifications) ? data.notifications : [])
-      .filter((item) => !item.read && (item.type === "win" || item.type === "runner_up"))
+    const importantMessages = (Array.isArray(data?.notifications) ? data.notifications : [])
+      .filter((item) => !item.read && (
+        item.type === "win"
+        || item.type === "runner_up"
+        || (item.notificationKind === "community_mention" && Number(item.communityMessageId || 0) > 0)
+      ))
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
-    const newest = winnerMessages.find((item) => !seenIdsRef.current.has(item.id));
+    const newest = importantMessages.find((item) => !seenIdsRef.current.has(item.id));
     if (!newest) return;
 
     seenIdsRef.current.add(newest.id);
     toast({
       title: newest.title || "Congratulations from the Fantasy Arena Team",
       description: newest.message || "You received a tournament reward.",
+      ...(newest.communityMessageId ? {
+        action: (
+          <ToastAction altText="Open the message mentioning you" onClick={() => {
+            void openCommunityMention(newest);
+          }}>
+            View message
+          </ToastAction>
+        ),
+      } : {}),
     });
   }, [data, toast]);
 

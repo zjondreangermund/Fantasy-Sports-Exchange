@@ -55,8 +55,8 @@ export default function MarketplaceFloorNotice() {
 }
 `);
 
-// Upgrade the floating widget: guided 3-second hover explanations, marketplace listing activity, and advanced community chat.
-write("client/src/components/FloatingSupportWidget.tsx", `import { useEffect, useMemo, useRef, useState } from "react";
+// Preserve the canonical notification-aware chat widget once it supersedes the legacy generator.
+if (!read("client/src/components/FloatingSupportWidget.tsx").includes("COMMUNITY_MENTION_NOTIFICATION_V1")) write("client/src/components/FloatingSupportWidget.tsx", `import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Bot, Check, HelpCircle, Mail, MessageCircle, Pencil, Reply, Send, Trash2, Users, X } from "lucide-react";
 import { Link } from "wouter";
