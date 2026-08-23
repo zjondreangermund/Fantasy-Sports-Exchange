@@ -69,11 +69,12 @@ function normalizedNames(player: any): string[] {
 function tokens(value: string): string[] {
   return normalizePlayerText(value)
     .split(" ")
-    .filter((token) => token.length > 1);
+    .filter(Boolean);
 }
 
 function firstNameCompatible(left: string, right: string): boolean {
   if (left === right) return true;
+  if ((left.length === 1 || right.length === 1) && left[0] === right[0]) return true;
   if (left.length < 3 || right.length < 3) return false;
   const shorter = left.length <= right.length ? left : right;
   const longer = left.length > right.length ? left : right;
@@ -91,8 +92,8 @@ export function strongPlayerNameMatch(left: unknown, right: unknown): boolean {
   if (aTokens.length < 2 || bTokens.length < 2) return false;
   if (!firstNameCompatible(aTokens[0], bTokens[0])) return false;
 
-  const surnamesA = new Set(aTokens.slice(1));
-  return bTokens.slice(1).some((token) => surnamesA.has(token));
+  const surnamesA = new Set(aTokens.slice(1).filter((token) => token.length > 1));
+  return bTokens.slice(1).some((token) => token.length > 1 && surnamesA.has(token));
 }
 
 function playerMatchesElement(player: any, element: any): boolean {
@@ -169,15 +170,29 @@ export function buildFplPlayerIndex(bootstrap: any) {
   };
 
   const resolve = (player: any) => {
+    const storedCandidateIsSafe = (candidate: any) => {
+      if (!candidate || !playerMatchesElement(player, candidate)) return false;
+      const playerTeam = normalizePlayerText(player?.team);
+      if (!playerTeam || normalizePlayerText(teamNameOf(candidate)) === playerTeam) return true;
+
+      // A player may have transferred since this legacy card was minted. Keep
+      // that valid stored ID unless another identity match exists at the
+      // card's recorded club; in that case the stored ID is ambiguous/stale.
+      return !elements.some((other: any) =>
+        Number(other?.id || 0) !== Number(candidate?.id || 0)
+        && normalizePlayerText(teamNameOf(other)) === playerTeam
+        && playerMatchesElement(player, other),
+      );
+    };
     const fplId = numericField(player, "fplId", "fpl_id");
     const byStoredId = fplId > 0 ? byId.get(fplId) : null;
-    if (byStoredId && playerMatchesElement(player, byStoredId)) {
+    if (storedCandidateIsSafe(byStoredId)) {
       return byStoredId;
     }
 
     const code = numericField(player, "code", "code");
     const byStoredCode = code > 0 ? byCode.get(code) : null;
-    if (byStoredCode && playerMatchesElement(player, byStoredCode)) {
+    if (storedCandidateIsSafe(byStoredCode)) {
       return byStoredCode;
     }
 

@@ -294,7 +294,28 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         const calculated = liveElement
           ? calculatePlayerScore(mapFplStatsToPlayerStats(liveElement), position)
           : null;
-        const saved = savedScores.get(Number(card.cardId));
+        const storedScore = savedScores.get(Number(card.cardId));
+        const storedElementId = Number(storedScore?.elementId || 0);
+        const storedIdentityStatus = String(storedScore?.identityStatus || "verified");
+        const snapshotMatchesVerifiedPlayer = Boolean(storedScore && (
+          snapshot?.final === true
+          || (elementId > 0 && storedElementId === elementId && storedIdentityStatus === "verified")
+        ));
+        const saved = snapshotMatchesVerifiedPlayer ? storedScore : null;
+        const identityStatus = !matchedElement
+          ? "identity-unlinked"
+          : !liveElement
+            ? "awaiting-gameweek-data"
+            : storedScore && !snapshotMatchesVerifiedPlayer
+              ? "refreshing-score"
+              : "verified";
+        const identityMessage = identityStatus === "identity-unlinked"
+          ? `${String(card.name || "This player")} could not be securely linked to an official Premier League player.`
+          : identityStatus === "awaiting-gameweek-data"
+            ? "Official gameweek statistics are not available for this verified player yet."
+            : identityStatus === "refreshing-score"
+              ? "The saved score was linked to a different player; the verified live score is shown while the tournament refreshes."
+              : String(saved?.identityMessage || `Verified official Premier League player: ${canonical?.name || card.name}.`);
         const points = Number(saved?.score ?? calculated?.total_score ?? 0);
         const captain = Number(card.cardId) === captainId;
         const captainBonus = captain
@@ -313,6 +334,9 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           imageUrl: apiImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
           apiFootballId: apiPlayer?.apiPlayerId || null,
           elementId: elementId || null,
+          identityStatus,
+          identityMessage,
+          identityProvider: saved?.identityProvider || (apiPlayer ? "api-football+fpl" : matchedElement ? "fpl-fallback" : null),
           captain,
           points,
           captainBonus,
@@ -325,7 +349,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
             : Array.isArray(calculated?.reasons)
               ? calculated.reasons
               : [],
-          minutes: Number(liveElement?.stats?.minutes || 0),
+          minutes: Number(saved?.minutesPlayed ?? liveElement?.stats?.minutes ?? 0),
           source: saved ? "official-gameweek-snapshot" : calculated ? "live-fpl-fallback" : "awaiting-match-data",
         };
       });

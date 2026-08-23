@@ -136,5 +136,11 @@ export function resolveDetailedStatsForPlayer(player: any, context: DetailedScor
   const match = resolveApiFootballPlayer(player, context.directory);
   if (!match) return null;
   const stats = context.statsByApiPlayerId.get(match.apiPlayerId);
-  return stats ? { ...stats, api_player_id: match.apiPlayerId } : null;
+  return stats ? {
+    ...stats,
+    api_player_id: match.apiPlayerId,
+    api_position: match.position,
+    api_player_name: match.name,
+    api_team: match.team,
+  } : null;
 }

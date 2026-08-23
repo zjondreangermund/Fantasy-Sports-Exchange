@@ -84,6 +84,9 @@ type TournamentTeamPlayer = {
   contribution: number;
   minutes: number;
   source: string;
+  identityStatus?: string;
+  identityMessage?: string;
+  identityProvider?: string | null;
   breakdown: { decisive: number; performance: number; penalties: number; bonus: number };
   reasons: TournamentScoreReason[];
 };
@@ -568,6 +571,7 @@ function TournamentLeaderboardPreview({ comp }: { comp: Tournament }) {
                             <div className="shrink-0 text-right"><div className="text-base font-black text-emerald-200">{scoreLabel(player.points)}</div><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/40">points</div></div>
                             {expanded ? <ChevronUp className="h-4 w-4 text-white/45" /> : <ChevronDown className="h-4 w-4 text-white/45" />}
                           </button>
+                          {player.identityStatus && player.identityStatus !== "verified" ? <div className="border-t border-amber-300/15 bg-amber-500/[.08] px-3 py-2 text-[11px] leading-4 text-amber-100">{player.identityMessage || "This player is awaiting an official scoring link."}</div> : null}
                         </div>;
                       })}</div>
                     </> : null}
@@ -585,6 +589,7 @@ function TournamentLeaderboardPreview({ comp }: { comp: Tournament }) {
           <div className="text-xs text-white/50">{expandedPlayer?.position} • {expandedPlayer?.team} • {expandedPlayer?.minutes || 0} minutes</div>
         </DialogHeader>
         {expandedPlayer ? <div className="max-h-[calc(88dvh-105px)] overflow-y-auto overscroll-contain p-5">
+          {expandedPlayer.identityMessage ? <div className={`mb-4 rounded-xl border px-3 py-2 text-xs ${expandedPlayer.identityStatus === "verified" ? "border-cyan-300/20 bg-cyan-400/[.06] text-cyan-100" : "border-amber-300/20 bg-amber-500/[.08] text-amber-100"}`}>{expandedPlayer.identityMessage}</div> : null}
           <div className="mb-4 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4"><div className="text-[10px] font-black uppercase tracking-[.15em] text-emerald-100/70">Player total</div><div className="mt-1 text-3xl font-black text-emerald-200">{scoreLabel(expandedPlayer.points)} points</div></div>
           <div className="grid grid-cols-2 gap-2"><ScoreCategory label="Decisive" points={expandedPlayer.breakdown.decisive} /><ScoreCategory label="Performance" points={expandedPlayer.breakdown.performance} /><ScoreCategory label="Penalties" points={expandedPlayer.breakdown.penalties} /><ScoreCategory label="Bonus" points={expandedPlayer.breakdown.bonus} /></div>
           <div className="mt-4 text-[10px] font-black uppercase tracking-[.15em] text-white/45">How points were earned</div>

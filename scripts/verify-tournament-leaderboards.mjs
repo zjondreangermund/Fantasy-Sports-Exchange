@@ -20,6 +20,8 @@ requireText(routes, 'limit ${pageSize} offset ${offset}', "Tournament leaderboar
 requireText(routes, "totalPages: Math.max(1, Math.ceil(totalEntries / pageSize))", "Tournament leaderboard pagination totals are missing.");
 requireText(routes, 'app.get("/api/competitions/:id/entries/:entryId"', "The submitted-team scoring endpoint is missing.");
 requireText(routes, "snapshot.cardScores", "Submitted teams must use official per-card scoring snapshots.");
+requireText(routes, "snapshotMatchesVerifiedPlayer", "Saved player points must belong to the same verified official footballer.");
+requireText(routes, "storedElementId === elementId", "Mismatched saved official player IDs must not override a verified live score.");
 requireText(routes, "saved?.breakdown || calculated?.breakdown", "Submitted teams must expose each player's exact scoring categories.");
 requireText(routes, "Array.isArray(saved?.reasons)", "Submitted teams must expose each player's recorded scoring actions.");
 requireText(routes, "fplApi.getLiveGameweek(Number(entry.gameWeek || 1))", "Team scoring must load the tournament's actual gameweek.");
@@ -28,6 +30,7 @@ requireText(scoreUpdater, "const storedCardScore = Math.round(latestScore);", "I
 requireText(scoreUpdater, "decisiveScore: storedCardScore", "Card display scores must be rounded before database persistence.");
 requireText(scoreUpdater, "score: toNumber(score?.total_score)", "Official tournament scoring snapshots must preserve exact fractional player points.");
 requireText(scoreUpdater, "scoringPrecision: 4", "Official tournament scoring snapshots must preserve four-decimal precision.");
+requireText(scoreUpdater, "identityStatus: String(score?.identity_status", "Scoring snapshots must explain each player's verification status.");
 requireText(scoreUpdater, "this.nextLast5Scores(card.last5Scores, latestScore)", "Player scoring history must preserve the exact official player score.");
 
 requireText(page, ".slice(0, 5)", "Tournament cards must show a compact top-five leaderboard.");
@@ -37,6 +40,7 @@ requireText(page, "Next", "The full leaderboard needs a next-page control.");
 requireText(page, "Open all", "Tournament cards need an Open all leaderboard action.");
 requireText(page, "How points were earned", "Player scoring actions must be visible in submitted teams.");
 requireText(page, "maximumFractionDigits: 4", "Tournament standings must show precise four-decimal scores.");
+requireText(page, "player.identityStatus !== \"verified\"", "Unverified or refreshing player scores must explain their status to users.");
 requireText(page, "<TournamentLeaderboardPreview comp={comp} />", "The tournament card must render its leaderboard.");
 requireText(generatedCard, "<TournamentLeaderboardPreview comp={comp} />", "The build-generated tournament card must retain its leaderboard.");
 
