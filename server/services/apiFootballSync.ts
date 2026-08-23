@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { calculatePlayerScore, mapApiFootballStatsToPlayerStats } from "./scoring.js";
 import { fplApi } from "./fplApi.js";
 import { apiFootballPhotoUrl, ensureApiFootballPlayerDirectorySchema, replaceApiFootballSquad } from "./apiFootballPlayerDirectory.js";
 
@@ -313,24 +314,18 @@ async function providerGet(path: string, params: Record<string, string | number 
 }
 
 function scorePreview(stat: any) {
-  const games = stat?.games || {};
-  const goals = stat?.goals || {};
-  const shots = stat?.shots || {};
-  const passes = stat?.passes || {};
-  const tackles = stat?.tackles || {};
-  const duels = stat?.duels || {};
-  const cards = stat?.cards || {};
-  const penalty = stat?.penalty || {};
-  const position = String(games.position || "M").toUpperCase();
-  const minutes = Number(games.minutes || 0);
-  const goalValue = position === "G" || position === "D" ? 15 : position === "M" ? 12 : 10;
-  const decisive = Math.max(0, Math.min(80,
-    (minutes > 0 ? 35 : 0) + Number(goals.total || 0) * goalValue + Number(goals.assists || 0) * 9 + Number(penalty.saved || 0) * 15 - Number(penalty.missed || 0) * 8 - Number(cards.red || 0) * 15,
-  ));
-  const allAround = Math.max(-15, Math.min(45,
-    Math.min(8, Number(passes.total || 0) / 12) + Number(passes.key || 0) * 2.2 + Number(tackles.total || 0) * 1.4 + Number(tackles.interceptions || 0) * 1.6 + Number(duels.won || 0) * 0.65 + Number(shots.on || 0) * 1.5 + Number(goals.saves || 0) * 1.2 - Number(cards.yellow || 0) * 2,
-  ));
-  return { score: Math.max(0, Math.min(100, Math.round((decisive + allAround) * 10) / 10)), decisive: Math.round(decisive * 10) / 10, allAround: Math.round(allAround * 10) / 10 };
+  const rawPosition = String(stat?.games?.position || "M").toUpperCase();
+  const position = rawPosition === "G" ? "GK" : rawPosition === "D" ? "DEF" : rawPosition === "F" ? "FWD" : "MID";
+  const result = calculatePlayerScore(mapApiFootballStatsToPlayerStats(stat), position);
+  const allAround = Math.round((result.breakdown.performance + result.breakdown.penalties + result.breakdown.bonus) * 10) / 10;
+  return {
+    score: result.total_score,
+    decisive: result.breakdown.decisive,
+    allAround,
+    decisiveScore: result.breakdown.decisive,
+    allAroundScore: allAround,
+    breakdown: { ...result.breakdown, reasons: result.reasons, dataSource: result.data_source },
+  };
 }
 
 async function beginRun(jobType: SyncJobType) {
@@ -401,8 +396,11 @@ async function syncLive(): Promise<{ calls: number; records: number; details: an
       and coalesce(status_short,'NS') not in ('FT','AET','PEN','PST','CANC','ABD','AWD','WO')
   `))[0]?.count || 0);
   if (!possibleLive) return { calls: 0, records: 0, details: { reason: "No scheduled live window" } };
-  const payload = await providerGet("fixtures", { league: LEAGUE_ID, season: seasonNow(), live: "all" });
-  const fixtures = Array.isArray(payload?.response) ? payload.response : [];
+  // API_FOOTBALL_VALID_LIVE_FILTER_V1: `live=all` must be sent on its own;
+  // scope the returned rows to Premier League league 39 before persisting.
+  const payload = await providerGet("fixtures", { live: "all" });
+  const fixtures = (Array.isArray(payload?.response) ? payload.response : [])
+    .filter((row: any) => Number(row?.league?.id || 0) === LEAGUE_ID);
   return { calls: 1, records: await upsertFixtures(fixtures), details: { possibleLive } };
 }
 
