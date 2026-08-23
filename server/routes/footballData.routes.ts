@@ -313,10 +313,13 @@ function mergeFplLiveFixture(game: any, saved: any, season: number) {
 
 async function resolvePremierLeagueLiveFixtures(providerFixtures: any[], season: number) {
   // FPL_LIVE_FIXTURE_FALLBACK_V1: share the exact live source used by /api/live/hub.
-  const [savedFixtures, fplLiveGames] = await Promise.all([
+  const [savedFixtures, fplLiveResult] = await Promise.all([
     savedPremierLeagueMatchdayFixtures(season),
-    fplApi.getLiveGames().catch(() => []),
+    fplApi.getLiveGames()
+      .then((games) => ({ games: Array.isArray(games) ? games : [], error: null }))
+      .catch((error) => ({ games: [], error })),
   ]);
+  const fplLiveGames = fplLiveResult.games;
   const merged = providerFixtures.map((fixture: any) => ({
     ...fixture,
     apiFixtureId: Number(fixture?.id || 0) || null,
@@ -347,7 +350,13 @@ async function resolvePremierLeagueLiveFixtures(providerFixtures: any[], season:
   }
 
   merged.sort((left: any, right: any) => new Date(left?.kickoffTime || 0).getTime() - new Date(right?.kickoffTime || 0).getTime());
-  return { fixtures: merged, usedFallback, savedFixtures };
+  return {
+    fixtures: merged,
+    usedFallback,
+    savedFixtures,
+    fplAvailable: !fplLiveResult.error,
+    fplFailure: fplLiveResult.error || null,
+  };
 }
 
 async function fallbackPremierLeagueMatch(fixtureId: number, season: number) {
@@ -661,8 +670,13 @@ export function registerFootballDataRoutes(app: Express) {
         params.round = round;
         ttl = 10 * 60;
       } else if (status === "live") {
+        // API_FOOTBALL_VALID_LIVE_FILTER_V1: API-Football accepts the literal
+        // `all` (or a hyphen-delimited league-id string). Fetch all live games
+        // and filter by league below so a provider validation change cannot
+        // break the Premier League match centre again.
+        delete params.league;
         delete params.season;
-        params.live = league.config.id;
+        params.live = "all";
         ttl = 20;
       } else if (status === "finished" || status === "completed") {
         params.last = Math.max(1, Math.min(40, Number(req.query.limit || 20)));
@@ -682,12 +696,20 @@ export function registerFootballDataRoutes(app: Express) {
       }
 
       let fixtures = result ? responseRows(result.payload).map(normalizeFixture) : [];
+      if (status === "live" && !round) {
+        fixtures = fixtures.filter((fixture: any) => Number(fixture.leagueId || 0) === league.config.id);
+      }
       let fallback = false;
       if (league.config.id === 39 && status === "live" && !round) {
         const live = await resolvePremierLeagueLiveFixtures(fixtures, season);
         fixtures = live.fixtures;
         fallback = live.usedFallback || Boolean(providerFailure) || Boolean(result?.stale);
-        if (providerFailure && !fixtures.length) throw providerFailure;
+        // A successful FPL response with zero rows means there are simply no
+        // Premier League matches in progress. Only expose an outage when both
+        // providers failed and there is no saved matchday data to show.
+        if (providerFailure && !fixtures.length && !live.fplAvailable && !live.savedFixtures.length) {
+          throw providerFailure;
+        }
       }
 
       const warning = fallback
