@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { fetchApiFootballProvider } from "../services/apiFootballSync.js";
+import { fplApi } from "../services/fplApi.js";
 
 // API_FOOTBALL_FULL_INTELLIGENCE_V2
 export type FootballLeagueKey =
@@ -99,20 +100,38 @@ async function cachedProvider(
   await ensureSiteCacheSchema();
   const key = stableCacheKey(path, params);
   const cached = rowsOf(await db.execute(sql`
-    select payload from app.api_football_site_cache
-    where cache_key=${key} and expires_at > now()
+    select payload, updated_at as "updatedAt", expires_at > now() as fresh
+    from app.api_football_site_cache
+    where cache_key=${key}
     limit 1
   `))[0];
-  if (cached?.payload) return { payload: cached.payload, cached: true };
+  if (cached?.payload && cached.fresh) {
+    return { payload: cached.payload, cached: true, stale: false, updatedAt: cached.updatedAt, warning: null };
+  }
 
-  const payload = await fetchApiFootballProvider(path, params as Record<string, string | number | undefined>);
-  const expiresAt = new Date(Date.now() + Math.max(5, ttlSeconds) * 1000);
-  await db.execute(sql`
-    insert into app.api_football_site_cache (cache_key,payload,expires_at,updated_at)
-    values (${key},${JSON.stringify(payload)}::jsonb,${expiresAt},now())
-    on conflict (cache_key) do update set payload=excluded.payload,expires_at=excluded.expires_at,updated_at=now()
-  `);
-  return { payload, cached: false };
+  try {
+    const payload = await fetchApiFootballProvider(path, params as Record<string, string | number | undefined>);
+    const expiresAt = new Date(Date.now() + Math.max(5, ttlSeconds) * 1000);
+    await db.execute(sql`
+      insert into app.api_football_site_cache (cache_key,payload,expires_at,updated_at)
+      values (${key},${JSON.stringify(payload)}::jsonb,${expiresAt},now())
+      on conflict (cache_key) do update set payload=excluded.payload,expires_at=excluded.expires_at,updated_at=now()
+    `);
+    return { payload, cached: false, stale: false, updatedAt: new Date().toISOString(), warning: null };
+  } catch (error: any) {
+    // API_FOOTBALL_STALE_CACHE_FALLBACK_V1: provider outages must not erase good data.
+    if (cached?.payload) {
+      console.warn(`[football-data] Serving saved ${path} data after provider failure:`, error?.message || error);
+      return {
+        payload: cached.payload,
+        cached: true,
+        stale: true,
+        updatedAt: cached.updatedAt,
+        warning: "API-Football is temporarily unavailable; the latest saved match data is being shown.",
+      };
+    }
+    throw error;
+  }
 }
 
 function responseRows(payload: any) {
@@ -156,6 +175,202 @@ function normalizeFixture(item: any) {
     },
     goals,
     score: item?.score || null,
+  };
+}
+
+const LIVE_FIXTURE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"]);
+
+function clubMatchKey(value: unknown) {
+  const name = String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(?:football club|fc|afc)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const aliases: Record<string, string> = {
+    "man city": "manchester city",
+    "man utd": "manchester united",
+    "newcastle": "newcastle united",
+    "west ham": "west ham united",
+    "leeds": "leeds united",
+    "spurs": "tottenham hotspur",
+    "tottenham": "tottenham hotspur",
+    "wolves": "wolverhampton wanderers",
+    "wolverhampton": "wolverhampton wanderers",
+    "brighton": "brighton and hove albion",
+    "brighton hove albion": "brighton and hove albion",
+    "bournemouth": "bournemouth",
+    "nott m forest": "nottingham forest",
+    "nottm forest": "nottingham forest",
+    "nott forest": "nottingham forest",
+  };
+  return aliases[name] || name;
+}
+
+function matchesLiveFixture(left: any, right: any) {
+  const sameHome = clubMatchKey(left?.homeTeam?.name) === clubMatchKey(right?.homeTeam?.name);
+  const sameAway = clubMatchKey(left?.awayTeam?.name) === clubMatchKey(right?.awayTeam?.name);
+  if (!sameHome || !sameAway) return false;
+  const leftKickoff = new Date(left?.kickoffTime || 0).getTime();
+  const rightKickoff = new Date(right?.kickoffTime || 0).getTime();
+  return !leftKickoff || !rightKickoff || Math.abs(leftKickoff - rightKickoff) <= 3 * 60 * 60 * 1000;
+}
+
+function normalizeSavedFixture(row: any) {
+  const base = normalizeFixture(row?.raw || {});
+  return {
+    ...base,
+    id: Number(row?.apiFixtureId || base.id || 0),
+    apiFixtureId: Number(row?.apiFixtureId || base.id || 0) || null,
+    leagueId: 39,
+    league: "Premier League",
+    season: Number(row?.season || base.season || currentSeason()),
+    round: String(row?.round || base.round || "Premier League"),
+    kickoffTime: row?.kickoffTime || base.kickoffTime || null,
+    timezone: row?.timezone || base.timezone || null,
+    status: String(row?.status || base.status || "NS"),
+    statusLong: String(row?.statusLong || base.statusLong || ""),
+    elapsed: Number(row?.elapsed ?? base.elapsed ?? 0),
+    homeTeam: {
+      ...base.homeTeam,
+      id: Number(row?.homeTeamId || base.homeTeam?.id || 0),
+      name: String(row?.homeName || base.homeTeam?.name || "Home"),
+      logo: String(row?.homeLogo || base.homeTeam?.logo || ""),
+      score: row?.homeScore ?? base.homeTeam?.score ?? null,
+    },
+    awayTeam: {
+      ...base.awayTeam,
+      id: Number(row?.awayTeamId || base.awayTeam?.id || 0),
+      name: String(row?.awayName || base.awayTeam?.name || "Away"),
+      logo: String(row?.awayLogo || base.awayTeam?.logo || ""),
+      score: row?.awayScore ?? base.awayTeam?.score ?? null,
+    },
+    source: "api-football-database",
+    intelligenceAvailable: true,
+  };
+}
+
+async function savedPremierLeagueMatchdayFixtures(season: number) {
+  try {
+    const rows = rowsOf(await db.execute(sql`
+      select f.api_fixture_id as "apiFixtureId", f.raw, f.season, f.round,
+             f.kickoff_at as "kickoffTime", f.timezone,
+             coalesce(f.status_short,'NS') as status, f.status_long as "statusLong", f.elapsed,
+             f.home_team_id as "homeTeamId", f.away_team_id as "awayTeamId",
+             f.home_score as "homeScore", f.away_score as "awayScore",
+             ht.name as "homeName", ht.logo as "homeLogo",
+             at.name as "awayName", at.logo as "awayLogo"
+      from app.api_football_fixtures f
+      left join app.api_football_teams ht on ht.api_team_id=f.home_team_id
+      left join app.api_football_teams at on at.api_team_id=f.away_team_id
+      where f.league_id=39 and f.season=${season}
+        and f.kickoff_at between now()-interval '6 hours' and now()+interval '2 hours'
+      order by f.kickoff_at asc, f.api_fixture_id asc
+    `));
+    return rows.map(normalizeSavedFixture);
+  } catch (error: any) {
+    console.warn("[football-data] Saved Premier League fixture fallback unavailable:", error?.message || error);
+    return [];
+  }
+}
+
+function mergeFplLiveFixture(game: any, saved: any, season: number) {
+  const minutes = Number(game?.minutes || saved?.elapsed || 0);
+  const apiFixtureId = Number(saved?.apiFixtureId || saved?.id || 0) || null;
+  const fplFixtureId = Number(game?.id || 0);
+  return {
+    ...(saved || {}),
+    id: apiFixtureId || fplFixtureId,
+    apiFixtureId,
+    fplFixtureId,
+    leagueId: 39,
+    league: "Premier League",
+    season,
+    round: String(saved?.round || "Premier League"),
+    kickoffTime: game?.kickoffTime || saved?.kickoffTime || null,
+    status: saved?.status && LIVE_FIXTURE_STATUSES.has(String(saved.status)) ? saved.status : "LIVE",
+    statusLong: "Match in progress",
+    elapsed: minutes,
+    homeTeam: {
+      ...(saved?.homeTeam || {}),
+      id: Number(saved?.homeTeam?.id || game?.homeTeam?.id || 0),
+      name: String(game?.homeTeam?.name || saved?.homeTeam?.name || "Home"),
+      score: game?.homeTeam?.score ?? saved?.homeTeam?.score ?? null,
+    },
+    awayTeam: {
+      ...(saved?.awayTeam || {}),
+      id: Number(saved?.awayTeam?.id || game?.awayTeam?.id || 0),
+      name: String(game?.awayTeam?.name || saved?.awayTeam?.name || "Away"),
+      score: game?.awayTeam?.score ?? saved?.awayTeam?.score ?? null,
+    },
+    source: apiFixtureId ? "api-football+fpl" : "fpl",
+    intelligenceAvailable: Boolean(apiFixtureId),
+  };
+}
+
+async function resolvePremierLeagueLiveFixtures(providerFixtures: any[], season: number) {
+  // FPL_LIVE_FIXTURE_FALLBACK_V1: share the exact live source used by /api/live/hub.
+  const [savedFixtures, fplLiveGames] = await Promise.all([
+    savedPremierLeagueMatchdayFixtures(season),
+    fplApi.getLiveGames().catch(() => []),
+  ]);
+  const merged = providerFixtures.map((fixture: any) => ({
+    ...fixture,
+    apiFixtureId: Number(fixture?.id || 0) || null,
+    source: "api-football",
+    intelligenceAvailable: true,
+  }));
+  let usedFallback = false;
+
+  for (const game of Array.isArray(fplLiveGames) ? fplLiveGames : []) {
+    const providerIndex = merged.findIndex((fixture: any) => matchesLiveFixture(fixture, game));
+    const saved = providerIndex >= 0
+      ? merged[providerIndex]
+      : savedFixtures.find((fixture: any) => matchesLiveFixture(fixture, game));
+    const combined = mergeFplLiveFixture(game, saved, season);
+    if (providerIndex >= 0) merged[providerIndex] = combined;
+    else {
+      merged.push(combined);
+      usedFallback = true;
+    }
+  }
+
+  if (!merged.length) {
+    const savedLive = savedFixtures.filter((fixture: any) => LIVE_FIXTURE_STATUSES.has(String(fixture.status || "")));
+    if (savedLive.length) {
+      merged.push(...savedLive);
+      usedFallback = true;
+    }
+  }
+
+  merged.sort((left: any, right: any) => new Date(left?.kickoffTime || 0).getTime() - new Date(right?.kickoffTime || 0).getTime());
+  return { fixtures: merged, usedFallback, savedFixtures };
+}
+
+async function fallbackPremierLeagueMatch(fixtureId: number, season: number) {
+  const live = await resolvePremierLeagueLiveFixtures([], season);
+  const fixture = live.fixtures.find((row: any) => Number(row.id || 0) === fixtureId || Number(row.fplFixtureId || 0) === fixtureId);
+  if (!fixture) return null;
+  return {
+    league: FOOTBALL_LEAGUES["premier-league"],
+    season,
+    coverage: { fixtures: {} },
+    fixture,
+    rawFixture: null,
+    events: [],
+    lineups: [],
+    statistics: [],
+    halfStatistics: [],
+    players: [],
+    prediction: null,
+    headToHead: [],
+    injuries: [],
+    refreshAfterSeconds: 30,
+    source: "fpl-fallback",
+    warning: "Live scores are available from the official Premier League feed; detailed API-Football match intelligence will return when its feed reconnects.",
   };
 }
 
@@ -456,8 +671,41 @@ export function registerFootballDataRoutes(app: Express) {
         params.next = Math.max(1, Math.min(40, Number(req.query.limit || 20)));
         ttl = 5 * 60;
       }
-      const result = await cachedProvider("fixtures", params, ttl);
-      return res.json({ league: league.config, season, status, round: round || null, fixtures: responseRows(result.payload).map(normalizeFixture), cached: result.cached });
+      let result: any = null;
+      let providerFailure: any = null;
+      try {
+        result = await cachedProvider("fixtures", params, ttl);
+      } catch (error: any) {
+        if (league.config.id !== 39 || status !== "live" || round) throw error;
+        providerFailure = error;
+        console.warn("[football-data] Premier League live provider failed; checking saved/FPL matches:", error?.message || error);
+      }
+
+      let fixtures = result ? responseRows(result.payload).map(normalizeFixture) : [];
+      let fallback = false;
+      if (league.config.id === 39 && status === "live" && !round) {
+        const live = await resolvePremierLeagueLiveFixtures(fixtures, season);
+        fixtures = live.fixtures;
+        fallback = live.usedFallback || Boolean(providerFailure) || Boolean(result?.stale);
+        if (providerFailure && !fixtures.length) throw providerFailure;
+      }
+
+      const warning = fallback
+        ? "API-Football is temporarily unavailable; official Premier League/FPL live scores and saved match details are being shown."
+        : result?.warning || null;
+      return res.json({
+        league: league.config,
+        season,
+        status,
+        round: round || null,
+        fixtures,
+        cached: Boolean(result?.cached),
+        stale: Boolean(result?.stale || providerFailure),
+        fallback,
+        source: fallback ? "fpl-fallback" : "api-football",
+        updatedAt: result?.updatedAt || new Date().toISOString(),
+        warning,
+      });
     } catch (error: any) {
       return publicError(res, error, "Could not load fixtures");
     }
@@ -487,11 +735,15 @@ export function registerFootballDataRoutes(app: Express) {
     if (!league) return res.status(404).json({ message: "Unsupported league" });
     const fixtureId = Number(req.params.fixtureId || 0);
     if (!fixtureId) return res.status(400).json({ message: "Invalid fixture" });
+    const season = requestedSeason(req.query.season);
     try {
-      const season = requestedSeason(req.query.season);
       const base = await cachedProvider("fixtures", { id: fixtureId }, 20);
       const fixtureRow = responseRows(base.payload)[0];
-      if (!fixtureRow) return res.status(404).json({ message: "Fixture not found" });
+      if (!fixtureRow) {
+        const fallback = league.config.id === 39 ? await fallbackPremierLeagueMatch(fixtureId, season) : null;
+        if (fallback) return res.json(fallback);
+        return res.status(404).json({ message: "Fixture not found" });
+      }
       const ttl = fixtureTtl(fixtureRow);
       const coverage = await coverageFor(league.config.id, season);
       const fixtureCoverage = coverage.coverage?.fixtures || {};
@@ -533,6 +785,10 @@ export function registerFootballDataRoutes(app: Express) {
         refreshAfterSeconds: ttl,
       });
     } catch (error: any) {
+      if (league.config.id === 39) {
+        const fallback = await fallbackPremierLeagueMatch(fixtureId, season).catch(() => null);
+        if (fallback) return res.json(fallback);
+      }
       return publicError(res, error, "Could not load match intelligence");
     }
   });

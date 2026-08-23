@@ -72,6 +72,11 @@ requireText(route, "coverage.coverage?.predictions", "predictions must be gated 
 requireText(route, "coverage.coverage?.injuries", "injuries must be gated by coverage");
 requireText(route, "fixtureCoverage.statistics_players", "player match stats must be gated by fixture coverage");
 requireText(route, "app.api_football_site_cache", "public API-Football data must be database cached");
+requireText(route, "API_FOOTBALL_STALE_CACHE_FALLBACK_V1", "expired API-Football cache is not retained during provider failures");
+requireText(route, "FPL_LIVE_FIXTURE_FALLBACK_V1", "Premier League live fixtures do not have an official FPL fallback");
+requireText(route, "app.api_football_fixtures", "saved API-Football fixture identities are not available to the live fallback");
+requireText(route, "fplApi.getLiveGames()", "live Match Centre does not share the header's official Premier League feed");
+requireText(route, "fallbackPremierLeagueMatch", "fallback live fixtures cannot open a match report");
 rejectText(route, 'cachedProvider("odds"', "betting odds must not be exposed by Fantasy Arena's football data centre");
 rejectText(route, 'cachedProvider("odds/live"', "live betting odds must not be exposed by Fantasy Arena's football data centre");
 
@@ -126,6 +131,9 @@ for (const marker of [
 
 requireText(centre, 'type LeagueKey = "premier-league";', "Data Centre is not locked to Premier League");
 requireText(centre, '{ key: "premier-league", name: "Premier League"', "Premier League Data Centre selector/config is missing");
+requireText(centre, "fixtures.isError", "Match Centre hides football-provider errors as empty fixture lists");
+requireText(centre, "Official Premier League backup feed active", "Match Centre does not explain when the FPL backup feed is being used");
+requireText(centre, "Live match feed unavailable", "Match Centre does not explain an unavailable live feed");
 requireText(sidebar, '{ title: "Premier League", href: "/premier-league"', "sidebar still labels the page generically as Leagues");
 requireText(liveDock, '>Premier League</Button>', "live dock still labels the route as Live Leagues");
 requireText(routeScene, 'label: "PREMIER LEAGUE"', "Premier League route scene still uses multi-league wording");
