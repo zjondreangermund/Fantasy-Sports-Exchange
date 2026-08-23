@@ -7,6 +7,7 @@ export const TOURNAMENT_UTILITY_POSITIONS = ["DEF", "MID", "FWD"] as const;
 export const TOURNAMENT_CARD_COUNT = 5;
 export const CAPTAIN_MULTIPLIER = 1.1;
 export const CAPTAIN_BONUS_PERCENT = 10;
+export const SCORE_PRECISION_DECIMALS = 4;
 export const PREMIER_LEAGUE_ONLY = true;
 export const TOURNAMENT_SETTLEMENT_DAY = "Tuesday";
 export const TOURNAMENT_SETTLEMENT_TIME_CAT = "23:59";
@@ -117,6 +118,15 @@ export const RARITY_FOOTBALL_POINT_MULTIPLIERS = {
 export const TOURNAMENT_TIEBREAK_ORDER = [
   "total_score",
   "captain_points",
+  "combined_match_rating",
+  "goals_scored",
+  "assists",
+  "key_passes",
+  "shots_on_target",
+  "defensive_actions",
+  "goalkeeper_saves",
+  "completed_passes",
+  "minutes_played",
   "lower_squad_value",
   "card_xp",
   "rarity_prestige",
@@ -136,21 +146,32 @@ export const PLAYER_SCORE_RULES = {
     minutes60Plus: 25,
     minutes30To59: 15,
     minutes1To29: 10,
+    minutePlayed: 0.013,
     fplBonusMultiplier: 3,
     multiCategoryContribution: 5,
   },
   detailedPerformance: {
     completedPassesPerPoint: 12,
     completedPassesMax: 8,
+    passingAccuracyPercent: 0.011,
+    matchRating: 0.37,
     keyPass: 2.2,
     tackle: 1.4,
     interception: 1.6,
     duelWon: 0.65,
+    duelLost: -0.11,
     shotOnTarget: 1.5,
+    shotOffTarget: 0.23,
     successfulDribble: 1,
+    unsuccessfulDribble: -0.17,
     block: 0.8,
     foulDrawn: 0.5,
     foulCommitted: -0.5,
+    goalkeeperSave: 0.37,
+    penaltyWon: 1.75,
+    penaltyConceded: -1.25,
+    penaltyScored: 0.75,
+    offside: -0.09,
   },
   fallbackPerformance: {
     ictPerPoint: 10,

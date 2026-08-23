@@ -182,8 +182,31 @@ export class ScoreUpdateService {
   private scoringSnapshot(entry: any, cards: any[], cardScores: any[], gameWeek: number, final: boolean, settlementAt: Date | null) {
     const captainId = Number(entry?.captainId || 0);
     const captainScore = cardScores.find((score: any) => Number(score?.card_id || 0) === captainId);
-    const baseTotal = cardScores.reduce((sum: number, score: any) => sum + toNumber(score?.total_score), 0);
+    const baseTotal = Math.round(cardScores.reduce((sum: number, score: any) => sum + toNumber(score?.total_score), 0) * 10000) / 10000;
     const totalScore = calculateLineupScore(cardScores, captainId);
+    const footballMetrics = cardScores.reduce((totals: any, score: any) => {
+      const metrics = score?.football_metrics || {};
+      totals.providerRatingTotal += toNumber(metrics.match_rating);
+      totals.goalsScored += toNumber(metrics.goals);
+      totals.assists += toNumber(metrics.assists);
+      totals.keyPasses += toNumber(metrics.key_passes);
+      totals.shotsOnTarget += toNumber(metrics.shots_on_target);
+      totals.defensiveActions += toNumber(metrics.defensive_actions);
+      totals.goalkeeperSaves += toNumber(metrics.goalkeeper_saves);
+      totals.completedPasses += toNumber(metrics.completed_passes);
+      totals.minutesPlayed += toNumber(metrics.minutes);
+      return totals;
+    }, {
+      providerRatingTotal: 0,
+      goalsScored: 0,
+      assists: 0,
+      keyPasses: 0,
+      shotsOnTarget: 0,
+      defensiveActions: 0,
+      goalkeeperSaves: 0,
+      completedPasses: 0,
+      minutesPlayed: 0,
+    });
     const unresolvedCardIds = cardScores.filter((score: any) => Number(score?.element_id || 0) <= 0).map((score: any) => Number(score?.card_id || 0)).filter(Boolean);
     const complete = cards.length === 5 && cardScores.length === 5 && unresolvedCardIds.length === 0;
     const updatedAt = new Date().toISOString();
@@ -202,7 +225,17 @@ export class ScoreUpdateService {
       captainMultiplier: 1.1,
       baseTotal,
       captainBasePoints: toNumber(captainScore?.total_score),
-      captainBonus: Math.round((totalScore - baseTotal) * 100) / 100,
+      scoringPrecision: 4,
+      providerRatingTotal: Math.round(footballMetrics.providerRatingTotal * 10000) / 10000,
+      goalsScored: footballMetrics.goalsScored,
+      assists: footballMetrics.assists,
+      keyPasses: footballMetrics.keyPasses,
+      shotsOnTarget: footballMetrics.shotsOnTarget,
+      defensiveActions: footballMetrics.defensiveActions,
+      goalkeeperSaves: footballMetrics.goalkeeperSaves,
+      completedPasses: footballMetrics.completedPasses,
+      minutesPlayed: footballMetrics.minutesPlayed,
+      captainBonus: Math.round((totalScore - baseTotal) * 10000) / 10000,
       totalScore,
       squadValue: Math.round(cards.reduce((sum: number, card: any) => sum + this.cardValue(card), 0) * 100) / 100,
       totalXp: cards.reduce((sum: number, card: any) => sum + toNumber(card?.xp), 0),
@@ -214,6 +247,7 @@ export class ScoreUpdateService {
         elementId: Number(score?.element_id || 0),
         score: toNumber(score?.total_score),
         breakdown: score?.breakdown || null,
+        footballMetrics: score?.football_metrics || null,
         reasons: Array.isArray(score?.reasons) ? score.reasons : [],
       })),
     };

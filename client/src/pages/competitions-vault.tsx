@@ -101,7 +101,7 @@ type TournamentTeamDetails = {
 
 const emptyLineup = (): Array<number | null> => [null, null, null, null, null];
 const money = (value: unknown) => `N$${Number(value || 0).toFixed(2)}`;
-const scoreLabel = (value: unknown) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const scoreLabel = (value: unknown) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 4 });
 const tier = (value: unknown) => normalizeTournamentRarity(value);
 const normalizeLeague = (value: unknown) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 const isPremierLeague = (value: unknown) => ["premierleague", "englishpremierleague", "epl"].includes(normalizeLeague(value));

@@ -160,6 +160,15 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
               order by
                 coalesce(ce.total_score, 0) desc,
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'captainBasePoints', '')::float, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'providerRatingTotal', '')::float, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'goalsScored', '')::float, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'assists', '')::float, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'keyPasses', '')::float, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'shotsOnTarget', '')::float, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'defensiveActions', '')::float, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'goalkeeperSaves', '')::float, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'completedPasses', '')::float, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'minutesPlayed', '')::float, 0) desc,
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'squadValue', '')::float, 0) asc,
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'totalXp', '')::float, 0) desc,
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'rarityPrestige', '')::float, 0) desc,
@@ -289,7 +298,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         const points = Number(saved?.score ?? calculated?.total_score ?? 0);
         const captain = Number(card.cardId) === captainId;
         const captainBonus = captain
-          ? Number(snapshot?.captainBonus ?? Math.round(points * 0.1 * 100) / 100)
+          ? Number(snapshot?.captainBonus ?? Math.round(points * 0.1 * 10000) / 10000)
           : 0;
         const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";
 
@@ -307,7 +316,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           captain,
           points,
           captainBonus,
-          contribution: Math.round((points + captainBonus) * 100) / 100,
+          contribution: Math.round((points + captainBonus) * 10000) / 10000,
           breakdown: saved?.breakdown || calculated?.breakdown || {
             decisive: 0, performance: 0, penalties: 0, bonus: 0,
           },
