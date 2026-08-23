@@ -318,8 +318,9 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
               : String(saved?.identityMessage || `Verified official Premier League player: ${canonical?.name || card.name}.`);
         const points = Number(saved?.score ?? calculated?.total_score ?? 0);
         const captain = Number(card.cardId) === captainId;
+        const calculatedCaptainBonus = Math.round(points * 0.1 * 10000) / 10000;
         const captainBonus = captain
-          ? Number(snapshot?.captainBonus ?? Math.round(points * 0.1 * 10000) / 10000)
+          ? Number(snapshot?.final === true ? snapshot?.captainBonus ?? calculatedCaptainBonus : calculatedCaptainBonus)
           : 0;
         const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";
 
@@ -353,6 +354,12 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           source: saved ? "official-gameweek-snapshot" : calculated ? "live-fpl-fallback" : "awaiting-match-data",
         };
       });
+      const calculatedTotalScore = Math.round(
+        players.reduce((total: number, player: any) => total + Number(player.contribution || 0), 0) * 10000,
+      ) / 10000;
+      const storedTotalScore = Number(entry.totalScore || 0);
+      const scoreReconciliationRequired = snapshot?.final !== true
+        && Math.abs(storedTotalScore - calculatedTotalScore) > 0.00005;
 
       return res.json({
         entryId: Number(entry.entryId),
@@ -360,9 +367,11 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         competitionName: String(entry.competitionName || "Tournament"),
         gameWeek: Number(entry.gameWeek || 0),
         teamName: String(entry.teamName || "Manager"),
-        totalScore: Number(entry.totalScore || 0),
+        totalScore: snapshot?.final === true ? storedTotalScore : calculatedTotalScore,
+        storedTotalScore,
+        scoreReconciliationRequired,
         captainId,
-        captainBonus: Number(snapshot?.captainBonus || 0),
+        captainBonus: Math.round(players.reduce((total: number, player: any) => total + Number(player.captainBonus || 0), 0) * 10000) / 10000,
         updatedAt: snapshot?.updatedAt || null,
         finalized: Boolean(snapshot?.final),
         players,
