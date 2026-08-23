@@ -234,6 +234,7 @@ export default function FootballDataCentre() {
 
   const fixtureRows = Array.isArray(fixtures.data?.fixtures) ? fixtures.data.fixtures : [];
   const roundRows = Array.isArray(rounds.data?.rounds) ? rounds.data.rounds : [];
+  const fixtureError = fixtures.error instanceof Error ? fixtures.error.message : "The live match provider could not be reached.";
 
   const selectLeague = (next: LeagueKey) => {
     setLeagueKey(next);
@@ -285,17 +286,47 @@ export default function FootballDataCentre() {
             </div>
           </div>
 
+          {fixtures.data?.warning ? (
+            <Card className="flex items-start gap-3 border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+              <div>
+                <div className="font-semibold">Official Premier League backup feed active</div>
+                <div className="mt-1 text-amber-100/80">{fixtures.data.warning}</div>
+              </div>
+            </Card>
+          ) : null}
+
+          {fixtures.isError && fixtureRows.length > 0 ? (
+            <Card className="flex items-center justify-between gap-3 border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+              <span>Live match updates are temporarily unavailable. Previously loaded matches are still shown.</span>
+              <Button size="sm" variant="outline" onClick={() => fixtures.refetch()}>Retry</Button>
+            </Card>
+          ) : null}
+
           <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
             <div className="space-y-2">
               {fixtures.isLoading ? [1,2,3,4].map((item) => <Skeleton key={item} className="h-24 w-full" />) : fixtureRows.length ? fixtureRows.map((fixture: any) => (
                 <button key={fixture.id} type="button" onClick={() => setSelectedFixtureId(Number(fixture.id))} className={`w-full rounded-xl border p-4 text-left transition ${Number(fixture.id) === selectedFixtureId ? "border-violet-400 bg-violet-500/10" : "border-white/10 bg-black/20 hover:bg-white/5"}`}>
-                  <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{fixture.round || selectedCompetition.name}</span><Badge variant="outline">{fixture.status}</Badge></div>
+                  <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{fixture.round || selectedCompetition.name}</span><Badge variant="outline">{fixture.elapsed > 0 ? `${fixture.elapsed}'` : fixture.status}</Badge></div>
                   <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 font-bold"><span className="truncate">{fixture.homeTeam?.name}</span><span className="rounded bg-black/30 px-2 py-1 text-center">{fixture.homeTeam?.score ?? "-"} : {fixture.awayTeam?.score ?? "-"}</span><span className="truncate text-right">{fixture.awayTeam?.name}</span></div>
                   <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground"><Clock className="h-3 w-3" />{formatDate(fixture.kickoffTime)}</div>
                 </button>
-              )) : <Card className="p-6 text-sm text-muted-foreground">No fixtures returned for this selection.</Card>}
+              )) : fixtures.isError ? (
+                <Card className="space-y-3 border-amber-500/30 bg-amber-500/10 p-5 text-sm">
+                  <div className="flex items-center gap-2 font-semibold text-amber-200"><AlertTriangle className="h-4 w-4" /> Live match feed unavailable</div>
+                  <p className="text-muted-foreground">{fixtureError}</p>
+                  <Button size="sm" variant="outline" onClick={() => fixtures.refetch()}>Retry live feed</Button>
+                </Card>
+              ) : <Card className="p-6 text-sm text-muted-foreground">{fixtureStatus === "live" && !selectedRound ? "No live Premier League matches are currently in progress." : "No fixtures returned for this selection."}</Card>}
             </div>
-            <MatchIntelligence data={match.data} loading={match.isLoading} onPlayer={(id) => setSelectedPlayerId(id)} />
+            {match.isError && !match.data ? (
+              <Card className="flex min-h-[18rem] flex-col items-center justify-center gap-3 border-amber-500/30 p-8 text-center">
+                <AlertTriangle className="h-6 w-6 text-amber-300" />
+                <div className="font-semibold">Detailed match intelligence is temporarily unavailable.</div>
+                <div className="text-sm text-muted-foreground">{match.error instanceof Error ? match.error.message : "The live provider could not return this fixture."}</div>
+                <Button size="sm" variant="outline" onClick={() => match.refetch()}>Retry match details</Button>
+              </Card>
+            ) : <MatchIntelligence data={match.data} loading={match.isLoading} onPlayer={(id) => setSelectedPlayerId(id)} />}
           </div>
           {selectedPlayerId ? <PlayerProfile data={playerProfile.data} loading={playerProfile.isLoading} /> : null}
         </TabsContent>
@@ -359,6 +390,12 @@ function MatchIntelligence({ data, loading, onPlayer }: { data: any; loading: bo
 
   return (
     <Card className="space-y-5 overflow-hidden p-4 sm:p-5">
+      {data.warning ? (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+          <span>{data.warning}</span>
+        </div>
+      ) : null}
       <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
         <div className="text-center text-xs uppercase tracking-[.18em] text-muted-foreground">{fixture.round}</div>
         <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center"><div className="font-black">{fixture.homeTeam?.name}</div><div className="rounded-lg bg-black/30 px-4 py-2 text-2xl font-black">{fixture.homeTeam?.score ?? "-"} : {fixture.awayTeam?.score ?? "-"}</div><div className="font-black">{fixture.awayTeam?.name}</div></div>
