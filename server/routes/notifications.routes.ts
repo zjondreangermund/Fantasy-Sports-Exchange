@@ -116,6 +116,10 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
       const notifications = rowsOf(await db.execute(sql`
         select n.id, n.user_id as "userId", n.type::text as type, n.title, n.message, n.read,
                n.created_at as "createdAt",
+               case when n.dedupe_key like 'community-mention:%'
+                 then split_part(n.dedupe_key, ':', 2)::bigint else null end as "communityMessageId",
+               case when n.dedupe_key like 'community-mention:%'
+                 then 'community_mention' else null end as "notificationKind",
                pr.id as "replacementClaimId",
                pr.rarity as "replacementRarity",
                pr.source_card_id as "replacementSourceCardId",

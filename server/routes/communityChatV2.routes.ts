@@ -1,6 +1,7 @@
 import type { Express, Response } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
 
 type CommunityChatV2Deps = {
   requireAuth: any;
@@ -76,6 +77,15 @@ function mentionsIn(value: string) {
   const mentions = new Set<string>();
   for (const match of value.matchAll(/(?:^|\s)@([a-z0-9_]{2,30})/gi)) mentions.add(match[1]);
   return Array.from(mentions).slice(0, 12);
+}
+
+function normalizeMentionHandle(value: unknown) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9_]/g, "")
+    .slice(0, 30)
+    .toLocaleLowerCase("en");
 }
 
 function iso(value: unknown) {
@@ -197,6 +207,39 @@ function broadcast(message: ChatMessage) {
   }
 }
 
+// COMMUNITY_MENTION_NOTIFICATION_V1: one durable, user-specific alert per message.
+async function notifyMentionedManagers(message: ChatMessage) {
+  const handles = Array.from(new Set(message.mentions.map(normalizeMentionHandle).filter(Boolean)));
+  if (!handles.length || !message.id || message.deletedAt) return;
+
+  await ensureNotificationsSchema();
+  const recipients = rowsOf(await db.execute(sql`
+    SELECT id,
+      COALESCE(NULLIF(btrim(manager_team_name), ''), NULLIF(btrim(name), ''),
+        split_part(COALESCE(email, ''), '@', 1), 'Arena Manager') AS "teamName"
+    FROM app.users
+    WHERE id <> ${message.userId}
+      AND lower(left(regexp_replace(
+        regexp_replace(btrim(COALESCE(NULLIF(btrim(manager_team_name), ''),
+          NULLIF(btrim(name), ''), split_part(COALESCE(email, ''), '@', 1),
+          'Arena Manager')), '[[:space:]]+', '_', 'g'),
+        '[^A-Za-z0-9_]', '', 'g'), 30)) IN (
+          SELECT lower(mention_handle.handle)
+          FROM jsonb_array_elements_text(${JSON.stringify(handles)}::jsonb)
+            AS mention_handle(handle)
+        )
+  `));
+
+  for (const recipient of recipients) {
+    await createNotificationOnce(db, {
+      userId: String(recipient.id || ""),
+      title: `${message.teamName} mentioned you in Community Live`,
+      message: message.message,
+      dedupeKey: `community-mention:${message.id}:${recipient.id}`,
+    });
+  }
+}
+
 async function ensureUser(req: any) {
   const userId = String(req.authUserId || "");
   await db.execute(sql`
@@ -241,6 +284,23 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
     }
   });
 
+  app.get("/community-live/messages/:id", requireAuth, async (req: any, res) => {
+    try {
+      await ensureSchema();
+      const messageId = Number(req.params.id);
+      if (!Number.isInteger(messageId) || messageId <= 0) {
+        return res.status(400).json({ message: "Valid message required" });
+      }
+      const message = await loadMessage(messageId, String(req.authUserId || ""));
+      if (!message) return res.status(404).json({ message: "Community message not found" });
+      res.setHeader("Cache-Control", "private, no-store");
+      return res.json({ message });
+    } catch (error) {
+      console.error("Community Live message lookup failed:", error);
+      return res.status(500).json({ message: "Failed to load community message" });
+    }
+  });
+
   app.post("/community-live/messages", requireAuth, async (req: any, res) => {
     try {
       if (!sameOrigin(req)) return res.status(403).json({ message: "Request origin is not allowed" });
@@ -264,6 +324,9 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
       const chatMessage = await loadMessage(Number(inserted?.id || 0), userId);
       if (!chatMessage) throw new Error("Failed to load created message");
       await db.execute(sql`INSERT INTO app.audit_logs (user_id, action, meta) VALUES (${userId}, 'community.message.created', ${JSON.stringify({ messageId: chatMessage.id, replyToId })}::jsonb)`);
+      await notifyMentionedManagers(chatMessage).catch((error) => {
+        console.error("Community Live mention notification failed:", error);
+      });
       broadcast(chatMessage);
       return res.status(201).json({ message: chatMessage });
     } catch (error) {
@@ -292,6 +355,9 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
       const chatMessage = await loadMessage(messageId, userId);
       if (!chatMessage) throw new Error("Failed to load edited message");
       await db.execute(sql`INSERT INTO app.audit_logs (user_id, action, meta) VALUES (${userId}, 'community.message.edited', ${JSON.stringify({ messageId })}::jsonb)`);
+      await notifyMentionedManagers(chatMessage).catch((error) => {
+        console.error("Community Live edited mention notification failed:", error);
+      });
       broadcast(chatMessage);
       return res.json({ message: chatMessage });
     } catch (error) {
