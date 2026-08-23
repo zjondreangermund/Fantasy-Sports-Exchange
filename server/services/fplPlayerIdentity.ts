@@ -1,4 +1,4 @@
-// STRICT_PLAYER_IDENTITY_FIX_V2
+// STRICT_PLAYER_IDENTITY_FIX_V3_POSITION_LOCK
 export type FplPosition = "GK" | "DEF" | "MID" | "FWD";
 
 export const FPL_POSITION_BY_ELEMENT_TYPE: Record<number, FplPosition> = {
@@ -96,7 +96,20 @@ export function strongPlayerNameMatch(left: unknown, right: unknown): boolean {
   return bTokens.slice(1).some((token) => token.length > 1 && surnamesA.has(token));
 }
 
+function normalizedPlayerPosition(value: unknown): FplPosition | "" {
+  const position = String(value || "").trim().toUpperCase();
+  return position === "GK" || position === "DEF" || position === "MID" || position === "FWD"
+    ? position as FplPosition
+    : "";
+}
+
+function positionCompatible(player: any, element: any): boolean {
+  const storedPosition = normalizedPlayerPosition(player?.position);
+  return !storedPosition || fplPlayerPosition(element) === storedPosition;
+}
+
 function playerMatchesElement(player: any, element: any): boolean {
+  if (!positionCompatible(player, element)) return false;
   const names = normalizedNames(player);
   const elementNames = [fplPlayerFullName(element), element?.web_name]
     .map(normalizePlayerText)

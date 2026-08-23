@@ -99,6 +99,20 @@ async function ensureReplacementLedger(client) {
 async function repairActivePlayer(client, playerId, identity, element) {
   const canonicalPosition = positionOf(identity.position);
   if (!canonicalPosition) throw new Error(`Invalid official position for player ${playerId}`);
+  const currentPlayer = rows(await client.query(`
+    select position::text as position, name, team
+    from app.players where id=$1 limit 1
+  `, [playerId]))[0];
+  const storedPosition = positionOf(currentPlayer?.position);
+  if (storedPosition && storedPosition !== canonicalPosition) {
+    console.warn(
+      `PLAYER_POSITION_REPAIR_BLOCKED playerId=${playerId}`
+      + ` stored=${storedPosition} provider=${canonicalPosition}`
+      + ` storedName="${String(currentPlayer?.name || "")}"`
+      + ` providerName="${String(identity?.name || "")}"`,
+    );
+    return 0;
+  }
   const requestedFplId = element ? Number(element.id || 0) || null : null;
   const requestedCode = element ? Number(element.code || 0) || null : null;
   const providerConflicts = rows(await client.query(`

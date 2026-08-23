@@ -78,19 +78,24 @@ function PremiumFootballCardBase({
     const verifiedImage = identityVerified ? data?.player?.imageUrl || undefined : undefined;
     if (!data) return player;
 
+    const payloadPosition = String(player.position || "").trim().toUpperCase();
+    const profilePosition = String(data.player?.position || "").trim().toUpperCase();
+    const profilePositionMatches = !payloadPosition || !profilePosition || payloadPosition === profilePosition;
+    const useProfileIdentity = identityVerified && profilePositionMatches;
+
     return {
       ...player,
-      name: data.player?.name || player.name,
-      team: data.player?.team || player.team,
-      club: data.player?.team || player.club,
-      position: data.player?.position || player.position,
-      totalPoints: data.stats?.totalPoints ?? player.totalPoints,
-      image: verifiedImage || player.image,
-      imageUrl: verifiedImage || player.imageUrl,
-      photo: verifiedImage || player.photo,
-      imageCandidates: verifiedImage ? [verifiedImage] : player.imageCandidates,
-      statsVerified: identityVerified ? true : player.statsVerified,
-      apiFootballId: data.player?.apiFootballId || (player as any).apiFootballId,
+      name: useProfileIdentity ? (data.player?.name || player.name) : player.name,
+      team: useProfileIdentity ? (data.player?.team || player.team) : player.team,
+      club: useProfileIdentity ? (data.player?.team || player.club) : player.club,
+      position: useProfileIdentity ? (data.player?.position || player.position) : player.position,
+      totalPoints: useProfileIdentity ? (data.stats?.totalPoints ?? player.totalPoints) : player.totalPoints,
+      image: useProfileIdentity ? (verifiedImage || player.image) : player.image,
+      imageUrl: useProfileIdentity ? (verifiedImage || player.imageUrl) : player.imageUrl,
+      photo: useProfileIdentity ? (verifiedImage || player.photo) : player.photo,
+      imageCandidates: useProfileIdentity && verifiedImage ? [verifiedImage] : player.imageCandidates,
+      statsVerified: useProfileIdentity ? true : player.statsVerified,
+      apiFootballId: useProfileIdentity ? (data.player?.apiFootballId || (player as any).apiFootballId) : (player as any).apiFootballId,
     } as PlayerCardData;
   }, [data, player]);
 
