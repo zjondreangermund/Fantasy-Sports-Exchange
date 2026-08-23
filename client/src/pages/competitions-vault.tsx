@@ -18,7 +18,7 @@ import {
   TOURNAMENT_UTILITY_POSITIONS,
   type TournamentRarity,
 } from "../../../shared/game-rules";
-import { CalendarDays, CheckCircle2, Clock3, Crown, Filter, Gift, KeyRound, Lock, Plus, ShieldCheck, Trophy, Users } from "lucide-react";
+import { Activity, CalendarDays, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock3, Crown, Eye, Filter, Gift, KeyRound, Lock, Plus, ShieldCheck, Trophy, Users } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 
 const rarityOrder: TournamentRarity[] = ["common", "rare", "unique", "epic", "legendary"];
@@ -50,9 +50,58 @@ type VaultSummary = {
   entrantsToNext?: number;
 };
 type VaultPayload = { summary?: Record<string, VaultSummary> };
+type TournamentLeaderboardEntry = {
+  entryId: number;
+  userId?: string;
+  teamName: string;
+  totalScore: number;
+  rank: number;
+  captainId?: number | null;
+};
+type TournamentLeaderboardPayload = {
+  leaderboard: TournamentLeaderboardEntry[];
+  viewerEntry?: TournamentLeaderboardEntry | null;
+  totalEntries: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+type TournamentScoreReason = {
+  label: string;
+  points: number;
+  category: string;
+};
+type TournamentTeamPlayer = {
+  cardId: number;
+  name: string;
+  team: string;
+  position: string;
+  rarity: string;
+  imageUrl?: string | null;
+  captain: boolean;
+  points: number;
+  captainBonus: number;
+  contribution: number;
+  minutes: number;
+  source: string;
+  breakdown: { decisive: number; performance: number; penalties: number; bonus: number };
+  reasons: TournamentScoreReason[];
+};
+type TournamentTeamDetails = {
+  entryId: number;
+  competitionName: string;
+  gameWeek: number;
+  teamName: string;
+  totalScore: number;
+  captainBonus: number;
+  updatedAt?: string | null;
+  finalized: boolean;
+  players: TournamentTeamPlayer[];
+};
 
 const emptyLineup = (): Array<number | null> => [null, null, null, null, null];
 const money = (value: unknown) => `N$${Number(value || 0).toFixed(2)}`;
+const scoreLabel = (value: unknown) => Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const tier = (value: unknown) => normalizeTournamentRarity(value);
 const normalizeLeague = (value: unknown) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 const isPremierLeague = (value: unknown) => ["premierleague", "englishpremierleague", "epl"].includes(normalizeLeague(value));
@@ -280,6 +329,7 @@ export default function CompetitionsVaultPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/competitions/leaderboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/competitions/my-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/prize-vault"] });
       closeBuilder();
@@ -363,8 +413,178 @@ function TournamentCard({ comp, vault, entryCount, onEnter }: { comp: Tournament
   const submissionClosesAt = comp.submissionClosesAt || comp.submission_closes_at;
   const settlementAt = comp.settlementAt || comp.settlement_at || comp.endDate || comp.end_date;
   const entryLockLabel = submissionClosesAt ? dateLabel(submissionClosesAt) : "First PL kickoff";
-  return <Card className={`relative overflow-hidden rounded-[2rem] border bg-gradient-to-br ${t.gradient} p-5 text-white`} style={{ borderColor: `${t.accent}55`, boxShadow: `0 0 35px ${t.glow},0 24px 60px rgba(0,0,0,.45)` }}><div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,.12)_18%,transparent_38%)]" /><div className="relative"><div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[.2em]" style={{ color: t.accent }}>{r} tournament</div><h2 className="mt-2 text-2xl font-black">{comp.name}</h2></div><Badge className="capitalize" style={{ background: `${t.accent}22`, color: t.accent }}>{status}</Badge></div><div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3"><div className="text-[9px] font-black uppercase tracking-[.15em] text-white/40">Cards required</div><div className="mt-1 text-sm font-black" style={{ color: t.accent }}>{requirement.shortLabel}</div></div><div className="mt-4 grid grid-cols-2 gap-2"><Metric label="Entry" value={money(comp.entryFee ?? comp.entry_fee)} /><Metric label="Tournament entries" value={maxEntries ? `${tournamentEntries}/${maxEntries}` : String(tournamentEntries)} /><Metric label="My submitted teams" value={String(entryCount)} /><Metric label="Shared vault entries" value={`${sharedEntries}/${target || 0}`} /><Metric label="Current prize" value={prizeTitle} /><Metric label="Entry lock" value={entryLockLabel} /><Metric label="Settlement" value={dateLabel(settlementAt)} /></div><div className="mt-3 rounded-xl border border-amber-300/15 bg-amber-300/10 p-3 text-[11px] leading-5 text-amber-100">Only Premier League points recorded for this gameweek before Tuesday settlement count. FA Cup matches and Premier League fixtures played after settlement are excluded.</div><div className="mt-4"><div className="flex justify-between text-xs text-white/55"><span>Shared {r} Prize Vault progress</span><b>{p}%</b></div><div className="mt-2 h-3 overflow-hidden rounded-full bg-black/40"><div className="h-full rounded-full" style={{ width: `${p}%`, background: t.accent, boxShadow: `0 0 18px ${t.glow}` }} /></div><div className="mt-4 flex gap-2"><Link href={`/prize-vault?rarity=${r}`} className="flex-1"><Button variant="outline" className="w-full border-white/15 bg-black/20 text-white"><Gift className="mr-2 h-4 w-4" />Prize ladder</Button></Link><Button onClick={onEnter} disabled={!canEnter} className="flex-1 font-black" style={{ background: canEnter ? t.accent : "#334155", color: r === "legendary" && canEnter ? "#111827" : "white" }}>{!canEnter ? <><Lock className="mr-2 h-4 w-4" />Closed</> : entryCount > 0 ? "Enter another team" : "Enter"}</Button></div></div></div></Card>;
+  return <Card className={`relative overflow-hidden rounded-[2rem] border bg-gradient-to-br ${t.gradient} p-5 text-white`} style={{ borderColor: `${t.accent}55`, boxShadow: `0 0 35px ${t.glow},0 24px 60px rgba(0,0,0,.45)` }}><div className="absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,.12)_18%,transparent_38%)]" /><div className="relative"><div className="flex items-start justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[.2em]" style={{ color: t.accent }}>{r} tournament</div><h2 className="mt-2 text-2xl font-black">{comp.name}</h2></div><Badge className="capitalize" style={{ background: `${t.accent}22`, color: t.accent }}>{status}</Badge></div><div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3"><div className="text-[9px] font-black uppercase tracking-[.15em] text-white/40">Cards required</div><div className="mt-1 text-sm font-black" style={{ color: t.accent }}>{requirement.shortLabel}</div></div><div className="mt-4 grid grid-cols-2 gap-2"><Metric label="Entry" value={money(comp.entryFee ?? comp.entry_fee)} /><Metric label="Tournament entries" value={maxEntries ? `${tournamentEntries}/${maxEntries}` : String(tournamentEntries)} /><Metric label="My submitted teams" value={String(entryCount)} /><Metric label="Shared vault entries" value={`${sharedEntries}/${target || 0}`} /><Metric label="Current prize" value={prizeTitle} /><Metric label="Entry lock" value={entryLockLabel} /><Metric label="Settlement" value={dateLabel(settlementAt)} /></div><div className="mt-3 rounded-xl border border-amber-300/15 bg-amber-300/10 p-3 text-[11px] leading-5 text-amber-100">Only Premier League points recorded for this gameweek before Tuesday settlement count. FA Cup matches and Premier League fixtures played after settlement are excluded.</div><div className="mt-4"><div className="flex justify-between text-xs text-white/55"><span>Shared {r} Prize Vault progress</span><b>{p}%</b></div><div className="mt-2 h-3 overflow-hidden rounded-full bg-black/40"><div className="h-full rounded-full" style={{ width: `${p}%`, background: t.accent, boxShadow: `0 0 18px ${t.glow}` }} /></div><div className="mt-4 flex gap-2"><Link href={`/prize-vault?rarity=${r}`} className="flex-1"><Button variant="outline" className="w-full border-white/15 bg-black/20 text-white"><Gift className="mr-2 h-4 w-4" />Prize ladder</Button></Link><Button onClick={onEnter} disabled={!canEnter} className="flex-1 font-black" style={{ background: canEnter ? t.accent : "#334155", color: r === "legendary" && canEnter ? "#111827" : "white" }}>{!canEnter ? <><Lock className="mr-2 h-4 w-4" />Closed</> : entryCount > 0 ? "Enter another team" : "Enter"}</Button></div></div><TournamentLeaderboardPreview comp={comp} /></div></Card>;
 }
 
 function Stat({ icon: Icon, label, value }: { icon: any; label: string; value: string }) { return <div className="rounded-2xl border border-white/10 bg-black/30 p-3"><div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[.14em] text-white/40"><Icon className="h-3.5 w-3.5 text-purple-300" />{label}</div><div className="mt-2 font-black">{value}</div></div>; }
 function Metric({ label, value }: { label: string; value: string }) { return <div className="min-w-0 rounded-xl border border-white/10 bg-black/30 p-3"><div className="text-[9px] font-black uppercase tracking-[.13em] text-white/35">{label}</div><div className="mt-1 line-clamp-2 text-sm font-black">{value}</div></div>; }
+
+function TournamentLeaderboardPreview({ comp }: { comp: Tournament }) {
+  const competitionId = Number(comp.id || 0);
+  const accent = rarityTheme[tier(comp.tier)].accent;
+  const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [selectedEntry, setSelectedEntry] = useState<TournamentLeaderboardEntry | null>(null);
+  const [expandedCardId, setExpandedCardId] = useState<number | null>(null);
+  const preview = (Array.isArray(comp.entries) ? comp.entries : [])
+    .slice(0, 5)
+    .map((entry: any, index: number): TournamentLeaderboardEntry => ({
+      entryId: Number(entry.entryId || entry.id || 0),
+      userId: entry.userId,
+      teamName: String(entry.teamName || entry.userName || "Manager"),
+      totalScore: Number(entry.totalScore || 0),
+      rank: Number(entry.rank || index + 1),
+      captainId: entry.captainId || null,
+    }));
+  const totalEntries = Number(comp.entryCount ?? comp.entry_count ?? preview.length);
+
+  const { data: leaderboard, isLoading: leaderboardLoading, isError: leaderboardError } = useQuery<TournamentLeaderboardPayload>({
+    queryKey: ["/api/competitions/leaderboard", competitionId, page],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/competitions/${competitionId}/leaderboard?page=${page}&pageSize=100`,
+        { credentials: "include" },
+      );
+      if (!response.ok) throw new Error("Failed to load the tournament leaderboard");
+      return response.json();
+    },
+    enabled: open && competitionId > 0,
+    refetchInterval: open ? 30000 : false,
+  });
+
+  const { data: team, isLoading: teamLoading, isError: teamError } = useQuery<TournamentTeamDetails>({
+    queryKey: ["/api/competitions/entry-score", competitionId, selectedEntry?.entryId || 0],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/competitions/${competitionId}/entries/${selectedEntry?.entryId}`,
+        { credentials: "include" },
+      );
+      if (!response.ok) throw new Error("Failed to load the submitted team");
+      return response.json();
+    },
+    enabled: open && competitionId > 0 && Number(selectedEntry?.entryId || 0) > 0,
+    refetchInterval: open && selectedEntry ? 30000 : false,
+  });
+
+  const openEntry = (entry: TournamentLeaderboardEntry) => {
+    setSelectedEntry(entry);
+    setExpandedCardId(null);
+    setOpen(true);
+  };
+  const totalPages = Math.max(1, Number(leaderboard?.totalPages || 1));
+
+  return <>
+    <section className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-3.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[.13em] text-white/85">
+          <Trophy className="h-4 w-4" style={{ color: accent }} />Leaderboard
+        </div>
+        <span className="text-[10px] font-bold text-white/45">Top 5 • {totalEntries} teams</span>
+      </div>
+      <div className="mt-3 space-y-1.5">
+        {preview.length ? preview.map((entry) => <button
+          key={entry.entryId}
+          type="button"
+          onClick={() => openEntry(entry)}
+          className="grid w-full grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-white/[.06] bg-white/[.035] px-2.5 py-2 text-left transition hover:border-white/20 hover:bg-white/[.08]"
+        >
+          <span className="text-xs font-black" style={{ color: entry.rank <= 3 ? accent : "rgba(255,255,255,.55)" }}>#{entry.rank}</span>
+          <span className="truncate text-xs font-bold text-white">{entry.teamName}</span>
+          <span className="text-xs font-black text-emerald-200">{scoreLabel(entry.totalScore)} pts</span>
+        </button>) : <div className="rounded-xl border border-dashed border-white/10 p-3 text-center text-xs text-white/45">No teams have entered yet.</div>}
+      </div>
+      <button
+        type="button"
+        onClick={() => { setPage(1); setSelectedEntry(null); setExpandedCardId(null); setOpen(true); }}
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-white/12 bg-white/[.05] px-3 py-2 text-xs font-black text-white/80 transition hover:border-white/25 hover:bg-white/10"
+      >
+        <Eye className="h-3.5 w-3.5" />Open all {totalEntries ? `(${totalEntries})` : ""}
+      </button>
+    </section>
+
+    <Dialog open={open} onOpenChange={(value) => { setOpen(value); if (!value) setExpandedCardId(null); }}>
+      <DialogContent className="max-h-[92vh] w-[min(96vw,1240px)] max-w-6xl overflow-hidden border-white/10 bg-slate-950 p-0 text-white">
+        <div className="flex max-h-[92vh] min-h-0 flex-col">
+          <DialogHeader className="border-b border-white/10 px-5 py-4 sm:px-6">
+            <div className="text-[10px] font-black uppercase tracking-[.22em]" style={{ color: accent }}>GW{Number(comp.gameWeek || comp.game_week || 0)} • Tournament leaderboard</div>
+            <DialogTitle className="mt-1 text-xl">{String(comp.name || "Tournament")}</DialogTitle>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs text-white/55">
+              <Badge className="bg-white/10 text-white">{Number(leaderboard?.totalEntries ?? totalEntries)} entered teams</Badge>
+              <Badge className="bg-emerald-500/15 text-emerald-200"><Activity className="mr-1 h-3.5 w-3.5" />Live gameweek points</Badge>
+              <Badge className="bg-purple-500/15 text-purple-200">100 teams per page</Badge>
+            </div>
+          </DialogHeader>
+
+          <div className="grid min-h-0 flex-1 gap-0 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(360px,.78fr)] lg:overflow-hidden">
+            <section className="min-w-0 border-b border-white/10 p-4 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+              <div className="mb-3 grid grid-cols-[48px_minmax(0,1fr)_90px] gap-2 px-3 text-[10px] font-black uppercase tracking-[.15em] text-white/40">
+                <span>Rank</span><span>Entered team</span><span className="text-right">Total points</span>
+              </div>
+              {leaderboardLoading ? <div className="rounded-xl border border-white/10 p-5 text-center text-sm text-white/55">Loading leaderboard…</div>
+                : leaderboardError ? <div className="rounded-xl border border-rose-300/20 bg-rose-500/10 p-5 text-center text-sm text-rose-100">Could not load this leaderboard.</div>
+                  : leaderboard?.leaderboard?.length ? <div className="space-y-1.5">{leaderboard.leaderboard.map((entry) => <button
+                    key={entry.entryId}
+                    type="button"
+                    onClick={() => openEntry(entry)}
+                    className={`grid w-full grid-cols-[48px_minmax(0,1fr)_90px] items-center gap-2 rounded-xl border px-3 py-3 text-left transition ${Number(selectedEntry?.entryId || 0) === Number(entry.entryId) ? "border-purple-300/45 bg-purple-500/15" : "border-white/[.07] bg-white/[.035] hover:border-white/20 hover:bg-white/[.07]"}`}
+                  >
+                    <span className="text-sm font-black" style={{ color: Number(entry.rank) <= 3 ? accent : "rgba(255,255,255,.7)" }}>#{entry.rank}</span>
+                    <span className="truncate text-sm font-bold text-white">{entry.teamName}</span>
+                    <span className="text-right text-sm font-black text-emerald-200">{scoreLabel(entry.totalScore)}</span>
+                  </button>)}</div>
+                    : <div className="rounded-xl border border-dashed border-white/12 p-6 text-center text-sm text-white/50">No tournament teams have been submitted yet.</div>}
+
+              <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[.035] p-2">
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+                  <ChevronLeft className="mr-1 h-4 w-4" />Previous
+                </Button>
+                <span className="text-xs font-bold text-white/65">Page {page} of {totalPages}</span>
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>
+                  Next<ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              </div>
+            </section>
+
+            <section className="min-w-0 bg-black/20 p-4 lg:overflow-y-auto">
+              {!selectedEntry ? <div className="grid min-h-52 place-items-center rounded-2xl border border-dashed border-white/15 bg-white/[.025] p-6 text-center"><div><Users className="mx-auto h-8 w-8 text-purple-300" /><div className="mt-3 font-black">Open an entered team</div><div className="mt-1 text-sm text-white/50">Select any team to view its five-player lineup and exact scoring actions.</div></div></div>
+                : teamLoading ? <div className="rounded-xl border border-white/10 p-5 text-center text-sm text-white/55">Loading team lineup…</div>
+                  : teamError ? <div className="rounded-xl border border-rose-300/20 bg-rose-500/10 p-5 text-center text-sm text-rose-100">Could not load this team’s scoring details.</div>
+                    : team ? <>
+                      <div className="rounded-2xl border border-white/10 bg-white/[.04] p-4">
+                        <div className="text-[10px] font-black uppercase tracking-[.17em] text-purple-300">Submitted lineup</div>
+                        <div className="mt-1 text-xl font-black">{team.teamName}</div>
+                        <div className="mt-3 flex items-end justify-between gap-3"><div><div className="text-[10px] font-black uppercase tracking-[.15em] text-white/45">Total points</div><div className="mt-1 text-3xl font-black text-emerald-200">{scoreLabel(team.totalScore)}</div></div><div className="text-right text-xs text-white/50">{team.finalized ? "Final score" : "Live score"}<br />{team.updatedAt ? dateLabel(team.updatedAt) : "Awaiting match update"}</div></div>
+                        {Number(team.captainBonus || 0) !== 0 ? <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100"><Crown className="mr-1 inline h-3.5 w-3.5" />Captain bonus: +{scoreLabel(team.captainBonus)} points</div> : null}
+                      </div>
+
+                      <div className="mt-4 space-y-2.5">{team.players.map((player) => {
+                        const expanded = expandedCardId === Number(player.cardId);
+                        const initials = player.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+                        return <div key={player.cardId} className={`overflow-hidden rounded-2xl border ${expanded ? "border-purple-300/35 bg-purple-500/[.08]" : "border-white/10 bg-white/[.04]"}`}>
+                          <button type="button" onClick={() => setExpandedCardId(expanded ? null : Number(player.cardId))} className="flex w-full items-center gap-3 p-3 text-left">
+                            <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/10 bg-black/40 text-xs font-black text-white/50">{player.imageUrl ? <img src={player.imageUrl} alt={player.name} className="h-full w-full object-contain object-top" /> : initials}</div>
+                            <div className="min-w-0 flex-1"><div className="truncate text-sm font-black text-white">{player.name}{player.captain ? <Crown className="ml-1 inline h-3.5 w-3.5 text-amber-300" /> : null}</div><div className="mt-1 truncate text-[10px] font-bold uppercase tracking-[.12em] text-white/45">{player.position} • {player.team} • {player.minutes} min</div></div>
+                            <div className="shrink-0 text-right"><div className="text-base font-black text-emerald-200">{scoreLabel(player.points)}</div><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/40">points</div></div>
+                            {expanded ? <ChevronUp className="h-4 w-4 text-white/45" /> : <ChevronDown className="h-4 w-4 text-white/45" />}
+                          </button>
+                          {expanded ? <div className="border-t border-white/10 bg-black/20 p-3">
+                            <div className="grid grid-cols-2 gap-2"><ScoreCategory label="Decisive" points={player.breakdown.decisive} /><ScoreCategory label="Performance" points={player.breakdown.performance} /><ScoreCategory label="Penalties" points={player.breakdown.penalties} /><ScoreCategory label="Bonus" points={player.breakdown.bonus} /></div>
+                            <div className="mt-3 text-[10px] font-black uppercase tracking-[.15em] text-white/45">How points were earned</div>
+                            {player.reasons.length ? <div className="mt-2 space-y-1.5">{player.reasons.map((reason, index) => <div key={`${reason.label}-${index}`} className="flex items-center justify-between gap-2 rounded-lg border border-white/[.07] bg-white/[.035] px-2.5 py-2 text-xs"><span className="min-w-0 flex-1 text-white/75">{reason.label}</span><span className={`shrink-0 font-black ${Number(reason.points) < 0 ? "text-rose-300" : "text-emerald-200"}`}>{Number(reason.points) > 0 ? "+" : ""}{scoreLabel(reason.points)}</span></div>)}</div> : <div className="mt-2 rounded-lg border border-dashed border-white/10 px-2.5 py-3 text-xs text-white/50">No scoring actions recorded for this player yet.</div>}
+                            {player.captain ? <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-500/10 px-2.5 py-2 text-xs font-bold text-amber-100">Captain contribution: {scoreLabel(player.points)} + {scoreLabel(player.captainBonus)} bonus = {scoreLabel(player.contribution)} points</div> : null}
+                          </div> : null}
+                        </div>;
+                      })}</div>
+                    </> : null}
+            </section>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>;
+}
+
+function ScoreCategory({ label, points }: { label: string; points: number }) {
+  const value = Number(points || 0);
+  return <div className="rounded-xl border border-white/10 bg-white/[.035] p-2"><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/40">{label}</div><div className={`mt-1 text-sm font-black ${value < 0 ? "text-rose-300" : "text-emerald-200"}`}>{value > 0 ? "+" : ""}{scoreLabel(value)}</div></div>;
+}

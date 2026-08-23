@@ -11,9 +11,9 @@ if [ -z "${DATABASE_URL:-}" ]; then
 fi
 
 # Keep today's one-time FREE GW1 test window in force for compiled server logic
-# and the FREE tournament sync. It expires automatically at 21:00 CAT on
-# 22 Aug 2026; paid tournaments and GW2+ retain their normal kickoff locks.
-echo "Preparing FREE GW1 21:00 CAT test window..."
+# and the FREE tournament sync. It expires automatically at 23:59:59 CAT on
+# 23 Aug 2026; paid tournaments and GW2+ retain their normal kickoff locks.
+echo "Preparing FREE GW1 23 Aug end-of-day CAT test window..."
 node scripts/apply-gw1-entry-extension.mjs
 
 # Build-time repair scripts are intentionally idempotent. Re-apply the Admin
