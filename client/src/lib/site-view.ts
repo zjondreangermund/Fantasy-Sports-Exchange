@@ -2,6 +2,7 @@ export type SiteViewMode = "mobile" | "desktop";
 
 export const SITE_VIEW_STORAGE_KEY = "fantasy_arena_site_view";
 const DESKTOP_VIEWPORT_WIDTH = 1280;
+const DESKTOP_VIEWPORT = `width=${DESKTOP_VIEWPORT_WIDTH}, viewport-fit=cover, user-scalable=yes`;
 const MOBILE_VIEWPORT = "width=device-width, initial-scale=1, viewport-fit=cover";
 
 function isInstalledMobileApp(): boolean {
@@ -15,40 +16,86 @@ function isInstalledMobileApp(): boolean {
   return native || standalone;
 }
 
-export function getSiteViewMode(): SiteViewMode {
-  if (typeof window === "undefined") return "mobile";
+function querySiteViewMode(): SiteViewMode | null {
+  if (typeof window === "undefined") return null;
   try {
     const queryMode = new URLSearchParams(window.location.search).get("view");
-    if (queryMode === "desktop" || queryMode === "mobile") return queryMode;
-    const stored = window.localStorage.getItem(SITE_VIEW_STORAGE_KEY);
-    if (stored === "desktop" || stored === "mobile") return stored;
+    return queryMode === "desktop" || queryMode === "mobile" ? queryMode : null;
   } catch {
-    // Storage can be unavailable in restricted WebViews; app detection still works.
+    return null;
   }
+}
+
+function storedSiteViewMode(): SiteViewMode | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.localStorage.getItem(SITE_VIEW_STORAGE_KEY);
+    return stored === "desktop" || stored === "mobile" ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistSiteViewMode(mode: SiteViewMode) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SITE_VIEW_STORAGE_KEY, mode);
+  } catch {
+    // Restricted WebViews can still use the current in-memory view.
+  }
+}
+
+function clearQueryViewOverride() {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("view")) return;
+    url.searchParams.delete("view");
+    const relative = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState(window.history.state, "", relative);
+  } catch {
+    // A stale query override is harmless until the next normal navigation.
+  }
+}
+
+export function getSiteViewMode(): SiteViewMode {
+  if (typeof window === "undefined") return "mobile";
+  const queryMode = querySiteViewMode();
+  if (queryMode) return queryMode;
+  const stored = storedSiteViewMode();
+  if (stored) return stored;
+
+  // Installed Android/iOS/PWA opens in the same full desktop layout as the PC
+  // website. Ordinary mobile browsers stay mobile unless Desktop view is chosen.
   return isInstalledMobileApp() ? "desktop" : "mobile";
 }
 
 export function applySiteView(mode: SiteViewMode): SiteViewMode {
   if (typeof document === "undefined") return mode;
+  const previousMode = document.documentElement.dataset.siteView as SiteViewMode | undefined;
+  const isInteractiveSwitch = Boolean(previousMode && previousMode !== mode);
   const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
   if (viewport) {
-    if (mode === "desktop") {
-      const deviceWidth = Number(window.screen?.width || window.innerWidth || 390);
-      const initialScale = Math.min(1, Math.max(0.2, deviceWidth / DESKTOP_VIEWPORT_WIDTH));
-      viewport.setAttribute("content", `width=${DESKTOP_VIEWPORT_WIDTH}, initial-scale=${initialScale.toFixed(3)}, minimum-scale=0.2, maximum-scale=5, user-scalable=yes, viewport-fit=cover`);
-    } else {
-      viewport.setAttribute("content", MOBILE_VIEWPORT);
-    }
+    // Never force a fractional initial-scale for desktop mode. Android WebView
+    // and mobile Chromium render more sharply when they select the overview
+    // scale for the fixed 1280px layout viewport, matching Desktop site mode.
+    viewport.setAttribute("content", mode === "desktop" ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT);
   }
 
   document.documentElement.dataset.siteView = mode;
-  try {
-    window.localStorage.setItem(SITE_VIEW_STORAGE_KEY, mode);
-  } catch {
-    // A temporary view is still useful when localStorage is blocked.
-  }
+  persistSiteViewMode(mode);
   window.dispatchEvent(new CustomEvent<SiteViewMode>("fantasy-arena:site-view", { detail: mode }));
-  window.setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
+
+  if (isInteractiveSwitch) {
+    // A ?view= query used to win over the saved button choice, and dynamic
+    // viewport replacement is unreliable in Android WebView. Remove the stale
+    // override and reload so both Desktop -> Mobile and Mobile -> Desktop are
+    // deterministic and the new viewport exists before React paints.
+    clearQueryViewOverride();
+    window.setTimeout(() => window.location.reload(), 0);
+  } else {
+    window.setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
+  }
   return mode;
 }
 
