@@ -26,6 +26,11 @@ check(competitions.includes('entryCount={entryCounts.get(Number(comp.id)) || 0}'
 check(!competitions.includes("entryCount={tournamentEntryCount(comp)}"), "Public totals must not populate the My entries field");
 check(competitions.includes("SITE_AUDIT_INVITE_AUTO_LOOKUP_V1"), "Private invite PIN must auto-resolve on the tournament page");
 check(competitions.includes("initialInvitePin"), "Tournament page must read the PIN from /join/:pin or ?pin=");
+check(competitions.includes("TOURNAMENT_PLAYER_IMAGE_FALLBACK_V1"), "Tournament leaderboard must use the resilient player portrait fallback component");
+check(competitions.includes("imageCandidates?: string[] | null;"), "Tournament team details must accept multiple verified portrait candidates");
+check(competitions.includes("<TournamentPlayerImage player={player} />"), "Leaderboard lineup rows must render through the shared fallback chain");
+check(competitions.includes("toSafeImageUrl(value)"), "Leaderboard portraits must use the image proxy for provider URLs");
+check(!competitions.includes("<img src={player.imageUrl}"), "Leaderboard must not render a single raw player image URL without fallback");
 
 check(app.includes('<Route path="/join/:pin" component={CompetitionsPage} />'), "Authenticated router must own /join/:pin");
 check(app.includes("SITE_AUDIT_PENDING_INVITE_V1"), "Private tournament PIN must survive Google OAuth redirect");
@@ -50,6 +55,9 @@ check(routes.includes("USER_SCOPED_MY_ENTRIES_API_V2"), "My entries API must be 
 
 check(!marketplace.includes('registerTournamentCreatorRoutes(app, { requireAuth })'), "Marketplace must not register tournament creator routes a second time");
 check(!marketplace.includes('app.post("/api/user-tournaments/create"'), "Marketplace must not shadow the canonical tournament creation endpoint");
+check(marketplace.includes('const imageCandidates = Array.from(new Set([apiImage, storedImage, fplImage].filter(Boolean)));'), "Tournament team API must return API-Football, stored and FPL portrait fallbacks");
+check(marketplace.includes('imageUrl: imageCandidates[0] || null'), "Tournament team API must expose the first verified portrait candidate as imageUrl");
+check(marketplace.includes('imageCandidates,'), "Tournament team API must expose the full portrait fallback list");
 check(count(userTournaments, 'app.post("/api/user-tournaments/create"') === 1, "User tournament module must own exactly one create endpoint");
 check(userTournaments.includes("const TOURNAMENT_FEE_RATE = 0.10"), "User-created tournament platform fee must remain 10%");
 check(userTournaments.includes("User-created tournaments are cash tournaments and require a paid entry fee"), "User-created tournaments must remain paid-only");
@@ -70,4 +78,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Site integrity audit verified: public totals stay separate from My entries, Prize Vault uses paid qualifying entries, live stats are linked and DB-backed, invites/settlement/navigation remain intact.");
+console.log("Site integrity audit verified: public totals stay separate from My entries, tournament leaderboard portraits use verified fallbacks, Prize Vault uses paid qualifying entries, live stats are linked and DB-backed, invites/settlement/navigation remain intact.");
