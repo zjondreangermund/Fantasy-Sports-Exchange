@@ -20,6 +20,7 @@ export type PlayerCardData = {
   imageUrl?: string;
   /** @deprecated Use image/imageCandidates. Kept temporarily while card components are migrated. */
   photo?: string;
+  apiFootballId?: number;
   nationality?: string;
   stats?: {
     pace: number;

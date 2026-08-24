@@ -159,6 +159,10 @@ app.get("/api/image-proxy", async (req, res) => {
     } catch (error: any) { console.warn("image-proxy candidate failed", url, error?.message || error); }
   }
 
+  if (String(req.query.strict || "") === "1") {
+    res.setHeader("Cache-Control", "private, no-store");
+    return res.status(404).json({ message: "Verified player portrait unavailable" });
+  }
   res.setHeader("Cache-Control", "public, max-age=300");
   return res.redirect(302, "/players/fallback.svg");
 });

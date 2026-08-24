@@ -40,8 +40,8 @@ function replaceOnce(source, from, to, label, marker = to) {
     '  const freeCardTitle = prizeCardRarity ? `${prizeCardRarity.charAt(0).toUpperCase() + prizeCardRarity.slice(1)} Player Card` : "Player Card";',
     lines(
       '  const freeCardTitle = prizeCardRarity ? `${prizeCardRarity.charAt(0).toUpperCase() + prizeCardRarity.slice(1)} Player Card` : "Player Card";',
-      '  const platformFeeRate = Math.max(0, Math.min(1, Number(row.platformFeeRate ?? row.platform_fee_rate ?? (isCashTournament ? 0.1 : 0.2))));',
-      '  const currentEntrantRevenue = toMoney(entryCount * entryFee);',
+      '  const platformFeeRate = Math.max(0, Math.min(1, Number(row.platformFeeRate ?? row.platform_fee_rate ?? (isCashTournament ? 0.1 : 0))));',
+      '  const currentEntrantRevenue = toMoney(row.currentEntrantRevenue ?? row.current_entrant_revenue ?? entryCount * entryFee);',
       '  const storedPrizePool = Number(row.prizePoolTotal ?? row.prize_pool_total ?? 0);',
       '  const calculatedCashPool = toMoney(currentEntrantRevenue * (1 - platformFeeRate));',
       '  const prizeDistribution = String(row.prizeDistribution ?? row.prize_distribution ?? "winner_takes_all");',

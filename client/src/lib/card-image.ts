@@ -53,7 +53,9 @@ function premierLeaguePhotoFromCode(
 
 export function toSafeImageUrl(url: string): string {
   if (/^https?:\/\/(resources\.premierleague\.com|media\.api-sports\.io)\//i.test(url)) {
-    return `/api/image-proxy?url=${encodeURIComponent(url)}`;
+    // A strict miss must trigger the image element's next verified candidate;
+    // redirecting immediately to the placeholder hides healthy fallback photos.
+    return `/api/image-proxy?url=${encodeURIComponent(url)}&strict=1`;
   }
   return url;
 }
@@ -85,17 +87,16 @@ export function buildCardImageCandidates(
   const candidates: string[] = [];
 
   if (verified) {
-    // Prefer the current official Premier League portrait first. It is the source
-    // most likely to receive an updated kit after a transfer or new season.
-    for (const codeLike of [player?.code, player?.photo]) {
-      const officialPhoto = premierLeaguePhotoFromCode(codeLike);
-      if (officialPhoto) candidates.push(toSafeImageUrl(officialPhoto));
+    // API-Football is the primary verified squad provider. Some official FPL
+    // headshots return 403, so try its independently linked headshot first.
+    const apiFootballId = Number(player?.apiFootballId || 0);
+    if (Number.isInteger(apiFootballId) && apiFootballId > 0) {
+      candidates.push(toSafeImageUrl(`https://media.api-sports.io/football/players/${apiFootballId}.png`));
     }
 
     const rawValues = uniqueStrings([
-      player?.officialPortraitUrl,
-      player?.verifiedImageUrl,
       player?.cutoutUrl,
+      player?.verifiedImageUrl,
       player?.headshotUrl,
       player?.imageUrl,
       player?.image_url,
@@ -104,12 +105,18 @@ export function buildCardImageCandidates(
       ...(Array.isArray(player?.imageCandidates)
         ? player.imageCandidates
         : []),
+      player?.officialPortraitUrl,
     ]);
 
     for (const raw of rawValues) {
       const normalized = normalizeImageUrl(raw);
       if (!normalized || LOCAL_PLACEHOLDER_PATTERN.test(normalized)) continue;
       candidates.push(toSafeImageUrl(normalized));
+    }
+
+    for (const codeLike of [player?.code, player?.photo]) {
+      const officialPhoto = premierLeaguePhotoFromCode(codeLike);
+      if (officialPhoto) candidates.push(toSafeImageUrl(officialPhoto));
     }
   }
 

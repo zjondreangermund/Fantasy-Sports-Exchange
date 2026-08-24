@@ -8,6 +8,7 @@ import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { useToast } from "../../hooks/use-toast";
 import { CheckCircle2, Gift, Plus, Save, Trash2, Trophy } from "lucide-react";
+import { AlertTriangle, BarChart3, RefreshCw, Search } from "lucide-react";
 
 const rarityOptions = ["common", "rare", "unique", "epic", "legendary"];
 const statusOptions = ["open", "upcoming", "active", "closed"];
@@ -59,8 +60,22 @@ export default function AdminTournamentManager() {
   const { toast } = useToast();
   const [form, setForm] = useState(buildEmptyForm());
   const [previewRarity, setPreviewRarity] = useState("rare");
+  const [financialSearch, setFinancialSearch] = useState("");
   const { data: competitions } = useQuery<any[]>({ queryKey: ["/api/competitions"] });
   const { data: prizePayload } = useQuery<any>({ queryKey: ["/api/admin/prizes"] });
+  const { data: financialPayload, isFetching: financialsFetching, refetch: refreshFinancials } = useQuery<any>({
+    queryKey: ["/api/admin/tournament-financials"],
+    staleTime: 0,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  });
+  const financialSummary = financialPayload?.summary || {};
+  const financialRows = Array.isArray(financialPayload?.tournaments) ? financialPayload.tournaments : [];
+  const visibleFinancialRows = useMemo(() => {
+    const needle = financialSearch.trim().toLowerCase();
+    if (!needle) return financialRows;
+    return financialRows.filter((row: any) => `${row.name} ${row.creatorName} ${row.category} ${row.tier} ${row.status} ${row.gameWeek}`.toLowerCase().includes(needle));
+  }, [financialRows, financialSearch]);
   const prizes = Array.isArray(prizePayload?.prizes) ? prizePayload.prizes : [];
   const sortedCompetitions = useMemo(() => [...(Array.isArray(competitions) ? competitions : [])].sort((a, b) => Number(a.gameWeek || 0) - Number(b.gameWeek || 0) || Number(a.id || 0) - Number(b.id || 0)), [competitions]);
   const officialCompetitions = sortedCompetitions.filter((comp) => String(comp.prizeKey || comp.prize_key || "") !== "user-cash");
@@ -167,6 +182,8 @@ export default function AdminTournamentManager() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tournament-financials"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       toast({
         title: form.id ? "Tournament updated" : "Tournament created",
         description: form.rewardMode === "card" ? `FREE ${cap(form.tier)} cup awards a ${cap(form.cardPrizeRarity)} player card.` : `${cap(form.tier)} Prize Ladder linked (admin only).`,
@@ -183,6 +200,8 @@ export default function AdminTournamentManager() {
       queryClient.invalidateQueries({ queryKey: ["/api/competitions/my-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/prize-vault"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/backoffice?range=30d"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tournament-financials"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       toast({ title: "Tournament settled", description: "Tuesday-frozen scores, ranks and prizes are now final." });
     },
     onError: (error: any) => toast({ title: "Tournament settlement failed", description: error.message, variant: "destructive" }),
@@ -194,6 +213,8 @@ export default function AdminTournamentManager() {
       queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/prize-vault"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/backoffice?range=30d"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tournament-financials"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       setForm(buildEmptyForm());
       toast({ title: "Tournament deleted" });
     },
@@ -237,6 +258,36 @@ export default function AdminTournamentManager() {
         <div className="flex gap-2"><Link href="/prize-vault"><Button variant="outline" className="rounded-xl border-emerald-300/30 bg-emerald-300/10 text-emerald-100"><Gift className="mr-2 h-4 w-4" />Prize Vault</Button></Link><Button onClick={() => setForm(buildEmptyForm())} className="rounded-xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><Plus className="mr-2 h-4 w-4" />New</Button></div>
       </div>
 
+      <section className="mt-5 overflow-hidden rounded-2xl border border-cyan-300/20 bg-black/30">
+        <div className="flex flex-col gap-3 border-b border-white/10 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-base font-black"><BarChart3 className="h-4 w-4 text-cyan-200" />Tournament entries &amp; financial reconciliation</h3>
+            <p className="mt-1 text-xs text-white/50">Every official, free and user-created tournament, using recorded Fantasy Arena entries, fees, refunds and payouts.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0"><Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/45" /><Input value={financialSearch} onChange={(event) => setFinancialSearch(event.target.value)} placeholder="Search tournaments, managers, GW…" className="h-9 w-full border-white/10 bg-black/40 pl-8 text-xs text-white lg:w-64" /></div>
+            <Button type="button" size="icon" variant="outline" aria-label="Refresh actual tournament values" onClick={() => { void refreshFinancials(); }} className="h-9 w-9 shrink-0 border-white/15 bg-white/[.04] text-white"><RefreshCw className={`h-4 w-4 ${financialsFetching ? "animate-spin" : ""}`} /></Button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 p-4 md:grid-cols-4 xl:grid-cols-8">
+          <FinancialStat label="Tournaments" value={String(financialSummary.tournaments || 0)} helper="All tournament types" />
+          <FinancialStat label="Actual entries" value={String(financialSummary.entries || 0)} helper={`${financialSummary.paidEntries || 0} paid · ${financialSummary.freeEntries || 0} free`} />
+          <FinancialStat label="Collected" value={money(financialSummary.grossEntryAmount)} helper="Recorded entry payments" />
+          <FinancialStat label="Net receipts" value={money(financialSummary.netCollected)} helper={`Refunds ${money(financialSummary.refunds)}`} />
+          <FinancialStat label="Platform fees" value={money(financialSummary.platformFees)} helper="Actually recorded" />
+          <FinancialStat label="Prize pools" value={money(financialSummary.prizePools)} helper="Actual tournament pools" />
+          <FinancialStat label="Paid out" value={money(financialSummary.cashPayouts)} helper={`Outstanding ${money(financialSummary.outstandingPrizePools)}`} />
+          <FinancialStat label="Mismatches" value={String(financialSummary.reconciliationDifferences || 0)} helper="Expected versus collected" warning={Number(financialSummary.reconciliationDifferences || 0) > 0} />
+        </div>
+        <div className="max-h-[24rem] overflow-auto border-t border-white/10">
+          <table className="w-full min-w-[1140px] text-left text-xs">
+            <thead className="sticky top-0 z-10 bg-[#101423] text-[10px] font-black uppercase tracking-[.12em] text-white/50"><tr>{["Tournament / owner", "GW / status", "Entries", "Entry fee", "Collected", "Difference", "Platform", "Prize pool", "Paid / refunded"].map((label) => <th key={label} className="px-3 py-3">{label}</th>)}</tr></thead>
+            <tbody>{visibleFinancialRows.length ? visibleFinancialRows.map((row: any) => <tr key={row.id} className="border-t border-white/[.07] text-white/80 hover:bg-white/[.035]"><td className="px-3 py-3"><div className="max-w-[240px] truncate font-bold text-white">{row.name}</div><div className="mt-0.5 text-[10px] text-white/45">{row.category === "user-cash" ? `Cash · ${row.creatorName}` : row.category === "free-cup" ? "Official free card cup" : "Official Prize Vault"}</div></td><td className="px-3 py-3"><div>GW{row.gameWeek}</div><div className="capitalize text-white/45">{row.status}</div></td><td className="px-3 py-3 font-bold">{row.entryCount}{Number(row.maxEntries) > 0 ? `/${row.maxEntries}` : ""}<div className="text-[10px] font-normal text-white/45">{row.uniqueManagers} managers</div></td><td className="px-3 py-3">{money(row.entryFee)}</td><td className="px-3 py-3 font-bold text-emerald-200">{money(row.grossEntryAmount)}</td><td className={`px-3 py-3 font-bold ${Number(row.entryAmountDifference) !== 0 ? "text-amber-200" : "text-white/55"}`}>{Number(row.entryAmountDifference) !== 0 ? money(row.entryAmountDifference) : "Balanced"}</td><td className="px-3 py-3">{money(row.platformFees)}<div className="text-[10px] text-white/45">{Number(row.platformFeeRate || 0) * 100}%</div></td><td className="px-3 py-3">{money(row.prizePool)}</td><td className="px-3 py-3"><div>{money(row.cashPayouts)} paid</div><div className="text-[10px] text-white/45">{money(row.refundTotal)} refunded{Number(row.awardedCards) > 0 ? ` · ${row.awardedCards} cards` : ""}</div></td></tr>) : <tr><td colSpan={9} className="px-4 py-8 text-center text-white/45">{financialsFetching ? "Loading actual tournament records…" : "No tournaments match this search."}</td></tr>}</tbody>
+          </table>
+        </div>
+        <p className="border-t border-white/10 px-4 py-2 text-[10px] text-white/45">Values refresh every 15 seconds. Recorded entries and wallet movements are never estimated or counted twice.</p>
+      </section>
+
       <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4">
         <div className="mb-2 text-xs font-black uppercase tracking-[.16em] text-emerald-100">FREE Card Cup presets — one for every entry rarity</div>
         <div className="flex flex-wrap gap-2">{rarityOptions.map((rarity) => <Button key={rarity} size="sm" variant="outline" onClick={() => applyFreeCupPreset(rarity)} className="capitalize border-emerald-300/30 bg-black/20 text-emerald-50">FREE {rarity}</Button>)}</div>
@@ -260,7 +311,7 @@ export default function AdminTournamentManager() {
             </div>
             <label className="space-y-1 text-sm"><span className="text-white/55">Entries open from</span><Input type="datetime-local" value={form.startDate} onChange={(e) => setField("startDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
             <label className="space-y-1 text-sm"><span className="text-white/55">Tuesday settlement cutoff</span><Input type="datetime-local" value={form.endDate} onChange={(e) => setField("endDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
-            <div className="md:col-span-2 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs text-amber-100">Only Premier League FPL points recorded before this settlement cutoff count. FA Cup matches and Premier League fixtures played later are excluded.</div>
+            <div className="md:col-span-2 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs text-amber-100">Only Fantasy Arena points from linked Premier League match actions recorded before this settlement cutoff count. FA Cup matches are excluded, and a postponed Premier League fixture does not count if it is played after the next gameweek has started.</div>
           </div>
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full rounded-xl bg-yellow-300 font-black text-slate-950 hover:bg-yellow-200"><Save className="mr-2 h-4 w-4" />{saveMutation.isPending ? "Saving..." : form.id ? "Save Changes" : isCardPrize ? "Create FREE Card Cup" : "Create Prize Ladder Tournament"}</Button>
         </div>
@@ -275,6 +326,10 @@ export default function AdminTournamentManager() {
       </div>
     </Card>
   );
+}
+
+function FinancialStat({ label, value, helper, warning = false }: { label: string; value: string; helper: string; warning?: boolean }) {
+  return <div className={`min-w-0 rounded-xl border p-3 ${warning ? "border-amber-300/35 bg-amber-300/10" : "border-white/10 bg-white/[.035]"}`}><div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-[.11em] text-white/50">{warning ? <AlertTriangle className="h-3 w-3 text-amber-200" /> : null}{label}</div><div className={`mt-1 truncate text-base font-black ${warning ? "text-amber-200" : "text-white"}`}>{value}</div><div className="mt-1 truncate text-[10px] text-white/45">{helper}</div></div>;
 }
 
 function TournamentList({ title, competitions, selectedId, onLoad, onDelete, onSettle, deleting, settling }: any) {

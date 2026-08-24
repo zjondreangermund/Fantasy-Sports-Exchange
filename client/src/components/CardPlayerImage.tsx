@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { buildCardImageCandidates, CARD_IMAGE_FALLBACK } from "../lib/card-image";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
@@ -17,6 +17,11 @@ function CardPlayerImageBase({ card, alt, className, thumb = true }: CardPlayerI
   const [index, setIndex] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
 
+  useEffect(() => {
+    setIndex(0);
+    setIsLoaded(false);
+  }, [card.id, card.player?.imageUrl, (card.player as any)?.apiFootballId]);
+
   const src = candidates[index] || CARD_IMAGE_FALLBACK;
 
   return (
@@ -32,6 +37,7 @@ function CardPlayerImageBase({ card, alt, className, thumb = true }: CardPlayerI
         onLoad={() => setIsLoaded(true)}
         onError={() => {
           if (index < candidates.length - 1) {
+            setIsLoaded(false);
             setIndex((prev) => prev + 1);
             return;
           }

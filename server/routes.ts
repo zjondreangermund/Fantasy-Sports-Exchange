@@ -134,7 +134,7 @@ async function loadCompetitions(): Promise<any[]> {
       c.status::text as status, c.game_week as "gameWeek", c.start_date as "startDate", c.end_date as "endDate",
       c.prize_card_rarity::text as "prizeCardRarity", c.created_at as "createdAt",
       c.created_by_user_id, c.join_pin, c.visibility, c.max_entries,
-      coalesce(c.platform_fee_rate, .2)::float as "platformFeeRate",
+      coalesce(c.platform_fee_rate, case when c.created_by_user_id is not null then .1 else 0 end)::float as "platformFeeRate",
       coalesce(c.platform_fee_total, 0)::float as "platformFeeTotal",
       coalesce(c.prize_pool_total, 0)::float as "prizePoolTotal",
       coalesce(c.prize_type, 'goods') as "prizeType",
@@ -178,7 +178,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS join_pin text`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS visibility text DEFAULT 'public'`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS max_entries integer`);
-      await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS platform_fee_rate real DEFAULT 0.2`);
+      await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS platform_fee_rate real DEFAULT 0.1`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS platform_fee_total real DEFAULT 0`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS prize_pool_total real DEFAULT 0`);
       await db.execute(sql`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS prize_type text DEFAULT 'goods'`);

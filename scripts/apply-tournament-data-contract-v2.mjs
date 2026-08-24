@@ -44,6 +44,7 @@ patchFile("client/src/pages/competitions-vault.tsx", (original) => {
 
   const toastImport = 'import { useToast } from "../hooks/use-toast";';
   source = insertAfter(source, toastImport, '\nimport { useAuth } from "../hooks/use-auth";', 'from "../hooks/use-auth"', "auth hook import");
+  source = insertAfter(source, toastImport, '\nimport CardPlayerImage from "../components/CardPlayerImage";', 'from "../components/CardPlayerImage"', "official fallback player-image component");
 
   source = insertAfter(
     source,
@@ -75,6 +76,14 @@ patchFile("client/src/pages/competitions-vault.tsx", (original) => {
   source = source.replaceAll('label="Tournament entries"', 'label={freeCardCup ? "All FREE Cup entries" : vaultTournament ? "All paid tournament entries" : "All tournament entries"}');
   source = source.replaceAll('label="My submitted teams"', 'label={freeCardCup ? "My FREE Cup teams" : vaultTournament ? "My paid teams" : "My teams"}');
   source = source.replaceAll('label="Shared vault entries"', 'label="Prize Vault qualifying entries"');
+  source = source.replace(
+    'className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/10 bg-black/35 font-black text-white/40">{player?.imageUrl ? <img src={player.imageUrl} alt={player.name} className="h-full w-full object-contain object-top" /> : initials}',
+    'className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/10 bg-black/35 font-black text-white/40">{card ? <CardPlayerImage card={card} alt={String(player?.name || initials)} className="h-full w-full object-contain object-top" /> : initials}',
+  );
+  source = source.replace(
+    '{player.imageUrl ? <img src={player.imageUrl} alt={player.name} className="h-full w-full object-contain object-top" /> : initials}',
+    '{player.imageUrl ? <img src={player.imageUrl} alt={player.name} className="h-full w-full object-contain object-top" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/players/fallback.svg"; }} /> : initials}',
+  );
 
   return source;
 });

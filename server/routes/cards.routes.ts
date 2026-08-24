@@ -98,7 +98,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
           const verifiedPlayer = { ...player, ...(canonical || {}) };
           const detailedStats = resolveDetailedStatsForPlayer(verifiedPlayer, detailedScoringContext);
           const combinedStats = mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats);
-          const verifiedPosition = String((detailedStats as any)?.api_position || canonical?.position || currentPosition);
+          const verifiedPosition = String(canonical?.position || currentPosition || (detailedStats as any)?.api_position || "MID");
           const calculatedScore = calculatePlayerScore(combinedStats, verifiedPosition);
           currentGameweekPoints = Number(calculatedScore?.total_score || 0);
           const latestLiveScore = currentGameweekPoints;
@@ -107,15 +107,18 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         last5Scores = last5Scores.map((value: any) => Number(value || 0)).slice(0, 5);
         while (last5Scores.length < 5) last5Scores.push(0);
 
-        const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
-        const form = matchedElement ? Number(matchedElement.form || 0) : null;
+        const officialFplSeasonPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
+        const totalPoints = identityVerified ? currentGameweekPoints : null;
+        const form = identityVerified ? currentGameweekPoints : null;
         const overall = matchedElement ? overallFromFplElement(matchedElement) : null;
         const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl(apiFootballPlayer.apiPlayerId, apiFootballPlayer.photo) : "";
+        const fplImage = matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : "";
 
         return {
           ...card,
           totalPoints,
           currentGameweekPoints,
+          officialFplSeasonPoints,
           last5Scores,
           player: {
             ...player,
@@ -126,6 +129,9 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
             position: canonical?.position || player.position || apiFootballPlayer?.position || "MID",
             nationality: apiFootballPlayer?.nationality || player.nationality,
             apiFootballId: apiFootballPlayer?.apiPlayerId || null,
+            officialPortraitUrl: fplImage || null,
+            cutoutUrl: apiFootballImage || null,
+            imageCandidates: Array.from(new Set([apiFootballImage, fplImage].filter(Boolean))),
             imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
             verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
             identityVerified: Boolean(apiFootballPlayer || matchedElement),
@@ -148,6 +154,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
             identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
             totalPoints,
             currentGameweekPoints,
+            officialFplSeasonPoints,
             form,
             overall,
           },
@@ -218,7 +225,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       const [lastSaleTransaction] = await db
         .select({ grossAmount: transactions.grossAmount, amount: transactions.amount })
         .from(transactions)
-        .where(and(eq(transactions.type, "sale" as any), sql`${transactions.description} ilike ${`%card:${cardId}%`}`))
+        .where(and(sql`${transactions.type}::text in ('sale', 'marketplace_sale')`, sql`${transactions.description} ilike ${`%card:${cardId}%`}`))
         .orderBy(desc(transactions.createdAt))
         .limit(1);
       const lastSaleValue = Number(lastSaleTransaction?.grossAmount || lastSaleTransaction?.amount || 0) || null;
@@ -240,10 +247,23 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         const replacementRows = Array.isArray((replacementResult as any)?.rows) ? (replacementResult as any).rows : [];
         departureReplacement = replacementRows[0] || null;
       }
-      const [bootstrap, apiFootballDirectory] = await Promise.all([
+      const [bootstrap, apiFootballDirectory, liveData, ownershipResult] = await Promise.all([
         fplApi.bootstrap().catch(() => null),
         loadApiFootballPlayerDirectory().catch(() => []),
+        fplApi.getLiveGameweek().catch(() => null),
+        db.execute(sql`
+          select
+            count(distinct pc.owner_id)::integer as "owners",
+            (select count(*)::integer from app.users) as "managers"
+          from app.player_cards pc
+          where pc.player_id = ${Number(card.playerId || player.id || 0)}
+            and pc.owner_id is not null
+        `).catch(() => null),
       ]);
+      const ownershipRow = Array.isArray((ownershipResult as any)?.rows) ? (ownershipResult as any).rows[0] || {} : {};
+      const arenaOwners = Number(ownershipRow.owners || 0);
+      const arenaManagers = Number(ownershipRow.managers || 0);
+      const arenaOwnership = arenaManagers > 0 ? Number(((arenaOwners / arenaManagers) * 100).toFixed(2)) : null;
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const teamShortById = new Map<number, string>();
       for (const team of fplIndex.teams) teamShortById.set(Number(team.id), String(team.short_name || team.name || `T${team.id}`));
@@ -252,7 +272,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       const apiSnapshot = await getApiFootballPlayerProfileSnapshot({ ...player, ...(canonical || {}) }, apiFootballDirectory).catch(() => null);
 
       if (!matchedElement) {
-        if (apiSnapshot) return res.json({ ...apiSnapshot, stats: { ...apiSnapshot.stats, value: lastSaleValue } });
+        if (apiSnapshot) return res.json({ ...apiSnapshot, stats: { ...apiSnapshot.stats, selectedBy: arenaOwnership, ownershipCount: arenaOwners, ownershipManagerCount: arenaManagers, value: lastSaleValue } });
         const outsidePremierLeague = String(player.league || "").toLowerCase() === "outside premier league"
           || String(player.status || "").toLowerCase() === "departed";
         return res.json({
@@ -278,12 +298,23 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         });
       }
 
+      const currentGameweek = Number((bootstrap as any)?.events?.find((event: any) => event?.is_current)?.id || await fplApi.getCurrentGameweek().catch(() => 0));
+      const liveElement = (Array.isArray((liveData as any)?.elements) ? (liveData as any).elements : []).find((element: any) => Number(element.id) === Number(matchedElement.id));
+      const detailedScoringContext = liveElement ? await loadDetailedScoringContext(bootstrap || {}, currentGameweek) : null;
+      const detailedStats = liveElement && detailedScoringContext ? resolveDetailedStatsForPlayer({ ...player, ...(canonical || {}) }, detailedScoringContext) : null;
+      const scoringPosition = String(canonical?.position || player.position || (detailedStats as any)?.api_position || "MID");
+      const arenaGameweekPoints = liveElement
+        ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), scoringPosition).total_score || 0)
+        : 0;
       const summary = await fplApi.playerSummary(Number(matchedElement.id));
       const history = Array.isArray(summary?.history) ? summary.history : [];
+      const verifiedApiHistory = new Map<number, any>((Array.isArray(apiSnapshot?.last10) ? apiSnapshot.last10 : []).map((match: any): [number, any] => [Number(match.gameweek), match]));
       const last10 = history.slice(-10).map((row: any) => ({
         gameweek: Number(row.round || row.event || 0),
         opponent: teamShortById.get(Number(row.opponent_team)) || `T${row.opponent_team}`,
-        points: Number(row.total_points || 0),
+        points: Number(verifiedApiHistory.get(Number(row.round || row.event || 0))?.points
+          ?? calculatePlayerScore(mapFplStatsToPlayerStats({ stats: row }), scoringPosition).total_score
+          ?? 0),
         minutes: Number(row.minutes || 0),
         goals: Number(row.goals_scored || 0),
         assists: Number(row.assists || 0),
@@ -302,8 +333,8 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         season: apiSnapshot?.season || null,
         providers: {
           identity: verifiedIdentity ? "API-Football current squads" : "Fantasy Premier League player list",
-          stats: "Fantasy Premier League match history",
-          fantasyPoints: "Official Fantasy Premier League points",
+          stats: "API-Football match actions with official FPL fallback",
+          fantasyPoints: "Fantasy Arena scoring",
         },
         player: {
           ...canonical,
@@ -323,7 +354,9 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
           goals: Number(matchedElement.goals_scored || 0), assists: Number(matchedElement.assists || 0),
           cleanSheets: Number(matchedElement.clean_sheets || 0), yellowCards: Number(matchedElement.yellow_cards || 0),
           redCards: Number(matchedElement.red_cards || 0), bonus: Number(matchedElement.bonus || 0),
-          totalPoints: Number(matchedElement.total_points || 0), selectedBy: matchedElement.selected_by_percent,
+          totalPoints: arenaGameweekPoints, arenaGameweekPoints,
+          officialFplSeasonPoints: Number(matchedElement.total_points || 0),
+          selectedBy: arenaOwnership, ownershipCount: arenaOwners, ownershipManagerCount: arenaManagers,
           value: lastSaleValue, saves: Number(matchedElement.saves || 0), averageRating: apiSnapshot?.stats?.averageRating || null,
         },
       });

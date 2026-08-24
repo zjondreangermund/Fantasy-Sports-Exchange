@@ -10,8 +10,8 @@ import {
 
 /**
  * Enriches card-player records with current verified Premier League identity,
- * club, position, portrait and official FPL values. Missing provider values stay
- * null; card progression fields are never reused as football performance stats.
+ * club, position, portrait and Fantasy Arena gameweek values. Provider-only FPL
+ * season totals remain explicitly separated from Arena scores.
  */
 export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
   const sourceCards = Array.isArray(cards) ? cards : [];
@@ -43,10 +43,11 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
     const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
     const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
     const detailedStats = liveElement ? resolveDetailedStatsForPlayer({ ...player, ...(canonical || {}) }, detailedScoringContext) : null;
-    const verifiedPosition = String((detailedStats as any)?.api_position || canonical?.position || currentPosition);
+    const verifiedPosition = String(canonical?.position || currentPosition || (detailedStats as any)?.api_position || "MID");
     const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), verifiedPosition)?.total_score || 0) : 0;
-    const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
-    const form = matchedElement ? Number(matchedElement.form || 0) : null;
+    const officialFplSeasonPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
+    const totalPoints = identityVerified ? currentGameweekPoints : null;
+    const form = identityVerified ? currentGameweekPoints : null;
     const overall = matchedElement ? overallFromFplElement(matchedElement) : null;
     const apiFootballImage = apiFootballPlayer
       ? apiFootballPhotoUrl(apiFootballPlayer.apiPlayerId, apiFootballPlayer.photo)
@@ -61,13 +62,14 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
           player.imageUrl,
         ].filter(Boolean)
       : [];
-    const imageCandidates = Array.from(new Set([fplImage, apiFootballImage, ...existingImages].filter(Boolean)));
+    const imageCandidates = Array.from(new Set([apiFootballImage, fplImage, ...existingImages].filter(Boolean)));
     const verifiedImageUrl = identityVerified ? imageCandidates[0] || null : null;
 
     return {
       ...card,
       totalPoints,
       currentGameweekPoints,
+      officialFplSeasonPoints,
       // Historical match rows are provided by the profile endpoint. Do not
       // reconstruct a "last five" series from live snapshots or stored zeros.
       last5Scores: [],
@@ -116,6 +118,7 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
                 : "unverified-card-data",
         totalPoints,
         currentGameweekPoints,
+        officialFplSeasonPoints,
         form,
         overall,
       },

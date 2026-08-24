@@ -1,4 +1,4 @@
-import { type CSSProperties } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { type PlayerCardData } from "./types";
 import { normalizeRarity } from "./cardTheme";
 
@@ -94,12 +94,22 @@ export default function CollectionStableCard({ player, selected = false, onClick
   const rarity = normalizeRarity(player.rarity);
   const palette = RARITY_PALETTE[rarity] || RARITY_PALETTE.common;
   const dim = SIZE[size] || SIZE.sm;
-  const image = imageOf(player);
+  const imageCandidates = useMemo(() => Array.from(new Set([
+    imageOf(player),
+    ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : []),
+    "/players/fallback.svg",
+  ].filter(Boolean))), [player.id, player.image, player.imageUrl, player.photo, player.imageCandidates]);
+  const [imageIndex, setImageIndex] = useState(0);
+  useEffect(() => { setImageIndex(0); }, [player.id, imageCandidates]);
+  const image = imageCandidates[imageIndex] || "/players/fallback.svg";
   const team = player.team || player.club || "Fantasy Arena";
   const price = Number(player.price || player.listedPrice || 0);
   const statsVerified = player.statsVerified !== false;
-  const ovr: number | string = statsVerified ? numberStat(player.rating) : "—";
-  const points: number | string = statsVerified ? numberStat(player.totalPoints) : "—";
+  const level = Math.max(1, numberStat(player.level, 1));
+  const exactPoints = Number(player.totalPoints ?? 0);
+  const points: number | string = statsVerified && Number.isFinite(exactPoints)
+    ? Number(exactPoints.toFixed(4)).toLocaleString(undefined, { maximumFractionDigits: 4 })
+    : "—";
   const form: number | string = statsVerified ? decimalStat(player.form) : "—";
   const serial = numberStat(player.serial);
   const maxSupply = numberStat(player.maxSupply);
@@ -135,7 +145,7 @@ export default function CollectionStableCard({ player, selected = false, onClick
         {rarity === "unique" ? <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, transparent, rgba(255,0,221,.18), rgba(255,255,255,.22), rgba(107,0,255,.16), transparent)", mixBlendMode: "color-dodge", opacity: .58 }} /> : null}
 
         <div style={{ position: "absolute", left: 14 * scale, right: 14 * scale, top: 17 * scale, height: 122 * scale, borderRadius: 13 * scale, overflow: "hidden", background: "radial-gradient(circle at 50% 8%,rgba(255,255,255,.26),rgba(15,23,42,.62) 42%,rgba(2,6,23,.94))", border: "1px solid rgba(255,255,255,.54)", boxShadow: `inset 0 0 28px rgba(0,0,0,.64), 0 10px 18px rgba(0,0,0,.34), 0 0 20px ${palette.glow}` }}>
-          <img src={image} alt={player.name} loading="lazy" style={{ width: "100%", height: "100%", objectFit: fallback ? "contain" : "cover", objectPosition: "center top", display: "block", padding: fallback ? `${18 * scale}px ${18 * scale}px 0` : 0, filter: fallback ? "saturate(.94) contrast(1.08) brightness(1.06)" : "saturate(1.12) contrast(1.10) brightness(1.05)", transform: fallback ? "scale(.78)" : "scale(.86)" }} />
+          <img src={image} alt={player.name} loading="lazy" onError={() => setImageIndex((previous) => Math.min(previous + 1, imageCandidates.length - 1))} style={{ width: "100%", height: "100%", objectFit: fallback ? "contain" : "cover", objectPosition: "center top", display: "block", padding: fallback ? `${18 * scale}px ${18 * scale}px 0` : 0, filter: fallback ? "saturate(.94) contrast(1.08) brightness(1.06)" : "saturate(1.12) contrast(1.10) brightness(1.05)", transform: fallback ? "scale(.78)" : "scale(.86)" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(255,255,255,.16),transparent 36%,rgba(0,0,0,.34)), radial-gradient(circle at 50% 0%, rgba(255,255,255,.52), transparent 26%)" }} />
         </div>
 
@@ -146,7 +156,7 @@ export default function CollectionStableCard({ player, selected = false, onClick
 
         <div style={{ position: "absolute", left: 11 * scale, right: 11 * scale, bottom: 33 * scale, padding: `${6 * scale}px ${7 * scale}px`, borderRadius: 12 * scale, background: "linear-gradient(180deg, rgba(2,6,23,.84), rgba(2,6,23,.60))", border: "1px solid rgba(255,255,255,.35)", boxShadow: `0 9px 18px rgba(0,0,0,.64), 0 0 16px ${palette.glow}, inset 0 1px 0 rgba(255,255,255,.21)`, textAlign: "center" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 * scale }}>
-            <StatChip label="A-OVR" value={ovr} scale={scale} glow={palette.glow} />
+            <StatChip label="LEVEL" value={level} scale={scale} glow={palette.glow} />
             <StatChip label="PTS" value={points} scale={scale} glow={palette.glow} />
             <StatChip label="FORM" value={form} scale={scale} glow={palette.glow} />
           </div>

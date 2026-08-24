@@ -10,13 +10,14 @@ import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
 import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
-import { calculatePlayerScore, mapFplStatsToPlayerStats } from "../services/scoring.js";
+import { calculatePlayerScore, mapFplStatsToPlayerStats, mergePlayerStatsWithDetailedStats } from "../services/scoring.js";
+import { loadDetailedScoringContext, resolveDetailedStatsForPlayer } from "../services/apiFootballScoringBridge.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
 const BUY_TX_TYPE = "marketplace_buy" as any;
 const SALE_TX_TYPE = "marketplace_sale" as any;
-const TOURNAMENT_FEE_RATE = 0.2;
+const TOURNAMENT_FEE_RATE = 0.1;
 const PIN_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 const TOURNAMENT_RARITIES = new Set(["common", "rare", "unique", "epic", "legendary"]);
 
@@ -272,6 +273,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         loadApiFootballPlayerDirectory().catch(() => []),
       ]);
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
+      const detailedScoringContext = await loadDetailedScoringContext(bootstrap || {}, Number(entry.gameWeek || 0)).catch(() => null);
       const liveByElementId = new Map<number, any>(
         (Array.isArray(liveData?.elements) ? liveData.elements : [])
           .map((element: any) => [Number(element.id), element]),
@@ -288,11 +290,14 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         const matchedElement = fplIndex.resolve(card);
         const canonical = matchedElement ? fplIndex.canonical(matchedElement) : null;
         const apiPlayer = resolveApiFootballPlayer({ ...card, ...(canonical || {}) }, apiFootballDirectory);
-        const position = apiPlayer?.position || canonical?.position || String(card.position || "");
+        const position = canonical?.position || String(card.position || "") || apiPlayer?.position || "MID";
         const elementId = Number(matchedElement?.id || 0);
         const liveElement = elementId ? liveByElementId.get(elementId) : null;
+        const detailedStats = liveElement && detailedScoringContext
+          ? resolveDetailedStatsForPlayer({ ...card, ...(canonical || {}) }, detailedScoringContext)
+          : null;
         const calculated = liveElement
-          ? calculatePlayerScore(mapFplStatsToPlayerStats(liveElement), position)
+          ? calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), position)
           : null;
         const storedScore = savedScores.get(Number(card.cardId));
         const storedElementId = Number(storedScore?.elementId || 0);
@@ -351,7 +356,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
               ? calculated.reasons
               : [],
           minutes: Number(saved?.minutesPlayed ?? liveElement?.stats?.minutes ?? 0),
-          source: saved ? "official-gameweek-snapshot" : calculated ? "live-fpl-fallback" : "awaiting-match-data",
+          source: saved ? "official-gameweek-snapshot" : calculated && detailedStats ? "live-api-football" : calculated ? "live-fpl-fallback" : "awaiting-match-data",
         };
       });
       const calculatedTotalScore = Math.round(
@@ -383,12 +388,16 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
   });
   app.get("/api/marketplace", async (_req, res) => {
     try {
-      const [result, bootstrap, apiFootballDirectory] = await Promise.all([
+      const [result, bootstrap, apiFootballDirectory, liveData] = await Promise.all([
         db.execute(sql`select pc.*, p.name as player_name, p.team as player_team, p.position as player_position, p.image_url as player_image_url, p.fpl_id as player_fpl_id, p.code as player_code, p.photo as player_photo, p.web_name as player_web_name, p.nationality as player_nationality, p.league as player_league, p.overall as player_overall, p.total_points as player_total_points, p.form as player_form from app.player_cards pc join app.players p on p.id = pc.player_id where pc.for_sale = true order by pc.price asc nulls last, pc.id desc`),
         fplApi.bootstrap().catch(() => null),
         loadApiFootballPlayerDirectory().catch(() => []),
+        fplApi.getLiveGameweek().catch(() => null),
       ]);
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
+      const currentGameweek = Number((bootstrap as any)?.events?.find((event: any) => event?.is_current)?.id || await fplApi.getCurrentGameweek().catch(() => 0));
+      const detailedScoringContext = await loadDetailedScoringContext(bootstrap || {}, currentGameweek).catch(() => null);
+      const liveByElementId = new Map<number, any>((Array.isArray(liveData?.elements) ? liveData.elements : []).map((element: any): [number, any] => [Number(element.id), element]));
       const rows = Array.isArray((result as any)?.rows) ? (result as any).rows : [];
       const listings = rows.map((row: any) => {
         const storedPlayer = { id: row.player_id, name: row.player_name, team: row.player_team, position: row.player_position, imageUrl: row.player_image_url, fplId: row.player_fpl_id, code: row.player_code, photo: row.player_photo, webName: row.player_web_name, nationality: row.player_nationality, league: row.player_league, overall: row.player_overall, totalPoints: row.player_total_points, form: row.player_form };
@@ -398,27 +407,35 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl(apiFootballPlayer.apiPlayerId, apiFootballPlayer.photo) : "";
         const verifiedImageUrl = apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null);
         const identityVerified = Boolean(apiFootballPlayer || matchedElement);
-        const officialTotalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
-        const officialForm = matchedElement ? Number(matchedElement.form || 0) : null;
+        const position = canonical?.position || String(storedPlayer.position || "") || apiFootballPlayer?.position || "MID";
+        const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
+        const detailedStats = liveElement && detailedScoringContext ? resolveDetailedStatsForPlayer({ ...storedPlayer, ...(canonical || {}) }, detailedScoringContext) : null;
+        const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), position).total_score || 0) : 0;
+        const officialFplSeasonPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
+        const totalPoints = identityVerified ? currentGameweekPoints : null;
         const officialOverall = matchedElement ? overallFromFplElement(matchedElement) : null;
         return {
           ...row,
-          totalPoints: officialTotalPoints,
+          totalPoints,
+          currentGameweekPoints,
+          officialFplSeasonPoints,
           player: {
             ...storedPlayer,
             ...(canonical || {}),
             name: apiFootballPlayer?.name || canonical?.name || storedPlayer.name,
             team: apiFootballPlayer?.team || canonical?.team || storedPlayer.team,
             league: identityVerified ? "Premier League" : storedPlayer.league,
-            position: apiFootballPlayer?.position || canonical?.position || storedPlayer.position,
+            position,
             apiFootballId: apiFootballPlayer?.apiPlayerId || null,
             imageUrl: verifiedImageUrl,
             verifiedImageUrl,
             identityVerified,
             premierLeagueEligible: identityVerified,
             identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
-            totalPoints: officialTotalPoints,
-            form: officialForm,
+            totalPoints,
+            currentGameweekPoints,
+            officialFplSeasonPoints,
+            form: identityVerified ? currentGameweekPoints : null,
             overall: officialOverall,
           },
         };

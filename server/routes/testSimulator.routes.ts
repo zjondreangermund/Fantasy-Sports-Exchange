@@ -81,7 +81,7 @@ async function ensureBotUsersAndCards(count: number, rarity: string) {
   const existing = rowsOf(await db.execute(sql`
     select owner_id as "ownerId", count(*)::int as count
     from app.player_cards
-    where owner_id = any(${botIds}::text[]) and rarity::text=${rarity}
+    where owner_id in (select jsonb_array_elements_text(${JSON.stringify(botIds)}::jsonb)) and rarity::text=${rarity}
     group by owner_id
   `));
   const existingMap = new Map(existing.map((row) => [String(row.ownerId), Number(row.count || 0)]));
@@ -141,7 +141,7 @@ export function registerTestSimulatorRoutes(app: Express, deps: RegisterTestSimu
             (select pc.id from app.player_cards pc where pc.owner_id=u.id and pc.rarity::text=${rarity} order by pc.id limit 1),
             0, null, '{}'::jsonb, now()
           from app.users u
-          where u.id = any(${chunk}::text[])
+          where u.id in (select jsonb_array_elements_text(${JSON.stringify(chunk)}::jsonb))
             and not exists (select 1 from app.competition_entries ce where ce.competition_id=${competitionId} and ce.user_id=u.id)
         `);
       }
@@ -156,7 +156,7 @@ export function registerTestSimulatorRoutes(app: Express, deps: RegisterTestSimu
         const cardRows = cardIds.length ? rowsOf(await db.execute(sql`
           select pc.id, p.name, p.team, p.position::text as position
           from app.player_cards pc join app.players p on p.id=pc.player_id
-          where pc.id = any(${cardIds}::int[]) order by pc.id
+          where pc.id in (select jsonb_array_elements_text(${JSON.stringify(cardIds)}::jsonb)::integer) order by pc.id
         `)) : [];
         const breakdown = cardRows.map((card, cardIndex) => ({ ...card, points: scoreForCard(String(card.position), index * 7 + cardIndex * 11 + gameWeek) }));
         const captainId = Number(cardIds[0] || 0);

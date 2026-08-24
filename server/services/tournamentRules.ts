@@ -74,15 +74,11 @@ function asObject(value: unknown): Record<string, any> {
 function cardPoints(card: any) {
   const scores = Array.isArray(card?.last5Scores) ? card.last5Scores : [];
   const latest = scores.length ? toNumber(scores[scores.length - 1]) : 0;
-  return toNumber(card?.decisiveScore, latest || toNumber(card?.player?.totalPoints) || toNumber(card?.player?.form));
+  return toNumber(card?.currentGameweekPoints ?? card?.player?.currentGameweekPoints, latest);
 }
 
 function cardValue(card: any) {
-  const explicit = toNumber(card?.price);
-  if (explicit > 0) return explicit;
-  const fplCost = toNumber(card?.player?.nowCost);
-  if (fplCost > 0) return fplCost;
-  return toNumber(card?.player?.overall, 50);
+  return Math.max(0, toNumber(card?.price));
 }
 
 function rarityPrestige(card: any) {
@@ -233,7 +229,7 @@ export function economyConfigPayload() {
       "Rarity prestige",
       "Earlier lineup lock",
     ],
-    platformFeeRate: 0.2,
-    prizePoolRate: 0.8,
+    platformFeeRate: 0.1,
+    prizePoolRate: 0.9,
   };
 }

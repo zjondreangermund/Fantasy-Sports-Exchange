@@ -49,7 +49,7 @@ async function weeklyEligibility(executor: any, userId: string) {
         latest_reward.last_reward_day,
         GREATEST(
           account.signup_day + 1,
-          COALESCE(latest_reward.last_reward_day + ${WEEKLY_COMMON_REWARD_INTERVAL_DAYS}, account.signup_day + 1)
+          COALESCE(latest_reward.last_reward_day + ${WEEKLY_COMMON_REWARD_INTERVAL_DAYS}::integer, account.signup_day + 1)
         )::date AS next_eligible_day
       FROM account
       CROSS JOIN latest_reward
