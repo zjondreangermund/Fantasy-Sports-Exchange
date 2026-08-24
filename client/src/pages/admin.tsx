@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card } from "../components/ui/card";
@@ -101,6 +101,16 @@ export default function AdminPage() {
   const [cardDialogOpen, setCardDialogOpen] = useState(false);
   const [workspacePanel, setWorkspacePanel] = useState<"transactions" | "withdrawals" | "backoffice" | "integrity" | "tournaments" | null>(null);
 
+  useEffect(() => {
+    const nextSearch = userSearchInput.trim();
+    if (!nextSearch) {
+      setUserSearchTerm("");
+      return;
+    }
+    const timer = window.setTimeout(() => setUserSearchTerm(nextSearch), 300);
+    return () => window.clearTimeout(timer);
+  }, [userSearchInput]);
+
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<AdminStats>({ queryKey: ["/api/admin/stats"] });
   const { data: usersResponse, refetch: refetchUsers } = useQuery<{ users: UserRow[]; total: number }>({ queryKey: ["/api/admin/users?limit=100"] });
   const { data: traffic, refetch: refetchTraffic } = useQuery<Traffic>({ queryKey: ["/api/admin/traffic"] });
@@ -116,11 +126,11 @@ export default function AdminPage() {
   });
 
   const cardUrl = selectedUserId
-    ? `/api/admin/users/${selectedUserId}/cards?q=${encodeURIComponent(cardSearch)}&rarity=${cardRarity}&status=${cardStatus}&sort=${cardSort}&page=${cardPage}&limit=50`
+    ? `/api/admin/users/${selectedUserId}/cards?q=${encodeURIComponent(cardSearch.trim())}&rarity=${cardRarity}&status=${cardStatus}&sort=${cardSort}&page=${cardPage}&limit=50`
     : "";
   const { data: cardData, isFetching: cardsLoading } = useQuery<any>({ queryKey: [cardUrl], enabled: Boolean(selectedUserId) });
 
-  const activityUrl = `/api/admin/activity?q=${encodeURIComponent(activitySearch)}&userId=${encodeURIComponent(activityUserId)}&source=${activitySource}&page=${activityPage}&limit=50`;
+  const activityUrl = `/api/admin/activity?q=${encodeURIComponent(activitySearch.trim())}&userId=${encodeURIComponent(activityUserId.trim())}&source=${activitySource}&page=${activityPage}&limit=50`;
   const { data: activityData, isFetching: activityLoading, refetch: refetchActivity } = useQuery<any>({ queryKey: [activityUrl] });
 
   const lookupUrl = lookupTerm ? `/api/admin/cards/lookup?q=${encodeURIComponent(lookupTerm)}` : "";
