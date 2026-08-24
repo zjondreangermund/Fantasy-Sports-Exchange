@@ -25,6 +25,7 @@ const adminUi = read("client/src/components/admin/AdminTournamentManager.tsx");
 const view = read("client/src/lib/site-view.ts");
 const app = read("client/src/App.tsx");
 const main = read("client/src/main.tsx");
+const androidMain = read("android/app/src/main/java/com/fantasyfc/app/MainActivity.java");
 const rules = read("server/services/tournamentRules.ts");
 const economy = read("server/routes/economyIntegrity.routes.ts");
 const routes = read("server/routes.ts");
@@ -92,7 +93,14 @@ includes(economy, "competition.platformFeeRate ??", "Official tournament zero-pe
 includes(view, "(display-mode: standalone)", "Installed mobile apps must be detected independently of ordinary browsers.");
 includes(view, "return isInstalledMobileApp() ? \"desktop\" : \"mobile\"", "Installed mobile apps must default to the desktop website layout.");
 includes(view, "SITE_VIEW_STORAGE_KEY", "The desktop/mobile preference must persist.");
+includes(view, "const DESKTOP_VIEWPORT = `width=${DESKTOP_VIEWPORT_WIDTH}, viewport-fit=cover, user-scalable=yes`;", "Desktop app mode must let the browser choose a sharp overview scale instead of forcing a fractional scale.");
+assert.ok(!view.includes("deviceWidth / DESKTOP_VIEWPORT_WIDTH") && !view.includes("initialScale.toFixed"), "Desktop app mode must not manually downscale the page into a blurry raster.");
+includes(view, "clearQueryViewOverride();", "The view toggle must clear stale query overrides so Mobile view can be restored.");
+includes(view, "window.location.reload()", "Desktop/mobile switching must reload the layout viewport for deterministic Android WebView behavior.");
 includes(app, "Switch to desktop site view", "Managers must be able to toggle between desktop and mobile views.");
 includes(main, "initializeSiteView();", "The chosen app layout must be applied before React renders.");
+includes(androidMain, "settings.setUseWideViewPort(true);", "Android app WebView must use a wide desktop-style layout viewport.");
+includes(androidMain, "settings.setLoadWithOverviewMode(true);", "Android app WebView must fit the desktop layout to the phone without CSS transforms.");
+includes(androidMain, "webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null);", "Android app rendering must stay hardware accelerated for sharp scaled text and cards.");
 
-console.log("Fantasy Arena image fallbacks, exact scores and values, SQL safety, private entries, mobile desktop view, and admin tournament reconciliation verified.");
+console.log("Fantasy Arena image fallbacks, exact scores and values, SQL safety, private entries, crisp reversible mobile desktop view, and admin tournament reconciliation verified.");
