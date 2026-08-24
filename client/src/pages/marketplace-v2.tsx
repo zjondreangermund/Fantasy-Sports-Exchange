@@ -13,6 +13,7 @@ import CardShowcase from "../components/CardShowcase";
 import CardProfileModal from "../components/cards/CardProfileModal";
 import { LoanMarketPanel } from "../components/marketplace/LoanMarketPanel";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
+import { cardMatchesSearch } from "../lib/search";
 import { type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
 import {
   ArrowRight,
@@ -139,6 +140,9 @@ export default function MarketplaceV2Page() {
       if (!res.ok) throw new Error("Failed to fetch marketplace");
       return normalizeCards(await res.json());
     },
+    staleTime: 0,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: wallet } = useQuery<Wallet>({
@@ -181,8 +185,7 @@ export default function MarketplaceV2Page() {
     return source
       .filter((card) => {
         const fantasy = toFantasyCardData(card, { imageWidth: 320 });
-        const haystack = `${fantasy.name} ${fantasy.team || ""} ${fantasy.club || ""} ${fantasy.position || ""}`.toLowerCase();
-        return (!search || haystack.includes(search.toLowerCase())) && (rarity === "all" || rarityOf(card) === rarity);
+        return cardMatchesSearch(search, card, fantasy.name, fantasy.team, fantasy.club, fantasy.position) && (rarity === "all" || rarityOf(card) === rarity);
       })
       .sort((a, b) => {
         if (sortBy === "priceAsc") return cardPrice(a) - cardPrice(b);
@@ -274,7 +277,7 @@ export default function MarketplaceV2Page() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search players, team, position..."
+              placeholder="Search players, teams, positions or cards..."
               className="h-12 border-white/10 bg-black/45 pl-10 text-white"
             />
           </div>
