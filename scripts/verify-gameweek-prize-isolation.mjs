@@ -35,11 +35,11 @@ const checks = [
   },
   {
     file: "server/services/playerCardEnrichment.ts",
-    required: ["currentGameweekPoints", "fplApi.getLiveGameweek()", "calculatePlayerScore", "mapFplStatsToPlayerStats"],
+    required: ["currentGameweekPoints", "fplApi.getLiveGameweek()", "calculatePlayerScore", "mapFplStatsToPlayerStats", "loadDetailedScoringContext", "resolveDetailedStatsForPlayer", "mergePlayerStatsWithDetailedStats"],
   },
   {
     file: "server/routes/cards.routes.ts",
-    required: ["let currentGameweekPoints = 0;", "const latestLiveScore = currentGameweekPoints;"],
+    required: ["let currentGameweekPoints = 0;", "const latestLiveScore = currentGameweekPoints;", "loadDetailedScoringContext", "resolveDetailedStatsForPlayer", "mergePlayerStatsWithDetailedStats"],
   },
   {
     file: "client/src/lib/fantasy-card-adapter.ts",
@@ -48,6 +48,10 @@ const checks = [
   {
     file: "client/src/pages/dashboard.tsx",
     required: ["(card as any).currentGameweekPoints || 0"],
+  },
+  {
+    file: "client/src/components/cards/CardProfileModal.tsx",
+    required: ["Arena GW Points", "currentGameweekArenaPoints", "maximumFractionDigits: 4", "value={arenaPointsDisplay}"],
   },
   {
     file: "client/src/pages/prize-vault.tsx",
