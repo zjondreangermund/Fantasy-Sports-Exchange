@@ -10,6 +10,7 @@ import {
   Pencil,
   Reply,
   RefreshCw,
+  Search,
   Send,
   Sparkles,
   Trash2,
@@ -31,6 +32,7 @@ import {
   openCommunityMention,
   type NotificationCache,
 } from "../lib/notifications";
+import { matchesSearch } from "../lib/search";
 
 const quickHelp = [
   { label: "Fees", keywords: ["fee", "deposit", "withdraw"], answer: "Tournament fees are shown before entry. Marketplace sales charge 8%, deposits below N$200 charge 2%, and Fantasy Arena charges no withdrawal fee." },
@@ -148,6 +150,7 @@ export default function FloatingSupportWidget() {
   const [helpInput, setHelpInput] = useState("");
   const [answer, setAnswer] = useState("Choose a topic or ask how Fantasy Arena works.");
   const [chatInput, setChatInput] = useState("");
+  const [chatSearch, setChatSearch] = useState("");
   const [chatError, setChatError] = useState("");
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -283,6 +286,17 @@ export default function FloatingSupportWidget() {
     [notificationInbox?.notifications],
   );
   const latestMention = unreadMentions[0];
+  const visibleMessages = useMemo(
+    () => messages.filter((message) => matchesSearch(
+      chatSearch,
+      message.message,
+      message.teamName,
+      message.mentions,
+      message.replyTo?.message,
+      message.replyTo?.teamName,
+    )),
+    [chatSearch, messages],
+  );
 
   useEffect(() => {
     const openMention = async (event: Event) => {
@@ -290,6 +304,7 @@ export default function FloatingSupportWidget() {
       if (!Number.isInteger(messageId) || messageId <= 0) return;
 
       setMode("community");
+      setChatSearch("");
       setHighlightedMessageId(messageId);
       setOpen(true);
 
@@ -475,12 +490,17 @@ export default function FloatingSupportWidget() {
 
           {mode === "community" ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div ref={scrollRef} onScroll={handleChatScroll} className="min-h-[260px] flex-1 space-y-2 overflow-y-auto px-3 py-3 sm:min-h-[330px]">
+              <div className="border-b border-white/10 bg-black/15 px-3 py-2">
+                <div className="relative"><Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-cyan-200/65" /><Input value={chatSearch} onChange={(event) => setChatSearch(event.target.value)} placeholder="Search messages, managers or @mentions" aria-label="Search Community Live messages" className="h-9 rounded-xl border-white/10 bg-white/[.045] pl-8 pr-9 text-xs text-white placeholder:text-white/40" />{chatSearch ? <button type="button" onClick={() => setChatSearch("")} aria-label="Clear chat search" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-white/60 hover:bg-white/10 hover:text-white"><X className="h-3.5 w-3.5" /></button> : null}</div>
+                {chatSearch.trim() ? <p className="mt-1 text-[10px] font-semibold text-white/55">{visibleMessages.length} matching message{visibleMessages.length === 1 ? "" : "s"}</p> : null}
+              </div>
+              <div ref={scrollRef} onScroll={handleChatScroll} className="min-h-[180px] flex-1 space-y-2 overflow-y-auto px-3 py-3 sm:min-h-[300px]">
                 {isLoading ? <p className="py-10 text-center text-sm text-white/40">Connecting to the community…</p> : null}
                 {chatLoadFailed ? <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-100"><span>{messages.length ? "Showing saved messages while the connection recovers." : "Could not load Community Live."}</span><button type="button" onClick={() => { void refreshMessages(); }} className="inline-flex shrink-0 items-center gap-1 font-black"><RefreshCw className="h-3.5 w-3.5" />Retry</button></div> : null}
                 {hasOlderMessages && messages.length ? <button type="button" onClick={() => { void loadOlderMessages(); }} disabled={loadingOlderMessages} className="mx-auto flex items-center gap-2 rounded-full border border-white/10 bg-white/[.045] px-3 py-1.5 text-[11px] font-bold text-white/65 hover:bg-white/10 disabled:opacity-55"><RefreshCw className={`h-3.5 w-3.5 ${loadingOlderMessages ? "animate-spin" : ""}`} />{loadingOlderMessages ? "Loading earlier messages…" : "Load earlier messages"}</button> : null}
                 {!isLoading && !messages.length ? <div className="py-10 text-center"><MessageCircle className="mx-auto h-8 w-8 text-cyan-200/45" /><p className="mt-2 text-sm font-semibold text-white/70">Start the conversation</p></div> : null}
-                {messages.map((message) => {
+                {!isLoading && messages.length > 0 && !visibleMessages.length ? <p className="py-10 text-center text-sm text-white/60">No messages match your search.</p> : null}
+                {visibleMessages.map((message) => {
                   const own = Boolean(message.isOwn || message.userId === user?.id);
                   const canEdit = Boolean(!message.deletedAt && own);
                   const canDelete = Boolean(!message.deletedAt && (own || adminCheck?.isAdmin));
@@ -491,7 +511,7 @@ export default function FloatingSupportWidget() {
                         {message.replyTo ? <button type="button" onClick={() => { void openCommunityMention({ communityMessageId: message.replyTo?.id }); }} className="mb-2 block w-full rounded-xl border-l-2 border-cyan-300/45 bg-black/25 px-2 py-1.5 text-left text-[10px] text-white/48 hover:bg-black/40"><span className="font-black text-cyan-200/70">{message.replyTo.teamName}</span><p className="mt-0.5 line-clamp-2">{message.replyTo.message}</p></button> : null}
                         <div className="mb-1 flex items-center gap-2 text-[10px]"><button type="button" onClick={() => addMention(message)} disabled={own || Boolean(message.deletedAt)} className={`max-w-[180px] truncate font-black ${own ? "text-cyan-200" : "text-white/65 hover:text-cyan-200"}`}>{own ? "You" : message.teamName || "Arena Manager"}</button><span className="text-white/30">{formatMessageTime(message.createdAt)}</span>{message.editedAt ? <span className="text-white/25">edited</span> : null}</div>
                         {editing ? <div className="space-y-2"><textarea value={editingText} onChange={(event) => setEditingText(event.target.value.slice(0, 280))} rows={3} className="w-full resize-none rounded-xl border border-white/10 bg-black/30 p-2 text-sm text-white outline-none focus:border-cyan-300/40" /><div className="flex justify-end gap-2"><button onClick={() => { setEditingId(null); setEditingText(""); }} className="text-[10px] font-bold text-white/45">Cancel</button><button onClick={() => editMutation.mutate({ id: message.id, message: editingText.trim() })} disabled={!editingText.trim() || editMutation.isPending} className="rounded-lg bg-cyan-300 px-2 py-1 text-[10px] font-black text-slate-950">Save</button></div></div> : <p className={`whitespace-pre-wrap break-words text-sm leading-5 ${message.deletedAt ? "italic text-white/45" : "text-white/90"}`}>{message.message}</p>}
-                        {!message.deletedAt && !editing ? <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/7 pt-1.5 text-[9px] font-black uppercase tracking-[.08em] text-white/35 sm:opacity-0 sm:transition sm:group-hover:opacity-100"><button onClick={() => { setReplyingTo(message); setChatError(""); }} className="flex items-center gap-1 hover:text-cyan-200"><Reply className="h-3 w-3" />Reply</button>{!own ? <button onClick={() => addMention(message)} className="flex items-center gap-1 hover:text-cyan-200"><AtSign className="h-3 w-3" />Mention</button> : null}{canEdit ? <button onClick={() => { setEditingId(message.id); setEditingText(message.message); }} className="flex items-center gap-1 hover:text-amber-200"><Pencil className="h-3 w-3" />Edit</button> : null}{canDelete ? <button onClick={() => window.confirm(adminCheck?.isAdmin && !own ? "Delete this community message as administrator?" : "Delete your message?") && deleteMutation.mutate(message)} className="flex items-center gap-1 hover:text-rose-200"><Trash2 className="h-3 w-3" />{adminCheck?.isAdmin && !own ? "Admin delete" : "Delete"}</button> : null}</div> : null}
+                        {!message.deletedAt && !editing ? <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-2 text-[10px] font-black tracking-[.04em]"><button type="button" onClick={() => { setReplyingTo(message); setChatError(""); }} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-white/[.07] px-2 text-white/75 hover:bg-cyan-300/15 hover:text-cyan-200"><Reply className="h-3.5 w-3.5" />Reply</button>{!own ? <button type="button" onClick={() => addMention(message)} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-cyan-300/10 px-2 text-cyan-100 hover:bg-cyan-300/20"><AtSign className="h-3.5 w-3.5" />Mention</button> : null}{canEdit ? <button type="button" onClick={() => { setEditingId(message.id); setEditingText(message.message); }} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-white/[.07] px-2 text-white/75 hover:text-amber-200"><Pencil className="h-3.5 w-3.5" />Edit</button> : null}{canDelete ? <button type="button" onClick={() => window.confirm(adminCheck?.isAdmin && !own ? "Delete this community message as administrator?" : "Delete your message?") && deleteMutation.mutate(message)} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-white/[.07] px-2 text-white/75 hover:text-rose-200"><Trash2 className="h-3.5 w-3.5" />{adminCheck?.isAdmin && !own ? "Admin delete" : "Delete"}</button> : null}</div> : null}
                       </div>
                     </div>
                   );

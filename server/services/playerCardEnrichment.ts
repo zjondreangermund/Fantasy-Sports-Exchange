@@ -1,5 +1,7 @@
 import { fplApi } from "./fplApi.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "./fplPlayerIdentity.js";
+import { calculatePlayerScore, mapFplStatsToPlayerStats, mergePlayerStatsWithDetailedStats } from "./scoring.js";
+import { loadDetailedScoringContext, resolveDetailedStatsForPlayer } from "./apiFootballScoringBridge.js";
 import {
   apiFootballPhotoUrl,
   loadApiFootballPlayerDirectory,
@@ -15,12 +17,17 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
   const sourceCards = Array.isArray(cards) ? cards : [];
   if (!sourceCards.length) return [];
 
-  const [bootstrap, apiFootballDirectory] = await Promise.all([
+  const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([
     fplApi.bootstrap().catch(() => null),
+    fplApi.getLiveGameweek().catch(() => null),
     loadApiFootballPlayerDirectory().catch(() => []),
   ]);
 
   const fplIndex = buildFplPlayerIndex(bootstrap || {});
+  const currentGameweek = Number((bootstrap as any)?.events?.find((event: any) => event?.is_current)?.id || await fplApi.getCurrentGameweek().catch(() => 0));
+  const detailedScoringContext = await loadDetailedScoringContext(bootstrap || {}, currentGameweek);
+  const liveByElementId = new Map<number, any>();
+  for (const element of Array.isArray((liveData as any)?.elements) ? (liveData as any).elements : []) liveByElementId.set(Number(element.id), element);
 
   return sourceCards.map((card: any) => {
     const player = card?.player as any;
@@ -33,7 +40,11 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
       apiFootballDirectory,
     );
     const identityVerified = Boolean(apiFootballPlayer || matchedElement);
-    const currentPosition = apiFootballPlayer?.position || canonical?.position || String(player.position || "") || "MID";
+    const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
+    const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
+    const detailedStats = liveElement ? resolveDetailedStatsForPlayer({ ...player, ...(canonical || {}) }, detailedScoringContext) : null;
+    const verifiedPosition = String((detailedStats as any)?.api_position || canonical?.position || currentPosition);
+    const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), verifiedPosition)?.total_score || 0) : 0;
     const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
     const form = matchedElement ? Number(matchedElement.form || 0) : null;
     const overall = matchedElement ? overallFromFplElement(matchedElement) : null;
@@ -56,6 +67,7 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
     return {
       ...card,
       totalPoints,
+      currentGameweekPoints,
       // Historical match rows are provided by the profile endpoint. Do not
       // reconstruct a "last five" series from live snapshots or stored zeros.
       last5Scores: [],
@@ -103,6 +115,7 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
                 ? "fpl"
                 : "unverified-card-data",
         totalPoints,
+        currentGameweekPoints,
         form,
         overall,
       },

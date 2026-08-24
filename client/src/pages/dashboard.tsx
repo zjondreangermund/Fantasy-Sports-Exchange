@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ArrowRight, BellRing, CreditCard, LayoutGrid, LineChart, ShoppingBag, Trophy, Wallet as WalletIcon } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
@@ -8,13 +8,15 @@ import { Button } from "../components/ui/button";
 import { Skeleton } from "../components/ui/skeleton";
 import Metal3DCard from "../components/Metal3DCard";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
+import { openNotification, type ArenaNotification } from "../lib/notifications";
 import MatchdayCenter from "../components/dashboard/MatchdayCenter";
 import DailyLoginRewardPanel from "../components/dashboard/DailyLoginRewardPanel";
 import { PremiumHero, PremiumPage, PremiumPanel, PremiumStat } from "../components/premium";
 import { type Competition, type CompetitionEntry, type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
 
 type CompetitionWithEntries = Competition & { entryCount?: number; max_entries?: number | null; maxEntries?: number | null; prize_pool_total?: number; platform_fee_total?: number; };
-type NotificationResponse = { notifications: Array<{ id: number; title: string; message: string; read: boolean; createdAt?: string | null }>; unreadCount: number; };
+type DashboardNotification = ArenaNotification & { id: number; title: string; message: string; read: boolean; createdAt?: string | null };
+type NotificationResponse = { notifications: DashboardNotification[]; unreadCount: number; };
 type RetentionSummary = { missions?: Array<{ id: string; title: string; progress: number; target: number; completed: boolean }>; nextBestAction?: { key: string; title: string; ctaPath: string }; deadline?: null | { competitionId: number; competitionName: string; startsAt: string }; };
 
 function money(value: unknown) {
@@ -32,9 +34,10 @@ function rarityCounts(cards: PlayerCardWithPlayer[] | undefined) {
 }
 
 export default function DashboardPage() {
+  const [, navigate] = useLocation();
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({ queryKey: ["/api/wallet"], queryFn: async () => { const res = await fetch("/api/wallet", { credentials: "include" }); if (!res.ok) throw new Error("Failed to fetch wallet"); return res.json(); } });
-  const { data: cards, isLoading: cardsLoading } = useQuery<PlayerCardWithPlayer[]>({ queryKey: ["/api/user/cards"], queryFn: async () => { const res = await fetch("/api/user/cards", { credentials: "include" }); if (!res.ok) throw new Error("Failed to fetch cards"); const data = await res.json(); return Array.isArray(data) ? data : data.cards || []; } });
-  const { data: lineup, isLoading: lineupLoading } = useQuery<{ cards: PlayerCardWithPlayer[] }>({ queryKey: ["/api/lineup"], queryFn: async () => { const res = await fetch("/api/lineup", { credentials: "include" }); if (!res.ok) return { cards: [] }; return res.json(); } });
+  const { data: cards, isLoading: cardsLoading } = useQuery<PlayerCardWithPlayer[]>({ queryKey: ["/api/user/cards"], queryFn: async () => { const res = await fetch("/api/user/cards", { credentials: "include" }); if (!res.ok) throw new Error("Failed to fetch cards"); const data = await res.json(); return Array.isArray(data) ? data : data.cards || []; }, staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
+  const { data: lineup, isLoading: lineupLoading } = useQuery<{ cards: PlayerCardWithPlayer[] }>({ queryKey: ["/api/lineup"], queryFn: async () => { const res = await fetch("/api/lineup", { credentials: "include" }); if (!res.ok) return { cards: [] }; return res.json(); }, staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
   const { data: competitions } = useQuery<CompetitionWithEntries[]>({ queryKey: ["/api/competitions"], queryFn: async () => { const res = await fetch("/api/competitions", { credentials: "include" }); if (!res.ok) return []; const data = await res.json(); return Array.isArray(data) ? data : data.competitions || []; }, refetchInterval: 30000 });
   const { data: myEntries } = useQuery<CompetitionEntry[]>({ queryKey: ["/api/competitions/my-entries"], queryFn: async () => { const res = await fetch("/api/competitions/my-entries", { credentials: "include" }); if (!res.ok) return []; return res.json(); }, refetchInterval: 30000 });
   const { data: notifications } = useQuery<NotificationResponse>({ queryKey: ["/api/notifications"], queryFn: async () => { const res = await fetch("/api/notifications", { credentials: "include" }); if (!res.ok) return { notifications: [], unreadCount: 0 }; return res.json(); }, refetchInterval: 30000 });
@@ -47,7 +50,7 @@ export default function DashboardPage() {
   const counts = rarityCounts(cards);
   const snapshotTotal = counts.common + counts.rare + counts.unique + counts.epic + counts.legendary;
   const lineupCards = lineup?.cards || [];
-  const lineupScore = lineupCards.reduce((sum, card) => { const scores = Array.isArray(card.last5Scores) ? card.last5Scores as number[] : []; return sum + Number(scores[scores.length - 1] || 0); }, 0);
+  const lineupScore = lineupCards.reduce((sum, card) => sum + Number((card as any).currentGameweekPoints || 0), 0);
   const walletBalance = Number(wallet?.balance || 0);
 
   const nextAction = useMemo(() => {
@@ -86,8 +89,8 @@ export default function DashboardPage() {
           </div>
         </PremiumPanel>
         <PremiumPanel>
-          <div className="mb-3 flex items-center gap-2"><BellRing className="h-5 w-5 text-cyan-300" /><h2 className="font-bold text-white">Matchday Alerts</h2></div>
-          {notifications?.notifications?.length ? <div className="space-y-2">{notifications.notifications.slice(0, 3).map((note) => <CompactRow key={note.id} title={note.title} meta={note.message} badge={note.read ? "Read" : "New"} />)}</div> : <p className="text-sm text-white/50">No important notifications.</p>}
+          <div className="mb-3 flex items-center justify-between gap-2"><div className="flex items-center gap-2"><BellRing className="h-5 w-5 text-cyan-300" /><h2 className="font-bold text-white">Matchday Alerts</h2></div><Link href="/account?tab=inbox" className="text-xs font-bold text-cyan-200 hover:text-cyan-100">View all</Link></div>
+          {notifications?.notifications?.length ? <div className="space-y-2">{notifications.notifications.slice(0, 3).map((note) => <NotificationRow key={note.id} notification={note} onOpen={() => { void openNotification(note, navigate); }} />)}</div> : <p className="text-sm text-white/50">No important notifications.</p>}
         </PremiumPanel>
       </section>
 
@@ -130,6 +133,10 @@ function ActionCard({ icon, title, body, href, cta }: { icon: ReactNode; title: 
 
 function CompactRow({ title, meta, badge }: { title: string; meta: string; badge: string }) {
   return <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/22 p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{title}</p><p className="truncate text-xs text-white/45">{meta}</p></div><Badge variant="outline" className="shrink-0 border-white/15 text-white/65">{badge}</Badge></div>;
+}
+
+function NotificationRow({ notification, onOpen }: { notification: DashboardNotification; onOpen: () => void }) {
+  return <button type="button" onClick={onOpen} className={`flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition hover:border-cyan-300/45 hover:bg-cyan-300/10 ${notification.read ? "border-white/10 bg-black/22" : "border-cyan-300/25 bg-cyan-300/[.08]"}`}><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{notification.title}</p><p className="truncate text-xs text-white/55">{notification.message}</p></div><span className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold ${notification.read ? "border-white/15 text-white/70" : "border-cyan-300/35 text-cyan-200"}`}>{notification.communityMessageId ? "Mention" : notification.read ? "Open" : "Read"}<ArrowRight className="h-3.5 w-3.5" /></span></button>;
 }
 
 function RarityPill({ label, value }: { label: string; value: number }) {

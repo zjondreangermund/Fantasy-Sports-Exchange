@@ -21,6 +21,7 @@ import { Card } from "./ui/card";
 import { Input } from "./ui/input";
 import { Skeleton } from "./ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { normalizeSearchText } from "../lib/search";
 
 // API_FOOTBALL_DATA_CENTRE_V2_FULL_INTELLIGENCE
 type LeagueKey =
@@ -218,7 +219,7 @@ export default function FootballDataCentre() {
     staleTime: 12 * 60 * 60 * 1000,
   });
 
-  const searchQuery = playerSearch.trim();
+  const searchQuery = normalizeSearchText(playerSearch);
   const playerResults = useQuery<any>({
     queryKey: ["api-football-player-search", leagueKey, searchQuery],
     queryFn: () => getJson(`/api/football/players/${leagueKey}?search=${encodeURIComponent(searchQuery)}`),
@@ -363,6 +364,9 @@ export default function FootballDataCentre() {
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {(Array.isArray(playerResults.data?.players) ? playerResults.data.players : []).map((row: any) => <TinyPlayer key={row?.player?.id} row={row} onClick={() => setSelectedPlayerId(Number(row?.player?.id || 0))} suffix={row?.statistics?.[0]?.games?.position || ""} />)}
           </div>
+          {playerSearch.trim() && searchQuery.length < 3 ? <p className="text-sm text-muted-foreground">Enter at least three letters to search official players.</p> : null}
+          {searchQuery.length >= 3 && !playerResults.isFetching && playerResults.isError ? <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3 text-sm text-amber-100"><span>Official player search is temporarily unavailable.</span><Button size="sm" variant="outline" onClick={() => { void playerResults.refetch(); }}>Retry search</Button></div> : null}
+          {searchQuery.length >= 3 && !playerResults.isFetching && !playerResults.isError && playerResults.data && !(Array.isArray(playerResults.data?.players) && playerResults.data.players.length) ? <p className="text-sm text-muted-foreground">No official players match that search.</p> : null}
           {playerResults.isFetching ? <Skeleton className="h-24 w-full" /> : null}
           {selectedPlayerId ? <PlayerProfile data={playerProfile.data} loading={playerProfile.isLoading} /> : null}
         </TabsContent>
