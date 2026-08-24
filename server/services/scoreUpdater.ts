@@ -3,7 +3,7 @@
  *
  * Integrity rules:
  * - Entry windows close at the FPL deadline / first Premier League kickoff.
- * - Official FPL supplies core events; API-Football supplies verified detailed actions.
+ * - Official FPL supplies core events; API-Football supplies detailed all-around actions when available.
  * - Scores freeze at the configured Tuesday settlement cutoff and never change afterwards.
  * - FA Cup matches and Premier League fixtures played after the settlement cutoff do not count.
  * - Historical competition scores are never reset when the current gameweek changes.
