@@ -65,40 +65,37 @@ export function getSiteViewMode(): SiteViewMode {
   const stored = storedSiteViewMode();
   if (stored) return stored;
 
-  // The installed Android/iOS/PWA experience intentionally opens in the same
-  // full desktop layout as the PC website. Ordinary mobile browsers stay mobile
-  // unless the manager explicitly chooses Desktop view.
+  // Installed Android/iOS/PWA opens in the same full desktop layout as the PC
+  // website. Ordinary mobile browsers stay mobile unless Desktop view is chosen.
   return isInstalledMobileApp() ? "desktop" : "mobile";
 }
 
 export function applySiteView(mode: SiteViewMode): SiteViewMode {
   if (typeof document === "undefined") return mode;
+  const previousMode = document.documentElement.dataset.siteView as SiteViewMode | undefined;
+  const isInteractiveSwitch = Boolean(previousMode && previousMode !== mode);
   const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
   if (viewport) {
-    // Do not force a fractional initial-scale here. Android WebView and mobile
-    // Chromium rasterize much more sharply when they are allowed to choose the
-    // overview scale for a fixed desktop layout viewport, just like Chrome's
-    // built-in Desktop site mode.
+    // Never force a fractional initial-scale for desktop mode. Android WebView
+    // and mobile Chromium render more sharply when they select the overview
+    // scale for the fixed 1280px layout viewport, matching Desktop site mode.
     viewport.setAttribute("content", mode === "desktop" ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT);
   }
 
   document.documentElement.dataset.siteView = mode;
   persistSiteViewMode(mode);
   window.dispatchEvent(new CustomEvent<SiteViewMode>("fantasy-arena:site-view", { detail: mode }));
-  window.setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
-  return mode;
-}
 
-export function switchSiteView(mode: SiteViewMode): SiteViewMode {
-  if (typeof window === "undefined") return mode;
-  persistSiteViewMode(mode);
-  clearQueryViewOverride();
-  applySiteView(mode);
-
-  // Dynamic viewport replacement is unreliable in Android WebView and some
-  // Chromium builds. A reload makes switching back to mobile deterministic and
-  // lets the browser establish the new layout viewport before React paints.
-  window.setTimeout(() => window.location.reload(), 0);
+  if (isInteractiveSwitch) {
+    // A ?view= query used to win over the saved button choice, and dynamic
+    // viewport replacement is unreliable in Android WebView. Remove the stale
+    // override and reload so both Desktop -> Mobile and Mobile -> Desktop are
+    // deterministic and the new viewport exists before React paints.
+    clearQueryViewOverride();
+    window.setTimeout(() => window.location.reload(), 0);
+  } else {
+    window.setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
+  }
   return mode;
 }
 
