@@ -20,6 +20,7 @@ import { Crown, Gem, HandCoins, Search, Shield, ShoppingCart, Star, Tag, XCircle
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
+import { cardMatchesSearch } from "../lib/search";
 
 type MarketResponse = PlayerCardWithPlayer[] | { listings?: PlayerCardWithPlayer[]; cards?: PlayerCardWithPlayer[] };
 type CardsResponse = PlayerCardWithPlayer[] | { cards?: PlayerCardWithPlayer[] };
@@ -157,6 +158,9 @@ export default function MarketplacePage() {
       if (!res.ok) throw new Error("Failed to fetch marketplace listings");
       return normalizeMarketplaceResponse(await res.json());
     },
+    staleTime: 0,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: myCards = [] } = useQuery<PlayerCardWithPlayer[]>({
@@ -217,8 +221,7 @@ export default function MarketplacePage() {
   const sortedListings = useMemo(() => {
     const filtered = listings.filter((card) => {
       const fantasy = toFantasyCardData(card, { imageWidth: 320 });
-      const haystack = `${fantasy.name} ${fantasy.team || ""} ${fantasy.club || ""} ${fantasy.position || ""}`.toLowerCase();
-      const matchesSearch = !search || haystack.includes(search.toLowerCase());
+      const matchesSearch = cardMatchesSearch(search, card, fantasy.name, fantasy.team, fantasy.club, fantasy.position);
       const matchesRarity = rarityFilter === "all" || getRarity(card) === rarityFilter;
       return matchesSearch && matchesRarity;
     });
@@ -258,7 +261,7 @@ export default function MarketplacePage() {
           <TabsContent value="buy" className="mt-5 space-y-4">
             <Card className="border-slate-800 bg-slate-950/60 p-4">
               <div className="flex flex-wrap items-center gap-3">
-                <div className="relative min-w-[260px] flex-1 max-w-lg"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" /><Input placeholder="Search players..." value={search} onChange={(event) => setSearch(event.target.value)} className="h-12 rounded-xl border-slate-800 bg-black/45 pl-10 text-white placeholder:text-slate-500" /></div>
+                <div className="relative min-w-[260px] flex-1 max-w-lg"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" /><Input placeholder="Search players, teams, positions or cards..." value={search} onChange={(event) => setSearch(event.target.value)} className="h-12 rounded-xl border-slate-800 bg-black/45 pl-10 text-white placeholder:text-slate-500" /></div>
                 <select value={rarityFilter} onChange={(event) => setRarityFilter(event.target.value as RarityFilter)} className="h-12 rounded-xl border border-slate-800 bg-black/45 px-3 text-sm text-white outline-none">
                   <option value="all">All Rarities</option><option value="common">Common</option><option value="rare">Rare</option><option value="epic">Epic</option><option value="unique">Unique</option><option value="legendary">Legendary</option>
                 </select>
