@@ -78,7 +78,7 @@ function replaceRegex(source, pattern, replacement, label) {
       const verifiedPlayer = { ...card.player, ...canonical };
       const detailedStats = resolveDetailedStatsForPlayer(verifiedPlayer, detailedContext);
       const combinedStats = mergePlayerStatsWithDetailedStats(fplStats, detailedStats);
-      const verifiedPosition = String((detailedStats as any)?.api_position || canonical.position);
+      const verifiedPosition = String(canonical.position || (detailedStats as any)?.api_position || card.player.position || "MID");
       const score = calculatePlayerScore(combinedStats, verifiedPosition);
       return {
         ...score,
