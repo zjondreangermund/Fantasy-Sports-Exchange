@@ -1,0 +1,79 @@
+name: Android App Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - "client/**"
+      - "capacitor.config.ts"
+      - "vite.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/**"
+      - ".github/workflows/android-app-build.yml"
+  workflow_dispatch:
+
+jobs:
+  android:
+    name: Build Fantasy Arena Android 1.1
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node for Capacitor 8
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Capacitor web assets
+        run: npm run build:web
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Verify desktop-view WebView configuration
+        run: |
+          grep -q "setUseWideViewPort(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "setLoadWithOverviewMode(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "setTextZoom(100)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "LAYER_TYPE_HARDWARE" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+
+      - name: Build Android APKs
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon clean assembleDebug assembleRelease
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p android-artifacts
+          cp android/app/build/outputs/apk/debug/app-debug.apk android-artifacts/Fantasy-Arena-1.1-debug.apk
+          if [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk android-artifacts/Fantasy-Arena-1.1-release-unsigned.apk
+          elif [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk android-artifacts/Fantasy-Arena-1.1-release.apk
+          fi
+          printf 'Fantasy Arena Android 1.1\nCommit: %s\nBuilt: %s\n\nThe debug APK is installable for testing. A release APK is uploaded unsigned unless repository signing is configured.\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > android-artifacts/BUILD-INFO.txt
+
+      - name: Upload Android build
+        uses: actions/upload-artifact@v4
+        with:
+          name: fantasy-arena-android-1.1
+          path: android-artifacts/*
+          if-no-files-found: error
+          retention-days: 30
