@@ -142,7 +142,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          npm run check 2>&1 | tee typescript-errors.log
+          npx tsc --project tsconfig.json 2>&1 | tee typescript-errors.log
           status=${PIPESTATUS[0]}
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit 0
