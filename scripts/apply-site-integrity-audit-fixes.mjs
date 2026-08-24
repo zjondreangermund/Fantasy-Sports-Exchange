@@ -31,6 +31,20 @@ function insertAfter(source, anchor, insertion, marker, label) {
 patchFile("client/src/pages/competitions-vault.tsx", (original) => {
   let source = original;
   source = replaceOnce(source, 'import { useMemo, useState } from "react";', 'import { useEffect, useMemo, useState } from "react";', "competition useEffect import");
+  source = insertAfter(
+    source,
+    'import { useToast } from "../hooks/use-toast";\n',
+    'import { CARD_IMAGE_FALLBACK, normalizeImageUrl, toSafeImageUrl } from "../lib/card-image";\n',
+    "CARD_IMAGE_FALLBACK, normalizeImageUrl, toSafeImageUrl",
+    "tournament player image helpers",
+  );
+
+  source = replaceOnce(
+    source,
+    '  imageUrl?: string | null;\n  captain: boolean;',
+    '  imageUrl?: string | null;\n  imageCandidates?: string[] | null;\n  captain: boolean;',
+    "tournament player image candidate contract",
+  );
 
   const pinState = '  const [pin, setPin] = useState("");';
   const pinStateReplacement = `  const initialInvitePin = typeof window !== "undefined"\n    ? (window.location.pathname.match(/^\\/join\\/([A-Z0-9]+)/i)?.[1] || new URLSearchParams(window.location.search).get("pin") || "").toUpperCase()\n    : "";\n  const [pin, setPin] = useState(initialInvitePin);`;
@@ -39,6 +53,21 @@ patchFile("client/src/pages/competitions-vault.tsx", (original) => {
   const joinMutationAnchor = `  const joinMutation = useMutation({`;
   const inviteEffect = `  // SITE_AUDIT_INVITE_AUTO_LOOKUP_V1\n  useEffect(() => {\n    if (!initialInvitePin || pinTournament || findPinMutation.isPending) return;\n    findPinMutation.mutate();\n  }, [initialInvitePin]);\n\n`;
   source = insertBefore(source, joinMutationAnchor, inviteEffect, "SITE_AUDIT_INVITE_AUTO_LOOKUP_V1", "invite auto lookup");
+
+  source = source.replace(
+    '                        const initials = player.name.split(/\\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();\n',
+    "",
+  );
+  source = replaceOnce(
+    source,
+    '<div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/10 bg-black/40 text-xs font-black text-white/50">{player.imageUrl ? <img src={player.imageUrl} alt={player.name} className="h-full w-full object-contain object-top" /> : initials}</div>',
+    '<div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/10 bg-black/40 text-xs font-black text-white/50"><TournamentPlayerImage player={player} /></div>',
+    "leaderboard resilient player portrait",
+  );
+
+  const scoreCategoryAnchor = `function ScoreCategory({ label, points }: { label: string; points: number }) {`;
+  const tournamentPlayerImage = `// TOURNAMENT_PLAYER_IMAGE_FALLBACK_V1\nfunction TournamentPlayerImage({ player }: { player: TournamentTeamPlayer }) {\n  const candidates = useMemo(() => {\n    const raw = [\n      ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : []),\n      player.imageUrl,\n    ];\n    const normalized = raw\n      .map((value) => normalizeImageUrl(value))\n      .filter((value): value is string => Boolean(value))\n      .map((value) => toSafeImageUrl(value));\n    return Array.from(new Set([...normalized, CARD_IMAGE_FALLBACK]));\n  }, [player.cardId, player.imageUrl, player.imageCandidates]);\n  const [imageIndex, setImageIndex] = useState(0);\n\n  useEffect(() => {\n    setImageIndex(0);\n  }, [player.cardId, player.imageUrl, player.imageCandidates]);\n\n  const source = candidates[imageIndex] || CARD_IMAGE_FALLBACK;\n  return <img\n    src={source}\n    alt={player.name}\n    className="h-full w-full object-contain object-top"\n    loading="lazy"\n    decoding="async"\n    onError={() => {\n      if (imageIndex < candidates.length - 1) setImageIndex((current) => current + 1);\n    }}\n  />;\n}\n\n`;
+  source = insertBefore(source, scoreCategoryAnchor, tournamentPlayerImage, "TOURNAMENT_PLAYER_IMAGE_FALLBACK_V1", "leaderboard player portrait fallback component");
   return source;
 });
 
@@ -116,6 +145,19 @@ patchFile("server/routes/marketplace.routes.ts", (original) => {
   const pinStart = source.indexOf('  app.get("/api/user-tournaments/pin/:pin", requireAuth', Math.max(0, createStart));
   if (createStart >= 0 && pinStart > createStart) source = source.slice(0, createStart) + source.slice(pinStart);
 
+  source = replaceOnce(
+    source,
+    '        const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";\n\n        return {',
+    '        const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";\n        const fplImage = matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : "";\n        const storedImage = String(card.imageUrl || "").trim();\n        const imageCandidates = Array.from(new Set([apiImage, storedImage, fplImage].filter(Boolean)));\n\n        return {',
+    "tournament team image candidates",
+  );
+  source = replaceOnce(
+    source,
+    '          imageUrl: apiImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),',
+    '          imageUrl: imageCandidates[0] || null,\n          imageCandidates,',
+    "tournament team image candidate response",
+  );
+
   return source;
 });
 
@@ -133,4 +175,4 @@ patchFile("scripts/verify-critical-flows.mjs", (source) => {
   return source;
 });
 
-console.log("Applied site integrity audit fixes: separate public/user tournament counts, Prize Vault isolation, invite routes, DB-backed live hub, Tuesday settlement clock, lineup shortcut, canonical tournament creation, and aligned integrity guards.");
+console.log("Applied site integrity audit fixes: separate public/user tournament counts, resilient leaderboard player portraits, Prize Vault isolation, invite routes, DB-backed live hub, Tuesday settlement clock, lineup shortcut, canonical tournament creation, and aligned integrity guards.");
