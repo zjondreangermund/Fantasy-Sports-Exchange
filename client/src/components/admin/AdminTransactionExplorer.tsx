@@ -206,7 +206,7 @@ export default function AdminTransactionExplorer() {
               <option key={txType || "all"} value={txType}>{txType || "All types"}</option>
             ))}
           </select>
-          <Input value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search description, buyer, seller, card or external ref" className="bg-black/25" />
+          <Input value={q} onChange={(event) => { const next = event.target.value; setQ(next); if (!next.trim()) { setPage(1); setAppliedFilters((current) => ({ ...current, q: "" })); } }} onKeyDown={(event) => { if (event.key === "Enter") applyFilters(); }} placeholder="Search description, buyer, seller, card or external ref" className="bg-black/25" />
           <div className="flex gap-2">
             <Button onClick={applyFilters}><Search className="mr-2 h-4 w-4" />Search</Button>
             <Button variant="outline" onClick={() => transactionsQuery.refetch()}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
