@@ -137,12 +137,12 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Full TypeScript check
+      - name: Generated-source TypeScript check
         id: typescript
         shell: bash
         run: |
           set +e
-          npx tsc --project tsconfig.json 2>&1 | tee typescript-errors.log
+          (npm run build:client && npx tsc --project tsconfig.json) 2>&1 | tee typescript-errors.log
           status=${PIPESTATUS[0]}
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit 0
