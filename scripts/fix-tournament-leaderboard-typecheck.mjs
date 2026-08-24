@@ -5,11 +5,18 @@ const source = fs.readFileSync(path, "utf8");
 const from = "leaderboard.leaderboard.map((entry) => <button";
 const to = "leaderboard.leaderboard.map((entry: TournamentLeaderboardEntry) => <button";
 
-if (source.includes(to)) {
-  console.log("Tournament leaderboard entry callback is already typed.");
-} else if (source.includes(from)) {
-  fs.writeFileSync(path, source.replace(from, to));
-  console.log("Typed the generated tournament leaderboard entry callback.");
+const updated = source.replaceAll(from, to);
+const remainingUntyped = updated.split(from).length - 1;
+
+if (remainingUntyped > 0) {
+  throw new Error(`Tournament leaderboard still has ${remainingUntyped} untyped entry callback(s).`);
+}
+
+if (updated !== source) {
+  fs.writeFileSync(path, updated);
+  console.log("Typed all generated tournament leaderboard entry callbacks.");
+} else if (source.includes(to)) {
+  console.log("Tournament leaderboard entry callbacks are already typed.");
 } else {
   throw new Error("Tournament leaderboard typecheck anchor not found.");
 }
