@@ -249,7 +249,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           return {
             ...card,
             league: "Premier League",
-            position: apiFootballPlayer?.position || canonical?.position || card.position,
+            position: canonical?.position || card.position || apiFootballPlayer?.position,
             selectionProvider: apiFootballPlayer ? "API-Football" : "FPL fallback",
           };
         });
@@ -433,7 +433,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const settlement = await db.transaction(async (tx) => {
         const competition = rowsOf(await tx.execute(sql`
           select id, name, status::text as status, tier::text as tier, game_week as "gameWeek",
-            coalesce(entry_fee, 0)::float as "entryFee", coalesce(platform_fee_rate, 0.2)::float as "platformFeeRate",
+            coalesce(entry_fee, 0)::float as "entryFee", coalesce(platform_fee_rate, case when created_by_user_id is not null then 0.1 else 0 end)::float as "platformFeeRate",
             coalesce(prize_type, 'goods') as "prizeType", coalesce(prize_key, '') as "prizeKey",
             coalesce(prize_description, '') as "prizeDescription", coalesce(visibility, 'public') as visibility,
             created_by_user_id as "createdByUserId"
@@ -505,7 +505,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           };
         }
 
-        const feeRate = Math.max(0, Math.min(1, Number(competition.platformFeeRate || 0.2)));
+        const feeRate = Math.max(0, Math.min(1, Number(competition.platformFeeRate ?? (competition.createdByUserId ? 0.1 : 0))));
         const cashPrizePool = cashPoolEnabled ? toMoney(grossPool - toMoney(grossPool * feeRate)) : 0;
         const prizeValue = prizeAward ? toMoney(prizeAward.value || 0) : 0;
         const platformFee = cashPoolEnabled ? toMoney(grossPool - cashPrizePool) : toMoney(Math.max(0, grossPool - prizeValue));

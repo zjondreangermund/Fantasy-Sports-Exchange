@@ -2,6 +2,7 @@ import * as React from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { Monitor, Smartphone } from "lucide-react";
 
 import { Toaster } from "./components/ui/toaster";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -23,6 +24,7 @@ import GuidedHoverHelp from "./components/GuidedHoverHelp";
 import GlobalActionToasts from "./components/GlobalActionToasts";
 import { useAuth } from "./hooks/use-auth";
 import { useScrollRepair } from "./hooks/use-scroll-repair";
+import { applySiteView, getSiteViewMode, type SiteViewMode } from "./lib/site-view";
 import { Skeleton } from "./components/ui/skeleton";
 
 import NotFound from "./pages/not-found";
@@ -147,6 +149,7 @@ function AuthenticatedRouter() {
 }
 
 function AuthenticatedApp() {
+  const [siteView, setSiteView] = React.useState<SiteViewMode>(() => getSiteViewMode());
   const [location] = useLocation();
   const isPlayRoute = location.startsWith("/competitions") || location.startsWith("/my-entries") || location.startsWith("/prize-vault");
   const isInfoRoute = publicInfoPaths.includes(location);
@@ -183,7 +186,7 @@ function AuthenticatedApp() {
           {!isPlayRoute && !isInfoRoute && <StadiumAmbientLayer teamName={teamName} />}
           <header className="relative z-50 flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/80 p-2">
             <div className="flex min-w-0 items-center gap-2"><SidebarTrigger data-testid="button-sidebar-toggle" className="h-10 w-10 shrink-0 rounded-xl border border-white/15 bg-white/5" /><span className="truncate text-xs font-bold text-white/65">Show / hide menu</span></div>
-            <ThemeToggle />
+            <div className="flex shrink-0 items-center gap-1.5"><button type="button" onClick={() => setSiteView(applySiteView(siteView === "desktop" ? "mobile" : "desktop"))} aria-label={siteView === "desktop" ? "Switch to mobile site view" : "Switch to desktop site view"} title={siteView === "desktop" ? "Switch to mobile view" : "Switch to desktop view"} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-2 text-[11px] font-bold text-white/75 hover:bg-white/10">{siteView === "desktop" ? <Smartphone className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}<span className="hidden sm:inline">{siteView === "desktop" ? "Mobile view" : "Desktop view"}</span></button><ThemeToggle /></div>
           </header>
           {!isInfoRoute && <LivePulseDock />}
           {showMarketplaceFloors && <MarketplaceFloorNotice />}

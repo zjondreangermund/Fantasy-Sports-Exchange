@@ -10,7 +10,9 @@ import "./card-image-sizing.css";
 import "./onboarding-card-clipping-fix.css";
 import "./legal-tabs-slider.css";
 import { patchFetchForApiBase } from "./lib/api-base";
+import { initializeSiteView } from "./lib/site-view";
 
+initializeSiteView();
 patchFetchForApiBase();
 
 const rootElement = document.getElementById("root");

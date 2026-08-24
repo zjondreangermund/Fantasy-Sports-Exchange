@@ -215,12 +215,12 @@ const isPrizeVaultTournament = (comp: Tournament) => {
   source = replaceOnce(
     source,
     `${officialPositionPrecedence}\n    const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;`,
-    `${officialPositionPrecedence}\n    const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;\n    const detailedStats = liveElement ? resolveDetailedStatsForPlayer({ ...player, ...(canonical || {}) }, detailedScoringContext) : null;\n    const verifiedPosition = String((detailedStats as any)?.api_position || canonical?.position || currentPosition);\n    const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), verifiedPosition)?.total_score || 0) : 0;\n    const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;`,
+    `${officialPositionPrecedence}\n    const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;\n    const detailedStats = liveElement ? resolveDetailedStatsForPlayer({ ...player, ...(canonical || {}) }, detailedScoringContext) : null;\n    const verifiedPosition = String(canonical?.position || currentPosition || (detailedStats as any)?.api_position || "MID");\n    const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), verifiedPosition)?.total_score || 0) : 0;\n    const totalPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;`,
     "Current gameweek points calculation",
     "mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats)",
   );
-  source = replaceOnce(source, '      totalPoints,\n      // Historical match rows', '      totalPoints,\n      currentGameweekPoints,\n      // Historical match rows', "Card top-level current GW points", "      currentGameweekPoints,\n      // Historical");
-  source = replaceOnce(source, '        totalPoints,\n        form,', '        totalPoints,\n        currentGameweekPoints,\n        form,', "Player current GW points", "        currentGameweekPoints,\n        form,");
+  source = replaceOnce(source, '      totalPoints,\n      // Historical match rows', '      totalPoints,\n      currentGameweekPoints,\n      // Historical match rows', "Card top-level current GW points", "      currentGameweekPoints,");
+  source = replaceOnce(source, '        totalPoints,\n        form,', '        totalPoints,\n        currentGameweekPoints,\n        form,', "Player current GW points", "        currentGameweekPoints,");
   write(rel, source);
 }
 
@@ -242,8 +242,8 @@ const isPrizeVaultTournament = (comp: Tournament) => {
     "Collection current GW points assignment",
     "const latestLiveScore = currentGameweekPoints;",
   );
-  source = replaceOnce(source, '          totalPoints,\n          last5Scores,', '          totalPoints,\n          currentGameweekPoints,\n          last5Scores,', "Collection card current GW payload", "          currentGameweekPoints,\n          last5Scores,");
-  source = replaceOnce(source, '            totalPoints,\n            form,', '            totalPoints,\n            currentGameweekPoints,\n            form,', "Collection player current GW payload", "            currentGameweekPoints,\n            form,");
+  source = replaceOnce(source, '          totalPoints,\n          last5Scores,', '          totalPoints,\n          currentGameweekPoints,\n          last5Scores,', "Collection card current GW payload", "          currentGameweekPoints,");
+  source = replaceOnce(source, '            totalPoints,\n            form,', '            totalPoints,\n            currentGameweekPoints,\n            form,', "Collection player current GW payload", "            currentGameweekPoints,");
   write(rel, source);
 }
 
@@ -264,6 +264,27 @@ const isPrizeVaultTournament = (comp: Tournament) => {
     '  // PTS on Fantasy Arena cards is a gameweek score. Season totals remain available in player profiles.\n  const totalPoints = statsVerified\n    ? finiteNumber((card as any).currentGameweekPoints, player?.currentGameweekPoints)\n    : 0;',
     "Card PTS current gameweek only",
     "PTS on Fantasy Arena cards is a gameweek score",
+  );
+  source = replaceOnce(
+    source,
+    '  const candidates = uniqueStrings([\n    ...directCandidates,\n    ...generatedCandidates,\n    CARD_IMAGE_FALLBACK,\n  ]);',
+    '  // Prefer the independently linked API-Football portrait before FPL images.\n  const candidates = uniqueStrings([\n    ...generatedCandidates.filter((candidate) => candidate !== CARD_IMAGE_FALLBACK),\n    ...directCandidates.map((candidate) => toSafeImageUrl(candidate)),\n    CARD_IMAGE_FALLBACK,\n  ]);',
+    "API-Football player portraits precede denied FPL images",
+    "Prefer the independently linked API-Football portrait",
+  );
+  source = replaceOnce(
+    source,
+    '  const form = statsVerified\n    ? finiteNumber(player?.form, player?.currentForm, (card as any).form)\n    : 0;',
+    '  // Card form is calculated only from recorded Fantasy Arena match scores.\n  const arenaScoreHistory = last5Scores.filter((score) => Number.isFinite(score) && score > 0);\n  const form = statsVerified\n    ? arenaScoreHistory.length\n      ? arenaScoreHistory.reduce((sum, score) => sum + score, 0) / arenaScoreHistory.length\n      : totalPoints\n    : 0;',
+    "Fantasy Arena form excludes external FPL form values",
+    "Card form is calculated only from recorded Fantasy Arena match scores",
+  );
+  source = replaceOnce(
+    source,
+    '    nationality: normalizeNationality(player),',
+    '    nationality: normalizeNationality(player),\n    apiFootballId: Number(player?.apiFootballId || 0) || undefined,',
+    "Expose official API-Football portrait identity to every card",
+    '    apiFootballId: Number(player?.apiFootballId || 0) || undefined,',
   );
   write(rel, source);
 }
@@ -301,6 +322,7 @@ const isPrizeVaultTournament = (comp: Tournament) => {
     "Card profile precise Fantasy Arena score display",
     'label={totalPointsLabel} value={arenaPointsDisplay}',
   );
+  source = source.replace('label="Ownership"', 'label="Arena ownership"');
   write(rel, source);
 }
 

@@ -3,7 +3,7 @@
  *
  * Integrity rules:
  * - Entry windows close at the FPL deadline / first Premier League kickoff.
- * - Only official Premier League FPL data for the selected gameweek is scored.
+ * - Official FPL supplies core events; API-Football supplies verified detailed actions.
  * - Scores freeze at the configured Tuesday settlement cutoff and never change afterwards.
  * - FA Cup matches and Premier League fixtures played after the settlement cutoff do not count.
  * - Historical competition scores are never reset when the current gameweek changes.
@@ -15,7 +15,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { fplApi } from "./fplApi.js";
 import { buildFplPlayerIndex } from "./fplPlayerIdentity.js";
-import { calculatePlayerScore, mapFplStatsToPlayerStats, calculateLineupScore } from "./scoring.js";
+import { calculatePlayerScore, mapFplStatsToPlayerStats, calculateLineupScore, mergePlayerStatsWithDetailedStats } from "./scoring.js";
+import { loadDetailedScoringContext, resolveDetailedStatsForPlayer, type DetailedScoringContext } from "./apiFootballScoringBridge.js";
 
 const RARITY_PRESTIGE: Record<string, number> = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };
 const SCORE_REFRESH_INTERVAL_MS = Math.max(
@@ -80,11 +81,9 @@ export class ScoreUpdateService {
   private nextLast5Scores(existing: any, nextScore: number) { const previous = Array.isArray(existing) ? existing.map((v: any) => Number(v || 0)) : []; if (previous.length > 0 && previous[previous.length - 1] === nextScore) return previous.slice(-5); return [...previous.slice(-4), nextScore]; }
 
   private cardValue(card: any) {
-    const explicit = toNumber(card?.price);
-    if (explicit > 0) return explicit;
-    const fplCost = toNumber(card?.player?.nowCost);
-    if (fplCost > 0) return fplCost;
-    return toNumber(card?.player?.overall, 50);
+    // Squad-value tiebreaks are based only on an actual Fantasy Arena card
+    // price. FPL transfer prices and derived ratings are not Arena currency.
+    return Math.max(0, toNumber(card?.price));
   }
 
   private async loadSubmittedLineupCards(entry: any, lineupCardIds: number[]) {
@@ -109,7 +108,7 @@ export class ScoreUpdateService {
     }));
   }
 
-  private buildCardScores(cards: any[], identityMap: IdentityMap, playerStatsMap: Map<any, any>) {
+  private buildCardScores(cards: any[], identityMap: IdentityMap, playerStatsMap: Map<any, any>, detailedContext: DetailedScoringContext) {
     return cards.map((card) => {
       if (!card?.player) return this.zeroScore(card);
       const elementId = this.resolveFplElementId(card.player, identityMap);
@@ -118,19 +117,24 @@ export class ScoreUpdateService {
       const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
       if (!fplStats) return this.zeroScore(card, elementId, "Official gameweek statistics have not been published for this verified player yet.");
       const canonical = identityMap.canonical(officialElement);
-      const score = calculatePlayerScore(fplStats, canonical.position);
+      const verifiedPlayer = { ...card.player, ...canonical };
+      const detailedStats = resolveDetailedStatsForPlayer(verifiedPlayer, detailedContext);
+      const combinedStats = mergePlayerStatsWithDetailedStats(fplStats, detailedStats);
+      const verifiedPosition = String(canonical.position || (detailedStats as any)?.api_position || card.player.position || "MID");
+      const score = calculatePlayerScore(combinedStats, verifiedPosition);
       return {
         ...score,
         card_id: card.id,
         player_id: card.playerId,
         element_id: elementId,
+        api_player_id: Number((detailedStats as any)?.api_player_id || 0),
         identity_status: "verified",
         identity_message: `Verified official Premier League player: ${canonical.name}.`,
-        identity_provider: "fpl-fallback",
+        identity_provider: detailedStats ? "api-football+fpl" : "fpl-fallback",
         official_player_name: canonical.name,
         official_team: canonical.team,
-        official_position: canonical.position,
-        minutes_played: Number(fplStats.minutes || 0),
+        official_position: verifiedPosition,
+        minutes_played: Number(combinedStats.minutes || 0),
       };
     });
   }
@@ -251,9 +255,14 @@ export class ScoreUpdateService {
       .filter(Boolean);
     const complete = cards.length === 5 && cardScores.length === 5 && unresolvedCardIds.length === 0;
     const updatedAt = new Date().toISOString();
+    const detailedStatsCards = cardScores.filter((score: any) => score?.data_source === "official-fpl-plus-api-football").length;
+    const fallbackStatsCards = cardScores.length - detailedStatsCards;
     return {
-      version: 3,
-      source: "official-fpl-live",
+      version: 4,
+      source: detailedStatsCards > 0 ? "official-fpl-plus-api-football" : "official-fpl-fallback",
+      scoringMethod: "FPL core events plus API-Football detailed actions; ICT/BPS fallback is used only when detailed actions are unavailable",
+      detailedStatsCards,
+      fallbackStatsCards,
       competition: "premier-league-only",
       fixturePolicy: "Only Premier League FPL points recorded before the configured Tuesday settlement cutoff count. Cup matches and later fixtures are excluded.",
       gameWeek,
@@ -286,6 +295,8 @@ export class ScoreUpdateService {
         cardId: Number(score?.card_id || 0),
         playerId: Number(score?.player_id || 0),
         elementId: Number(score?.element_id || 0),
+        apiFootballPlayerId: Number(score?.api_player_id || 0),
+        dataSource: score?.data_source || "official-fpl-fallback",
         score: toNumber(score?.total_score),
         breakdown: score?.breakdown || null,
         footballMetrics: score?.football_metrics || null,
@@ -310,6 +321,7 @@ export class ScoreUpdateService {
     const bootstrapElementById = new Map<number, any>();
     const identityMap = this.buildFplIdentityMap(bootstrap);
     const settlementAt = this.settlementDeadline(competition);
+    const detailedContext = await loadDetailedScoringContext(bootstrap, gameWeek);
     for (const element of bootstrap?.elements || []) bootstrapElementById.set(Number(element.id), element);
     for (const element of liveData.elements || []) playerStatsMap.set(Number(element.id), mapFplStatsToPlayerStats(element));
 
@@ -336,7 +348,7 @@ export class ScoreUpdateService {
         const resolvedCardIds = new Set(cards.map((card: any) => Number(card?.id || 0)));
         const missingCardIds = lineupCardIds.filter((cardId: number) => !resolvedCardIds.has(cardId));
         missingCardIds.forEach((cardId: number) => unresolved.add(cardId));
-        const cardScores = this.buildCardScores(cards, identityMap, playerStatsMap);
+        const cardScores = this.buildCardScores(cards, identityMap, playerStatsMap, detailedContext);
         const previousScoresByCard = new Map<number, any>(
           (Array.isArray(previousSnapshot.cardScores) ? previousSnapshot.cardScores : [])
             .map((score: any) => [Number(score?.cardId || 0), score]),

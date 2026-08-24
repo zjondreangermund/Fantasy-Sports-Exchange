@@ -412,8 +412,9 @@ export function registerTournamentCreatorRoutes(app: Express, deps: RegisterTour
       const deletableIds = ids.filter((id) => !protectedIds.has(id));
       await db.transaction(async (tx) => {
         if (deletableIds.length) {
-          await tx.execute(sql`delete from app.competition_entries where competition_id = any(${deletableIds}::int[])`);
-          await tx.execute(sql`delete from app.competitions where id = any(${deletableIds}::int[])`);
+          const deletableIdArray = `{${deletableIds.map(Number).filter(Number.isInteger).join(",")}}`;
+          await tx.execute(sql`delete from app.competition_entries where competition_id = any(${deletableIdArray}::int[])`);
+          await tx.execute(sql`delete from app.competitions where id = any(${deletableIdArray}::int[])`);
         }
       });
       return res.json({ success: true, deletedTournaments: deletableIds.length, protectedSettledTournaments: protectedIds.size });

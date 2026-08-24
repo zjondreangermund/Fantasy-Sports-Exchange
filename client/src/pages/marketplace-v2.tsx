@@ -10,6 +10,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { LiveHero, LivePageShell, LiveStatCard } from "../components/layout/LivePageShell";
 import CardShowcase from "../components/CardShowcase";
+import CardPlayerImage from "../components/CardPlayerImage";
 import CardProfileModal from "../components/cards/CardProfileModal";
 import { LoanMarketPanel } from "../components/marketplace/LoanMarketPanel";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
@@ -90,7 +91,7 @@ function verifiedPlayerStat(card: PlayerCardWithPlayer, ...keys: string[]): numb
   const player = card.player as any;
   if (!player?.identityVerified) return null;
   for (const key of keys) {
-    const value = key === "card.totalPoints" ? (card as any).totalPoints : player?.[key];
+    const value = key.startsWith("card.") ? (card as any)[key.slice(5)] : player?.[key];
     if (value === null || value === undefined || value === "") continue;
     const number = Number(value);
     if (Number.isFinite(number)) return number;
@@ -99,15 +100,11 @@ function verifiedPlayerStat(card: PlayerCardWithPlayer, ...keys: string[]): numb
 }
 
 function officialPoints(card: PlayerCardWithPlayer) {
-  return verifiedPlayerStat(card, "totalPoints", "total_points", "card.totalPoints");
-}
-
-function officialOverall(card: PlayerCardWithPlayer) {
-  return verifiedPlayerStat(card, "overall");
+  return verifiedPlayerStat(card, "currentGameweekPoints", "card.currentGameweekPoints");
 }
 
 function statText(value: number | null, decimals = 0) {
-  return value === null ? "—" : value.toFixed(decimals);
+  return value === null ? "—" : Number(value.toFixed(decimals)).toLocaleString(undefined, { maximumFractionDigits: decimals });
 }
 
 export default function MarketplaceV2Page() {
@@ -217,7 +214,7 @@ export default function MarketplaceV2Page() {
         description="Buy, loan or auction premium chrome cards from one high-end market hub."
       >
         <LiveStatCard label="Sale Listings" value={String(filtered.length)} helper="Available now" />
-        <LiveStatCard label="Average Sale" value={money(avgPrice)} helper="Filtered price" />
+        <LiveStatCard label="Average Asking" value={money(avgPrice)} helper="Active listing prices" />
         <LiveStatCard label="Balance" value={money(walletBalance)} helper="Wallet funds" />
       </LiveHero>
 
@@ -398,7 +395,7 @@ function HotCard({ card, onClick }: { card: PlayerCardWithPlayer; onClick: () =>
   return (
     <button onClick={onClick} className="rounded-2xl border border-white/10 bg-black/25 p-3 text-left transition hover:bg-cyan-400/10">
       <div className="flex items-center gap-3">
-        <img src={fantasy.image} alt={fantasy.name} className="h-12 w-12 rounded-xl object-cover" />
+        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl"><CardPlayerImage card={card} alt={fantasy.name} className="h-full w-full object-cover" /></div>
         <div className="min-w-0">
           <p className="truncate font-bold">{fantasy.name}</p>
           <p className="truncate text-xs text-white/45">{fantasy.team || fantasy.club}</p>
@@ -441,8 +438,8 @@ function MarketRow({
       <div className="relative grid gap-3 md:grid-cols-[1.45fr_0.7fr_0.7fr_0.9fr_auto] md:items-center">
         <div className="flex min-w-0 items-center gap-3 text-left">
           <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-black/35">
-            <img src={fantasy.image} alt={fantasy.name} className="h-full w-full object-cover" />
-            <div title="Arena OVR derived from official FPL inputs" className="absolute left-1 top-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black">A-OVR {statText(officialOverall(card))}</div>
+            <CardPlayerImage card={card} alt={fantasy.name} className="h-full w-full object-cover" />
+            <div title="Actual Fantasy Arena card level" className="absolute left-1 top-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black">LEVEL {Math.max(1, Number(card.level || 1))}</div>
           </div>
           <div className="min-w-0">
             <p className="truncate text-lg font-black">{fantasy.name}</p>
@@ -457,8 +454,8 @@ function MarketRow({
         </div>
 
         <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2">
-          <p className="text-[10px] uppercase tracking-[.14em] text-white/40">Season points</p>
-          <p className="font-black">{statText(officialPoints(card))}</p>
+          <p className="text-[10px] uppercase tracking-[.14em] text-white/40">Arena GW points</p>
+          <p className="font-black">{statText(officialPoints(card), 4)}</p>
         </div>
 
         <div className="rounded-xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-2">

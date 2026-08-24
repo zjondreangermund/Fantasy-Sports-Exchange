@@ -13,6 +13,7 @@ const catalog = read("client/src/components/prize-vault/prizeArtworkCatalogLegac
 expect(reward.includes("WEEKLY_COMMON_REWARD_INTERVAL_DAYS = 7"), "Weekly Common reward interval must be 7 days");
 expect(reward.includes("account.signup_day + 1"), "First free Common reward must remain eligible from signup Day 2");
 expect(reward.includes("last_reward_day + ${WEEKLY_COMMON_REWARD_INTERVAL_DAYS}"), "Subsequent Common rewards must wait 7 days after the last reward");
+expect(reward.includes("last_reward_day + ${WEEKLY_COMMON_REWARD_INTERVAL_DAYS}::integer"), "Weekly reward date arithmetic must bind an explicitly typed PostgreSQL integer");
 expect(reward.includes("reward.weekly_common.claimed"), "Weekly Common reward audit action is missing");
 expect(reward.includes("Weekly common card collected"), "Weekly Common notification is missing");
 expect(!reward.includes("interval '1 day'"), "Old next-day reward interval must not remain active");

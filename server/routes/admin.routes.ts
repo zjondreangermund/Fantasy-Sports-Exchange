@@ -56,6 +56,11 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
           (select count(*)::int from app.player_cards) as cards,
           (select count(*)::int from app.player_cards where for_sale = true) as "activeListings",
           (select count(*)::int from app.competitions) as competitions,
+          (select count(*)::int from app.competition_entries) as "tournamentEntries",
+          (select count(distinct user_id)::int from app.competition_entries) as "tournamentParticipants",
+          (select coalesce(sum(entry_fee_paid), 0)::float from app.competition_entries) as "tournamentEntryAmount",
+          (select coalesce(sum(platform_fee_total), 0)::float from app.competitions) as "tournamentPlatformFees",
+          (select coalesce(sum(prize_pool_total), 0)::float from app.competitions) as "tournamentPrizePools",
           (select count(*)::int from app.auctions where status::text = 'live') as auctions,
           (select count(*)::int from app.transactions) as transactions,
           (select count(distinct user_id)::int from app.audit_logs where created_at >= now() - interval '1 day' and user_id is not null) as dau,
@@ -63,8 +68,8 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
           (select count(distinct user_id)::int from app.audit_logs where created_at >= now() - interval '30 days' and user_id is not null) as mau,
           (select count(distinct user_id)::int from app.audit_logs where created_at >= now() - interval '10 minutes' and user_id is not null) as "onlineUsersLast10Minutes",
           (select count(*)::int from app.audit_logs where action ilike '%error%' and created_at >= now() - interval '24 hours') as "errorsLast24h",
-          (select coalesce(sum(case when source_type = 'marketplace_sale' or type::text in ('marketplace_buy','marketplace_sale','purchase','sale') or coalesce(description,'') ilike '%marketplace%' then abs(coalesce(gross_amount, amount, 0)) else 0 end), 0)::float from app.transactions) as "marketplaceVolume",
-          (select coalesce(sum(case when source_type = 'marketplace_sale' or type::text in ('marketplace_sale','sale') or coalesce(description,'') ilike '%marketplace%' then greatest(coalesce(fee_amount, 0), greatest(abs(coalesce(gross_amount, 0)) - abs(coalesce(net_amount, 0)), 0)) else 0 end), 0)::float from app.transactions) as "marketplaceFees"
+          (select coalesce(sum(case when source_type = 'marketplace_sale' or type::text in ('marketplace_sale','sale') then abs(coalesce(gross_amount, amount, 0)) else 0 end), 0)::float from app.transactions) as "marketplaceVolume",
+          (select coalesce(sum(case when source_type = 'marketplace_sale' or type::text in ('marketplace_sale','sale') then coalesce(fee_amount, 0) else 0 end), 0)::float from app.transactions) as "marketplaceFees"
       `);
       const row = rowsOf(result)[0] || {};
       return res.json({
@@ -73,6 +78,11 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
         cards: Number(row.cards || 0),
         activeListings: Number(row.activeListings || 0),
         competitions: Number(row.competitions || 0),
+        tournamentEntries: Number(row.tournamentEntries || 0),
+        tournamentParticipants: Number(row.tournamentParticipants || 0),
+        tournamentEntryAmount: toMoney(row.tournamentEntryAmount || 0),
+        tournamentPlatformFees: toMoney(row.tournamentPlatformFees || 0),
+        tournamentPrizePools: toMoney(row.tournamentPrizePools || 0),
         auctions: Number(row.auctions || 0),
         transactions: Number(row.transactions || 0),
         dau: Number(row.dau || 0),
@@ -86,6 +96,114 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
     } catch (error: any) {
       console.error("Failed to fetch admin stats:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch admin stats" });
+    }
+  });
+
+  // A single database-backed contract keeps public tournament counts, admin
+  // receipts, actual entry fees and payout liabilities reconcilable.
+  app.get("/api/admin/tournament-financials", requireAuth, isAdmin, async (req: any, res) => {
+    try {
+      res.setHeader("Cache-Control", "private, no-store, max-age=0");
+      const requestedGameWeek = Number(req.query.gameWeek || 0);
+      const requestedTier = String(req.query.tier || "").trim().toLowerCase();
+      const requestedStatus = String(req.query.status || "").trim().toLowerCase();
+      const search = String(req.query.q || "").trim().toLowerCase();
+      const rawRows = rowsOf(await db.execute(sql`
+        select
+          c.id, c.name, c.tier::text as tier, c.status::text as status,
+          c.game_week as "gameWeek", c.visibility, c.prize_type as "prizeType",
+          c.prize_key as "prizeKey", c.created_by_user_id as "createdByUserId",
+          coalesce(creator.manager_team_name, creator.name, creator.email, 'Fantasy Arena') as "creatorName",
+          coalesce(c.entry_fee, 0)::float as "entryFee",
+          coalesce(c.max_entries, 0)::integer as "maxEntries",
+          coalesce(c.platform_fee_rate, 0)::float as "platformFeeRate",
+          coalesce(c.platform_fee_total, 0)::float as "platformFees",
+          coalesce(c.prize_pool_total, 0)::float as "prizePool",
+          coalesce(c.refund_total, 0)::float as "refundTotal",
+          coalesce(c.refunded_entry_count, 0)::integer as "refundedEntryCount",
+          c.start_date as "startsAt", c.end_date as "settlesAt", c.created_at as "createdAt",
+          coalesce(entry_totals.entries, 0)::integer as "entryCount",
+          coalesce(entry_totals.managers, 0)::integer as "uniqueManagers",
+          coalesce(entry_totals.gross, 0)::float as "grossEntryAmount",
+          coalesce(entry_totals.payouts, 0)::float as "cashPayouts",
+          coalesce(entry_totals.awarded_cards, 0)::integer as "awardedCards"
+        from app.competitions c
+        left join app.users creator on creator.id = c.created_by_user_id
+        left join lateral (
+          select count(*) as entries, count(distinct ce.user_id) as managers,
+            sum(coalesce(ce.entry_fee_paid, 0)) as gross,
+            sum(coalesce(ce.prize_amount, 0)) as payouts,
+            count(ce.prize_card_id) as awarded_cards
+          from app.competition_entries ce
+          where ce.competition_id = c.id
+        ) entry_totals on true
+        where c.name not like '[TEST]%'
+        order by c.game_week desc, c.created_at desc nulls last, c.id desc
+      `));
+
+      const tournaments = rawRows.map((row) => {
+        const entryCount = Number(row.entryCount || 0);
+        const entryFee = toMoney(row.entryFee || 0);
+        const grossEntryAmount = toMoney(row.grossEntryAmount || 0);
+        const expectedEntryAmount = toMoney(entryCount * entryFee);
+        const refundTotal = toMoney(row.refundTotal || 0);
+        const prizePool = toMoney(row.prizePool || 0);
+        const cashPayouts = toMoney(row.cashPayouts || 0);
+        const prizeKey = String(row.prizeKey || "").toLowerCase();
+        const category = prizeKey === "user-cash" || String(row.prizeType || "").toLowerCase() === "cash_pool"
+          ? "user-cash"
+          : prizeKey.startsWith("free-") || entryFee === 0
+            ? "free-cup"
+            : "prize-vault";
+        return {
+          ...row,
+          id: Number(row.id || 0),
+          gameWeek: Number(row.gameWeek || 0),
+          entryCount,
+          uniqueManagers: Number(row.uniqueManagers || 0),
+          entryFee,
+          grossEntryAmount,
+          expectedEntryAmount,
+          entryAmountDifference: toMoney(expectedEntryAmount - grossEntryAmount),
+          platformFeeRate: Number(row.platformFeeRate || 0),
+          platformFees: toMoney(row.platformFees || 0),
+          refundTotal,
+          refundedEntryCount: Number(row.refundedEntryCount || 0),
+          netCollected: toMoney(grossEntryAmount - refundTotal),
+          prizePool,
+          cashPayouts,
+          outstandingPrizePool: toMoney(Math.max(prizePool - cashPayouts, 0)),
+          awardedCards: Number(row.awardedCards || 0),
+          category,
+        };
+      }).filter((row) => (!requestedGameWeek || row.gameWeek === requestedGameWeek)
+        && (!requestedTier || String(row.tier || "").toLowerCase() === requestedTier)
+        && (!requestedStatus || String(row.status || "").toLowerCase() === requestedStatus)
+        && (!search || `${row.name} ${row.creatorName} ${row.tier} ${row.category} ${row.id}`.toLowerCase().includes(search)));
+
+      const summary = tournaments.reduce((totals, row) => ({
+        tournaments: totals.tournaments + 1,
+        entries: totals.entries + row.entryCount,
+        paidEntries: totals.paidEntries + (row.entryFee > 0 ? row.entryCount : 0),
+        freeEntries: totals.freeEntries + (row.entryFee === 0 ? row.entryCount : 0),
+        grossEntryAmount: toMoney(totals.grossEntryAmount + row.grossEntryAmount),
+        refunds: toMoney(totals.refunds + row.refundTotal),
+        netCollected: toMoney(totals.netCollected + row.netCollected),
+        platformFees: toMoney(totals.platformFees + row.platformFees),
+        prizePools: toMoney(totals.prizePools + row.prizePool),
+        cashPayouts: toMoney(totals.cashPayouts + row.cashPayouts),
+        outstandingPrizePools: toMoney(totals.outstandingPrizePools + row.outstandingPrizePool),
+        reconciliationDifferences: totals.reconciliationDifferences + (row.entryAmountDifference !== 0 ? 1 : 0),
+      }), {
+        tournaments: 0, entries: 0, paidEntries: 0, freeEntries: 0, grossEntryAmount: 0,
+        refunds: 0, netCollected: 0, platformFees: 0, prizePools: 0, cashPayouts: 0,
+        outstandingPrizePools: 0, reconciliationDifferences: 0,
+      });
+
+      return res.json({ updatedAt: new Date().toISOString(), summary, tournaments, source: "Fantasy Arena competition entries and wallet records" });
+    } catch (error: any) {
+      console.error("Failed to fetch admin tournament financials:", error);
+      return res.status(500).json({ message: error?.message || "Failed to fetch tournament financials" });
     }
   });
 
@@ -250,20 +368,19 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
         const txResult = await db.execute(sql`
           select
             coalesce(sum(case when source_type = 'marketplace_sale' then fee_amount else 0 end), 0)::float as marketplace_recorded,
-            coalesce(sum(case when source_type = 'marketplace_sale' or type::text in ('marketplace_sale','sale','purchase','marketplace_buy') or coalesce(description, '') ilike '%marketplace%' then abs(coalesce(gross_amount, amount, 0)) else 0 end), 0)::float as marketplace_volume,
-            coalesce(sum(case when source_type = 'marketplace_sale' or type::text in ('marketplace_sale','sale') or coalesce(description, '') ilike '%marketplace%' then greatest(coalesce(fee_amount, 0), greatest(abs(coalesce(gross_amount, 0)) - abs(coalesce(net_amount, 0)), 0)) else 0 end), 0)::float as marketplace_inferred,
+            coalesce(sum(case when source_type = 'marketplace_sale' or type::text in ('marketplace_sale','sale') then abs(coalesce(gross_amount, amount, 0)) else 0 end), 0)::float as marketplace_volume,
             coalesce(sum(case when source_type in ('user_tournament_entry','competition_entry') or type::text = 'entry_fee' then fee_amount else 0 end), 0)::float as tournaments,
             coalesce(sum(case when source_type = 'deposit' or type::text = 'deposit' then fee_amount else 0 end), 0)::float as deposits,
             coalesce(sum(case when source_type ilike '%withdraw%' or type::text = 'withdrawal' then fee_amount else 0 end), 0)::float as withdrawals
           from app.transactions where ${sinceSql}
         `);
-        const withdrawalResult = await db.execute(sql`select coalesce(sum(coalesce(fee, 0)), 0)::float as withdrawal_request_fees from app.withdrawal_requests where ${sinceSql}`);
+        const tournamentResult = await db.execute(sql`select coalesce(sum(coalesce(platform_fee_total, 0)), 0)::float as tournament_platform_fees from app.competitions where ${sinceSql}`);
         const row = rowsOf(txResult)[0] || {};
         const marketplaceVolume = toMoney(row.marketplace_volume || 0);
-        const marketplace = toMoney(Math.max(Number(row.marketplace_recorded || 0), Number(row.marketplace_inferred || 0), marketplaceVolume * 0.08));
-        const tournaments = toMoney(row.tournaments || 0);
+        const marketplace = toMoney(row.marketplace_recorded || 0);
+        const tournaments = toMoney(Math.max(Number(row.tournaments || 0), Number(rowsOf(tournamentResult)[0]?.tournament_platform_fees || 0)));
         const deposits = toMoney(row.deposits || 0);
-        const withdrawals = toMoney(Math.max(Number(row.withdrawals || 0), Number(rowsOf(withdrawalResult)[0]?.withdrawal_request_fees || 0)));
+        const withdrawals = toMoney(row.withdrawals || 0);
         return { label, marketplace, marketplaceVolume, tournaments, deposits, withdrawals, total: toMoney(marketplace + tournaments + deposits + withdrawals) };
       };
       const [today, week, month, lifetime] = await Promise.all([
@@ -272,7 +389,7 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
         buildWindow("This Month", sql`created_at >= date_trunc('month', now())`),
         buildWindow("Lifetime", sql`true`),
       ]);
-      return res.json({ feeRates: { tournaments: 0.2, marketplace: 0.08, withdrawals: 0.035, depositsUnder200: 0.02 }, windows: { today, week, month, lifetime } });
+      return res.json({ feeRates: { tournaments: 0.1, marketplace: 0.08, withdrawals: 0, depositsUnder200: 0.02 }, windows: { today, week, month, lifetime } });
     } catch (error: any) {
       console.error("Failed to fetch admin revenue:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch admin revenue" });
@@ -290,9 +407,13 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
           (select count(*)::int from app.transactions where source_type = 'marketplace_sale' or type::text in ('sale','marketplace_sale')) as "soldCards",
           (select count(*)::int from app.auctions where status::text = 'live') as "auctionsLive",
           (select count(*)::int from app.competitions where status::text in ('open','active','upcoming')) as "competitionsLive",
+          (select count(*)::int from app.competition_entries) as "tournamentEntries",
+          (select coalesce(sum(entry_fee_paid),0)::float from app.competition_entries) as "tournamentEntryAmount",
+          (select coalesce(sum(platform_fee_total),0)::float from app.competitions) as "tournamentPlatformFees",
+          (select coalesce(sum(prize_pool_total),0)::float from app.competitions) as "tournamentPrizePools",
           (select coalesce(sum(balance),0)::float from app.wallets) as "walletBalances",
-          (select coalesce(sum(abs(coalesce(gross_amount, amount, 0))),0)::float from app.transactions where source_type ilike '%marketplace%' or type::text in ('purchase','sale','marketplace_buy','marketplace_sale')) as "grossMarketplaceVolume",
-          (select coalesce(sum(greatest(coalesce(fee_amount,0), greatest(abs(coalesce(gross_amount,0)) - abs(coalesce(net_amount,0)),0))),0)::float from app.transactions where source_type ilike '%marketplace%' or type::text in ('sale','marketplace_sale')) as "platformFees",
+          (select coalesce(sum(abs(coalesce(gross_amount, amount, 0))),0)::float from app.transactions where source_type='marketplace_sale' or type::text in ('sale','marketplace_sale')) as "grossMarketplaceVolume",
+          (select coalesce(sum(coalesce(fee_amount,0)),0)::float from app.transactions where source_type='marketplace_sale' or type::text in ('sale','marketplace_sale')) as "platformFees",
           (select coalesce(sum(coalesce(fee_amount,0)),0)::float from app.transactions where source_type in ('user_tournament_entry','competition_entry') or type::text = 'entry_fee') as "tournamentFees",
           (select count(*)::int from app.withdrawal_requests where status::text = 'pending') as "withdrawalsPending"
       `))[0] || {};
@@ -300,6 +421,8 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
         totalUsers: Number(row.totalUsers || 0), activeUsers: Number(row.activeUsers || 0), totalCardsMinted: Number(row.totalCardsMinted || 0),
         listedCards: Number(row.listedCards || 0), soldCards: Number(row.soldCards || 0), auctionsLive: Number(row.auctionsLive || 0),
         competitionsLive: Number(row.competitionsLive || 0), walletBalances: toMoney(row.walletBalances || 0),
+        tournamentEntries: Number(row.tournamentEntries || 0), tournamentEntryAmount: toMoney(row.tournamentEntryAmount || 0),
+        tournamentPlatformFees: toMoney(row.tournamentPlatformFees || 0), tournamentPrizePools: toMoney(row.tournamentPrizePools || 0),
         grossMarketplaceVolume: toMoney(row.grossMarketplaceVolume || 0), platformFees: toMoney(row.platformFees || 0),
         tournamentFees: toMoney(row.tournamentFees || 0), withdrawalsPending: Number(row.withdrawalsPending || 0)
       } });

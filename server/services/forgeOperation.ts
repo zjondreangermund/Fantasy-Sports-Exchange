@@ -33,36 +33,39 @@ export function forgeFeePostingKey(operationId: number): string {
 
 async function findBlockedCards(executor: any, userId: string, cardIds: number[]) {
   if (!cardIds.length) return [];
+  // Drizzle expands JavaScript arrays into SQL records. Bind one typed array
+  // literal instead so PostgreSQL never attempts to cast a record to integer[].
+  const cardIdArray = `{${normalizeForgeCardIds(cardIds).join(",")}}`;
   return rowsOf(await executor.execute(sql`
     SELECT DISTINCT blocked.card_id AS "cardId", blocked.reason
     FROM (
       SELECT cl.card_id, 'competition_lock'::text AS reason
       FROM app.card_locks cl
-      WHERE cl.card_id = ANY(${cardIds}::int[])
+      WHERE cl.card_id = ANY(${cardIdArray}::int[])
         AND (cl.expires_at IS NULL OR cl.expires_at > now())
       UNION ALL
       SELECT a.card_id, 'auction'::text AS reason
       FROM app.auctions a
-      WHERE a.card_id = ANY(${cardIds}::int[]) AND a.status::text IN ('draft', 'live')
+      WHERE a.card_id = ANY(${cardIdArray}::int[]) AND a.status::text IN ('draft', 'live')
       UNION ALL
       SELECT so.offered_card_id, 'pending_swap'::text AS reason
       FROM app.swap_offers so
-      WHERE so.offered_card_id = ANY(${cardIds}::int[]) AND so.status::text = 'pending'
+      WHERE so.offered_card_id = ANY(${cardIdArray}::int[]) AND so.status::text = 'pending'
       UNION ALL
       SELECT so.requested_card_id, 'pending_swap'::text AS reason
       FROM app.swap_offers so
-      WHERE so.requested_card_id = ANY(${cardIds}::int[]) AND so.status::text = 'pending'
+      WHERE so.requested_card_id = ANY(${cardIdArray}::int[]) AND so.status::text = 'pending'
       UNION ALL
       SELECT l.card_id, 'loan'::text AS reason
       FROM app.card_loans l
-      WHERE l.card_id = ANY(${cardIds}::int[]) AND l.status IN ('open', 'active')
+      WHERE l.card_id = ANY(${cardIdArray}::int[]) AND l.status IN ('open', 'active')
       UNION ALL
       SELECT lineup_card.value::int AS card_id, 'active_lineup'::text AS reason
       FROM app.lineups lineup
       CROSS JOIN LATERAL jsonb_array_elements_text(
         CASE WHEN jsonb_typeof(lineup.card_ids) = 'array' THEN lineup.card_ids ELSE '[]'::jsonb END
       ) AS lineup_card(value)
-      WHERE lineup.user_id = ${userId} AND lineup_card.value::int = ANY(${cardIds}::int[])
+      WHERE lineup.user_id = ${userId} AND lineup_card.value::int = ANY(${cardIdArray}::int[])
     ) blocked
     ORDER BY blocked.card_id, blocked.reason
   `));
@@ -151,6 +154,7 @@ export async function executeCommonToRareForge(tx: any, input: { userId: string;
   await ensureForgeOperationSchema();
   const userId = String(input.userId || "").trim();
   const cardIds = normalizeForgeCardIds(input.cardIds);
+  const cardIdArray = `{${cardIds.join(",")}}`;
   const sourceSignature = forgeSourceSignature(userId, cardIds);
   const operationKey = forgeOperationKey(sourceSignature);
 
@@ -161,7 +165,7 @@ export async function executeCommonToRareForge(tx: any, input: { userId: string;
   const cards = rowsOf(await tx.execute(sql`
     SELECT pc.id, pc.player_id AS "playerId", pc.owner_id AS "ownerId", pc.rarity::text AS rarity, pc.for_sale AS "forSale"
     FROM app.player_cards pc
-    WHERE pc.id = ANY(${cardIds}::int[])
+    WHERE pc.id = ANY(${cardIdArray}::int[])
     ORDER BY pc.id
     FOR UPDATE
   `));
@@ -219,13 +223,13 @@ export async function executeCommonToRareForge(tx: any, input: { userId: string;
   await tx.execute(sql`
     INSERT INTO app.forge_burn_items (operation_id, card_id, ordinal)
     SELECT ${operationId}, source.card_id, source.ordinality::int
-    FROM unnest(${cardIds}::int[]) WITH ORDINALITY AS source(card_id, ordinality)
+    FROM unnest(${cardIdArray}::int[]) WITH ORDINALITY AS source(card_id, ordinality)
   `);
 
   const burned = rowsOf(await tx.execute(sql`
     UPDATE app.player_cards
     SET owner_id = NULL, for_sale = false, price = 0
-    WHERE id = ANY(${cardIds}::int[]) AND owner_id = ${userId} AND rarity::text = 'common'
+    WHERE id = ANY(${cardIdArray}::int[]) AND owner_id = ${userId} AND rarity::text = 'common'
     RETURNING id
   `));
   if (burned.length !== COMMON_FORGE_BURN_COUNT) throw new Error("Forge source cards changed before burn completion");

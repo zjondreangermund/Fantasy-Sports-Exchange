@@ -23,7 +23,7 @@ function rarityOf(card: PlayerCardWithPlayer) { return String(card.rarity || "co
 function money(value: unknown) { const n = Number(value || 0); return Number.isFinite(n) ? `N$${n.toFixed(2)}` : "N$0.00"; }
 function normalizeCards(data: unknown): PlayerCardWithPlayer[] { if (Array.isArray(data)) return data as PlayerCardWithPlayer[]; if (Array.isArray((data as any)?.cards)) return (data as any).cards; return []; }
 function playerName(card: PlayerCardWithPlayer) { return String(card.player?.name || "").toLowerCase(); }
-function cardValue(card: PlayerCardWithPlayer) { return Number(card.price || BASE_PRICES[rarityOf(card)] || 0); }
+function cardValue(card: PlayerCardWithPlayer) { return card.forSale ? Math.max(0, Number(card.price || 0)) : 0; }
 
 export default function CollectionCleanPage() {
   const { toast } = useToast();
@@ -89,7 +89,7 @@ export default function CollectionCleanPage() {
               <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">Premium Collection</h1>
               <p className="mt-1 max-w-2xl text-sm text-slate-300">Showing 10 cards per page for faster scrolling and cleaner browsing.</p>
             </div>
-            <div className="grid grid-cols-3 gap-2 sm:min-w-[420px]"><Stat label="Cards" value={cards.length} /><Stat label="Premium" value={premiumCount} /><Stat label="Value" value={money(collectionValue)} /></div>
+            <div className="grid grid-cols-3 gap-2 sm:min-w-[420px]"><Stat label="Cards" value={cards.length} /><Stat label="Premium" value={premiumCount} /><Stat label="Listed value" value={money(collectionValue)} /></div>
           </div>
           <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
             <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search players, teams, positions or cards..." className="h-12 w-full rounded-2xl border border-white/10 bg-black/30 pl-10 pr-4 text-sm font-semibold text-white outline-none placeholder:text-white/35 focus:border-violet-300/50" /></div>

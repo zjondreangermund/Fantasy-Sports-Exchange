@@ -28,6 +28,7 @@ type ProfileData = {
   };
   stats?: {
     totalPoints?: number;
+    arenaGameweekPoints?: number;
   };
 };
 
@@ -68,7 +69,9 @@ function PremiumFootballCardBase({
       if (!response.ok) throw new Error("Failed to fetch card profile");
       return response.json();
     },
-    enabled: cardId > 0,
+    // Collection/marketplace payloads already include verified identity, live
+    // Arena points and portrait candidates; avoid one extra request per card.
+    enabled: cardId > 0 && interactive && !player.image && !player.imageUrl,
     staleTime: 60_000,
     retry: false,
   });
@@ -84,11 +87,11 @@ function PremiumFootballCardBase({
       team: data.player?.team || player.team,
       club: data.player?.team || player.club,
       position: data.player?.position || player.position,
-      totalPoints: data.stats?.totalPoints ?? player.totalPoints,
+      totalPoints: data.stats?.arenaGameweekPoints ?? player.totalPoints,
       image: verifiedImage || player.image,
       imageUrl: verifiedImage || player.imageUrl,
       photo: verifiedImage || player.photo,
-      imageCandidates: verifiedImage ? [verifiedImage] : player.imageCandidates,
+      imageCandidates: Array.from(new Set([verifiedImage, ...(player.imageCandidates || [])].filter(Boolean))) as string[],
       statsVerified: identityVerified ? true : player.statsVerified,
       apiFootballId: data.player?.apiFootballId || (player as any).apiFootballId,
     } as PlayerCardData;

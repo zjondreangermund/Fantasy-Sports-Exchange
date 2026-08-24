@@ -397,7 +397,7 @@ export async function getApiFootballPlayerProfileSnapshot(
     return {
       gameweek: roundNumber(row.round, index + 1),
       opponent,
-      points: Math.round(rowPoints * 10) / 10,
+      points: Math.round(rowPoints * 10_000) / 10_000,
       minutes: rowMinutes,
       goals: rowGoals,
       assists: rowAssists,
@@ -433,7 +433,7 @@ export async function getApiFootballPlayerProfileSnapshot(
       yellowCards,
       redCards,
       bonus: 0,
-      totalPoints: Math.round(totalPoints * 10) / 10,
+      totalPoints: Math.round(totalPoints * 10_000) / 10_000,
       selectedBy: null,
       value: null,
       saves,

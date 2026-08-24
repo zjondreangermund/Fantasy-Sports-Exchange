@@ -9,6 +9,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import Metal3DCard from "../components/Metal3DCard";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { openNotification, type ArenaNotification } from "../lib/notifications";
+import { useAuth } from "../hooks/use-auth";
 import MatchdayCenter from "../components/dashboard/MatchdayCenter";
 import DailyLoginRewardPanel from "../components/dashboard/DailyLoginRewardPanel";
 import { PremiumHero, PremiumPage, PremiumPanel, PremiumStat } from "../components/premium";
@@ -35,11 +36,12 @@ function rarityCounts(cards: PlayerCardWithPlayer[] | undefined) {
 
 export default function DashboardPage() {
   const [, navigate] = useLocation();
+  const { user } = useAuth();
   const { data: wallet, isLoading: walletLoading } = useQuery<Wallet>({ queryKey: ["/api/wallet"], queryFn: async () => { const res = await fetch("/api/wallet", { credentials: "include" }); if (!res.ok) throw new Error("Failed to fetch wallet"); return res.json(); } });
   const { data: cards, isLoading: cardsLoading } = useQuery<PlayerCardWithPlayer[]>({ queryKey: ["/api/user/cards"], queryFn: async () => { const res = await fetch("/api/user/cards", { credentials: "include" }); if (!res.ok) throw new Error("Failed to fetch cards"); const data = await res.json(); return Array.isArray(data) ? data : data.cards || []; }, staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
   const { data: lineup, isLoading: lineupLoading } = useQuery<{ cards: PlayerCardWithPlayer[] }>({ queryKey: ["/api/lineup"], queryFn: async () => { const res = await fetch("/api/lineup", { credentials: "include" }); if (!res.ok) return { cards: [] }; return res.json(); }, staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
-  const { data: competitions } = useQuery<CompetitionWithEntries[]>({ queryKey: ["/api/competitions"], queryFn: async () => { const res = await fetch("/api/competitions", { credentials: "include" }); if (!res.ok) return []; const data = await res.json(); return Array.isArray(data) ? data : data.competitions || []; }, refetchInterval: 30000 });
-  const { data: myEntries } = useQuery<CompetitionEntry[]>({ queryKey: ["/api/competitions/my-entries"], queryFn: async () => { const res = await fetch("/api/competitions/my-entries", { credentials: "include" }); if (!res.ok) return []; return res.json(); }, refetchInterval: 30000 });
+  const { data: competitions } = useQuery<CompetitionWithEntries[]>({ queryKey: ["/api/competitions"], queryFn: async () => { const res = await fetch("/api/competitions", { credentials: "include" }); if (!res.ok) return []; const data = await res.json(); return Array.isArray(data) ? data : data.competitions || []; }, staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
+  const { data: myEntries } = useQuery<CompetitionEntry[]>({ queryKey: ["/api/competitions/my-entries", user?.id || "anonymous"], enabled: Boolean(user?.id), queryFn: async () => { const res = await fetch("/api/competitions/my-entries", { credentials: "include" }); if (!res.ok) return []; return res.json(); }, staleTime: 0, refetchInterval: 15_000, refetchOnWindowFocus: true });
   const { data: notifications } = useQuery<NotificationResponse>({ queryKey: ["/api/notifications"], queryFn: async () => { const res = await fetch("/api/notifications", { credentials: "include" }); if (!res.ok) return { notifications: [], unreadCount: 0 }; return res.json(); }, refetchInterval: 30000 });
   const { data: retentionSummary } = useQuery<RetentionSummary>({ queryKey: ["/api/retention/summary"], queryFn: async () => { const res = await fetch("/api/retention/summary", { credentials: "include" }); if (!res.ok) return {}; return res.json(); }, refetchInterval: 30000 });
 
