@@ -127,4 +127,22 @@ patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) =
   return source;
 });
 
+// The site-integrity generators run immediately before this patch during CI.
+// Keep their generated TypeScript valid without changing runtime behavior.
+patchFile("client/src/pages/competitions-vault.tsx", (original) => {
+  const typed = "leaderboard.leaderboard.map((entry: any) => <button";
+  if (original.includes(typed)) return original;
+  const untyped = "leaderboard.leaderboard.map((entry) => <button";
+  if (!original.includes(untyped)) throw new Error("[manual-settlement] leaderboard entry typing anchor not found");
+  return original.replace(untyped, typed);
+});
+
+patchFile("server/routes.ts", (original) => {
+  if (!original.includes("GW1_TEST_ENTRY_EXTENSION_UTC")) return original;
+  if (original.includes("const GW1_TEST_ENTRY_EXTENSION_UTC =")) return original;
+  const anchor = "const SEASON_END = Date.UTC(2027, 6, 1);\n";
+  if (!original.includes(anchor)) throw new Error("[manual-settlement] GW1 extension constant anchor not found");
+  return original.replace(anchor, `${anchor}const GW1_TEST_ENTRY_EXTENSION_UTC = Date.parse(\"2026-08-21T19:00:00.000Z\"); // historical one-time GW1 test cutoff (21:00 CAT)\n`);
+});
+
 console.log("[manual-settlement] Safe manual settlement controls are ready.");
