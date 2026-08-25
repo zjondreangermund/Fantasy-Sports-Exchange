@@ -17,6 +17,14 @@ function replaceOnce(source, from, to, label) {
   return source.replace(from, to);
 }
 
+function replaceOneOf(source, variants, to, marker, label) {
+  if (source.includes(marker || to)) return source;
+  for (const from of variants) {
+    if (source.includes(from)) return source.replace(from, to);
+  }
+  throw new Error(`[manual-settlement] anchor not found: ${label}`);
+}
+
 function insertAfter(source, anchor, insertion, marker, label) {
   if (source.includes(marker)) return source;
   if (!source.includes(anchor)) throw new Error(`[manual-settlement] anchor not found: ${label}`);
@@ -73,6 +81,13 @@ patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
   );
   source = insertAfter(
     source,
+    "          replayedPostings,\n",
+    "          manualSettlement: forceManual,\n",
+    "manualSettlement: forceManual,",
+    "manual settlement response metadata",
+  );
+  source = insertAfter(
+    source,
     "        \"Stored score does not match the final scoring snapshot\",\n",
     "        \"Eligible Premier League fixtures are still unfinished\",\n        \"No eligible Premier League fixtures are available for manual settlement\",\n",
     "Eligible Premier League fixtures are still unfinished",
@@ -90,14 +105,40 @@ patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) =
     "admin settle mutation payload",
   );
 
+  source = replaceOneOf(
+    source,
+    [
+      '    onSuccess: () => {',
+      '    onSuccess: (result: any) => {',
+    ],
+    '    onSuccess: (result: any) => {',
+    'onSuccess: (result: any) => {',
+    "admin settle result handler",
+  );
+  source = replaceOneOf(
+    source,
+    [
+      '      toast({ title: "Tournament settled", description: "Tuesday-frozen scores, ranks and prizes are now final." });',
+      '      toast({ title: "Tournament settled", description: result?.settlement?.manualSettlement ? "Manual settlement completed using finished eligible Premier League fixtures." : "Final scores, ranks and prizes are now settled." });',
+    ],
+    '      toast({ title: "Tournament settled", description: result?.settlement?.manualSettlement ? "Manual settlement completed using finished eligible Premier League fixtures." : "Final scores, ranks and prizes are now settled." });',
+    'result?.settlement?.manualSettlement',
+    "manual settlement success message",
+  );
+
   const requestFrom = `  const requestSettlement = (comp: any) => {\n    if (!window.confirm(\`Settle \"\${comp.name || \"this tournament\"}\" using the score frozen at \${settlementLabel(comp.endDate || comp.end_date)}?\`)) return;\n    settleMutation.mutate(Number(comp.id));\n  };`;
   const requestTo = `  const requestSettlement = (comp: any) => {\n    const settlement = comp.endDate || comp.end_date;\n    const settlementMs = new Date(String(settlement || \"\")).getTime();\n    const forceManual = !Number.isFinite(settlementMs) || Date.now() < settlementMs;\n    const warning = forceManual\n      ? \`MANUAL EARLY SETTLEMENT\\n\\nThis will freeze the current official Premier League scores, calculate ranks, issue the tournament prize/payout and release tournament card locks. It will only proceed if every eligible Premier League fixture is finished.\\n\\nSettle \"\${comp.name || \"this tournament\"}\" now?\`\n      : \`Settle \"\${comp.name || \"this tournament\"}\" using the final score at \${settlementLabel(settlement)}?\`;\n    if (!window.confirm(warning)) return;\n    settleMutation.mutate({ competitionId: Number(comp.id), forceManual });\n  };`;
   source = replaceOnce(source, requestFrom, requestTo, "manual settlement confirmation");
 
-  source = replaceOnce(
+  const guardedReady = 'const readyToSettle = !isCancelled && !isCompleted && ["active", "closed"].includes(status) && Number.isFinite(settlementMs) && Date.now() >= settlementMs;';
+  const simpleReady = 'const readyToSettle = ["active", "closed"].includes(status) && Number.isFinite(settlementMs) && Date.now() >= settlementMs;';
+  const guardedCanSettle = 'const canSettle = !isCancelled && !isCompleted && ["active", "closed"].includes(status); const earlyManualSettle = canSettle && (!Number.isFinite(settlementMs) || Date.now() < settlementMs);';
+  const simpleCanSettle = 'const canSettle = ["active", "closed"].includes(status); const earlyManualSettle = canSettle && (!Number.isFinite(settlementMs) || Date.now() < settlementMs);';
+  source = replaceOneOf(
     source,
-    'const readyToSettle = ["active", "closed"].includes(status) && Number.isFinite(settlementMs) && Date.now() >= settlementMs;',
-    'const canSettle = ["active", "closed"].includes(status); const earlyManualSettle = canSettle && (!Number.isFinite(settlementMs) || Date.now() < settlementMs);',
+    [guardedReady, simpleReady],
+    source.includes("const isCancelled =") ? guardedCanSettle : simpleCanSettle,
+    "const canSettle =",
     "manual settle availability",
   );
   source = replaceOnce(
