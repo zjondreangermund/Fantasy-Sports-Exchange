@@ -23,8 +23,6 @@ function insertAfter(source, anchor, insertion, marker, label) {
   return source.replace(anchor, `${anchor}${insertion}`);
 }
 
-// Allow an admin to finalize a tournament early only after every Premier League
-// fixture that is eligible before that tournament's settlement cutoff is finished.
 patchFile("server/services/scoreUpdater.ts", (original) => {
   let source = original;
   source = replaceOnce(
@@ -33,7 +31,6 @@ patchFile("server/services/scoreUpdater.ts", (original) => {
     "  async updateCompetition(competitionId: number, options: { forceFinal?: boolean } = {}): Promise<CompetitionScoreResult> {",
     "score updater manual-final signature",
   );
-
   source = insertAfter(
     source,
     "    if (String(comp.status) === \"cancelled\") throw new Error(`Competition ${competitionId} is cancelled`);\n",
@@ -41,18 +38,14 @@ patchFile("server/services/scoreUpdater.ts", (original) => {
     "const forceFinal = Boolean(options.forceFinal);",
     "score updater force-final flag",
   );
-
   const finalBlockFrom = `    if (![\"active\", \"closed\"].includes(String(comp.status))) throw new Error(\`Competition \${competitionId} cannot be scored (status: \${comp.status})\`);\n\n    const final = this.isSettlementFinal(comp);\n    const currentGameweek = this.currentOrNextGameweek(bootstrap);`;
-  const finalBlockTo = `    if (![\"active\", \"closed\"].includes(String(comp.status))) throw new Error(\`Competition \${competitionId} cannot be scored (status: \${comp.status})\`);\n\n    // MANUAL_TOURNAMENT_SETTLEMENT_V1\n    // Early settlement is permitted only when every fixture that can count\n    // before the configured settlement cutoff has already finished. Fixtures\n    // postponed beyond that cutoff do not block settlement.\n    if (forceFinal) {\n      const settlement = this.settlementDeadline(comp);\n      const eligibleFixtures = this.fixturesForGameweek(fixtures, gameWeek).filter((fixture: any) => {\n        if (!fixture?.kickoff_time) return false;\n        const kickoff = new Date(String(fixture.kickoff_time));\n        if (!Number.isFinite(kickoff.getTime())) return false;\n        return !settlement || kickoff.getTime() <= settlement.getTime();\n      });\n      if (!eligibleFixtures.length) throw new Error(\"No eligible Premier League fixtures are available for manual settlement\");\n      const unfinishedFixtures = eligibleFixtures.filter((fixture: any) => !fixture?.finished && !fixture?.finished_provisional);\n      if (unfinishedFixtures.length) throw new Error(\"Eligible Premier League fixtures are still unfinished\");\n    }\n\n    const final = forceFinal || this.isSettlementFinal(comp);\n    const currentGameweek = this.currentOrNextGameweek(bootstrap);`;
+  const finalBlockTo = `    if (![\"active\", \"closed\"].includes(String(comp.status))) throw new Error(\`Competition \${competitionId} cannot be scored (status: \${comp.status})\`);\n\n    // MANUAL_TOURNAMENT_SETTLEMENT_V1\n    if (forceFinal) {\n      const settlement = this.settlementDeadline(comp);\n      const eligibleFixtures = this.fixturesForGameweek(fixtures, gameWeek).filter((fixture: any) => {\n        if (!fixture?.kickoff_time) return false;\n        const kickoff = new Date(String(fixture.kickoff_time));\n        if (!Number.isFinite(kickoff.getTime())) return false;\n        return !settlement || kickoff.getTime() <= settlement.getTime();\n      });\n      if (!eligibleFixtures.length) throw new Error(\"No eligible Premier League fixtures are available for manual settlement\");\n      const unfinishedFixtures = eligibleFixtures.filter((fixture: any) => !fixture?.finished && !fixture?.finished_provisional);\n      if (unfinishedFixtures.length) throw new Error(\"Eligible Premier League fixtures are still unfinished\");\n    }\n\n    const final = forceFinal || this.isSettlementFinal(comp);\n    const currentGameweek = this.currentOrNextGameweek(bootstrap);`;
   source = replaceOnce(source, finalBlockFrom, finalBlockTo, "score updater manual final guard");
   return source;
 });
 
-// Reuse the canonical settlement route so payouts/rewards, ranks, notifications,
-// lock release and exactly-once posting protection stay in one place.
 patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
   let source = original;
-
   source = insertAfter(
     source,
     "      if (!Number.isInteger(competitionId) || competitionId <= 0) return res.status(400).json({ message: \"Valid tournament required\" });\n",
@@ -60,28 +53,24 @@ patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
     "const forceManual = Boolean(req.body?.forceManual",
     "manual settle request flag",
   );
-
   source = replaceOnce(
     source,
     "        const scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId);",
     "        const scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId, { forceFinal: forceManual });",
     "manual settlement scoring call",
   );
-
   source = replaceOnce(
     source,
     "            settledAt: new Date().toISOString(),",
     "            settledAt: new Date().toISOString(),\n            manualSettlement: forceManual,",
     "settlement manual metadata",
   );
-
   source = replaceOnce(
     source,
     "        values (${adminId}, 'admin.tournament.settled', ${JSON.stringify({ competitionId, grossPool, platformFee, prizePool, prizeType, prizeVault, sharedEntries, prizeAward: awardRecord, cardLocksReleased: true, replayedPostings })}::jsonb)",
     "        values (${adminId}, 'admin.tournament.settled', ${JSON.stringify({ competitionId, grossPool, platformFee, prizePool, prizeType, prizeVault, sharedEntries, prizeAward: awardRecord, cardLocksReleased: true, replayedPostings, manualSettlement: forceManual })}::jsonb)",
     "manual settlement audit metadata",
   );
-
   source = insertAfter(
     source,
     "        \"Stored score does not match the final scoring snapshot\",\n",
@@ -89,23 +78,16 @@ patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
     "Eligible Premier League fixtures are still unfinished",
     "manual settlement validation messages",
   );
-
   return source;
 });
 
-// Before the normal cutoff an active/closed tournament gets an amber Manual
-// Settle Now action. After the cutoff it remains the normal final settle action.
 patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) => {
   let source = original;
-
-  const settleMutationFrom = `    mutationFn: async (competitionId: number) => (await apiRequest(\"POST\", \`/api/admin/competitions/settle/\${competitionId}\`, {})).json(),\n    onSuccess: () => {`;
-  const settleMutationTo = `    mutationFn: async ({ competitionId, forceManual }: { competitionId: number; forceManual: boolean }) => (await apiRequest(\"POST\", \`/api/admin/competitions/settle/\${competitionId}\`, { forceManual })).json(),\n    onSuccess: (result: any) => {`;
-  source = replaceOnce(source, settleMutationFrom, settleMutationTo, "admin settle mutation payload");
   source = replaceOnce(
     source,
-    '      toast({ title: "Tournament settled", description: "Tuesday-frozen scores, ranks and prizes are now final." });',
-    '      toast({ title: "Tournament settled", description: result?.message || "Scores, ranks and prizes are now final." });',
-    "admin settle success toast",
+    '    mutationFn: async (competitionId: number) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, {})).json(),',
+    '    mutationFn: async ({ competitionId, forceManual }: { competitionId: number; forceManual: boolean }) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, { forceManual })).json(),',
+    "admin settle mutation payload",
   );
 
   const requestFrom = `  const requestSettlement = (comp: any) => {\n    if (!window.confirm(\`Settle \"\${comp.name || \"this tournament\"}\" using the score frozen at \${settlementLabel(comp.endDate || comp.end_date)}?\`)) return;\n    settleMutation.mutate(Number(comp.id));\n  };`;
@@ -124,7 +106,6 @@ patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) =
     '{canSettle ? <Button size="sm" disabled={settling} onClick={() => onSettle(comp)} className={`mt-3 w-full font-black text-slate-950 ${earlyManualSettle ? "bg-amber-300 hover:bg-amber-200" : "bg-emerald-300 hover:bg-emerald-200"}`}><CheckCircle2 className="mr-2 h-4 w-4" />{settling ? "Settling..." : earlyManualSettle ? "Manual Settle Now" : "Settle Tournament"}</Button> : null}',
     "manual settle tournament button",
   );
-
   return source;
 });
 
