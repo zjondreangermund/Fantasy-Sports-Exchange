@@ -81,13 +81,6 @@ patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
   );
   source = insertAfter(
     source,
-    "          replayedPostings,\n",
-    "          manualSettlement: forceManual,\n",
-    "manualSettlement: forceManual,",
-    "manual settlement response metadata",
-  );
-  source = insertAfter(
-    source,
     "        \"Stored score does not match the final scoring snapshot\",\n",
     "        \"Eligible Premier League fixtures are still unfinished\",\n        \"No eligible Premier League fixtures are available for manual settlement\",\n",
     "Eligible Premier League fixtures are still unfinished",
@@ -103,27 +96,6 @@ patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) =
     '    mutationFn: async (competitionId: number) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, {})).json(),',
     '    mutationFn: async ({ competitionId, forceManual }: { competitionId: number; forceManual: boolean }) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, { forceManual })).json(),',
     "admin settle mutation payload",
-  );
-
-  source = replaceOneOf(
-    source,
-    [
-      '    onSuccess: () => {',
-      '    onSuccess: (result: any) => {',
-    ],
-    '    onSuccess: (result: any) => {',
-    'onSuccess: (result: any) => {',
-    "admin settle result handler",
-  );
-  source = replaceOneOf(
-    source,
-    [
-      '      toast({ title: "Tournament settled", description: "Tuesday-frozen scores, ranks and prizes are now final." });',
-      '      toast({ title: "Tournament settled", description: result?.settlement?.manualSettlement ? "Manual settlement completed using finished eligible Premier League fixtures." : "Final scores, ranks and prizes are now settled." });',
-    ],
-    '      toast({ title: "Tournament settled", description: result?.settlement?.manualSettlement ? "Manual settlement completed using finished eligible Premier League fixtures." : "Final scores, ranks and prizes are now settled." });',
-    'result?.settlement?.manualSettlement',
-    "manual settlement success message",
   );
 
   const requestFrom = `  const requestSettlement = (comp: any) => {\n    if (!window.confirm(\`Settle \"\${comp.name || \"this tournament\"}\" using the score frozen at \${settlementLabel(comp.endDate || comp.end_date)}?\`)) return;\n    settleMutation.mutate(Number(comp.id));\n  };`;
