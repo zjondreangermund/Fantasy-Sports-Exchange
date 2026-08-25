@@ -8,6 +8,7 @@ function patchFile(file, transform) {
 
 function replaceOnce(source, from, to, label) {
   if (source.includes(to)) return source;
+  if (label === "competition settlement timestamp" && source.includes("const settlementAt = catTuesdaySettlementAfterKickoff(new Date(submissionClosesAt));")) return source;
   if (!source.includes(from)) throw new Error(`Site integrity patch anchor not found: ${label}`);
   return source.replace(from, to);
 }
