@@ -113,10 +113,15 @@ patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) =
     "const canSettle =",
     "manual settle availability",
   );
-  source = replaceOnce(
+
+  const oldTuesdayButton = '{readyToSettle ? <Button size="sm" disabled={settling} onClick={() => onSettle(comp)} className="mt-3 w-full bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200"><CheckCircle2 className="mr-2 h-4 w-4" />{settling ? "Settling..." : "Settle Tuesday Results"}</Button> : null}';
+  const oldGeneratedButton = '{readyToSettle ? <Button size="sm" disabled={settling} onClick={() => onSettle(comp)} className="mt-3 w-full bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200"><CheckCircle2 className="mr-2 h-4 w-4" />{settling ? "Settling..." : "Settle Results"}</Button> : null}';
+  const manualButton = '{canSettle ? <Button size="sm" disabled={settling} onClick={() => onSettle(comp)} className={`mt-3 w-full font-black text-slate-950 ${earlyManualSettle ? "bg-amber-300 hover:bg-amber-200" : "bg-emerald-300 hover:bg-emerald-200"}`}><CheckCircle2 className="mr-2 h-4 w-4" />{settling ? "Settling..." : earlyManualSettle ? "Manual Settle Now" : "Settle Tournament"}</Button> : null}';
+  source = replaceOneOf(
     source,
-    '{readyToSettle ? <Button size="sm" disabled={settling} onClick={() => onSettle(comp)} className="mt-3 w-full bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200"><CheckCircle2 className="mr-2 h-4 w-4" />{settling ? "Settling..." : "Settle Tuesday Results"}</Button> : null}',
-    '{canSettle ? <Button size="sm" disabled={settling} onClick={() => onSettle(comp)} className={`mt-3 w-full font-black text-slate-950 ${earlyManualSettle ? "bg-amber-300 hover:bg-amber-200" : "bg-emerald-300 hover:bg-emerald-200"}`}><CheckCircle2 className="mr-2 h-4 w-4" />{settling ? "Settling..." : earlyManualSettle ? "Manual Settle Now" : "Settle Tournament"}</Button> : null}',
+    [oldTuesdayButton, oldGeneratedButton],
+    manualButton,
+    'earlyManualSettle ? "Manual Settle Now"',
     "manual settle tournament button",
   );
   return source;
