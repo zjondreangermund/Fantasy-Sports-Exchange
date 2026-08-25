@@ -59,7 +59,10 @@ assert.doesNotMatch(restore, /set\s+owner_id\s*=\s*null/i, "restoration must nev
 
 assert.match(cards, /position:\s*canonical\?\.position\s*\|\|\s*player\.position\s*\|\|\s*apiFootballPlayer\?\.position/, "Collection must display the tournament-authoritative position");
 assert.match(enrichment, /const currentPosition = canonical\?\.position \|\| String\(player\.position \|\| ""\) \|\| apiFootballPlayer\?\.position/, "shared card enrichment must prefer FPL/stored tournament positions");
-assert.match(marketplace, /position:\s*canonical\?\.position\s*\|\|\s*storedPlayer\.position\s*\|\|\s*apiFootballPlayer\?\.position/, "Marketplace must display the tournament-authoritative position");
+const marketplaceUsesInlinePosition = /position:\s*canonical\?\.position\s*\|\|\s*storedPlayer\.position\s*\|\|\s*apiFootballPlayer\?\.position/.test(marketplace);
+const marketplaceUsesCanonicalPositionHelper = /const position = canonical\?\.position \|\| String\(storedPlayer\.position \|\| ""\) \|\| apiFootballPlayer\?\.position(?: \|\| "MID")?;/.test(marketplace)
+  && /player:\s*\{[\s\S]*?position,/.test(marketplace);
+assert.ok(marketplaceUsesInlinePosition || marketplaceUsesCanonicalPositionHelper, "Marketplace must display the tournament-authoritative position");
 assert.match(gameweekPatch, /const currentPosition = canonical\?\.position \|\| String\(player\.position \|\| ""\) \|\| apiFootballPlayer\?\.position \|\| "MID"/, "gameweek build transform must preserve tournament-authoritative position precedence");
 assert.doesNotMatch(gameweekPatch, /const currentPosition = apiFootballPlayer\?\.position \|\| canonical\?\.position/, "gameweek build transform must not restore stale API-Football position precedence");
 
