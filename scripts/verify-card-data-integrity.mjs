@@ -24,12 +24,15 @@ includesAll(identity, [
   '3: "MID"',
   '4: "FWD"',
   "strongPlayerNameMatch",
-  "playerMatchesElement(player, byStoredId)",
-  "playerMatchesElement(player, byStoredCode)",
+  "function playerMatchesElement",
+  "const storedCandidateIsSafe",
+  "storedCandidateIsSafe(byStoredId)",
+  "storedCandidateIsSafe(byStoredCode)",
   "const strongCandidates = elements.filter",
   "teamNameOf",
   "canonical",
 ], "FPL player identity resolver");
+expect(/storedCandidateIsSafe[\s\S]*?playerMatchesElement\(player, candidate\)/.test(identity), "Stored FPL IDs/codes must be accepted only after verified player-name matching");
 expect(!identity.includes("if (fplId > 0 && byId.has(fplId)) return"), "Stored FPL ids must not be accepted without confirming the player name");
 expect(!identity.includes("if (code > 0 && byCode.has(code)) return"), "Stored photo codes must not be accepted without confirming the player name");
 
@@ -49,17 +52,20 @@ includesAll(cards, [
   "buildFplPlayerIndex",
   "const matchedElement = fplIndex.resolve(player)",
   "const canonical = matchedElement ? fplIndex.canonical(matchedElement) : null",
-  "totalPoints: Number(matchedElement.total_points || 0)",
-  "form = matchedElement",
+  "const officialFplSeasonPoints = matchedElement ? Number(matchedElement.total_points || 0) : null",
+  "const totalPoints = identityVerified ? currentGameweekPoints : null",
+  "const form = identityVerified ? currentGameweekPoints : null",
   "currentPosition",
   "loadApiFootballPlayerDirectory",
   "resolveApiFootballPlayer",
   "verifiedImageUrl",
   "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
-  'stats: "Fantasy Premier League match history"',
+  'stats: "API-Football match actions with official FPL fallback"',
   "cleanSheets: Number(row.clean_sheets || 0)",
   "yellowCards: Number(row.yellow_cards || 0)",
   "redCards: Number(row.red_cards || 0)",
+  "officialFplSeasonPoints: Number(matchedElement.total_points || 0)",
+  "totalPoints: arenaGameweekPoints, arenaGameweekPoints",
 ], "Card API enrichment");
 expect(!cards.includes("elementByNameTeam"), "Card API must not require a stale database team to match an FPL player");
 expect(!cards.includes("player: { ...player, overall: averageScore }"), "Card API must not replace official overall with an average of fallback scores");
@@ -85,9 +91,11 @@ expect(!adapter.includes("last5Scores.reduce"), "Season points must not be inven
 
 includesAll(stableCard, [
   "const statsVerified = player.statsVerified !== false",
-  'const ovr: number | string = statsVerified ? numberStat(player.rating) : "—"',
-  'const points: number | string = statsVerified ? numberStat(player.totalPoints) : "—"',
+  "const exactPoints = Number(player.totalPoints ?? 0)",
+  "const points: number | string = statsVerified && Number.isFinite(exactPoints)",
   'const form: number | string = statsVerified ? decimalStat(player.form) : "—"',
+  '<StatChip label="PTS" value={points}',
+  '<StatChip label="FORM" value={form}',
   "value: number | string",
 ], "Stable card stat display");
 expect(!stableCard.includes("player.totalPoints || player.form || player.rating"), "PTS must never fall back to FORM or OVR");
@@ -102,4 +110,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Card teams, positions, official season totals, form, verified identities and profile stats are wired to canonical providers without fabricated fallbacks.");
+console.log("Card teams, positions, Fantasy Arena gameweek points, official FPL season reference totals, form, verified identities and profile stats are wired to canonical providers without fabricated fallbacks.");

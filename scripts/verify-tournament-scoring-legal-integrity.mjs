@@ -63,6 +63,8 @@ includesAll(scoreUpdater, [
   "immutableFinal",
   "captainMultiplier: 1.1",
   "unresolvedCardIds",
+  "MANUAL_TOURNAMENT_SETTLEMENT_V1",
+  "Eligible Premier League fixtures are still unfinished",
 ], "Score updater");
 expect(!scoreUpdater.includes("isGameweekFinal"), "Tournament finalization must use the configured gameweek settlement cutoff, not the FPL event-finished flag");
 expect(!scoreUpdater.includes("resetForNewGameweek"), "Score updater must not reset historical gameweek scores");
@@ -93,6 +95,8 @@ includesAll(economy, [
   "nonCashAwardEnabled",
   "pending_claim",
   "postWalletAmountExactlyOnce",
+  "forceManual",
+  "manualSettlement: forceManual",
 ], "Tournament economy route");
 expect(!economy.includes("if (new Date(competition.startDate).getTime() <= Date.now())"), "Join validation must not use the tournament start as the lineup deadline");
 
@@ -114,7 +118,9 @@ includesAll(competitions, [
 ], "Tournament page");
 includesAll(adminTournaments, [
   "Settlement cutoff — day after last eligible PL match",
-  "Settle Results",
+  "Manual Settle Now",
+  "Settle Tournament",
+  "MANUAL EARLY SETTLEMENT",
   "/api/admin/competitions/settle/",
   "postponed Premier League fixture does not count",
   "common: 1.7, rare: 1.6, unique: 1.5, epic: 1.4, legendary: 1.3",
@@ -164,4 +170,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Tournament entry lock, live fixture-window settlement, late-postponement exclusion, Premier League-only scoring, admin 0% platform fees and legal/support navigation verified.");
+console.log("Tournament entry lock, live fixture-window settlement, guarded manual admin settlement, late-postponement exclusion, Premier League-only scoring, admin 0% platform fees and legal/support navigation verified.");

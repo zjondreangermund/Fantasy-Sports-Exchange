@@ -11,6 +11,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import AdminBackofficePanel from "../components/admin/AdminBackofficePanel";
 import AdminIntegrityPanel from "../components/admin/AdminIntegrityPanel";
 import AdminTransactionExplorer from "../components/admin/AdminTransactionExplorer";
+import AdminTournamentDirectory from "../components/admin/AdminTournamentDirectory";
 import {
   Activity,
   AlertTriangle,
@@ -361,7 +362,7 @@ export default function AdminPage() {
           <TabsContent value="ops" className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <WorkspaceLauncher icon={Building2} title="Backoffice management" subtitle="Open tournament management, operational controls and administration tools." onOpen={() => setWorkspacePanel("backoffice")} />
             <WorkspaceLauncher icon={Shield} title="Integrity and security" subtitle="Review risk signals, platform integrity and protected operational checks." onOpen={() => setWorkspacePanel("integrity")} />
-            <WorkspaceLauncher icon={Trophy} title="Tournament directory" subtitle={`${allCompetitions.length} tournament(s), with gameweeks, rarity and live entry totals.`} onOpen={() => setWorkspacePanel("tournaments")} />
+            <WorkspaceLauncher icon={Trophy} title="Tournament directory" subtitle={`${allCompetitions.length} tournament(s), grouped by gameweek with entrants, prize and profit detail.`} onOpen={() => setWorkspacePanel("tournaments")} />
           </TabsContent>
         </Tabs>
 
@@ -411,7 +412,12 @@ export default function AdminPage() {
               {workspacePanel === "backoffice" ? <AdminBackofficePanel /> : null}
               {workspacePanel === "integrity" ? <AdminIntegrityPanel /> : null}
               {workspacePanel === "withdrawals" ? <div className="space-y-2">{asArray(withdrawals).length ? asArray(withdrawals).map((wr) => <div key={wr.id} className="rounded-xl border border-white/10 bg-black/25 p-3"><b>{wr.userName || wr.email || wr.userId}</b><div className="text-xs text-white/45">{money(wr.amount)} • Fee {money(wr.fee)} • Net {money(wr.netAmount)} • {wr.status}</div></div>) : <div className="rounded-xl border border-dashed border-white/15 p-6 text-center text-white/45">No withdrawal requests are available.</div>}</div> : null}
-              {workspacePanel === "tournaments" ? <div className="grid gap-2 md:grid-cols-2">{allCompetitions.map((c) => <div key={c.id} className="rounded-xl border border-white/10 bg-black/25 p-3"><b>{c.name}</b><div className="text-xs text-white/45">GW{c.gameWeek} • {c.tier} • {c.status} • {c.entryCount || 0} entries</div></div>)}</div> : null}
+              {workspacePanel === "tournaments" ? <AdminTournamentDirectory
+                onOpenUser={(userId) => { setWorkspacePanel(null); selectUser(userId); }}
+                onOpenCard={(cardId) => { setWorkspacePanel(null); openCardLookup(cardId); }}
+                onOpenBackoffice={() => setWorkspacePanel("backoffice")}
+                onOpenTransactions={() => setWorkspacePanel("transactions")}
+              /> : null}
             </div>
           </DialogContent>
         </Dialog>
