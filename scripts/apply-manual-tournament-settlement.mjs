@@ -124,13 +124,9 @@ patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
 patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) => {
   let source = original;
 
-  source = replaceOnce(
-    source,
-    '    mutationFn: async (competitionId: number) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, {})).json(),',
-    '    mutationFn: async ({ competitionId, forceManual }: { competitionId: number; forceManual: boolean }) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, { forceManual })).json(),',
-    "admin settle mutation payload",
-  );
-  source = replaceOnce(source, "    onSuccess: () => {\n      queryClient.invalidateQueries({ queryKey: [\"/api/competitions\"] });", "    onSuccess: (result: any) => {\n      queryClient.invalidateQueries({ queryKey: [\"/api/competitions\"] });", "admin settle success result");
+  const settleMutationFrom = `    mutationFn: async (competitionId: number) => (await apiRequest(\"POST\", \`/api/admin/competitions/settle/\${competitionId}\`, {})).json(),\n    onSuccess: () => {`;
+  const settleMutationTo = `    mutationFn: async ({ competitionId, forceManual }: { competitionId: number; forceManual: boolean }) => (await apiRequest(\"POST\", \`/api/admin/competitions/settle/\${competitionId}\`, { forceManual })).json(),\n    onSuccess: (result: any) => {`;
+  source = replaceOnce(source, settleMutationFrom, settleMutationTo, "admin settle mutation payload");
   source = replaceOnce(
     source,
     '      toast({ title: "Tournament settled", description: "Tuesday-frozen scores, ranks and prizes are now final." });',
