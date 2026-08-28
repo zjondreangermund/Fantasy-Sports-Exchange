@@ -14,12 +14,22 @@ function replaceRequired(from, to, label, marker = to) {
   changed = true;
 }
 
-replaceRequired(
-  '  const visible = official.filter((c) => Number(c.gameWeek || c.game_week) === Number(shownGw) && tier(c.tier) === activeRarity);\n  const selectedTier = tier(selected?.tier);',
-  `  const visible = official.filter((c) => Number(c.gameWeek || c.game_week) === Number(shownGw) && tier(c.tier) === activeRarity);\n  const shownSettlementTournament = visible[0] || official.find((c) => Number(c.gameWeek || c.game_week) === Number(shownGw));\n  const shownSettlementAt = shownSettlementTournament?.settlementAt || shownSettlementTournament?.settlement_at || shownSettlementTournament?.endDate || shownSettlementTournament?.end_date;\n  const shownSettlementLabel = shownSettlementAt ? dateLabel(shownSettlementAt) : "Fixture controlled";\n  const selectedTier = tier(selected?.tier);`,
-  "shown gameweek settlement source",
-  "const shownSettlementLabel = shownSettlementAt ? dateLabel(shownSettlementAt)",
-);
+const settlementInsert = `  const shownSettlementTournament = visible[0] || official.find((c) => Number(c.gameWeek || c.game_week) === Number(shownGw));\n  const shownSettlementAt = shownSettlementTournament?.settlementAt || shownSettlementTournament?.settlement_at || shownSettlementTournament?.endDate || shownSettlementTournament?.end_date;\n  const shownSettlementLabel = shownSettlementAt ? dateLabel(shownSettlementAt) : "Fixture controlled";\n`;
+
+if (!source.includes("const shownSettlementLabel = shownSettlementAt ? dateLabel(shownSettlementAt)")) {
+  const playVisible = '  const visible = tournamentPool.filter((c) => Number(c.gameWeek || c.game_week) === Number(shownGw) && tier(c.tier) === activeRarity);\n';
+  const legacyVisible = '  const visible = official.filter((c) => Number(c.gameWeek || c.game_week) === Number(shownGw) && tier(c.tier) === activeRarity);\n';
+
+  if (source.includes(playVisible)) {
+    source = source.replace(playVisible, `${playVisible}${settlementInsert}`);
+    changed = true;
+  } else if (source.includes(legacyVisible)) {
+    source = source.replace(legacyVisible, `${legacyVisible}${settlementInsert}`);
+    changed = true;
+  } else {
+    throw new Error("Settlement-date patch anchor not found: shown gameweek settlement source");
+  }
+}
 
 replaceRequired(
   'Every entry uses five Premier League cards. Entries lock at the first Premier League kickoff; scores freeze and results settle after the following Tuesday cutoff.',
