@@ -134,6 +134,23 @@ function patchTournamentCopy(input) {
 if (patchFile("client/src/pages/competitions.tsx", patchTournamentCopy)) changedFiles += 1;
 if (patchFile("client/src/pages/competitions-vault.tsx", (input) => {
   let source = patchTournamentCopy(input);
+
+  // The Play navigation patch now owns the live/completed tournament pool. Keep all 38
+  // gameweeks available on the live tab, while completed only lists weeks with records.
+  // This branch runs after prepare-play-gameweek-navigation during production builds.
+  if (source.includes("PLAY_SETTLEMENT_CURRENT_GW_V1")) {
+    const playSelector = '  const gameweeks = [...new Set<number>(tournamentPool.map((c) => Number(c.gameWeek || c.game_week || 0)).filter(Boolean))].sort((a, b) => a - b);';
+    const compatibleSelector = `  const availableGameweeks = [...new Set<number>(tournamentPool.map((c) => Number(c.gameWeek || c.game_week || 0)).filter(Boolean))].sort((a, b) => a - b);\n  const gameweeks = tournamentView === "completed" ? availableGameweeks : Array.from({ length: 38 }, (_, index) => index + 1);`;
+    source = replaceRequired(
+      source,
+      playSelector,
+      compatibleSelector,
+      "all 38 gameweeks selector after Play navigation",
+      "tournamentView === \"completed\" ? availableGameweeks : Array.from({ length: 38 }",
+    );
+    return source;
+  }
+
   source = replaceRequired(
     source,
     `  const gameweeks = useMemo(
