@@ -26,13 +26,17 @@ const sw = read("client/public/sw.js");
 includesAll(fplIdentity, [
   "STRICT_PLAYER_IDENTITY_FIX_V2",
   "strongPlayerNameMatch",
-  "playerMatchesElement(player, byStoredId)",
-  "playerMatchesElement(player, byStoredCode)",
+  "const storedCandidateIsSafe = (candidate: any) =>",
+  "if (!candidate || !playerMatchesElement(player, candidate)) return false",
+  "storedCandidateIsSafe(byStoredId)",
+  "storedCandidateIsSafe(byStoredCode)",
   "const strongCandidates = elements.filter",
-  "bTokens.slice(1).some((token) => surnamesA.has(token))",
+  "token.length > 1 && surnamesA.has(token)",
+  "return !elements.some((other: any) =>",
 ], "FPL strict identity resolver");
 expect(!fplIdentity.includes("if (fplId > 0 && byId.has(fplId)) return"), "Stored FPL ids must not be trusted without checking the player name");
 expect(!fplIdentity.includes("if (code > 0 && byCode.has(code)) return"), "Stored photo codes must not be trusted without checking the player name");
+expect(!fplIdentity.includes("bTokens.slice(1).some((token) => surnamesA.has(token))"), "One-character surname tokens must not be accepted by the strict identity matcher");
 
 expect(!directory.includes("normalizePlayerText(candidate.lastName),"), "API-Football matching must not use surname-only aliases");
 expect(!directory.includes("source.length === 1"), "API-Football matching must not link a card from one token");
@@ -44,7 +48,10 @@ includesAll(cards, [
   "verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
   "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
   'identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football"',
-  'imageUrl: null, verifiedImageUrl: null, identityVerified: false',
+  "imageUrl: null",
+  "verifiedImageUrl: null",
+  "identityVerified: false",
+  'identitySource: "unverified-card-data"',
 ], "Collection card enrichment");
 expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl"), "Unverified collection cards must not fall back to stale stored photos");
 
@@ -115,4 +122,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Strict provider identity links, verified-only player images and crash-safe fixture responses verified.");
+console.log("Strict provider identity links, guarded stored-ID/code reuse, verified-only player images and crash-safe fixture responses verified.");
