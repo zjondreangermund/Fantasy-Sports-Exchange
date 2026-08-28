@@ -7,10 +7,10 @@
     "node": "20.x"
   },
   "scripts": {
-    "predev": "node scripts/apply-play-gameweek-navigation.mjs",
-    "prebuild:client": "node scripts/apply-play-gameweek-navigation.mjs",
+    "predev": "node scripts/prepare-play-gameweek-navigation.mjs",
+    "prebuild:client": "node scripts/prepare-play-gameweek-navigation.mjs",
     "postbuild:client": "node scripts/verify-play-gameweek-navigation.mjs",
-    "prebuild:web": "node scripts/apply-play-gameweek-navigation.mjs",
+    "prebuild:web": "node scripts/prepare-play-gameweek-navigation.mjs",
     "postbuild:web": "node scripts/verify-play-gameweek-navigation.mjs",
     "dev": "node scripts/apply-onboarding-starter-randomization.mjs && node scripts/verify-onboarding-starter-randomization.mjs && node scripts/apply-loan-acquisition-pricing.mjs && node scripts/verify-free-first-landing-loan-pricing.mjs && node scripts/apply-signup-funnel-observability-v2.mjs && node scripts/verify-signup-funnel-observability.mjs && node scripts/apply-weekly-common-legendary-refresh.mjs && node scripts/verify-weekly-common-legendary-refresh.mjs && node scripts/prepare-legendary-prize-artwork-v2.mjs && node scripts/verify-legendary-direct-artwork.mjs && node scripts/apply-profile-verification-ui.mjs && node scripts/apply-security-banner-layout.mjs && node scripts/verify-security-banner-layout.mjs && node scripts/apply-site-integrity-audit-fixes.mjs && node scripts/verify-site-integrity-audit-fixes.mjs && node scripts/apply-manual-tournament-settlement.mjs && NODE_ENV=development npx tsx server/index.ts",
     "build": "npm run build:client && npm run build:server",
