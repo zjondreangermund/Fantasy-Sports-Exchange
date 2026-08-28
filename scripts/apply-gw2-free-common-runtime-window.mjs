@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-const CUTOFF_ISO = "2026-08-28T19:00:00.000Z"; // 21:00 Namibia/CAT (UTC+2)
+const CUTOFF_ISO = "2026-08-28T19:00:00.000Z"; // exactly 21:00 Namibia/CAT (UTC+2)
 const CUTOFF_LABEL = "21:00 Namibia time on 28 Aug 2026";
 
 function patchFile(path, transform, requiredMarkers = []) {
@@ -20,8 +20,7 @@ function patchFile(path, transform, requiredMarkers = []) {
 
 patchFile("dist/server/server/routes.js", (original) => {
   let source = original;
-  const constantMarker = "GW2_FREE_COMMON_ENTRY_CUTOFF_UTC";
-  if (!source.includes(constantMarker)) {
+  if (!source.includes("GW2_FREE_COMMON_ENTRY_CUTOFF_UTC")) {
     const anchor = "const SEASON_END = Date.UTC(2027, 6, 1);";
     if (!source.includes(anchor)) throw new Error("Could not locate season constants in compiled routes.js");
     source = source.replace(anchor, `${anchor}\nconst GW2_FREE_COMMON_ENTRY_CUTOFF_UTC = Date.parse(\"${CUTOFF_ISO}\"); // ${CUTOFF_LABEL}`);
@@ -41,7 +40,7 @@ patchFile("dist/server/server/routes.js", (original) => {
   return source;
 }, [
   `Date.parse(\"${CUTOFF_ISO}\")`,
-  "isGw2FreeCommonEntryWindow(comp)",
+  "function isGw2FreeCommonEntryWindow(comp)",
   "return new Date(GW2_FREE_COMMON_ENTRY_CUTOFF_UTC)",
 ]);
 
@@ -54,80 +53,78 @@ patchFile("dist/server/server/routes/economyIntegrity.routes.js", (original) => 
     source = source.replace(anchor, addition);
   }
 
-  const oldPreview = `select id, game_week as \"gameWeek\", start_date as \"startDate\"\n        from app.competitions`;
-  const newPreview = `select id, name, tier::text as tier, coalesce(entry_fee, 0)::float as \"entryFee\", game_week as \"gameWeek\", start_date as \"startDate\"\n        from app.competitions`;
-  if (!source.includes(newPreview)) {
-    if (!source.includes(oldPreview)) throw new Error("Could not locate compiled tournament preview query");
-    source = source.replace(oldPreview, newPreview);
+  if (!source.includes('select id, name, tier::text as tier, coalesce(entry_fee, 0)::float as "entryFee", game_week as "gameWeek", start_date as "startDate"')) {
+    const previewPattern = /select id, game_week as "gameWeek", start_date as "startDate"\s*from app\.competitions/;
+    if (!previewPattern.test(source)) throw new Error("Could not locate compiled tournament preview query");
+    source = source.replace(previewPattern, 'select id, name, tier::text as tier, coalesce(entry_fee, 0)::float as "entryFee", game_week as "gameWeek", start_date as "startDate"\n        from app.competitions');
   }
 
-  const oldDeadline = "const entryDeadline = await resolveEntryDeadline(Number(preview.gameWeek || 0), preview.startDate);";
   const newDeadline = "const entryDeadline = isGw2FreeCommonEntryWindow(preview) ? new Date(GW2_FREE_COMMON_ENTRY_CUTOFF_UTC) : await resolveEntryDeadline(Number(preview.gameWeek || 0), preview.startDate);";
   if (!source.includes(newDeadline)) {
-    if (!source.includes(oldDeadline)) throw new Error("Could not locate compiled join deadline call");
-    source = source.replace(oldDeadline, newDeadline);
+    const deadlinePattern = /const entryDeadline = await resolveEntryDeadline\(Number\(preview\.gameWeek \|\| 0\), preview\.startDate\);/;
+    if (!deadlinePattern.test(source)) throw new Error("Could not locate compiled join deadline call");
+    source = source.replace(deadlinePattern, newDeadline);
   }
 
-  const oldGuard = `if (String(competition.status) !== \"open\") throw new Error(\"Tournament is not open for entries\");\n        if (Date.now() >= entryDeadline.getTime()) throw new Error(\"Gameweek entries are closed\");`;
-  const newGuard = [
-    `const gw2FreeCommonEntryOpen = isGw2FreeCommonEntryWindow(competition);`,
-    `        if (String(competition.status) !== \"open\" && !gw2FreeCommonEntryOpen) throw new Error(\"Tournament is not open for entries\");`,
-    `        if (gw2FreeCommonEntryOpen && String(competition.status) !== \"open\") {`,
-    `          await tx.execute(sql\`update app.competitions set status = 'open' where id = \${competitionId} and status::text not in ('completed','cancelled')\`);`,
-    `          competition.status = \"open\";`,
-    `        }`,
-    `        if (Date.now() >= entryDeadline.getTime()) throw new Error(\"Gameweek entries are closed\");`,
-  ].join("\n");
   if (!source.includes("const gw2FreeCommonEntryOpen = isGw2FreeCommonEntryWindow(competition);")) {
-    if (!source.includes(oldGuard)) throw new Error("Could not locate compiled tournament join status guard");
-    source = source.replace(oldGuard, newGuard);
+    const statusGuardPattern = /if\s*\(String\(competition\.status\)\s*!==\s*"open"\)\s*throw new Error\("Tournament is not open for entries"\);/;
+    if (!statusGuardPattern.test(source)) throw new Error("Could not locate compiled tournament status guard");
+    const replacement = [
+      `const gw2FreeCommonEntryOpen = isGw2FreeCommonEntryWindow(competition);`,
+      `        if (String(competition.status) !== \"open\" && !gw2FreeCommonEntryOpen) throw new Error(\"Tournament is not open for entries\");`,
+      `        if (gw2FreeCommonEntryOpen && String(competition.status) !== \"open\") {`,
+      `          await tx.execute(sql\`update app.competitions set status = 'open' where id = \${competitionId} and status::text not in ('completed','cancelled')\`);`,
+      `          competition.status = \"open\";`,
+      `        }`,
+    ].join("\n");
+    source = source.replace(statusGuardPattern, replacement);
   }
   return source;
 }, [
   `Date.parse(\"${CUTOFF_ISO}\")`,
   "isGw2FreeCommonEntryWindow(preview)",
-  "gw2FreeCommonEntryOpen",
+  "const gw2FreeCommonEntryOpen = isGw2FreeCommonEntryWindow(competition);",
 ]);
 
 patchFile("dist/server/server/services/scoreUpdater.js", (original) => {
   let source = original;
   if (!source.includes("GW2_FREE_COMMON_ENTRY_CUTOFF_UTC")) {
-    const anchor = "const RARITY_PRESTIGE = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };";
-    if (!source.includes(anchor)) throw new Error("Could not locate scoring constants in compiled scoreUpdater.js");
-    source = source.replace(anchor, `${anchor}\nconst GW2_FREE_COMMON_ENTRY_CUTOFF_UTC = Date.parse(\"${CUTOFF_ISO}\"); // ${CUTOFF_LABEL}`);
+    const rarityPattern = /const RARITY_PRESTIGE\s*=\s*\{[^\n]+\};/;
+    const match = source.match(rarityPattern);
+    if (!match) throw new Error("Could not locate scoring constants in compiled scoreUpdater.js");
+    source = source.replace(rarityPattern, `${match[0]}\nconst GW2_FREE_COMMON_ENTRY_CUTOFF_UTC = Date.parse(\"${CUTOFF_ISO}\"); // ${CUTOFF_LABEL}`);
   }
 
   if (!source.includes("isGw2FreeCommonEntryWindow(competition)")) {
-    const anchor = "isAutoUpdateEnabled() { return Boolean(this.updateInterval); }";
-    if (!source.includes(anchor)) throw new Error("Could not locate ScoreUpdateService compiled constructor helpers");
-    const helper = `${anchor}\n    isGw2FreeCommonEntryWindow(competition) {\n        return Number(competition?.gameWeek ?? competition?.game_week ?? 0) === 2\n            && String(competition?.tier || \"\").toLowerCase() === \"common\"\n            && Number(competition?.entryFee ?? competition?.entry_fee ?? Number.NaN) === 0\n            && String(competition?.name || \"\") === \"GW2 FREE Common Card Cup\"\n            && Date.now() < GW2_FREE_COMMON_ENTRY_CUTOFF_UTC;\n    }`;
-    source = source.replace(anchor, helper);
+    const helperAnchor = /isAutoUpdateEnabled\(\)\s*\{\s*return Boolean\(this\.updateInterval\);\s*\}/;
+    const match = source.match(helperAnchor);
+    if (!match) throw new Error("Could not locate ScoreUpdateService compiled helpers");
+    const helper = `${match[0]}\n    isGw2FreeCommonEntryWindow(competition) {\n        return Number(competition?.gameWeek ?? competition?.game_week ?? 0) === 2\n            && String(competition?.tier || \"\").toLowerCase() === \"common\"\n            && Number(competition?.entryFee ?? competition?.entry_fee ?? Number.NaN) === 0\n            && String(competition?.name || \"\") === \"GW2 FREE Common Card Cup\"\n            && Date.now() < GW2_FREE_COMMON_ENTRY_CUTOFF_UTC;\n    }`;
+    source = source.replace(helperAnchor, helper);
   }
 
-  if (!source.includes("if (this.isGw2FreeCommonEntryWindow(competition)) return new Date(GW2_FREE_COMMON_ENTRY_CUTOFF_UTC);")) {
-    const pattern = /(entryDeadline\(competition, event, fixtures\) \{)/;
-    if (!pattern.test(source)) throw new Error("Could not locate compiled score entryDeadline method");
-    source = source.replace(pattern, `$1\n        if (this.isGw2FreeCommonEntryWindow(competition)) return new Date(GW2_FREE_COMMON_ENTRY_CUTOFF_UTC);`);
+  if (!source.includes("return new Date(GW2_FREE_COMMON_ENTRY_CUTOFF_UTC);")) {
+    const deadlinePattern = /(entryDeadline\(competition, event, fixtures\)\s*\{)/;
+    if (!deadlinePattern.test(source)) throw new Error("Could not locate compiled score entryDeadline method");
+    source = source.replace(deadlinePattern, `$1\n        if (this.isGw2FreeCommonEntryWindow(competition)) return new Date(GW2_FREE_COMMON_ENTRY_CUTOFF_UTC);`);
   }
 
   if (!source.includes("GW2 FREE Common stays open for entry testing until 21:00 Namibia time")) {
-    const pattern = /(async activateCompetitionAtDeadline\(competition\) \{)/;
-    if (!pattern.test(source)) throw new Error("Could not locate compiled activation method");
-    source = source.replace(pattern, `$1\n        if (this.isGw2FreeCommonEntryWindow(competition)) {\n            // GW2 FREE Common stays open for entry testing until 21:00 Namibia time.\n            await this.setCompetitionStatus(Number(competition.id), \"open\");\n            competition.status = \"open\";\n            return \"open\";\n        }`);
+    const activatePattern = /(async activateCompetitionAtDeadline\(competition\)\s*\{)/;
+    if (!activatePattern.test(source)) throw new Error("Could not locate compiled activation method");
+    source = source.replace(activatePattern, `$1\n        if (this.isGw2FreeCommonEntryWindow(competition)) {\n            // GW2 FREE Common stays open for entry testing until 21:00 Namibia time.\n            await this.setCompetitionStatus(Number(competition.id), \"open\");\n            competition.status = \"open\";\n            return \"open\";\n        }`);
   }
 
-  const oldAutoScore = `if (status === \"active\" || (status === \"closed\" && final)) {\n                    toScore.push({ competition: { ...competition, status }, final });\n                }`;
-  const newAutoScore = `const gw2FreeCommonLiveTest = this.isGw2FreeCommonEntryWindow(competition) && status === \"open\";\n                if (gw2FreeCommonLiveTest || status === \"active\" || (status === \"closed\" && final)) {\n                    toScore.push({ competition: { ...competition, status }, final: gw2FreeCommonLiveTest ? false : final });\n                }`;
+  // Live scoring while the temporary entry window is open is useful for testing,
+  // but entry access must never fail just because a nonessential compiled scoring
+  // block was reformatted by TypeScript. Patch these opportunistically.
   if (!source.includes("const gw2FreeCommonLiveTest = this.isGw2FreeCommonEntryWindow(competition)")) {
-    if (!source.includes(oldAutoScore)) throw new Error("Could not locate compiled automatic scoring filter");
-    source = source.replace(oldAutoScore, newAutoScore);
-  }
-
-  const oldManualGuard = `if (![\"active\", \"closed\"].includes(String(comp.status))) throw new Error(\`Competition \${competitionId} cannot be scored (status: \${comp.status})\`);`;
-  const newManualGuard = `const gw2FreeCommonLiveTest = this.isGw2FreeCommonEntryWindow(comp) && String(comp.status) === \"open\";\n        if (![\"active\", \"closed\"].includes(String(comp.status)) && !gw2FreeCommonLiveTest) throw new Error(\`Competition \${competitionId} cannot be scored (status: \${comp.status})\`);`;
-  if (!source.includes("const gw2FreeCommonLiveTest = this.isGw2FreeCommonEntryWindow(comp)")) {
-    if (!source.includes(oldManualGuard)) throw new Error("Could not locate compiled manual scoring status guard");
-    source = source.replace(oldManualGuard, newManualGuard);
+    const autoPattern = /if\s*\(status === "active" \|\| \(status === "closed" && final\)\)\s*\{\s*toScore\.push\(\{ competition: \{ \.\.\.competition, status \}, final \}\);\s*\}/;
+    if (autoPattern.test(source)) {
+      source = source.replace(autoPattern, `const gw2FreeCommonLiveTest = this.isGw2FreeCommonEntryWindow(competition) && status === \"open\";\n                if (gw2FreeCommonLiveTest || status === \"active\" || (status === \"closed\" && final)) {\n                    toScore.push({ competition: { ...competition, status }, final: gw2FreeCommonLiveTest ? false : final });\n                }`);
+    } else {
+      console.warn("[gw2-free-common] live-score filter shape changed; entry window patch continues without that optional adjustment");
+    }
   }
   return source;
 }, [
@@ -136,4 +133,4 @@ patchFile("dist/server/server/services/scoreUpdater.js", (original) => {
   "GW2 FREE Common stays open for entry testing until 21:00 Namibia time",
 ]);
 
-console.log(`[gw2-free-common] runtime API, join validation and scoring lifecycle forced OPEN until ${CUTOFF_LABEL}.`);
+console.log(`[gw2-free-common] runtime API, join validation and lifecycle forced OPEN until ${CUTOFF_LABEL}.`);
