@@ -55,7 +55,9 @@ includesAll(cards, [
   'source: "card-fallback"',
   "last10: []",
   'verifiedIdentity ? "API-Football current squads"',
-  'stats: "Fantasy Premier League match history"',
+  'stats: "API-Football match actions with official FPL fallback"',
+  "const verifiedApiHistory = new Map<number, any>",
+  "calculatePlayerScore(mapFplStatsToPlayerStats({ stats: row })",
   "saves: Number(matchedElement.saves || 0)",
 ], "Card profile provider integration");
 expect(!cards.includes("opponent: `GW${index + 1}`"), "Card profiles must not fabricate ten placeholder gameweeks");
@@ -101,4 +103,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Verified player identities, official match histories, goalkeeper stats and full-screen profile modal behavior are wired correctly.");
+console.log("Verified player identities, API-Football match actions with official FPL history fallback, goalkeeper stats and full-screen profile modal behavior are wired correctly.");
