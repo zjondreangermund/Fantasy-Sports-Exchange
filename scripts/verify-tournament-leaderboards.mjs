@@ -3,7 +3,7 @@ import fs from "node:fs";
 const routes = fs.readFileSync("server/routes/marketplace.routes.ts", "utf8");
 const page = fs.readFileSync("client/src/pages/competitions-vault.tsx", "utf8");
 const generatedCard = fs.readFileSync("scripts/apply-gameweek-prize-isolation.mjs", "utf8");
-const freeWindow = fs.readFileSync("scripts/apply-gw1-entry-extension.mjs", "utf8");
+const freeCupSync = fs.readFileSync("scripts/sync-free-card-tournaments.mjs", "utf8");
 const startup = fs.readFileSync("start.sh", "utf8");
 const scoreUpdater = fs.readFileSync("server/services/scoreUpdater.ts", "utf8");
 const fplApi = fs.readFileSync("server/services/fplApi.ts", "utf8");
@@ -58,10 +58,14 @@ requireText(page, "const LIVE_SCORE_REFRESH_MS = 15_000", "Visible tournament st
 requireText(page, "<TournamentLeaderboardPreview comp={comp} />", "The tournament card must render its leaderboard.");
 requireText(generatedCard, "<TournamentLeaderboardPreview comp={comp} />", "The build-generated tournament card must retain its leaderboard.");
 
-requireText(freeWindow, 'const CUTOFF_ISO = "2026-08-23T21:59:59.000Z"', "FREE GW1 tournaments must remain open until the end of 23 August CAT.");
-requireText(freeWindow, "Number(comp?.entryFee ?? comp?.entry_fee ?? Number.NaN) === 0", "The GW1 extension must exclude paid tournaments.");
-requireText(freeWindow, "startsWith(", "The GW1 extension must check the tournament name.");
-requireText(freeWindow, "GW1 FREE ", "The GW1 extension must only reopen named FREE GW1 tournaments.");
-requireText(startup, "23 Aug end-of-day CAT", "Production startup must announce the current FREE GW1 window.");
+// The old GW1 test window expired on 23 Aug 2026 and must no longer be applied
+// during startup. The current one-time test override is intentionally limited to
+// the GW2 FREE Common Card Cup and expires automatically at 21:00 CAT today.
+requireText(startup, "Skipping expired FREE GW1 startup patcher.", "Production startup must not re-run the expired FREE GW1 patcher.");
+requireText(freeCupSync, 'const GW2_FREE_COMMON_TEST_CUTOFF_UTC = Date.parse("2026-08-28T19:00:00.000Z")', "GW2 FREE Common test entries must close at 21:00 CAT on 28 Aug 2026.");
+requireText(freeCupSync, 'Number(gw) === 2', "The temporary FREE Cup override must be limited to GW2.");
+requireText(freeCupSync, 'String(tier) === "common"', "The temporary FREE Cup override must be limited to the Common tier.");
+requireText(freeCupSync, '["completed", "cancelled"]', "Completed or cancelled tournaments must never be reopened by the GW2 test override.");
+requireText(freeCupSync, 'GW2 FREE Common Card Cup forced OPEN until 21:00 CAT on 28 Aug 2026 for entry testing.', "The FREE Cup sync must report when the GW2 Common test override is applied.");
 
-console.log("Tournament leaderboards, official player scoring details and the FREE GW1 test window verified.");
+console.log("Tournament leaderboards, official player scoring details and the GW2 FREE Common 21:00 CAT test window verified.");
