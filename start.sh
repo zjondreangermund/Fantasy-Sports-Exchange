@@ -150,6 +150,12 @@ if ! node scripts/sync-free-card-tournaments.mjs; then
   exit 1
 fi
 
+# The database status alone is not enough: the compiled API and scoring lifecycle
+# also use the first Premier League kickoff as the normal entry deadline. Override
+# those runtime checks only for GW2 FREE Common until exactly 21:00 Namibia time.
+echo "Applying GW2 FREE Common 21:00 Namibia entry window..."
+node scripts/apply-gw2-free-common-runtime-window.mjs
+
 # Start only after all 380 official season slots are present: 190 paid + 190 free.
 echo "Starting server..."
 exec node dist/server/server/index.js
