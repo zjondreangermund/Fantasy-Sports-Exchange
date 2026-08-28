@@ -2,6 +2,7 @@ import pg from "pg";
 
 const { Client } = pg;
 const SEASON = "2026-27";
+const GW2_FREE_COMMON_TEST_CUTOFF_UTC = Date.parse("2026-08-28T19:00:00.000Z"); // 21:00 CAT/Namibia on 28 Aug 2026
 const FREE_CUP_RARITIES = [
   { tier: "common", prizeCardRarity: "rare" },
   { tier: "rare", prizeCardRarity: "unique" },
@@ -18,6 +19,13 @@ function title(value) {
 
 function quoteIdentifier(value) {
   return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function forceGw2FreeCommonOpen(gw, tier, currentStatus) {
+  return Number(gw) === 2
+    && String(tier) === "common"
+    && Date.now() < GW2_FREE_COMMON_TEST_CUTOFF_UTC
+    && !["completed", "cancelled"].includes(String(currentStatus || "").toLowerCase());
 }
 
 async function resolveEnumSchema(client, enumName) {
@@ -85,6 +93,7 @@ async function main() {
     let created = 0;
     let updated = 0;
     let preservedEntries = 0;
+    let gw2CommonForcedOpen = false;
 
     for (let gw = 1; gw <= 38; gw += 1) {
       for (const rarity of FREE_CUP_RARITIES) {
@@ -114,9 +123,13 @@ async function main() {
 
         if (existing.rows.length) {
           const row = existing.rows[0];
+          const forceOpen = forceGw2FreeCommonOpen(gw, rarity.tier, row.status);
           const nextStatus = ["completed", "cancelled"].includes(String(row.status || ""))
             ? String(row.status)
-            : String(source.status || "upcoming");
+            : forceOpen
+              ? "open"
+              : String(source.status || "upcoming");
+          if (forceOpen) gw2CommonForcedOpen = true;
           preservedEntries += Number(row.entry_count || 0);
           await client.query(
             `update app.competitions
@@ -157,6 +170,8 @@ async function main() {
           );
           updated += 1;
         } else {
+          const forceOpen = forceGw2FreeCommonOpen(gw, rarity.tier, source.status);
+          if (forceOpen) gw2CommonForcedOpen = true;
           await client.query(
             `insert into app.competitions
               (name, tier, entry_fee, status, game_week, start_date, end_date, prize_card_rarity,
@@ -169,7 +184,7 @@ async function main() {
             [
               name,
               rarity.tier,
-              String(source.status || "upcoming"),
+              forceOpen ? "open" : String(source.status || "upcoming"),
               gw,
               source.start_date,
               source.end_date,
@@ -212,6 +227,9 @@ async function main() {
     console.log(`FREE Card Cups synced for ${SEASON}: created ${created}, updated ${updated}, verified ${coveragePairs}/190 slots.`);
     console.log("Prize progression: Common→Rare, Rare→Unique, Unique→Epic, Epic→Legendary, Legendary→Legendary.");
     console.log(`Preserved ${preservedEntries} existing FREE Cup entries; no tournament entry rows were deleted or moved.`);
+    if (gw2CommonForcedOpen) {
+      console.log("GW2 FREE Common Card Cup forced OPEN until 21:00 CAT on 28 Aug 2026 for entry testing.");
+    }
   } catch (error) {
     try { await client.query("ROLLBACK"); } catch {}
     throw error;
