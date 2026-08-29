@@ -59,13 +59,13 @@ requireText(page, "<TournamentLeaderboardPreview comp={comp} />", "The tournamen
 requireText(generatedCard, "<TournamentLeaderboardPreview comp={comp} />", "The build-generated tournament card must retain its leaderboard.");
 
 // The old GW1 test window expired on 23 Aug 2026 and must no longer be applied
-// during startup. The current one-time test override is intentionally limited to
-// the GW2 FREE Common Card Cup and expires automatically at 21:00 CAT today.
+// during startup. The current one-time override is intentionally limited to the
+// GW2 FREE Common Card Cup and expires at today's first Premier League kickoff.
 requireText(startup, "Skipping expired FREE GW1 startup patcher.", "Production startup must not re-run the expired FREE GW1 patcher.");
-requireText(freeCupSync, 'const GW2_FREE_COMMON_TEST_CUTOFF_UTC = Date.parse("2026-08-28T19:00:00.000Z")', "GW2 FREE Common test entries must close at 21:00 CAT on 28 Aug 2026.");
+requireText(freeCupSync, 'const GW2_FREE_COMMON_TEST_CUTOFF_UTC = Date.parse("2026-08-29T11:30:00.000Z")', "GW2 FREE Common test entries must close at 13:30 CAT on 29 Aug 2026.");
 requireText(freeCupSync, 'Number(gw) === 2', "The temporary FREE Cup override must be limited to GW2.");
 requireText(freeCupSync, 'String(tier) === "common"', "The temporary FREE Cup override must be limited to the Common tier.");
 requireText(freeCupSync, '["completed", "cancelled"]', "Completed or cancelled tournaments must never be reopened by the GW2 test override.");
-requireText(freeCupSync, 'GW2 FREE Common Card Cup forced OPEN until 21:00 CAT on 28 Aug 2026 for entry testing.', "The FREE Cup sync must report when the GW2 Common test override is applied.");
+requireText(freeCupSync, "GW2 FREE Common Card Cup forced OPEN until 13:30 CAT on 29 Aug 2026, today's first Premier League kickoff.", "The FREE Cup sync must report when the GW2 Common first-kickoff override is applied.");
 
-console.log("Tournament leaderboards, official player scoring details and the GW2 FREE Common 21:00 CAT test window verified.");
+console.log("Tournament leaderboards, official player scoring details and the GW2 FREE Common first-kickoff entry window verified.");
