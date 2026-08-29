@@ -1,7 +1,7 @@
 import fs from "node:fs";
 
-const CUTOFF_ISO = "2026-08-28T19:00:00.000Z"; // exactly 21:00 Namibia/CAT (UTC+2)
-const CUTOFF_LABEL = "21:00 Namibia time on 28 Aug 2026";
+const CUTOFF_ISO = "2026-08-29T11:30:00.000Z"; // exactly 13:30 Namibia/CAT (UTC+2), today's first Premier League kickoff
+const CUTOFF_LABEL = "13:30 Namibia time on 29 Aug 2026 (today's first Premier League kickoff)";
 
 function patchFile(path, transform, requiredMarkers = []) {
   if (!fs.existsSync(path)) throw new Error(`Runtime target missing: ${path}`);
@@ -109,10 +109,10 @@ patchFile("dist/server/server/services/scoreUpdater.js", (original) => {
     source = source.replace(deadlinePattern, `$1\n        if (this.isGw2FreeCommonEntryWindow(competition)) return new Date(GW2_FREE_COMMON_ENTRY_CUTOFF_UTC);`);
   }
 
-  if (!source.includes("GW2 FREE Common stays open for entry testing until 21:00 Namibia time")) {
+  if (!source.includes("GW2 FREE Common stays open until today's first Premier League kickoff")) {
     const activatePattern = /(async activateCompetitionAtDeadline\(competition\)\s*\{)/;
     if (!activatePattern.test(source)) throw new Error("Could not locate compiled activation method");
-    source = source.replace(activatePattern, `$1\n        if (this.isGw2FreeCommonEntryWindow(competition)) {\n            // GW2 FREE Common stays open for entry testing until 21:00 Namibia time.\n            await this.setCompetitionStatus(Number(competition.id), \"open\");\n            competition.status = \"open\";\n            return \"open\";\n        }`);
+    source = source.replace(activatePattern, `$1\n        if (this.isGw2FreeCommonEntryWindow(competition)) {\n            // GW2 FREE Common stays open until today's first Premier League kickoff at 13:30 Namibia time.\n            await this.setCompetitionStatus(Number(competition.id), \"open\");\n            competition.status = \"open\";\n            return \"open\";\n        }`);
   }
 
   // Live scoring while the temporary entry window is open is useful for testing,
@@ -130,7 +130,7 @@ patchFile("dist/server/server/services/scoreUpdater.js", (original) => {
 }, [
   `Date.parse(\"${CUTOFF_ISO}\")`,
   "isGw2FreeCommonEntryWindow(competition)",
-  "GW2 FREE Common stays open for entry testing until 21:00 Namibia time",
+  "GW2 FREE Common stays open until today's first Premier League kickoff",
 ]);
 
 console.log(`[gw2-free-common] runtime API, join validation and lifecycle forced OPEN until ${CUTOFF_LABEL}.`);
