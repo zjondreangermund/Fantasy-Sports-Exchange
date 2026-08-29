@@ -2,7 +2,7 @@ import pg from "pg";
 
 const { Client } = pg;
 const SEASON = "2026-27";
-const GW2_FREE_COMMON_TEST_CUTOFF_UTC = Date.parse("2026-08-28T19:00:00.000Z"); // 21:00 CAT/Namibia on 28 Aug 2026
+const GW2_FREE_COMMON_TEST_CUTOFF_UTC = Date.parse("2026-08-29T11:30:00.000Z"); // 13:30 CAT/Namibia on 29 Aug 2026, today's first Premier League kickoff
 const FREE_CUP_RARITIES = [
   { tier: "common", prizeCardRarity: "rare" },
   { tier: "rare", prizeCardRarity: "unique" },
@@ -228,7 +228,7 @@ async function main() {
     console.log("Prize progression: Common→Rare, Rare→Unique, Unique→Epic, Epic→Legendary, Legendary→Legendary.");
     console.log(`Preserved ${preservedEntries} existing FREE Cup entries; no tournament entry rows were deleted or moved.`);
     if (gw2CommonForcedOpen) {
-      console.log("GW2 FREE Common Card Cup forced OPEN until 21:00 CAT on 28 Aug 2026 for entry testing.");
+      console.log("GW2 FREE Common Card Cup forced OPEN until 13:30 CAT on 29 Aug 2026, today's first Premier League kickoff.");
     }
   } catch (error) {
     try { await client.query("ROLLBACK"); } catch {}
