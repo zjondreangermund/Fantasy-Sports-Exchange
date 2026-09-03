@@ -10,10 +10,11 @@ const checks = [
   {
     file: "server/routes/prizeVault.routes.ts",
     required: [
-      "lower(coalesce(c.prize_key, '')) = 'ladder'",
-      "lower(coalesce(c.prize_type, 'goods')) = 'goods'",
+      "lower(coalesce(nullif(trim(c.prize_key), ''), 'ladder')) = 'ladder'",
+      "lower(coalesce(nullif(trim(c.prize_type), ''), 'goods')) <> 'cash_pool'",
+      "coalesce(c.entry_fee, 0) > 0",
       "c.created_by_user_id is null",
-      "coalesce(lower(c.visibility), 'public') = 'public'",
+      "coalesce(lower(nullif(trim(c.visibility), '')), 'public') = 'public'",
       "GAMEWEEK_ISOLATION_V1",
       "fplApi.getCurrentGameweek()",
       "PRIZE_VAULT_EXACT_TOURNAMENT_LINK_V1",
@@ -30,6 +31,8 @@ const checks = [
       "!isPrizeVaultTournament(comp)",
       "GAMEWEEK_ISOLATED_TOURNAMENT_CARD",
       "PRIZE_VAULT_EXACT_LINK_FROM_TOURNAMENT_V1",
+      "PRIZE_VAULT_TOURNAMENT_ENTRY_MIRROR_V2",
+      "const sharedEntries = vaultTournament ? tournamentEntries : 0;",
       "Separate from the Prize Vault.",
       "Entries in this FREE Card Cup do not fund, unlock or advance",
       "Enter FREE",
@@ -90,4 +93,4 @@ if (failures) {
   process.exit(1);
 }
 
-console.log("\nGameweek isolation verified: FREE/cash tournaments are excluded, each Prize Vault ladder resolves an exact official paid tournament/gameweek, and Fantasy Arena PTS remains current-GW only.");
+console.log("\nGameweek isolation verified: FREE/cash tournaments are excluded, legacy official paid Prize Ladders remain compatible, tournament cards mirror their qualifying entries, and Fantasy Arena PTS remains current-GW only.");

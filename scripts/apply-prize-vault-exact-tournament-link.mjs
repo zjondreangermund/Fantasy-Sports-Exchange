@@ -56,7 +56,7 @@ function patchServer() {
   requireMatch(next, wherePattern, "official Prize Ladder filter");
   next = next.replace(
     wherePattern,
-    `        where c.created_by_user_id is null\n          and c.season = \${SEASON_KEY}\n          and lower(coalesce(c.prize_key, '')) = 'ladder'\n          and lower(coalesce(c.prize_type, 'goods')) = 'goods'\n          and coalesce(lower(c.visibility), 'public') = 'public'\n          and lower(c.status::text) <> 'cancelled'\n          and c.name not like '[TEST]%'\n        order by c.game_week asc, c.id asc`,
+    `        where c.created_by_user_id is null\n          and c.season = \${SEASON_KEY}\n          and coalesce(lower(nullif(trim(c.visibility), '')), 'public') = 'public'\n          and coalesce(c.entry_fee, 0) > 0\n          and lower(coalesce(nullif(trim(c.prize_type), ''), 'goods')) <> 'cash_pool'\n          and lower(coalesce(nullif(trim(c.prize_key), ''), 'ladder')) = 'ladder'\n          and lower(c.status::text) <> 'cancelled'\n          and c.name not like '[TEST]%'\n        order by c.game_week asc, c.id asc`,
   );
 
   const gameweekPattern = /      \/\/ GAMEWEEK_ISOLATION_V1:[\s\S]*?          : 0;/;
@@ -130,26 +130,38 @@ function patchVaultPage() {
 
 function patchTournamentPage() {
   const source = read(TOURNAMENT_PAGE);
-  if (source.includes("PRIZE_VAULT_EXACT_LINK_FROM_TOURNAMENT_V1")) {
+  if (source.includes("PRIZE_VAULT_EXACT_LINK_FROM_TOURNAMENT_V1") && source.includes("PRIZE_VAULT_TOURNAMENT_ENTRY_MIRROR_V2")) {
     console.log(`[prize-vault-link] ${TOURNAMENT_PAGE} already patched`);
     return;
   }
   let next = source;
 
   const topLink = 'href={`/prize-vault?rarity=${activeRarity}`}';
-  if (!next.includes(topLink)) throw new Error("Prize Vault exact-link patch anchor not found: tournament header link");
-  next = next.replace(topLink, 'href={`/prize-vault?rarity=${activeRarity}&gameWeek=${shownGw}`}');
+  const patchedTopLink = 'href={`/prize-vault?rarity=${activeRarity}&gameWeek=${shownGw}`}';
+  if (!next.includes(patchedTopLink)) {
+    if (!next.includes(topLink)) throw new Error("Prize Vault exact-link patch anchor not found: tournament header link");
+    next = next.replace(topLink, patchedTopLink);
+  }
 
   const cardLink = 'href={`/prize-vault?rarity=${r}`}';
-  if (!next.includes(cardLink)) throw new Error("Prize Vault exact-link patch anchor not found: tournament card link");
-  next = next.replace(
-    cardLink,
-    'href={`/prize-vault?rarity=${r}&gameWeek=${Number(comp.gameWeek || comp.game_week || 0)}&competitionId=${Number(comp.id || 0)}`}',
-  );
+  const patchedCardLink = 'href={`/prize-vault?rarity=${r}&gameWeek=${Number(comp.gameWeek || comp.game_week || 0)}&competitionId=${Number(comp.id || 0)}`}';
+  if (!next.includes(patchedCardLink)) {
+    if (!next.includes(cardLink)) throw new Error("Prize Vault exact-link patch anchor not found: tournament card link");
+    next = next.replace(cardLink, patchedCardLink);
+  }
+
+  const sharedEntriesOld = '  const sharedEntries = vaultTournament ? Number(vault?.currentEntries ?? tournamentEntries) : 0;';
+  const sharedEntriesNew = '  // PRIZE_VAULT_TOURNAMENT_ENTRY_MIRROR_V2: every entry in an official paid Prize Ladder tournament is a qualifying Vault entry.\n  const sharedEntries = vaultTournament ? tournamentEntries : 0;';
+  if (!next.includes("PRIZE_VAULT_TOURNAMENT_ENTRY_MIRROR_V2")) {
+    if (!next.includes(sharedEntriesOld)) throw new Error("Prize Vault exact-link patch anchor not found: tournament qualifying entry count");
+    next = next.replace(sharedEntriesOld, sharedEntriesNew);
+  }
 
   const markerAnchor = 'function TournamentCard({ comp, vault, entryCount, onEnter }:';
-  if (!next.includes(markerAnchor)) throw new Error("Prize Vault exact-link patch anchor not found: tournament card marker");
-  next = next.replace(markerAnchor, `// PRIZE_VAULT_EXACT_LINK_FROM_TOURNAMENT_V1\n${markerAnchor}`);
+  if (!next.includes("PRIZE_VAULT_EXACT_LINK_FROM_TOURNAMENT_V1")) {
+    if (!next.includes(markerAnchor)) throw new Error("Prize Vault exact-link patch anchor not found: tournament card marker");
+    next = next.replace(markerAnchor, `// PRIZE_VAULT_EXACT_LINK_FROM_TOURNAMENT_V1\n${markerAnchor}`);
+  }
 
   writeIfChanged(TOURNAMENT_PAGE, source, next);
 }
@@ -157,4 +169,4 @@ function patchTournamentPage() {
 patchServer();
 patchVaultPage();
 patchTournamentPage();
-console.log("Prize Vault exact tournament linking is ready: tournament ID/gameweek and Vault entry totals now share one source.");
+console.log("Prize Vault exact tournament linking is ready: tournament ID/gameweek and Vault entry totals now share one source on both the Vault and tournament ladder card.");
