@@ -10,9 +10,10 @@ const checks = [
       "requestedCompetitionId",
       "entryWindowOpen",
       "c.created_by_user_id is null",
-      "lower(coalesce(c.prize_key, '')) = 'ladder'",
-      "lower(coalesce(c.prize_type, 'goods')) = 'goods'",
-      "coalesce(lower(c.visibility), 'public') = 'public'",
+      "coalesce(c.entry_fee, 0) > 0",
+      "lower(coalesce(nullif(trim(c.prize_type), ''), 'goods')) <> 'cash_pool'",
+      "lower(coalesce(nullif(trim(c.prize_key), ''), 'ladder')) = 'ladder'",
+      "coalesce(lower(nullif(trim(c.visibility), '')), 'public') = 'public'",
       "Math.max(...entryWindowGameWeeks)",
       "competitionId: Number(source?.id || 0)",
       "competitionName: String(source?.name || \"\")",
@@ -34,6 +35,8 @@ const checks = [
     file: "client/src/pages/competitions-vault.tsx",
     required: [
       "PRIZE_VAULT_EXACT_LINK_FROM_TOURNAMENT_V1",
+      "PRIZE_VAULT_TOURNAMENT_ENTRY_MIRROR_V2",
+      "const sharedEntries = vaultTournament ? tournamentEntries : 0;",
       "&gameWeek=${shownGw}",
       "&competitionId=${Number(comp.id || 0)}",
     ],
@@ -58,4 +61,4 @@ if (failed) {
   process.exit(1);
 }
 
-console.log("\nPrize Vault verified: each paid ladder can resolve its exact tournament/gameweek and read that tournament's live entry count.");
+console.log("\nPrize Vault verified: each official paid ladder accepts safe legacy metadata, resolves its exact tournament/gameweek, and the tournament card mirrors that exact tournament's qualifying entry count.");
