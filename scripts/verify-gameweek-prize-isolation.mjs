@@ -11,10 +11,15 @@ const checks = [
     file: "server/routes/prizeVault.routes.ts",
     required: [
       "lower(coalesce(c.prize_key, '')) = 'ladder'",
-      "coalesce(c.entry_fee, 0) > 0",
-      "lower(coalesce(c.prize_type, 'goods')) <> 'cash_pool'",
+      "lower(coalesce(c.prize_type, 'goods')) = 'goods'",
+      "c.created_by_user_id is null",
+      "coalesce(lower(c.visibility), 'public') = 'public'",
       "GAMEWEEK_ISOLATION_V1",
       "fplApi.getCurrentGameweek()",
+      "PRIZE_VAULT_EXACT_TOURNAMENT_LINK_V1",
+      "entryWindowGameWeeks",
+      "requestedCompetitionId",
+      "competitionId: Number(source?.id || 0)",
     ],
   },
   {
@@ -24,9 +29,11 @@ const checks = [
       "const isPrizeVaultTournament =",
       "!isPrizeVaultTournament(comp)",
       "GAMEWEEK_ISOLATED_TOURNAMENT_CARD",
+      "PRIZE_VAULT_EXACT_LINK_FROM_TOURNAMENT_V1",
       "Separate from the Prize Vault.",
       "Entries in this FREE Card Cup do not fund, unlock or advance",
       "Enter FREE",
+      "competitionId=${Number(comp.id || 0)}",
     ],
   },
   {
@@ -55,7 +62,13 @@ const checks = [
   },
   {
     file: "client/src/pages/prize-vault.tsx",
-    required: ["refetchInterval: 60_000", "refetchOnWindowFocus: true"],
+    required: [
+      "refetchInterval: 60_000",
+      "refetchOnWindowFocus: true",
+      "PRIZE_VAULT_QUERY_LINK_V1",
+      'vaultQuery.get("gameWeek")',
+      'vaultQuery.get("competitionId")',
+    ],
   },
 ];
 
@@ -77,4 +90,4 @@ if (failures) {
   process.exit(1);
 }
 
-console.log("\nGameweek isolation verified: free cups are separate; Prize Vault and PTS are current-GW only.");
+console.log("\nGameweek isolation verified: FREE/cash tournaments are excluded, each Prize Vault ladder resolves an exact official paid tournament/gameweek, and Fantasy Arena PTS remains current-GW only.");
