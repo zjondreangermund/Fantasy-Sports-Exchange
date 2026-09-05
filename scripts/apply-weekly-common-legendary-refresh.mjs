@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import "./apply-common-reward-position-balance.mjs";
 
 function patchFile(file, transform) {
   const source = fs.readFileSync(file, "utf8");
@@ -46,4 +47,4 @@ patchFile("client/src/components/prize-vault/prizeArtworkCatalogLegacy.ts", (ori
   return source;
 });
 
-console.log("Applied weekly Common reward / Legendary prize refresh: N$250k Cash and N$350k Vehicle Deposit replace World Cup VIP Trip and Tiny Home.");
+console.log("Applied weekly Common reward / Legendary prize refresh: Common rewards balance tournament positions; N$250k Cash and N$350k Vehicle Deposit replace World Cup VIP Trip and Tiny Home.");
