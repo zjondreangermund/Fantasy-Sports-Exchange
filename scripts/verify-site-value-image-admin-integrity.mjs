@@ -25,6 +25,8 @@ const adminUi = read("client/src/components/admin/AdminTournamentManager.tsx");
 const view = read("client/src/lib/site-view.ts");
 const app = read("client/src/App.tsx");
 const main = read("client/src/main.tsx");
+const scroll = read("client/src/unified-scroll.css");
+const installApp = read("client/src/components/InstallAppButton.tsx");
 const androidMain = read("android/app/src/main/java/com/fantasyfc/app/MainActivity.java");
 const rules = read("server/services/tournamentRules.ts");
 const economy = read("server/routes/economyIntegrity.routes.ts");
@@ -91,16 +93,24 @@ includes(rules, "prizePoolRate: 0.9", "User-created tournaments must allocate 90
 includes(economy, "competition.platformFeeRate ??", "Official tournament zero-percent fees must not be replaced by a truthy fallback.");
 
 includes(view, "(display-mode: standalone)", "Installed mobile apps must be detected independently of ordinary browsers.");
-includes(view, "return isInstalledMobileApp() ? \"desktop\" : \"mobile\"", "Installed mobile apps must default to the desktop website layout.");
-includes(view, "SITE_VIEW_STORAGE_KEY", "The desktop/mobile preference must persist.");
+includes(view, 'if (isInstalledMobileApp()) return "desktop";', "Installed mobile apps must default to the desktop website layout on each fresh session.");
+includes(view, 'APP_SESSION_VIEW_STORAGE_KEY = "fantasy_arena_app_session_view"', "Installed app view overrides must be session-scoped so Desktop remains the next-launch default.");
+includes(view, "window.sessionStorage.setItem(APP_SESSION_VIEW_STORAGE_KEY, mode)", "Installed app view changes must use session storage.");
+includes(view, "SITE_VIEW_STORAGE_KEY", "The desktop/mobile preference must persist in ordinary browsers.");
 includes(view, "const DESKTOP_VIEWPORT = `width=${DESKTOP_VIEWPORT_WIDTH}, viewport-fit=cover, user-scalable=yes`;", "Desktop app mode must let the browser choose a sharp overview scale instead of forcing a fractional scale.");
 assert.ok(!view.includes("deviceWidth / DESKTOP_VIEWPORT_WIDTH") && !view.includes("initialScale.toFixed"), "Desktop app mode must not manually downscale the page into a blurry raster.");
 includes(view, "clearQueryViewOverride();", "The view toggle must clear stale query overrides so Mobile view can be restored.");
 includes(view, "window.location.reload()", "Desktop/mobile switching must reload the layout viewport for deterministic Android WebView behavior.");
 includes(app, "Switch to desktop site view", "Managers must be able to toggle between desktop and mobile views.");
+includes(app, "<InstallAppButton />", "Signed-in web users must retain an Install App option until the app is installed.");
+includes(installApp, "beforeinstallprompt", "Install App must use the browser installation flow when available.");
+includes(installApp, "if (isInstalledMobileApp()) return null", "Install App option must disappear inside an installed app.");
 includes(main, "initializeSiteView();", "The chosen app layout must be applied before React renders.");
+includes(scroll, "APP_DESKTOP_VIEW_PAN_V1", "Desktop app mode must explicitly restore pan gestures while zoomed.");
+includes(scroll, "touch-action: pan-x pan-y pinch-zoom !important;", "Zoomed Desktop app mode must support horizontal and vertical panning.");
 includes(androidMain, "settings.setUseWideViewPort(true);", "Android app WebView must use a wide desktop-style layout viewport.");
 includes(androidMain, "settings.setLoadWithOverviewMode(true);", "Android app WebView must fit the desktop layout to the phone without CSS transforms.");
+includes(androidMain, "settings.setSupportZoom(true);", "Android app WebView must keep pinch zoom enabled.");
 includes(androidMain, "webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null);", "Android app rendering must stay hardware accelerated for sharp scaled text and cards.");
 
-console.log("Fantasy Arena image fallbacks, exact scores and values, SQL safety, private entries, crisp reversible mobile desktop view, and admin tournament reconciliation verified.");
+console.log("Fantasy Arena image fallbacks, exact scores and values, SQL safety, private entries, install access, desktop-first app sessions, zoom panning, and admin tournament reconciliation verified.");
