@@ -24,6 +24,32 @@ function isCurrentPremierLeaguePlayer(player: any) {
     && !["departed", "superseded", "unlinked"].includes(status);
 }
 
+const REFERRAL_COMMON_POSITION_BALANCE_V1 = true;
+const COMMON_POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
+type CommonPosition = (typeof COMMON_POSITIONS)[number];
+type CommonPositionCounts = Record<CommonPosition, number>;
+
+function normalizePosition(value: unknown): CommonPosition | null {
+  const position = String(value || "").trim().toUpperCase();
+  return COMMON_POSITIONS.includes(position as CommonPosition) ? position as CommonPosition : null;
+}
+
+function referralTargetTeams(commonCountAfterReward: number) {
+  return Math.min(4, Math.max(1, Math.ceil(Math.max(1, commonCountAfterReward) / 5)));
+}
+
+function referralPositionPriority(counts: CommonPositionCounts, commonCountAfterReward: number): CommonPosition[] {
+  const targetTeams = referralTargetTeams(commonCountAfterReward);
+  const randomTie = new Map(COMMON_POSITIONS.map((position) => [position, Math.random()]));
+  return [...COMMON_POSITIONS].sort((a, b) => {
+    const deficitA = Math.max(0, targetTeams - counts[a]);
+    const deficitB = Math.max(0, targetTeams - counts[b]);
+    if (deficitA !== deficitB) return deficitB - deficitA;
+    if (counts[a] !== counts[b]) return counts[a] - counts[b];
+    return Number(randomTie.get(a) || 0) - Number(randomTie.get(b) || 0);
+  });
+}
+
 async function ensureReferralSchema() {
   await db.execute(sql`
     create table if not exists app.referral_codes (
@@ -61,15 +87,41 @@ async function ensureCode(userId: string) {
   throw new Error("Could not create referral code");
 }
 
-async function grantRandomCommonCard(storage: any, userId: string) {
+async function grantPositionBalancedCommonCard(storage: any, userId: string) {
   const allPlayers = await storage.getPlayers();
   const players = (Array.isArray(allPlayers) ? allPlayers : []).filter(isCurrentPremierLeaguePlayer);
   if (players.length === 0) return null;
-  const owned = await storage.getUserCards(userId);
-  const ownedCommonPlayerIds = new Set((Array.isArray(owned) ? owned : []).filter((card: any) => String(card.rarity || "") === "common").map((card: any) => Number(card.playerId)));
-  const candidates = players.filter((player: any) => !ownedCommonPlayerIds.has(Number(player.id)));
-  const pool = candidates.length ? candidates : players;
-  const chosen = pool[Math.floor(Math.random() * pool.length)];
+
+  const playersById = new Map(players.map((player: any) => [Number(player.id), player]));
+  const owned = Array.isArray(await storage.getUserCards(userId)) ? await storage.getUserCards(userId) : [];
+  const ownedCommon = owned.filter((card: any) => String(card.rarity || "").toLowerCase() === "common");
+  const ownedCommonPlayerIds = new Set(ownedCommon.map((card: any) => Number(card.playerId ?? card.player_id ?? card.player?.id)));
+  const counts: CommonPositionCounts = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+
+  for (const card of ownedCommon) {
+    const playerId = Number(card.playerId ?? card.player_id ?? card.player?.id);
+    const player = card.player || playersById.get(playerId);
+    const position = normalizePosition(player?.position ?? card.position);
+    if (position) counts[position] += 1;
+  }
+
+  const priority = referralPositionPriority(counts, ownedCommon.length + 1);
+  let chosen: any = null;
+
+  // Referral rewards follow the same Common-card rule as weekly rewards: first
+  // choose the position that improves tournament-team capacity, then keep the
+  // actual Premier League player random inside that position. Prefer a new
+  // player identity, but allow a duplicate if the position would otherwise be
+  // impossible to fill. Rare/Unique/Epic/Legendary cards are never affected.
+  for (const position of priority) {
+    const positionPool = players.filter((player: any) => normalizePosition(player.position) === position);
+    const unseen = positionPool.filter((player: any) => !ownedCommonPlayerIds.has(Number(player.id)));
+    const pool = unseen.length ? unseen : positionPool;
+    if (!pool.length) continue;
+    chosen = pool[Math.floor(Math.random() * pool.length)];
+    if (chosen) break;
+  }
+
   if (!chosen?.id) return null;
   return storage.createPlayerCard({
     playerId: Number(chosen.id),
@@ -135,7 +187,7 @@ export function registerReferralRoutes(app: Express, deps: { requireAuth: any; s
       const existing = rowsOf(await db.execute(sql`select id from app.referrals where referred_user_id=${referredUserId}`))[0];
       if (existing?.id) return res.json({ success: true, alreadyClaimed: true });
 
-      const reward = await grantRandomCommonCard(storage, referrerUserId);
+      const reward = await grantPositionBalancedCommonCard(storage, referrerUserId);
       await db.execute(sql`
         insert into app.referrals (referrer_user_id, referred_user_id, referral_code, reward_card_id, status)
         values (${referrerUserId}, ${referredUserId}, ${code}, ${reward?.id || null}, ${reward?.id ? "rewarded" : "claimed_no_card"})
