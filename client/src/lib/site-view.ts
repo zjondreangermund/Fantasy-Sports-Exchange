@@ -1,11 +1,12 @@
 export type SiteViewMode = "mobile" | "desktop";
 
 export const SITE_VIEW_STORAGE_KEY = "fantasy_arena_site_view";
+const APP_SESSION_VIEW_STORAGE_KEY = "fantasy_arena_app_session_view";
 const DESKTOP_VIEWPORT_WIDTH = 1280;
 const DESKTOP_VIEWPORT = `width=${DESKTOP_VIEWPORT_WIDTH}, viewport-fit=cover, user-scalable=yes`;
-const MOBILE_VIEWPORT = "width=device-width, initial-scale=1, viewport-fit=cover";
+const MOBILE_VIEWPORT = "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=yes";
 
-function isInstalledMobileApp(): boolean {
+export function isInstalledMobileApp(): boolean {
   if (typeof window === "undefined") return false;
   const capacitor = (window as any).Capacitor;
   const native = typeof capacitor?.isNativePlatform === "function"
@@ -29,7 +30,9 @@ function querySiteViewMode(): SiteViewMode | null {
 function storedSiteViewMode(): SiteViewMode | null {
   if (typeof window === "undefined") return null;
   try {
-    const stored = window.localStorage.getItem(SITE_VIEW_STORAGE_KEY);
+    const storage = isInstalledMobileApp() ? window.sessionStorage : window.localStorage;
+    const key = isInstalledMobileApp() ? APP_SESSION_VIEW_STORAGE_KEY : SITE_VIEW_STORAGE_KEY;
+    const stored = storage.getItem(key);
     return stored === "desktop" || stored === "mobile" ? stored : null;
   } catch {
     return null;
@@ -39,7 +42,14 @@ function storedSiteViewMode(): SiteViewMode | null {
 function persistSiteViewMode(mode: SiteViewMode) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(SITE_VIEW_STORAGE_KEY, mode);
+    if (isInstalledMobileApp()) {
+      // The installed app is desktop-first on every fresh app session. A manager
+      // may still switch to Mobile view for the current session without making
+      // Mobile the default the next time the app is launched.
+      window.sessionStorage.setItem(APP_SESSION_VIEW_STORAGE_KEY, mode);
+    } else {
+      window.localStorage.setItem(SITE_VIEW_STORAGE_KEY, mode);
+    }
   } catch {
     // Restricted WebViews can still use the current in-memory view.
   }
@@ -62,12 +72,15 @@ export function getSiteViewMode(): SiteViewMode {
   if (typeof window === "undefined") return "mobile";
   const queryMode = querySiteViewMode();
   if (queryMode) return queryMode;
+
   const stored = storedSiteViewMode();
   if (stored) return stored;
 
-  // Installed Android/iOS/PWA opens in the same full desktop layout as the PC
-  // website. Ordinary mobile browsers stay mobile unless Desktop view is chosen.
-  return isInstalledMobileApp() ? "desktop" : "mobile";
+  // Installed Android/iOS/PWA starts in the same full desktop layout as the PC
+  // website on every fresh app session. Ordinary mobile browsers stay mobile
+  // unless Desktop view is explicitly chosen and saved.
+  if (isInstalledMobileApp()) return "desktop";
+  return "mobile";
 }
 
 export function applySiteView(mode: SiteViewMode): SiteViewMode {
@@ -79,6 +92,7 @@ export function applySiteView(mode: SiteViewMode): SiteViewMode {
     // Never force a fractional initial-scale for desktop mode. Android WebView
     // and mobile Chromium render more sharply when they select the overview
     // scale for the fixed 1280px layout viewport, matching Desktop site mode.
+    // user-scalable remains enabled so a zoomed app can still pan around.
     viewport.setAttribute("content", mode === "desktop" ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT);
   }
 
