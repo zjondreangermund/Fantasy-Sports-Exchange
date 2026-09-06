@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 const SERVICE = "server/services/dailyLoginReward.ts";
+const APP = "client/src/App.tsx";
 const MARKER = "COMMON_REWARD_POSITION_BALANCE_V1";
 
 function patchFile(file, transform) {
@@ -36,4 +37,21 @@ patchFile(SERVICE, (original) => {
   return source;
 });
 
-console.log("Weekly Common position balancing is ready: player identity stays random within the position needed to increase tournament-team capacity.");
+patchFile(APP, (original) => {
+  let source = original;
+  source = replaceRequired(
+    source,
+    'import GlobalActionToasts from "./components/GlobalActionToasts";\n',
+    'import GlobalActionToasts from "./components/GlobalActionToasts";\nimport InstallAppButton from "./components/InstallAppButton";\n',
+    "Install App component import",
+  );
+  source = replaceRequired(
+    source,
+    '<div className="flex shrink-0 items-center gap-1.5"><button type="button" onClick={() => setSiteView(',
+    '<div className="flex shrink-0 items-center gap-1.5"><InstallAppButton /><button type="button" onClick={() => setSiteView(',
+    "authenticated Install App control",
+  );
+  return source;
+});
+
+console.log("Weekly/referral Common position balancing and signed-in Install App access are ready.");
