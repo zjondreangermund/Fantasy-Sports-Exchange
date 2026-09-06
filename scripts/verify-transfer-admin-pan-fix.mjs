@@ -15,7 +15,9 @@ need(transfer, "PLAYER_TRANSFER_CANONICAL_TEAM_V2", "canonical team-identity tra
 need(transfer, '["nottingham-forest", "nottingham", "nottm-forest"', "Nottingham naming variants are not canonicalized");
 need(transfer, '["manchester-united", "man-united", "man-utd"', "Manchester United naming variants are not canonicalized");
 need(transfer, '["tottenham-hotspur", "tottenham", "spurs"', "Tottenham naming variants are not canonicalized");
-need(transfer, "canonicalTeamIdentity(fromTeam) === canonicalTeamIdentity(toTeam)", "same-club aliases are not identified");
+need(transfer, "const fromTeamIdentity = canonicalTeamIdentity(fromTeam);", "old club name is not converted to canonical identity");
+need(transfer, "const toTeamIdentity = canonicalTeamIdentity(toTeam);", "new club name is not converted to canonical identity");
+need(transfer, "fromTeamIdentity === toTeamIdentity", "same-club aliases are not identified");
 need(transfer, "suppressedTeamAliasChanges += 1", "alias-only changes are not suppressed before notifications");
 need(transfer, "suppression_reason='club_alias_only'", "historical alias-noise events are not marked");
 need(transfer, "delete from app.notifications", "false transfer notifications are not cleaned up");
