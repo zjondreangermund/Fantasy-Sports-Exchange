@@ -247,3 +247,25 @@ html.app-scroll-locked .app-content > header {
     scrollbar-gutter: stable;
   }
 }
+
+/* APP_DESKTOP_VIEW_PAN_V1
+ * Android/iOS WebViews allow pinch zoom, but the normal authenticated shell
+ * intentionally restricts page gestures to vertical scrolling. In installed
+ * Desktop view that prevented users from dragging the zoomed visual viewport
+ * left/right. Permit two-axis panning while retaining pinch zoom only in the
+ * desktop-style app view; ordinary responsive mobile browsing is unchanged. */
+html[data-site-view="desktop"],
+html[data-site-view="desktop"] body,
+html[data-site-view="desktop"] .app-shell,
+html[data-site-view="desktop"] .app-content,
+html[data-site-view="desktop"] [data-app-scroll-root],
+html[data-site-view="desktop"] [data-page-scroll-content],
+html[data-site-view="desktop"] [data-page-scroll-content] > :where(main, section, article, div),
+html[data-site-view="desktop"] [data-scroll-region="true"],
+html[data-site-view="desktop"] [role="dialog"] {
+  touch-action: pan-x pan-y pinch-zoom !important;
+}
+
+html[data-site-view="desktop"] [data-app-scroll-root] {
+  overscroll-behavior-x: auto;
+}
