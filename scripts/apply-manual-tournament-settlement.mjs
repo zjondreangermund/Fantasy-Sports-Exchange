@@ -142,3 +142,5 @@ patchFile("server/routes.ts", (original) => {
 });
 
 console.log("[manual-settlement] Safe manual settlement controls are ready.");
+await import("./apply-epl-exit-finance-controls.mjs");
+await import("./verify-epl-exit-finance-controls.mjs");
