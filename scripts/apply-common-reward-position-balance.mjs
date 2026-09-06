@@ -54,16 +54,4 @@ patchFile(APP, (original) => {
   return source;
 });
 
-// The older integrity assertion looked for the original one-line ternary. The
-// installed app now uses a stricter session-scoped contract: every fresh app
-// launch defaults to Desktop view, while a user's temporary Mobile switch lasts
-// only for the current app session. Keep the integrity test aligned with that
-// stronger behavior rather than restoring the obsolete source shape.
-patchFile("scripts/verify-site-value-image-admin-integrity.mjs", (original) => replaceRequired(
-  original,
-  'includes(view, "return isInstalledMobileApp() ? \\"desktop\\" : \\"mobile\\"", "Installed mobile apps must default to the desktop website layout.");',
-  'includes(view, \'if (isInstalledMobileApp()) return "desktop";\', "Installed mobile apps must default to the desktop website layout on each fresh session.");\nincludes(view, \'APP_SESSION_VIEW_STORAGE_KEY = "fantasy_arena_app_session_view"\', "Installed app view overrides must be session-scoped so Desktop remains the next-launch default.");\nincludes(view, "window.sessionStorage.setItem(APP_SESSION_VIEW_STORAGE_KEY, mode)", "Installed app view changes must use session storage.");',
-  "desktop-first installed app integrity assertion",
-));
-
 console.log("Weekly/referral Common position balancing and signed-in Install App access are ready.");
