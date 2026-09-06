@@ -168,6 +168,10 @@ rejectText(retiredGrant, "insert into app.player_cards", "retired full-set scrip
 requireText(referrals, "isCurrentPremierLeaguePlayer", "referral rewards are not restricted to active EPL players");
 requireText(referrals, "fplId > 0", "referral rewards do not require official FPL identity");
 requireText(referrals, "departed", "referral rewards do not exclude departed players");
+requireText(referrals, "REFERRAL_COMMON_POSITION_BALANCE_V1", "referral Common cards are not protected by position balancing");
+requireText(referrals, 'COMMON_POSITIONS = ["GK", "DEF", "MID", "FWD"]', "referral Common cards do not cover all mandatory tournament positions");
+requireText(referrals, "referralPositionPriority(counts, ownedCommon.length + 1)", "referral Common cards do not prioritize the limiting tournament position");
+requireText(referrals, 'rarity: "common"', "referral reward is no longer restricted to Common rarity");
 
 if (failures.length) {
   console.error("EPL card ownership protection verification failed:");
@@ -175,4 +179,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("EPL card ownership verified: startup never resets user cards, Collection is read-only, confirmed starter minting is atomic, ownership audits are non-destructive, and recovery requires independent evidence plus explicit approval.");
+console.log("EPL card ownership verified: startup never resets user cards, Collection is read-only, confirmed starter minting is atomic, referral Common cards balance tournament positions, ownership audits are non-destructive, and recovery requires independent evidence plus explicit approval.");
