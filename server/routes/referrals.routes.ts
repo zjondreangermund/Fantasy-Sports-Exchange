@@ -93,7 +93,8 @@ async function grantPositionBalancedCommonCard(storage: any, userId: string) {
   if (players.length === 0) return null;
 
   const playersById = new Map(players.map((player: any) => [Number(player.id), player]));
-  const owned = Array.isArray(await storage.getUserCards(userId)) ? await storage.getUserCards(userId) : [];
+  const ownedRows = await storage.getUserCards(userId);
+  const owned = Array.isArray(ownedRows) ? ownedRows : [];
   const ownedCommon = owned.filter((card: any) => String(card.rarity || "").toLowerCase() === "common");
   const ownedCommonPlayerIds = new Set(ownedCommon.map((card: any) => Number(card.playerId ?? card.player_id ?? card.player?.id)));
   const counts: CommonPositionCounts = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
