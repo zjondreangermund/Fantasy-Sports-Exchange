@@ -25,6 +25,7 @@ function isCurrentPremierLeaguePlayer(player: any) {
 }
 
 const REFERRAL_COMMON_POSITION_BALANCE_V1 = true;
+const REFERRAL_ATOMIC_CLAIM_V1 = true;
 const COMMON_POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
 type CommonPosition = (typeof COMMON_POSITIONS)[number];
 type CommonPositionCounts = Record<CommonPosition, number>;
@@ -58,16 +59,31 @@ async function ensureReferralSchema() {
       created_at timestamp default now()
     )
   `);
+
+  // Older production databases already contain app.referrals with a legacy
+  // shape. CREATE TABLE IF NOT EXISTS does not add newer columns, so explicitly
+  // converge the existing table before any reward can be minted.
   await db.execute(sql`
     create table if not exists app.referrals (
       id integer generated always as identity primary key,
-      referrer_user_id varchar(255) not null references app.users(id) on delete cascade,
-      referred_user_id varchar(255) not null unique references app.users(id) on delete cascade,
-      referral_code text not null,
+      referrer_user_id varchar(255) references app.users(id) on delete cascade,
+      referred_user_id varchar(255) references app.users(id) on delete cascade,
+      referral_code text,
       reward_card_id integer references app.player_cards(id),
       status text not null default 'rewarded',
       created_at timestamp default now()
     )
+  `);
+  await db.execute(sql`alter table app.referrals add column if not exists referrer_user_id varchar(255) references app.users(id) on delete cascade`);
+  await db.execute(sql`alter table app.referrals add column if not exists referred_user_id varchar(255) references app.users(id) on delete cascade`);
+  await db.execute(sql`alter table app.referrals add column if not exists referral_code text`);
+  await db.execute(sql`alter table app.referrals add column if not exists reward_card_id integer references app.player_cards(id)`);
+  await db.execute(sql`alter table app.referrals add column if not exists status text not null default 'rewarded'`);
+  await db.execute(sql`alter table app.referrals add column if not exists created_at timestamp default now()`);
+  await db.execute(sql`
+    create unique index if not exists referrals_referred_user_id_unique_idx
+    on app.referrals (referred_user_id)
+    where referred_user_id is not null
   `);
 }
 
@@ -87,7 +103,7 @@ async function ensureCode(userId: string) {
   throw new Error("Could not create referral code");
 }
 
-async function grantPositionBalancedCommonCard(storage: any, userId: string) {
+async function grantPositionBalancedCommonCard(storage: any, userId: string, executor: any) {
   const allPlayers = await storage.getPlayers();
   const players = (Array.isArray(allPlayers) ? allPlayers : []).filter(isCurrentPremierLeaguePlayer);
   if (players.length === 0) return null;
@@ -107,7 +123,6 @@ async function grantPositionBalancedCommonCard(storage: any, userId: string) {
   }
 
   const priority = referralPositionPriority(counts, ownedCommon.length + 1);
-  let chosen: any = null;
 
   // Referral rewards follow the same Common-card rule as weekly rewards: first
   // choose the position that improves tournament-team capacity, then keep the
@@ -117,23 +132,37 @@ async function grantPositionBalancedCommonCard(storage: any, userId: string) {
   for (const position of priority) {
     const positionPool = players.filter((player: any) => normalizePosition(player.position) === position);
     const unseen = positionPool.filter((player: any) => !ownedCommonPlayerIds.has(Number(player.id)));
-    const pool = unseen.length ? unseen : positionPool;
-    if (!pool.length) continue;
-    chosen = pool[Math.floor(Math.random() * pool.length)];
-    if (chosen) break;
+    const orderedPools = unseen.length ? [unseen, positionPool] : [positionPool];
+
+    for (const pool of orderedPools) {
+      const shuffled = [...pool].sort(() => Math.random() - 0.5);
+      for (const chosen of shuffled) {
+        if (!chosen?.id) continue;
+        const playerId = Number(chosen.id);
+        const duplicate = rowsOf(await executor.execute(sql`
+          select id from app.player_cards
+          where owner_id=${userId} and player_id=${playerId} and rarity::text='common'
+          limit 1
+        `))[0];
+        if (duplicate) continue;
+
+        const supply = rowsOf(await executor.execute(sql`
+          select count(*)::int as count from app.player_cards
+          where player_id=${playerId} and rarity::text='common'
+        `))[0];
+        if (Number(supply?.count || 0) >= 1000) continue;
+
+        const created = rowsOf(await executor.execute(sql`
+          insert into app.player_cards (player_id, owner_id, rarity, level, xp, decisive_score, for_sale, price)
+          values (${playerId}, ${userId}, 'common', 1, 0, 35, false, 0)
+          returning id
+        `))[0];
+        if (created?.id) return { id: Number(created.id), playerId };
+      }
+    }
   }
 
-  if (!chosen?.id) return null;
-  return storage.createPlayerCard({
-    playerId: Number(chosen.id),
-    ownerId: userId,
-    rarity: "common",
-    level: 1,
-    xp: 0,
-    decisiveScore: 35,
-    forSale: false,
-    price: 0,
-  } as any);
+  return null;
 }
 
 export function registerReferralRoutes(app: Express, deps: { requireAuth: any; storage: any }) {
@@ -181,19 +210,43 @@ export function registerReferralRoutes(app: Express, deps: { requireAuth: any; s
       const referredUserId = String(req.authUserId || "");
       const code = cleanCode(req.body?.code);
       if (!code) return res.status(400).json({ message: "Referral code required" });
-      const referrerRow = rowsOf(await db.execute(sql`select user_id from app.referral_codes where code=${code}`))[0];
-      if (!referrerRow?.user_id) return res.status(404).json({ message: "Referral code not found" });
-      const referrerUserId = String(referrerRow.user_id);
-      if (referrerUserId === referredUserId) return res.status(400).json({ message: "You cannot use your own referral link" });
-      const existing = rowsOf(await db.execute(sql`select id from app.referrals where referred_user_id=${referredUserId}`))[0];
-      if (existing?.id) return res.json({ success: true, alreadyClaimed: true });
 
-      const reward = await grantPositionBalancedCommonCard(storage, referrerUserId);
-      await db.execute(sql`
-        insert into app.referrals (referrer_user_id, referred_user_id, referral_code, reward_card_id, status)
-        values (${referrerUserId}, ${referredUserId}, ${code}, ${reward?.id || null}, ${reward?.id ? "rewarded" : "claimed_no_card"})
-      `);
-      return res.json({ success: true, rewardCardId: reward?.id || null });
+      const result = await db.transaction(async (tx: any) => {
+        // One referred account can be claimed only once. The card mint and the
+        // referral row now share this transaction, so an insert/schema failure
+        // rolls the card back instead of leaving an extra owned card behind.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`referral-claim:${referredUserId}`}))`);
+
+        const existing = rowsOf(await tx.execute(sql`
+          select id, reward_card_id as "rewardCardId"
+          from app.referrals
+          where referred_user_id=${referredUserId}
+          limit 1
+        `))[0];
+        if (existing?.id) {
+          return { success: true, alreadyClaimed: true, rewardCardId: existing.rewardCardId ? Number(existing.rewardCardId) : null };
+        }
+
+        const referrerRow = rowsOf(await tx.execute(sql`select user_id from app.referral_codes where code=${code}`))[0];
+        if (!referrerRow?.user_id) return { error: 404, message: "Referral code not found" };
+        const referrerUserId = String(referrerRow.user_id);
+        if (referrerUserId === referredUserId) return { error: 400, message: "You cannot use your own referral link" };
+
+        // Serialize rewards to the same referrer too, so two friends completing
+        // signup at once cannot both select/mint against a stale card inventory.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`referral-reward:${referrerUserId}`}))`);
+        const reward = await grantPositionBalancedCommonCard(storage, referrerUserId, tx);
+
+        await tx.execute(sql`
+          insert into app.referrals (referrer_user_id, referred_user_id, referral_code, reward_card_id, status)
+          values (${referrerUserId}, ${referredUserId}, ${code}, ${reward?.id || null}, ${reward?.id ? "rewarded" : "claimed_no_card"})
+        `);
+
+        return { success: true, alreadyClaimed: false, rewardCardId: reward?.id || null };
+      });
+
+      if ((result as any)?.error) return res.status(Number((result as any).error)).json({ message: (result as any).message });
+      return res.json(result);
     } catch (error: any) {
       console.error("Referral claim failed:", error);
       return res.status(500).json({ message: error?.message || "Failed to claim referral" });
