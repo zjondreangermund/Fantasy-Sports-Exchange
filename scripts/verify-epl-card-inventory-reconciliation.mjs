@@ -171,7 +171,10 @@ requireText(referrals, "departed", "referral rewards do not exclude departed pla
 requireText(referrals, "REFERRAL_COMMON_POSITION_BALANCE_V1", "referral Common cards are not protected by position balancing");
 requireText(referrals, 'COMMON_POSITIONS = ["GK", "DEF", "MID", "FWD"]', "referral Common cards do not cover all mandatory tournament positions");
 requireText(referrals, "referralPositionPriority(counts, ownedCommon.length + 1)", "referral Common cards do not prioritize the limiting tournament position");
-requireText(referrals, 'rarity: "common"', "referral reward is no longer restricted to Common rarity");
+requireText(referrals, "values (${playerId}, ${userId}, 'common'", "referral reward is no longer restricted to Common rarity");
+requireText(referrals, "REFERRAL_ATOMIC_CLAIM_V1", "referral rewards are not protected by atomic/idempotent claim handling");
+requireText(referrals, "db.transaction(async (tx: any)", "referral claim and reward mint are not in one transaction");
+requireText(referrals, "referrals_referred_user_id_unique_idx", "referral retries are not backed by a durable referred-user uniqueness guard");
 
 if (failures.length) {
   console.error("EPL card ownership protection verification failed:");
@@ -179,4 +182,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("EPL card ownership verified: startup never resets user cards, Collection is read-only, confirmed starter minting is atomic, referral Common cards balance tournament positions, ownership audits are non-destructive, and recovery requires independent evidence plus explicit approval.");
+console.log("EPL card ownership verified: startup never resets user cards, Collection is read-only, confirmed starter minting is atomic, referral Common cards balance tournament positions and claim atomically, ownership audits are non-destructive, and recovery requires independent evidence plus explicit approval.");
