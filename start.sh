@@ -150,6 +150,15 @@ if ! node scripts/sync-free-card-tournaments.mjs; then
   exit 1
 fi
 
+# Explicit production operator requested on 7 Sep 2026: settle entered GW3
+# tournaments through the existing guarded Admin settlement route, then open the
+# already-configured GW4 official tournaments early. The script is idempotent,
+# refuses unfinished eligible fixtures, and is inert unless the Railway flag is 1.
+if [ "${RUN_GW3_SETTLE_OPEN_GW4:-0}" = "1" ]; then
+  echo "Running guarded GW3 settlement / GW4 entry-opening operator..."
+  node scripts/operate-gw3-settle-open-gw4.mjs
+fi
+
 # The database status alone is not enough: the compiled API and scoring lifecycle
 # also use the first Premier League kickoff as the normal entry deadline. Override
 # those runtime checks only for GW2 FREE Common until exactly 21:00 Namibia time.
