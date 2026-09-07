@@ -102,6 +102,16 @@ fi
 echo "Restoring exact original signup card sets and removing all extras..."
 node scripts/restore-original-signup-card-sets.mjs
 
+# 7 Sep 2026 referral incident repair. Two production requests minted a Common
+# card and then failed while writing the legacy referrals table. The guarded
+# repair only releases target-account cards whose acquisition timestamp matches
+# those failed requests and which have no durable reward/referral/lineup/wallet
+# reference. It is inert unless the explicit Railway flag is enabled.
+if [ "${RUN_REFERRAL_DUPLICATE_REPAIR_20260907:-0}" = "1" ]; then
+  echo "Repairing proven failed-referral card leaks..."
+  node scripts/repair-failed-referral-card-leaks-20260907.mjs
+fi
+
 # Snapshot currently owned normal-user cards. Snapshots never update/delete
 # player_cards and provide an exact baseline for future ownership-drift checks.
 echo "Snapshotting normal-user card ownership..."
