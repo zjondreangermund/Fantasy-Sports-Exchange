@@ -49,6 +49,7 @@ function countdownLabel(raw?: string | null) {
 export default function FreeTournamentCampaign() {
   const { toast } = useToast();
   const [clockTick, setClockTick] = useState(0);
+  const canNativeShare = typeof navigator !== "undefined" && typeof (navigator as any).share === "function";
 
   const { data: competitions } = useQuery<Tournament[]>({
     queryKey: ["/api/competitions"],
@@ -97,8 +98,8 @@ export default function FreeTournamentCampaign() {
     const text = `Gameweek ${gameWeek || ""} is open on Fantasy Arena. Join the FREE Common Card Cup and challenge me.`.trim();
 
     try {
-      if (navigator.share) {
-        await navigator.share({ title: "Fantasy Arena FREE tournament", text, url });
+      if (canNativeShare) {
+        await (navigator as any).share({ title: "Fantasy Arena FREE tournament", text, url });
         return;
       }
       await navigator.clipboard.writeText(url);
@@ -138,7 +139,7 @@ export default function FreeTournamentCampaign() {
             <Button className="font-bold">Enter FREE GW{gameWeek || ""}</Button>
           </Link>
           <Button type="button" variant="outline" onClick={shareTournament} className="border-white/20 bg-black/20 text-white hover:bg-white/10">
-            {typeof navigator !== "undefined" && navigator.share ? <Share2 className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+            {canNativeShare ? <Share2 className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
             Invite a friend
           </Button>
         </div>
