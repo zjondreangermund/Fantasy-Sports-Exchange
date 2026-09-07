@@ -48,15 +48,21 @@ expect(!rewardBalancePatch.includes("rarity::text = 'legendary'"), "Position bal
 
 // Referral rewards are also free Common cards, so they must use the same
 // position-first, random-player-within-position strategy without touching any
-// tradable rarity.
+// tradable rarity. The reward mint and referral claim must also be atomic: a
+// failed referral row may never leave an owned card behind.
 expect(referrals.includes("REFERRAL_COMMON_POSITION_BALANCE_V1"), "Referral Common position-balancing marker is missing");
+expect(referrals.includes("REFERRAL_ATOMIC_CLAIM_V1"), "Atomic referral claim marker is missing");
 expect(referrals.includes('COMMON_POSITIONS = ["GK", "DEF", "MID", "FWD"]'), "Referral rewards must balance GK/DEF/MID/FWD");
 expect(referrals.includes("referralTargetTeams(commonCountAfterReward"), "Referral rewards must calculate the same next team-capacity milestone");
 expect(referrals.includes("Math.ceil(Math.max(1, commonCountAfterReward) / 5)"), "Referral rewards must balance before each 10/15/20-card milestone");
 expect(referrals.includes("referralPositionPriority(counts, ownedCommon.length + 1)"), "Referral rewards must prioritize the referrer's limiting Common position");
 expect(referrals.includes("const unseen = positionPool.filter"), "Referral rewards must prefer a new random player identity inside the needed position");
-expect(referrals.includes('rarity: "common"'), "Referral reward mint must remain Common rarity");
-expect(referrals.includes("grantPositionBalancedCommonCard(storage, referrerUserId)"), "Referral claim must use the position-balanced Common reward path");
+expect(referrals.includes("values (${playerId}, ${userId}, 'common'"), "Referral reward mint must remain Common rarity");
+expect(referrals.includes("grantPositionBalancedCommonCard(storage, referrerUserId, tx)"), "Referral claim must mint the position-balanced Common card inside its transaction");
+expect(referrals.includes("db.transaction(async (tx: any)"), "Referral claim must use one database transaction");
+expect(referrals.includes("pg_advisory_xact_lock"), "Referral claim must serialize retries/concurrent claims");
+expect(referrals.includes("alter table app.referrals add column if not exists referral_code text"), "Referral startup compatibility must add the missing referral_code column");
+expect(referrals.includes("referrals_referred_user_id_unique_idx"), "Referral claims need a durable unique referred-user constraint");
 for (const rarity of ["rare", "unique", "epic", "legendary"]) {
   expect(!referrals.includes(`rarity: "${rarity}"`), `Referral position balancing must not mint ${rarity} cards`);
 }
@@ -104,4 +110,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Common rewards verified: weekly and referral cards balance tournament positions while player identity remains random; signed-in web users retain Install App access; installed app sessions default to Desktop view and support two-axis panning while zoomed.");
+console.log("Common rewards verified: weekly and referral cards balance tournament positions while player identity remains random; referral rewards are atomic/idempotent; signed-in web users retain Install App access; installed app sessions default to Desktop view and support two-axis panning while zoomed.");
