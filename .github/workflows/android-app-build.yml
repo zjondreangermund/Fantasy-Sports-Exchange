@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   android:
-    name: Build Fantasy Arena Android 1.1.1
+    name: Build Fantasy Arena Android 1.1.2
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -54,7 +54,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Capacitor web assets
+      - name: Build and verify production web app
         run: npm run build:web
 
       - name: Configure Firebase messaging
@@ -67,11 +67,39 @@ jobs:
             echo "Firebase Android configuration is not set; this APK will build without native push delivery."
           fi
 
+      - name: Replace bundled website with compact remote shell
+        run: |
+          # The native app is intentionally configured to load the live Fantasy Arena URL
+          # from capacitor.config.ts. Bundling the entire production web build duplicated
+          # hundreds of MB of player/media assets inside the APK and made mobile downloads
+          # unnecessarily fragile. Keep only a tiny offline fallback shell in the package.
+          rm -rf dist
+          mkdir -p dist
+          cat > dist/index.html <<'EOF'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width,initial-scale=1" />
+              <title>Fantasy Arena</title>
+            </head>
+            <body style="margin:0;background:#050816;color:#fff;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;text-align:center">
+              <main>
+                <h1>Fantasy Arena</h1>
+                <p>Connect to the internet and reopen the app.</p>
+              </main>
+            </body>
+          </html>
+          EOF
+          test "$(du -sk dist | cut -f1)" -lt 256
+
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
-      - name: Verify desktop-view WebView configuration
+      - name: Verify Android identity and desktop-view WebView configuration
         run: |
+          grep -q 'applicationId "com.fantasyfc.app"' android/app/build.gradle
+          grep -q 'appId: "com.fantasyfc.app"' capacitor.config.ts
           grep -q "setUseWideViewPort(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "setLoadWithOverviewMode(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "setTextZoom(100)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
@@ -83,35 +111,100 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon clean assembleDebug assembleRelease
 
-      - name: Prepare artifacts
+      - name: Select signed APK for distribution
+        id: select_apk
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          RELEASE_UNSIGNED="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          DEBUG_APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          PUBLIC_APK="android-artifacts/Fantasy-Arena-Android.apk"
           mkdir -p android-artifacts
-          cp android/app/build/outputs/apk/debug/app-debug.apk android-artifacts/Fantasy-Arena-1.1.1-debug.apk
-          cp android/app/build/outputs/apk/debug/app-debug.apk android-artifacts/Fantasy-Arena-Android.apk
-          if [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
-            cp android/app/build/outputs/apk/release/app-release-unsigned.apk android-artifacts/Fantasy-Arena-1.1.1-release-unsigned.apk
-          elif [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
-            cp android/app/build/outputs/apk/release/app-release.apk android-artifacts/Fantasy-Arena-1.1.1-release.apk
-          fi
-          printf 'Fantasy Arena Android 1.1.1\nCommit: %s\nBuilt: %s\n\nThe debug APK is installable for testing. A release APK is uploaded unsigned unless repository signing is configured.\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > android-artifacts/BUILD-INFO.txt
 
-      - name: Upload Android build
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_ALIAS" ] && [ -n "$ANDROID_KEY_PASSWORD" ]; then
+            test -f "$RELEASE_UNSIGNED"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/fantasy-arena-release.jks"
+            "$BUILD_TOOLS/zipalign" -f -p 4 "$RELEASE_UNSIGNED" "$RUNNER_TEMP/Fantasy-Arena-aligned.apk"
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks "$RUNNER_TEMP/fantasy-arena-release.jks" \
+              --ks-key-alias "$ANDROID_KEY_ALIAS" \
+              --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" \
+              --key-pass "pass:$ANDROID_KEY_PASSWORD" \
+              --out "$PUBLIC_APK" \
+              "$RUNNER_TEMP/Fantasy-Arena-aligned.apk"
+            echo "kind=release-signed" >> "$GITHUB_OUTPUT"
+          else
+            # Until persistent release-signing secrets are configured, publish one compact,
+            # Android-SDK-signed test package rather than an unsigned release package.
+            # The fixed android-1.1.2 release is not overwritten on future builds, so its
+            # signing certificate remains stable for users of this release.
+            test -f "$DEBUG_APK"
+            cp "$DEBUG_APK" "$PUBLIC_APK"
+            echo "kind=debug-signed" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify APK before publishing
+        id: verify_apk
+        run: |
+          set -euo pipefail
+          APK="android-artifacts/Fantasy-Arena-Android.apk"
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          "$BUILD_TOOLS/aapt" dump badging "$APK" | tee android-artifacts/APK-BADGING.txt
+          grep -q "package: name='com.fantasyfc.app'" android-artifacts/APK-BADGING.txt
+          grep -q "versionCode='4'" android-artifacts/APK-BADGING.txt
+          grep -q "versionName='1.1.2'" android-artifacts/APK-BADGING.txt
+
+          SIZE_BYTES="$(stat -c%s "$APK")"
+          MAX_BYTES=$((50 * 1024 * 1024))
+          if [ "$SIZE_BYTES" -gt "$MAX_BYTES" ]; then
+            echo "APK is unexpectedly large: $SIZE_BYTES bytes" >&2
+            exit 1
+          fi
+
+          SHA256="$(sha256sum "$APK" | awk '{print $1}')"
+          echo "size_bytes=$SIZE_BYTES" >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          printf '%s  %s\n' "$SHA256" "Fantasy-Arena-Android.apk" > android-artifacts/SHA256SUMS.txt
+
+      - name: Prepare build information
+        run: |
+          printf 'Fantasy Arena Android 1.1.2\nCommit: %s\nBuilt: %s\nPackage: com.fantasyfc.app\nKind: %s\nSize bytes: %s\nSHA-256: %s\n\nThe APK passed ZIP integrity, Android package metadata and apksigner verification before publication.\n' \
+            "$GITHUB_SHA" \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "${{ steps.select_apk.outputs.kind }}" \
+            "${{ steps.verify_apk.outputs.size_bytes }}" \
+            "${{ steps.verify_apk.outputs.sha256 }}" \
+            > android-artifacts/BUILD-INFO.txt
+
+      - name: Upload verified Android build
         uses: actions/upload-artifact@v4
         with:
-          name: fantasy-arena-android-1.1.1
+          name: fantasy-arena-android-1.1.2
           path: android-artifacts/*
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish direct Android download
+      - name: Publish direct Android 1.1.2 download
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view android-1.1.1 >/dev/null 2>&1; then
-            echo "Stable android-1.1.1 APK already exists; leaving it unchanged until persistent release signing is configured."
+          set -euo pipefail
+          if gh release view android-1.1.2 >/dev/null 2>&1; then
+            echo "Stable android-1.1.2 release already exists; leaving its verified APK and signing certificate unchanged."
           else
-            gh release create android-1.1.1 android-artifacts/Fantasy-Arena-Android.apk \
-              --title "Fantasy Arena Android 1.1.1" \
-              --notes "Branded Fantasy Arena Android APK with the official launcher icon. Tap Fantasy-Arena-Android.apk to install."
+            gh release create android-1.1.2 \
+              android-artifacts/Fantasy-Arena-Android.apk \
+              android-artifacts/SHA256SUMS.txt \
+              android-artifacts/BUILD-INFO.txt \
+              --title "Fantasy Arena Android 1.1.2" \
+              --notes "Verified compact Fantasy Arena Android package. The APK is integrity-checked and signature-verified before publication."
           fi
