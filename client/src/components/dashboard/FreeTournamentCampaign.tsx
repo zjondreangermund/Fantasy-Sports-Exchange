@@ -92,9 +92,11 @@ export default function FreeTournamentCampaign() {
   void clockTick;
 
   const shareTournament = async () => {
-    const referralUrl = String(referral?.url || "").trim();
-    const fallbackUrl = typeof window !== "undefined" ? `${window.location.origin}/competitions` : "/competitions";
-    const url = referralUrl || fallbackUrl;
+    const referralCode = String(referral?.code || "").trim();
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const url = referralCode
+      ? `${origin}/free?ref=${encodeURIComponent(referralCode)}&src=invite`
+      : `${origin}/free?src=share`;
     const text = `Gameweek ${gameWeek || ""} is open on Fantasy Arena. Join the FREE Common Card Cup and challenge me.`.trim();
 
     try {

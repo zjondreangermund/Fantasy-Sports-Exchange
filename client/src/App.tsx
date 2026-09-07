@@ -30,6 +30,7 @@ import { Skeleton } from "./components/ui/skeleton";
 import NotFound from "./pages/not-found";
 
 const LandingPage = React.lazy(() => import("./pages/landing"));
+const FreeGameweekLandingPage = React.lazy(() => import("./pages/free-gameweek"));
 const LegalCentrePage = React.lazy(() => import("./pages/legal-centre"));
 const ScoringRulesPage = React.lazy(() => import("./pages/scoring-rules"));
 const TrustCentrePage = React.lazy(() => import("./pages/trust-centre"));
@@ -117,6 +118,8 @@ function AuthenticatedRouter() {
     <React.Suspense fallback={<RouteFallback />}>
       <Switch>
         {legalRouteElements()}
+        <Route path="/free" component={CompetitionsPage} />
+        <Route path="/play-free" component={CompetitionsPage} />
         <Route path="/" component={DashboardPage} />
         <Route path="/dashboard" component={DashboardPage} />
         <Route path="/analytics" component={AnalyticsPage} />
@@ -151,7 +154,7 @@ function AuthenticatedRouter() {
 function AuthenticatedApp() {
   const [siteView, setSiteView] = React.useState<SiteViewMode>(() => getSiteViewMode());
   const [location] = useLocation();
-  const isPlayRoute = location.startsWith("/competitions") || location.startsWith("/my-entries") || location.startsWith("/prize-vault");
+  const isPlayRoute = location.startsWith("/competitions") || location.startsWith("/my-entries") || location.startsWith("/prize-vault") || location.startsWith("/free") || location.startsWith("/play-free");
   const isInfoRoute = publicInfoPaths.includes(location);
   const showMarketplaceFloors = location.startsWith("/collection") || location.startsWith("/marketplace");
   const style = { "--sidebar-width": "16rem", "--sidebar-width-icon": "3rem" };
@@ -205,7 +208,7 @@ function AuthenticatedApp() {
 }
 
 function PublicRouter() {
-  return <React.Suspense fallback={<RouteFallback />}><Switch>{legalRouteElements()}<Route component={LandingPage} /></Switch></React.Suspense>;
+  return <React.Suspense fallback={<RouteFallback />}><Switch>{legalRouteElements()}<Route path="/free" component={FreeGameweekLandingPage} /><Route path="/play-free" component={FreeGameweekLandingPage} /><Route component={LandingPage} /></Switch></React.Suspense>;
 }
 
 function AppContent() {
