@@ -98,7 +98,7 @@ export default function InstallAppButton() {
       data-install-app-button
     >
       <Download className="h-4 w-4" />
-      <span className="hidden sm:inline">{label}</span>
+      <span className={isAndroidBrowser ? "inline" : "hidden sm:inline"}>{label}</span>
     </button>
   );
 }
