@@ -1,4 +1,4 @@
-const CACHE_NAME = "fantasy-site-v19-install-brand";
+const CACHE_NAME = "fantasy-site-v18-lion-jpg";
 const APP_SHELL = [
   "/",
   "/manifest.json?v=fa-install-2026-09",
