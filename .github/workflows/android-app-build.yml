@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   android:
-    name: Build Fantasy Arena Android 1.1
+    name: Build Fantasy Arena Android 1.1.1
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -86,19 +86,19 @@ jobs:
       - name: Prepare artifacts
         run: |
           mkdir -p android-artifacts
-          cp android/app/build/outputs/apk/debug/app-debug.apk android-artifacts/Fantasy-Arena-1.1-debug.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk android-artifacts/Fantasy-Arena-1.1.1-debug.apk
           cp android/app/build/outputs/apk/debug/app-debug.apk android-artifacts/Fantasy-Arena-Android.apk
           if [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
-            cp android/app/build/outputs/apk/release/app-release-unsigned.apk android-artifacts/Fantasy-Arena-1.1-release-unsigned.apk
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk android-artifacts/Fantasy-Arena-1.1.1-release-unsigned.apk
           elif [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
-            cp android/app/build/outputs/apk/release/app-release.apk android-artifacts/Fantasy-Arena-1.1-release.apk
+            cp android/app/build/outputs/apk/release/app-release.apk android-artifacts/Fantasy-Arena-1.1.1-release.apk
           fi
-          printf 'Fantasy Arena Android 1.1\nCommit: %s\nBuilt: %s\n\nThe debug APK is installable for testing. A release APK is uploaded unsigned unless repository signing is configured.\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > android-artifacts/BUILD-INFO.txt
+          printf 'Fantasy Arena Android 1.1.1\nCommit: %s\nBuilt: %s\n\nThe debug APK is installable for testing. A release APK is uploaded unsigned unless repository signing is configured.\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > android-artifacts/BUILD-INFO.txt
 
       - name: Upload Android build
         uses: actions/upload-artifact@v4
         with:
-          name: fantasy-arena-android-1.1
+          name: fantasy-arena-android-1.1.1
           path: android-artifacts/*
           if-no-files-found: error
           retention-days: 30
@@ -108,10 +108,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view android-1.1 >/dev/null 2>&1; then
-            echo "Stable android-1.1 APK already exists; leaving it unchanged until persistent release signing is configured."
+          if gh release view android-1.1.1 >/dev/null 2>&1; then
+            echo "Stable android-1.1.1 APK already exists; leaving it unchanged until persistent release signing is configured."
           else
-            gh release create android-1.1 android-artifacts/Fantasy-Arena-Android.apk \
-              --title "Fantasy Arena Android 1.1" \
-              --notes "Latest installable Fantasy Arena Android APK. Tap Fantasy-Arena-Android.apk to install."
+            gh release create android-1.1.1 android-artifacts/Fantasy-Arena-Android.apk \
+              --title "Fantasy Arena Android 1.1.1" \
+              --notes "Branded Fantasy Arena Android APK with the official launcher icon. Tap Fantasy-Arena-Android.apk to install."
           fi
