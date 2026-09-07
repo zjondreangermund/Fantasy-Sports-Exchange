@@ -1,8 +1,9 @@
-const CACHE_NAME = "fantasy-site-v18-lion-jpg";
+const CACHE_NAME = "fantasy-site-v19-install-brand";
 const APP_SHELL = [
   "/",
-  "/manifest.json?v=lion-jpg-2026-08",
-  "/brand/fantasy-arena-logo.jpg?v=lion-jpg-2026-08",
+  "/manifest.json?v=fa-install-2026-09",
+  "/brand/fantasy-arena-icon.svg?v=fa-install-2026-09",
+  "/brand/fantasy-arena-logo.jpg?v=fa-install-2026-09",
 ];
 
 self.addEventListener("install", (event) => {
@@ -112,8 +113,8 @@ self.addEventListener("push", (event) => {
     body,
     tag,
     renotify: true,
-    icon: "/brand/fantasy-arena-logo.jpg?v=lion-jpg-2026-08",
-    badge: "/brand/fantasy-arena-logo.jpg?v=lion-jpg-2026-08",
+    icon: "/brand/fantasy-arena-logo.jpg?v=fa-install-2026-09",
+    badge: "/brand/fantasy-arena-logo.jpg?v=fa-install-2026-09",
     data: { url, notificationId: Number(payload.notificationId || 0) },
   }));
 });
