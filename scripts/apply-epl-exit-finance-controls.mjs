@@ -14,13 +14,13 @@ function patchFile(path, transform) {
 function replaceRequired(source, from, to, label) {
   if (source.includes(to)) return source;
   if (!source.includes(from)) throw new Error(`[epl-exit-finance] anchor not found: ${label}`);
-  return source.replace(from, to);
+  return source.replace(from, () => to);
 }
 
 function replaceOneOf(source, variants, to, marker, label) {
   if (source.includes(marker)) return source;
   for (const from of variants) {
-    if (source.includes(from)) return source.replace(from, to);
+    if (source.includes(from)) return source.replace(from, () => to);
   }
   throw new Error(`[epl-exit-finance] anchor not found: ${label}`);
 }
@@ -28,13 +28,13 @@ function replaceOneOf(source, variants, to, marker, label) {
 function insertAfter(source, anchor, insertion, marker, label) {
   if (source.includes(marker)) return source;
   if (!source.includes(anchor)) throw new Error(`[epl-exit-finance] anchor not found: ${label}`);
-  return source.replace(anchor, `${anchor}${insertion}`);
+  return source.replace(anchor, () => `${anchor}${insertion}`);
 }
 
 function insertBefore(source, anchor, insertion, marker, label) {
   if (source.includes(marker)) return source;
   if (!source.includes(anchor)) throw new Error(`[epl-exit-finance] anchor not found: ${label}`);
-  return source.replace(anchor, `${insertion}${anchor}`);
+  return source.replace(anchor, () => `${insertion}${anchor}`);
 }
 
 // EPL departures: preserve both rarity and the football position of the departed card.
@@ -114,12 +114,26 @@ patchFile("server/services/playerTransferMonitoring.ts", (original) => {
 // Global claim dialog: authenticated users cannot dismiss an EPL departure replacement until it is claimed.
 patchFile("client/src/App.tsx", (original) => {
   let source = original;
+  if (!source.includes('MandatoryReplacementClaimDialog from "./components/MandatoryReplacementClaimDialog"')) {
+    const installImport = 'import InstallAppButton from "./components/InstallAppButton";\n';
+    const globalImport = 'import GlobalActionToasts from "./components/GlobalActionToasts";\n';
+    const importAnchor = source.includes(installImport) ? installImport : globalImport;
+    if (!source.includes(importAnchor)) throw new Error("[epl-exit-finance] anchor not found: mandatory replacement dialog import");
+    source = source.replace(importAnchor, () => `${importAnchor}import MandatoryReplacementClaimDialog from "./components/MandatoryReplacementClaimDialog";\n`);
+  }
   source = insertAfter(
     source,
-    'import GlobalActionToasts from "./components/GlobalActionToasts";\n',
     'import MandatoryReplacementClaimDialog from "./components/MandatoryReplacementClaimDialog";\n',
-    'MandatoryReplacementClaimDialog from "./components/MandatoryReplacementClaimDialog"',
-    "mandatory replacement dialog import",
+    'import PushNotificationControl from "./components/PushNotificationControl";\n',
+    'PushNotificationControl from "./components/PushNotificationControl"',
+    "installed-app push control import",
+  );
+  source = insertBefore(
+    source,
+    '<ThemeToggle />',
+    '<PushNotificationControl />',
+    '<PushNotificationControl />',
+    "installed-app push control mount",
   );
   source = insertAfter(
     source,
@@ -181,11 +195,10 @@ patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
     '            title: underMinimumCashFallback && index === 0 ? `Prize Ladder cash fallback — you won ${competition.name}` : `Congratulations — #${index + 1} in ${competition.name}`,\n            message: underMinimumCashFallback && index === 0\n              ? `The Prize Ladder minimum entry threshold was not reached. You finished #1 in ${competition.name} with ${toMoney(rankedEntry.totalScore).toFixed(1)} points, so 80% of the collected entry fees (N$${payout.toFixed(2)}) has been credited to your Fantasy Arena wallet. Fantasy Arena retained the remaining 20% platform share.`\n              : `Congratulations from the Fantasy Arena Team! You finished #${index + 1} in ${competition.name} with ${toMoney(rankedEntry.totalScore).toFixed(1)} points. N$${payout.toFixed(2)} has been credited to your Fantasy Arena wallet.`,',
     "fallback winner notification",
   );
-  source = insertAfter(
+  source = replaceRequired(
     source,
-    '          prizeVault,\n',
-    '          underMinimumCashFallback,\n',
-    'underMinimumCashFallback,\n          sharedEntries',
+    '          prizeVault,\n          sharedEntries,',
+    '          prizeVault,\n          underMinimumCashFallback,\n          sharedEntries,',
     "fallback settlement return field",
   );
   source = replaceOneOf(
@@ -212,23 +225,36 @@ patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
 // Public tournament card: disclose the fallback before users pay an entry fee.
 patchFile("client/src/pages/competitions-vault.tsx", (original) => {
   let source = original;
-  source = insertAfter(
-    source,
-    '  const p = percentage(sharedEntries, target);\n',
-    '  // PRIZE_LADDER_FALLBACK_DISCLOSURE_V1\n  const paidEntryFee = Number(comp.entryFee ?? comp.entry_fee ?? 0);\n  const underMinimumCashFallback = paidEntryFee > 0 && tournamentEntries > 0 && target > 0 && sharedEntries < target && !vault?.activePrize;\n  const fallbackWinnerCash = Math.round((tournamentEntries * paidEntryFee * 0.8) * 100) / 100;\n',
-    'PRIZE_LADDER_FALLBACK_DISCLOSURE_V1',
-    "public fallback calculations",
-  );
+  if (source.includes('label="Settlement" value={shownSettlementLabel}') && !source.includes("const shownSettlementLabel = shownSettlementAt ? dateLabel(shownSettlementAt)")) {
+    const playVisible = '  const visible = tournamentPool.filter((c) => Number(c.gameWeek || c.game_week) === Number(shownGw) && tier(c.tier) === activeRarity);\n';
+    const legacyVisible = '  const visible = official.filter((c) => Number(c.gameWeek || c.game_week) === Number(shownGw) && tier(c.tier) === activeRarity);\n';
+    const visibleAnchor = source.includes(playVisible) ? playVisible : legacyVisible;
+    if (!source.includes(visibleAnchor)) throw new Error("[epl-exit-finance] anchor not found: shown gameweek settlement source");
+    const settlementInsert = '  const shownSettlementTournament = visible[0] || official.find((c) => Number(c.gameWeek || c.game_week) === Number(shownGw));\n  const shownSettlementAt = shownSettlementTournament?.settlementAt || shownSettlementTournament?.settlement_at || shownSettlementTournament?.endDate || shownSettlementTournament?.end_date;\n  const shownSettlementLabel = shownSettlementAt ? dateLabel(shownSettlementAt) : "Fixture controlled";\n';
+    source = source.replace(visibleAnchor, () => `${visibleAnchor}${settlementInsert}`);
+  }
+  if (!source.includes("PRIZE_LADDER_FALLBACK_DISCLOSURE_V1")) {
+    const insertion = '  // PRIZE_LADDER_FALLBACK_DISCLOSURE_V1\n  const paidEntryFee = Number(comp.entryFee ?? comp.entry_fee ?? 0);\n  const underMinimumCashFallback = vaultTournament && paidEntryFee > 0 && tournamentEntries > 0 && target > 0 && sharedEntries < target && !vault?.activePrize;\n  const fallbackWinnerCash = Math.round((tournamentEntries * paidEntryFee * 0.8) * 100) / 100;\n';
+    const generatedAnchor = '  const vaultProgress = vaultTournament ? percentage(sharedEntries, target) : 0;\n';
+    const sourceAnchor = '  const p = percentage(sharedEntries, target);\n';
+    if (source.includes(generatedAnchor)) source = source.replace(generatedAnchor, () => `${generatedAnchor}${insertion}`);
+    else if (source.includes(sourceAnchor)) source = source.replace(sourceAnchor, () => `${sourceAnchor}${insertion.replace("vaultTournament && ", "")}`);
+    else throw new Error("[epl-exit-finance] anchor not found: public fallback calculations");
+  }
   source = replaceRequired(
     source,
     '  const prizeTitle = vault?.activePrize?.title || vault?.nextPrize?.title || comp.prizeDescription || comp.prize_description || "Prize ladder";',
     '  const prizeTitle = vault?.activePrize?.title || (underMinimumCashFallback ? `Cash fallback: ${money(fallbackWinnerCash)} to #1 if minimum stays unmet` : vault?.nextPrize?.title) || comp.prizeDescription || comp.prize_description || "Prize ladder";',
     "public fallback prize title",
   );
-  source = replaceRequired(
+  source = replaceOneOf(
     source,
-    '<div className="mt-3 rounded-xl border border-amber-300/15 bg-amber-300/10 p-3 text-[11px] leading-5 text-amber-100">Only Premier League points recorded for this gameweek before Tuesday settlement count. FA Cup matches and Premier League fixtures played after settlement are excluded.</div>',
-    '<div className="mt-3 rounded-xl border border-amber-300/15 bg-amber-300/10 p-3 text-[11px] leading-5 text-amber-100">Only Premier League points recorded for this gameweek before Tuesday settlement count. FA Cup matches and Premier League fixtures played after settlement are excluded.</div>{underMinimumCashFallback ? <div className="mt-2 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-3 text-[11px] font-semibold leading-5 text-emerald-50"><b>Minimum-entry protection:</b> if this Prize Ladder finishes below its first prize unlock, #1 receives 80% of this tournament&apos;s collected entry fees in cash and Fantasy Arena retains 20%. Current projected winner cash: {money(fallbackWinnerCash)}.</div> : null}',
+    [
+      '<div className="mt-3 rounded-xl border border-amber-300/15 bg-amber-300/10 p-3 text-[11px] leading-5 text-amber-100">Only Premier League points recorded for this gameweek before Tuesday settlement count. FA Cup matches and Premier League fixtures played after settlement are excluded.</div>',
+      '<div className="mt-3 rounded-xl border border-amber-300/15 bg-amber-300/10 p-3 text-[11px] leading-5 text-amber-100">Only Premier League points recorded for this gameweek before the settlement cutoff shown above count. FA Cup matches and Premier League fixtures played after that cutoff are excluded.</div>',
+    ],
+    '<div className="mt-3 rounded-xl border border-amber-300/15 bg-amber-300/10 p-3 text-[11px] leading-5 text-amber-100">Only Premier League points recorded for this gameweek before the settlement cutoff shown above count. FA Cup matches and Premier League fixtures played after that cutoff are excluded.</div>{underMinimumCashFallback ? <div className="mt-2 rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-3 text-[11px] font-semibold leading-5 text-emerald-50"><b>Minimum-entry protection:</b> if this Prize Ladder finishes below its first prize unlock, #1 receives 80% of this tournament&apos;s collected entry fees in cash and Fantasy Arena retains 20%. Current projected winner cash: {money(fallbackWinnerCash)}.</div> : null}',
+    "Minimum-entry protection:",
     "public fallback disclosure",
   );
   return source;
