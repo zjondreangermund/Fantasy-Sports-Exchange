@@ -9,6 +9,11 @@ const config: CapacitorConfig = {
     url: "https://fantasy-sports-exchange-production-d05c.up.railway.app",
     cleartext: false,
   },
+  plugins: {
+    PushNotifications: {
+      presentationOptions: ["badge", "sound", "banner", "list"],
+    },
+  },
 };
 
 export default config;

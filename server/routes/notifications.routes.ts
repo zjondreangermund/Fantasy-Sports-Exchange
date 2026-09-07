@@ -7,6 +7,20 @@ import {
   ensurePlayerTransferMonitoringSchema,
   listUserReplacementClaims,
 } from "../services/playerTransferMonitoring.js";
+import {
+  disableWebPushSubscription,
+  getWebPushStatus,
+  processPendingWebPushDeliveries,
+  startWebPushDeliveryWorker,
+  upsertWebPushSubscription,
+} from "../services/webPush.js";
+import {
+  disableNativePushSubscription,
+  getNativePushStatus,
+  processPendingNativePushDeliveries,
+  startNativePushDeliveryWorker,
+  upsertNativePushSubscription,
+} from "../services/nativePush.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -104,8 +118,138 @@ async function syncGameweekNotifications(userId: string) {
   }
 }
 
+let subscribedNotificationSyncTimer: NodeJS.Timeout | null = null;
+let subscribedNotificationSyncRunning = false;
+
+async function syncSubscribedUserNotifications() {
+  if (subscribedNotificationSyncRunning) return;
+  subscribedNotificationSyncRunning = true;
+  try {
+    await ensureNotificationsSchema();
+    const users = rowsOf(await db.execute(sql`
+      select user_id as "userId"
+      from (
+        select user_id from app.web_push_subscriptions where disabled_at is null
+        union
+        select user_id from app.native_push_subscriptions where disabled_at is null
+      ) subscribed_users
+      order by user_id
+      limit 2000
+    `));
+    for (const user of users) {
+      const userId = String(user.userId || "");
+      if (!userId) continue;
+      try {
+        await syncGameweekNotifications(userId);
+      } catch (error) {
+        console.error("Failed to prepare scheduled push notifications for a subscribed user:", error);
+      }
+    }
+    await processPendingWebPushDeliveries();
+    await processPendingNativePushDeliveries();
+  } finally {
+    subscribedNotificationSyncRunning = false;
+  }
+}
+
+function startSubscribedNotificationSync() {
+  if (subscribedNotificationSyncTimer) return;
+  const run = () => {
+    void syncSubscribedUserNotifications().catch((error) => {
+      console.error("Scheduled Web Push notification sync failed:", error);
+    });
+  };
+  const initialTimer = setTimeout(run, 15_000);
+  initialTimer.unref?.();
+  subscribedNotificationSyncTimer = setInterval(run, 15 * 60_000);
+  subscribedNotificationSyncTimer.unref?.();
+}
+
 export function registerNotificationRoutes(app: Express, deps: { requireAuth: any }) {
   const { requireAuth } = deps;
+  startWebPushDeliveryWorker();
+  startNativePushDeliveryWorker();
+  startSubscribedNotificationSync();
+
+  app.get("/api/push/status", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const [web, native] = await Promise.all([
+        getWebPushStatus(userId),
+        getNativePushStatus(userId),
+      ]);
+      return res.json({
+        ...web,
+        nativeConfigured: native.configured,
+        activeNativeSubscriptions: native.activeSubscriptions,
+      });
+    } catch (error: any) {
+      console.error("Failed to load Web Push status:", error);
+      return res.status(500).json({ message: error?.message || "Failed to load notification status" });
+    }
+  });
+
+  app.post("/api/push/subscription", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const subscription = await upsertWebPushSubscription(userId, req.body?.subscription, req.get?.("user-agent"));
+      await createNotificationOnce(db, {
+        userId,
+        title: "Fantasy Arena notifications enabled",
+        message: "Installed-app notifications are active. Tournament reminders, results, prize updates and required replacement-card claims can now reach this device.",
+        dedupeKey: `web-push:enabled:${subscription.id}`,
+      });
+      void processPendingWebPushDeliveries().catch((error) => console.error("Immediate Web Push delivery failed:", error));
+      return res.json({ success: true, subscription });
+    } catch (error: any) {
+      console.error("Failed to save Web Push subscription:", error);
+      const message = String(error?.message || "Failed to enable notifications");
+      const status = /valid|secure|required/i.test(message) ? 400 : 500;
+      return res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/push/subscription", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const disabled = await disableWebPushSubscription(userId, req.body?.endpoint);
+      return res.json({ success: true, disabled });
+    } catch (error: any) {
+      const message = String(error?.message || "Failed to disable notifications");
+      return res.status(/required/i.test(message) ? 400 : 500).json({ message });
+    }
+  });
+
+  app.post("/api/push/native-subscription", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const subscription = await upsertNativePushSubscription(userId, req.body?.token, req.body?.platform);
+      await createNotificationOnce(db, {
+        userId,
+        title: "Fantasy Arena notifications enabled",
+        message: "Android app notifications are active. Tournament reminders, results, prize updates and required replacement-card claims can now reach this device.",
+        dedupeKey: `native-push:enabled:${subscription.id}`,
+      });
+      void processPendingNativePushDeliveries().catch((error) => console.error("Immediate native push delivery failed:", error));
+      return res.json({ success: true, subscription });
+    } catch (error: any) {
+      console.error("Failed to save native push subscription:", error);
+      const message = String(error?.message || "Failed to enable Android notifications");
+      const status = /valid|required|currently available/i.test(message) ? 400 : 500;
+      return res.status(status).json({ message });
+    }
+  });
+
+  app.delete("/api/push/native-subscription", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const disabled = await disableNativePushSubscription(userId, req.body?.token);
+      return res.json({ success: true, disabled });
+    } catch (error: any) {
+      const message = String(error?.message || "Failed to disable Android notifications");
+      return res.status(/valid|required/i.test(message) ? 400 : 500).json({ message });
+    }
+  });
 
   app.get("/api/notifications", requireAuth, async (req: any, res) => {
     try {

@@ -85,3 +85,57 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+
+function safeNotificationPath(value) {
+  try {
+    const target = new URL(String(value || "/dashboard"), self.location.origin);
+    if (target.origin !== self.location.origin) return "/dashboard";
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return "/dashboard";
+  }
+}
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : "You have a new Fantasy Arena notification." };
+  }
+
+  const title = String(payload.title || "Fantasy Arena");
+  const body = String(payload.body || "You have a new Fantasy Arena notification.");
+  const url = safeNotificationPath(payload.url);
+  const tag = String(payload.tag || `fantasy-arena-${Date.now()}`);
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    tag,
+    renotify: true,
+    icon: "/brand/fantasy-arena-logo.jpg?v=lion-jpg-2026-08",
+    badge: "/brand/fantasy-arena-logo.jpg?v=lion-jpg-2026-08",
+    data: { url, notificationId: Number(payload.notificationId || 0) },
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const path = safeNotificationPath(event.notification?.data?.url);
+  const targetUrl = new URL(path, self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (windows) => {
+      const existing = windows.find((client) => {
+        try {
+          return new URL(client.url).origin === self.location.origin;
+        } catch {
+          return false;
+        }
+      });
+      if (existing) {
+        if ("navigate" in existing) await existing.navigate(targetUrl);
+        return existing.focus();
+      }
+      return self.clients.openWindow(targetUrl);
+    }),
+  );
+});

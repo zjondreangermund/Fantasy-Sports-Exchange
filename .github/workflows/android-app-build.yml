@@ -1,6 +1,17 @@
 name: Android App Build
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "android/**"
+      - "client/**"
+      - "capacitor.config.ts"
+      - "vite.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/**"
+      - ".github/workflows/android-app-build.yml"
   push:
     branches: [main]
     paths:
@@ -42,6 +53,16 @@ jobs:
 
       - name: Build Capacitor web assets
         run: npm run build:web
+
+      - name: Configure Firebase messaging
+        env:
+          FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64" ]; then
+            printf '%s' "$FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > android/app/google-services.json
+          else
+            echo "Firebase Android configuration is not set; this APK will build without native push delivery."
+          fi
 
       - name: Sync Capacitor Android project
         run: npx cap sync android
