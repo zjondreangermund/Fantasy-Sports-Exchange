@@ -7,8 +7,10 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
-const ANDROID_APK_URL =
+const ANDROID_APK_BASE_URL =
   "https://github.com/zjondreangermund/Fantasy-Sports-Exchange/releases/download/android-1.1.2/Fantasy-Arena-Android.apk";
+const ANDROID_VERSION = "1.1.2";
+const ANDROID_SIZE_LABEL = "5.7 MB";
 
 let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
 const promptListeners = new Set<() => void>();
@@ -39,6 +41,11 @@ function fallbackInstallInstructions() {
   window.alert("Install Fantasy Arena: open your browser menu (⋮) and choose Install app or Add to Home screen.");
 }
 
+function freshAndroidApkUrl() {
+  const nonce = Date.now();
+  return `${ANDROID_APK_BASE_URL}?version=${encodeURIComponent(ANDROID_VERSION)}&nocache=${nonce}`;
+}
+
 export default function InstallAppButton() {
   const [, refresh] = React.useReducer((value) => value + 1, 0);
   const [installing, setInstalling] = React.useState(false);
@@ -61,7 +68,7 @@ export default function InstallAppButton() {
     if (installing) return;
 
     if (isAndroidBrowser) {
-      window.location.assign(ANDROID_APK_URL);
+      window.location.assign(freshAndroidApkUrl());
       return;
     }
 
@@ -84,8 +91,10 @@ export default function InstallAppButton() {
     }
   };
 
-  const label = isAndroidBrowser ? "Download App" : installing ? "Installing…" : "Install App";
-  const accessibleLabel = isAndroidBrowser ? "Download Fantasy Arena Android app" : "Install Fantasy Arena app";
+  const label = isAndroidBrowser ? `Download ${ANDROID_VERSION}` : installing ? "Installing…" : "Install App";
+  const accessibleLabel = isAndroidBrowser
+    ? `Download Fantasy Arena Android ${ANDROID_VERSION}, ${ANDROID_SIZE_LABEL}`
+    : "Install Fantasy Arena app";
 
   return (
     <button
@@ -96,6 +105,8 @@ export default function InstallAppButton() {
       title={accessibleLabel}
       className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-2 text-[11px] font-bold text-cyan-100 hover:bg-cyan-300/15 disabled:opacity-60"
       data-install-app-button
+      data-android-version={isAndroidBrowser ? ANDROID_VERSION : undefined}
+      data-android-size={isAndroidBrowser ? ANDROID_SIZE_LABEL : undefined}
     >
       <Download className="h-4 w-4" />
       <span className={isAndroidBrowser ? "inline" : "hidden sm:inline"}>{label}</span>
