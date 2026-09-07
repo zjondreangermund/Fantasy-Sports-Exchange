@@ -8,7 +8,7 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 const ANDROID_APK_URL =
-  "https://github.com/zjondreangermund/Fantasy-Sports-Exchange/releases/download/android-1.1/Fantasy-Arena-Android.apk";
+  "https://github.com/zjondreangermund/Fantasy-Sports-Exchange/releases/download/android-1.1.1/Fantasy-Arena-Android.apk";
 
 let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
 const promptListeners = new Set<() => void>();

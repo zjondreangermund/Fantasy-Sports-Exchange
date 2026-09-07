@@ -1,14 +1,26 @@
 {
   "name": "Fantasy Arena",
   "short_name": "Fantasy Arena",
-  "start_url": "/?app=lion-jpg-2026-08",
+  "start_url": "/?app=fa-install-2026-09",
   "display": "standalone",
   "background_color": "#020617",
   "theme_color": "#020617",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/brand/fantasy-arena-logo.jpg?v=lion-jpg-2026-08",
+      "src": "/brand/fantasy-arena-icon.svg?v=fa-install-2026-09",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/fantasy-arena-icon.svg?v=fa-install-2026-09",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/brand/fantasy-arena-logo.jpg?v=fa-install-2026-09",
       "sizes": "160x160",
       "type": "image/jpeg",
       "purpose": "any"
