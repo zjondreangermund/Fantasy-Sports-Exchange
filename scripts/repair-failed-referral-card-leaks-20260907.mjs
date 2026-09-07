@@ -7,6 +7,7 @@ const TARGET_EMAIL = String(process.env.REFERRAL_DUPLICATE_REPAIR_EMAIL || "mich
 const FAILURE_WINDOWS = [
   { label: "failed-referral-20260907-095831z", at: new Date("2026-09-07T09:58:31.046Z") },
   { label: "failed-referral-20260907-112028z", at: new Date("2026-09-07T11:20:28.421Z") },
+  { label: "failed-referral-20260907-132301z", at: new Date("2026-09-07T13:23:01.799Z") },
 ];
 const WINDOW_MS = 15_000;
 
