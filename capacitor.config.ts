@@ -1,9 +1,9 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "com.fantasyarena.app",
+  appId: "com.fantasyfc.app",
   appName: "Fantasy Arena",
-  webDir: "dist",
+  webDir: process.env.CAPACITOR_WEB_DIR || "dist",
   bundledWebRuntime: false,
   server: {
     url: "https://fantasy-sports-exchange-production-d05c.up.railway.app",
