@@ -1,8 +1,9 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Express } from "express";
 import type passport from "passport";
+import { sql } from "drizzle-orm";
 import { getSessionSecret } from "../auth-config.js";
-import { pool } from "../db.js";
+import { db, pool } from "../db.js";
 
 interface RegisterAuthRoutesDeps {
   isReplit: boolean;
