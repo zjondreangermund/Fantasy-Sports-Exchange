@@ -18,6 +18,43 @@
   touch-action: manipulation;
 }
 
+/* The bottom navigation is part of the flex layout instead of floating over
+   page content. The raised PLAY button can still protrude upward, but the dock
+   itself always reserves its own height so the last card/row remains readable. */
+[data-native-mobile-shell] .arena-bottom-dock {
+  position: relative !important;
+  inset: auto !important;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+[data-native-mobile-shell] main[data-app-scroll-root] {
+  min-height: 0 !important;
+  padding-bottom: max(0.85rem, env(safe-area-inset-bottom, 0px)) !important;
+  scroll-padding-top: 0.75rem;
+  scroll-padding-bottom: 1.75rem;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+}
+
+[data-native-mobile-shell] [data-page-scroll-content] {
+  min-height: 100%;
+  padding-bottom: 0.85rem;
+}
+
+[data-native-mobile-shell] [data-native-home-v2],
+[data-native-mobile-shell] [data-native-play],
+[data-native-mobile-shell] [data-native-squad],
+[data-native-mobile-shell] [data-native-cards],
+[data-native-mobile-shell] [data-native-market],
+[data-native-mobile-shell] [data-native-vault],
+[data-native-mobile-shell] [data-native-wallet],
+[data-native-mobile-shell] [data-native-premier-league],
+[data-native-mobile-shell] [data-native-club] {
+  padding-bottom: 1.15rem !important;
+}
+
 [data-native-mobile-shell] .premium-page {
   min-height: auto !important;
   padding: 0.85rem 0.85rem 1.25rem !important;
@@ -74,6 +111,12 @@
 
 [data-native-mobile-shell] [data-radix-scroll-area-viewport] {
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+[data-native-mobile-shell] [class*="overflow-x-auto"] {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 
 [data-native-mobile-shell] ::-webkit-scrollbar {
