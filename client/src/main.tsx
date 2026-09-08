@@ -9,6 +9,7 @@ import "./unified-scroll.css";
 import "./card-image-sizing.css";
 import "./onboarding-card-clipping-fix.css";
 import "./legal-tabs-slider.css";
+import "./native-mobile.css";
 import { patchFetchForApiBase } from "./lib/api-base";
 import { initializeSiteView, isNativeMobileApp } from "./lib/site-view";
 
@@ -23,37 +24,43 @@ if (!rootElement) {
 
 createRoot(rootElement).render(<App />);
 
-// The native APK loads the live site inside Capacitor and does not need the web
-// PWA service worker competing with the WebView cache. Browser/PWA behavior is
-// unchanged and keeps the existing service worker/update flow.
-if ("serviceWorker" in navigator && !isNativeMobileApp()) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .getRegistrations()
-      .then((registrations) =>
-        Promise.all(
-          registrations.map((registration) => {
-            const activeUrl = registration.active?.scriptURL || "";
-            if (!activeUrl.endsWith("/sw.js")) {
-              return registration.unregister();
-            }
-            return Promise.resolve(false);
-          }),
-        ),
-      )
-      .then(() => navigator.serviceWorker.register("/sw.js"))
-      .then((registration) => registration.update())
-      .then(() => {
-        if ("caches" in window) {
-          caches.keys().then((keys) => {
-            keys
-              .filter((key) => key !== "fantasy-site-v18-lion-jpg")
-              .forEach((key) => caches.delete(key));
-          });
-        }
-      })
-      .catch((error) => {
-        console.error("Service worker registration failed:", error);
-      });
-  });
+if ("serviceWorker" in navigator) {
+  if (isNativeMobileApp()) {
+    // A previous desktop/PWA-style app session may have registered the web
+    // worker inside Android WebView. Remove it once so the native shell uses the
+    // WebView/network cache directly and does not render stale website chrome.
+    navigator.serviceWorker.getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      .catch(() => {});
+  } else {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) =>
+          Promise.all(
+            registrations.map((registration) => {
+              const activeUrl = registration.active?.scriptURL || "";
+              if (!activeUrl.endsWith("/sw.js")) {
+                return registration.unregister();
+              }
+              return Promise.resolve(false);
+            }),
+          ),
+        )
+        .then(() => navigator.serviceWorker.register("/sw.js"))
+        .then((registration) => registration.update())
+        .then(() => {
+          if ("caches" in window) {
+            caches.keys().then((keys) => {
+              keys
+                .filter((key) => key !== "fantasy-site-v18-lion-jpg")
+                .forEach((key) => caches.delete(key));
+            });
+          }
+        })
+        .catch((error) => {
+          console.error("Service worker registration failed:", error);
+        });
+    });
+  }
 }
