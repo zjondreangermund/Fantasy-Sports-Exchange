@@ -2,6 +2,7 @@ import fs from "node:fs";
 
 const SERVICE = "server/services/dailyLoginReward.ts";
 const APP = "client/src/App.tsx";
+const REFERRALS = "server/routes/referrals.routes.ts";
 const MARKER = "COMMON_REWARD_POSITION_BALANCE_V1";
 
 function patchFile(file, transform) {
@@ -51,7 +52,36 @@ patchFile(APP, (original) => {
     '<div className="flex shrink-0 items-center gap-1.5"><InstallAppButton /><button type="button" onClick={() => setSiteView(',
     "authenticated Install App control",
   );
+  source = replaceRequired(
+    source,
+    '.then(() => localStorage.removeItem("fantasy_referral_code")).catch(() => {}); }, [user]);',
+    '.then((response) => { /* REFERRAL_CLIENT_RETRY_V1 */ if (response.ok) localStorage.removeItem("fantasy_referral_code"); }).catch(() => {}); }, [user]);',
+    "keep referral code after server failure",
+  );
   return source;
 });
 
-console.log("Weekly/referral Common position balancing and signed-in Install App access are ready.");
+patchFile(REFERRALS, (original) => {
+  let source = original;
+  source = replaceRequired(
+    source,
+    'import { db } from "../db.js";\n',
+    'import { db } from "../db.js";\nimport { reconcileReferralHistory } from "../services/referralHistoryReconciliation.js";\n',
+    "referral history reconciliation import",
+  );
+  source = replaceRequired(
+    source,
+    'export function registerReferralRoutes(app: Express, deps: { requireAuth: any; storage: any }) {\n  const { requireAuth, storage } = deps;\n',
+    'export function registerReferralRoutes(app: Express, deps: { requireAuth: any; storage: any }) {\n  const { requireAuth, storage } = deps;\n\n  // REFERRAL_HISTORY_RECONCILIATION_V1: repair deterministic historical attribution\n  // once at service startup, and let history await the same idempotent promise.\n  void (async () => {\n    try {\n      await ensureReferralSchema();\n      await reconcileReferralHistory();\n    } catch (error) {\n      console.error("Referral startup reconciliation failed:", error);\n    }\n  })();\n',
+    "startup referral history reconciliation",
+  );
+  source = replaceRequired(
+    source,
+    '      await ensureReferralSchema();\n      const userId = String(req.authUserId || "");\n      const rows = rowsOf(await db.execute(sql`\n        select r.id, r.referred_user_id as "referredUserId"',
+    '      await ensureReferralSchema();\n      await reconcileReferralHistory();\n      const userId = String(req.authUserId || "");\n      const rows = rowsOf(await db.execute(sql`\n        select r.id, r.referred_user_id as "referredUserId"',
+    "history awaits referral reconciliation",
+  );
+  return source;
+});
+
+console.log("Weekly/referral Common position balancing, durable referral attribution and signed-in Install App access are ready.");
