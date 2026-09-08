@@ -36,6 +36,7 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
   touch-action: pan-y;
+  z-index: auto !important;
 }
 
 [data-native-mobile-shell] [data-page-scroll-content] {
@@ -53,6 +54,36 @@
 [data-native-mobile-shell] [data-native-premier-league],
 [data-native-mobile-shell] [data-native-club] {
   padding-bottom: 1.15rem !important;
+  z-index: auto !important;
+}
+
+/* Compact page sheets/dialogs must behave like true app sub-screens rather
+   than children of the scrolling page. Removing the page stacking context lets
+   their own z-index sit above the bottom dock. Any long sheet gets independent
+   touch scrolling so its final CTA can always be reached on smaller phones. */
+[data-native-mobile-shell] [role="dialog"][class*="fixed"][class*="inset-0"] {
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+[data-native-mobile-shell] [role="dialog"][class*="fixed"][class*="inset-0"] > section {
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px)) !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scroll-padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
+}
+
+/* When a modal/sub-screen is open the persistent dock should not compete with
+   the action sheet or cover its purchase/submit controls. Chrome WebView on the
+   supported Android builds includes :has(). */
+[data-native-mobile-shell]:has([role="dialog"]) .arena-bottom-dock {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 [data-native-mobile-shell] .premium-page {
