@@ -3,30 +3,37 @@
   --arena-panel: rgba(8, 10, 24, 0.82);
   --arena-panel-strong: rgba(7, 8, 19, 0.94);
   --arena-violet: #b64cff;
-  --arena-violet-soft: #8b5cf6;
   --arena-cyan: #35d9ff;
-  --arena-blue: #2588ff;
-  --arena-pink: #ff4fd8;
+  --arena-route: #b64cff;
+  --arena-route-2: #35d9ff;
   --arena-green: #62f6c2;
   --arena-gold: #ffd86b;
-  --arena-line: rgba(192, 118, 255, 0.22);
-  --arena-line-cyan: rgba(53, 217, 255, 0.22);
   background:
-    radial-gradient(circle at 15% -5%, rgba(180, 76, 255, 0.24), transparent 34%),
-    radial-gradient(circle at 95% 4%, rgba(37, 136, 255, 0.2), transparent 32%),
+    radial-gradient(circle at 15% -5%, color-mix(in srgb, var(--arena-route) 24%, transparent), transparent 34%),
+    radial-gradient(circle at 95% 4%, color-mix(in srgb, var(--arena-route-2) 20%, transparent), transparent 32%),
     linear-gradient(180deg, #060610 0%, #020309 48%, #060510 100%);
   color: #fff;
 }
+
+[data-native-mobile-shell][data-arena-route="home"] { --arena-route: #c34cff; --arena-route-2: #35d9ff; }
+[data-native-mobile-shell][data-arena-route="play"] { --arena-route: #ff4fd8; --arena-route-2: #35d9ff; }
+[data-native-mobile-shell][data-arena-route="squad"] { --arena-route: #35d9ff; --arena-route-2: #6977ff; }
+[data-native-mobile-shell][data-arena-route="cards"] { --arena-route: #a855f7; --arena-route-2: #ff5bd7; }
+[data-native-mobile-shell][data-arena-route="market"] { --arena-route: #31e7be; --arena-route-2: #35d9ff; }
+[data-native-mobile-shell][data-arena-route="vault"] { --arena-route: #b64cff; --arena-route-2: #ffd86b; }
+[data-native-mobile-shell][data-arena-route="wallet"] { --arena-route: #62f6c2; --arena-route-2: #35d9ff; }
+[data-native-mobile-shell][data-arena-route="league"] { --arena-route: #368cff; --arena-route-2: #35d9ff; }
+[data-native-mobile-shell][data-arena-route="club"] { --arena-route: #d34cff; --arena-route-2: #7585ff; }
 
 [data-native-mobile-shell]::before {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: .32;
+  opacity: .34;
   background-image:
-    linear-gradient(rgba(139,92,246,.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(34,211,238,.035) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--arena-route) 4.5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--arena-route-2) 3.5%, transparent) 1px, transparent 1px);
   background-size: 30px 30px;
   mask-image: linear-gradient(to bottom, #000 0%, rgba(0,0,0,.7) 58%, transparent 100%);
 }
@@ -36,7 +43,9 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  box-shadow: inset 3px 0 0 rgba(184, 74, 255, .22), inset -3px 0 0 rgba(36, 176, 255, .18);
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--arena-route) 24%, transparent),
+    inset -3px 0 0 color-mix(in srgb, var(--arena-route-2) 20%, transparent);
   z-index: 2;
 }
 
@@ -51,17 +60,20 @@
 
 [data-native-mobile-shell] .arena-header {
   background:
-    linear-gradient(180deg, rgba(6,7,18,.98), rgba(5,5,14,.92)),
-    radial-gradient(circle at 15% 0%, rgba(186,76,255,.18), transparent 32%);
-  border-bottom: 1px solid rgba(165, 94, 255, .26);
-  box-shadow: 0 12px 40px rgba(0,0,0,.38), 0 1px 0 rgba(42,205,255,.09);
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--arena-route) 19%, transparent), transparent 35%),
+    radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--arena-route-2) 12%, transparent), transparent 35%),
+    linear-gradient(180deg, rgba(6,7,18,.985), rgba(5,5,14,.94));
+  border-bottom: 1px solid color-mix(in srgb, var(--arena-route) 30%, transparent);
+  box-shadow: 0 12px 40px rgba(0,0,0,.4), 0 1px 0 color-mix(in srgb, var(--arena-route-2) 10%, transparent);
 }
 
 [data-native-mobile-shell] .arena-logo-frame {
   position: relative;
-  background: linear-gradient(135deg, rgba(190,77,255,.85), rgba(41,189,255,.82));
+  background: linear-gradient(135deg, var(--arena-route), var(--arena-route-2));
   padding: 1px;
-  box-shadow: 0 0 20px rgba(172,68,255,.28), 0 0 18px rgba(38,190,255,.18);
+  box-shadow:
+    0 0 20px color-mix(in srgb, var(--arena-route) 28%, transparent),
+    0 0 18px color-mix(in srgb, var(--arena-route-2) 18%, transparent);
 }
 
 [data-native-mobile-shell] .arena-logo-frame::after {
@@ -69,7 +81,7 @@
   position: absolute;
   inset: -4px;
   border-radius: 1rem;
-  border: 1px solid rgba(190, 77, 255, .12);
+  border: 1px solid color-mix(in srgb, var(--arena-route) 14%, transparent);
   pointer-events: none;
 }
 
@@ -102,17 +114,18 @@
 
 [data-native-mobile-shell] .arena-page-frame::before {
   left: 5px;
-  background: linear-gradient(to bottom, transparent, rgba(187,75,255,.48), transparent 68%);
-  box-shadow: 0 0 12px rgba(187,75,255,.4);
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--arena-route) 52%, transparent), transparent 68%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--arena-route) 42%, transparent);
 }
 
 [data-native-mobile-shell] .arena-page-frame::after {
   right: 5px;
-  background: linear-gradient(to bottom, transparent, rgba(45,199,255,.42), transparent 68%);
-  box-shadow: 0 0 12px rgba(45,199,255,.35);
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--arena-route-2) 48%, transparent), transparent 68%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--arena-route-2) 36%, transparent);
 }
 
 [data-native-mobile-shell] [data-native-home],
+[data-native-mobile-shell] [data-native-home-v2],
 [data-native-mobile-shell] [data-native-play],
 [data-native-mobile-shell] [data-native-squad],
 [data-native-mobile-shell] [data-native-cards],
@@ -126,6 +139,7 @@
 }
 
 [data-native-mobile-shell] [data-native-home] > section,
+[data-native-mobile-shell] [data-native-home-v2] > section,
 [data-native-mobile-shell] [data-native-play] > section,
 [data-native-mobile-shell] [data-native-squad] > section,
 [data-native-mobile-shell] [data-native-cards] > section,
@@ -134,16 +148,17 @@
 [data-native-mobile-shell] [data-native-wallet] > section,
 [data-native-mobile-shell] [data-native-premier-league] > section,
 [data-native-mobile-shell] [data-native-club] > section {
-  border-color: rgba(177, 93, 255, .2) !important;
+  border-color: color-mix(in srgb, var(--arena-route) 22%, transparent) !important;
   background-color: var(--arena-panel) !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.045),
-    inset 0 0 28px rgba(139,92,246,.025),
+    inset 0 0 28px color-mix(in srgb, var(--arena-route) 3%, transparent),
     0 14px 34px rgba(0,0,0,.3);
   backdrop-filter: blur(20px);
 }
 
 [data-native-mobile-shell] [data-native-home] > section:first-child,
+[data-native-mobile-shell] [data-native-home-v2] > section:first-child,
 [data-native-mobile-shell] [data-native-play] > section:first-child,
 [data-native-mobile-shell] [data-native-squad] > section:first-child,
 [data-native-mobile-shell] [data-native-cards] > section:first-child,
@@ -154,19 +169,20 @@
 [data-native-mobile-shell] [data-native-club] > section:first-child {
   position: relative;
   overflow: hidden;
-  border-color: rgba(178, 77, 255, .32) !important;
+  border-color: color-mix(in srgb, var(--arena-route) 34%, transparent) !important;
   background:
-    radial-gradient(circle at 5% 5%, rgba(202, 69, 255, .22), transparent 34%),
-    radial-gradient(circle at 96% 8%, rgba(25, 172, 255, .22), transparent 36%),
+    radial-gradient(circle at 5% 5%, color-mix(in srgb, var(--arena-route) 23%, transparent), transparent 34%),
+    radial-gradient(circle at 96% 8%, color-mix(in srgb, var(--arena-route-2) 22%, transparent), transparent 36%),
     linear-gradient(145deg, rgba(15,11,31,.96), rgba(4,8,21,.96)) !important;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.06),
-    0 0 0 1px rgba(35,188,255,.055),
+    0 0 0 1px color-mix(in srgb, var(--arena-route-2) 6%, transparent),
     0 18px 45px rgba(0,0,0,.42),
-    0 0 28px rgba(139,92,246,.08) !important;
+    0 0 30px color-mix(in srgb, var(--arena-route) 9%, transparent) !important;
 }
 
 [data-native-mobile-shell] [data-native-home] > section:first-child::after,
+[data-native-mobile-shell] [data-native-home-v2] > section:first-child::after,
 [data-native-mobile-shell] [data-native-play] > section:first-child::after,
 [data-native-mobile-shell] [data-native-squad] > section:first-child::after,
 [data-native-mobile-shell] [data-native-cards] > section:first-child::after,
@@ -181,23 +197,28 @@
   right: 12%;
   bottom: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(188,78,255,.9), rgba(36,193,255,.9), transparent);
-  box-shadow: 0 0 12px rgba(137,86,255,.5);
+  background: linear-gradient(90deg, transparent, var(--arena-route), var(--arena-route-2), transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--arena-route) 50%, transparent);
+}
+
+[data-native-mobile-shell] [data-native-home-v2] > section:nth-child(2) > a > div,
+[data-native-mobile-shell] [data-native-home-v2] > section:nth-child(3) > a > div {
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--arena-route) 4%, transparent), 0 8px 20px rgba(0,0,0,.18);
 }
 
 [data-native-mobile-shell] input,
 [data-native-mobile-shell] select,
 [data-native-mobile-shell] textarea {
   background: rgba(1, 4, 14, .72) !important;
-  border-color: rgba(152, 105, 255, .2) !important;
-  box-shadow: inset 0 0 20px rgba(53,217,255,.018);
+  border-color: color-mix(in srgb, var(--arena-route) 20%, transparent) !important;
+  box-shadow: inset 0 0 20px color-mix(in srgb, var(--arena-route-2) 2%, transparent);
 }
 
 [data-native-mobile-shell] input:focus,
 [data-native-mobile-shell] select:focus,
 [data-native-mobile-shell] textarea:focus {
-  border-color: rgba(53,217,255,.58) !important;
-  box-shadow: 0 0 0 2px rgba(53,217,255,.08), 0 0 20px rgba(53,217,255,.08) !important;
+  border-color: color-mix(in srgb, var(--arena-route-2) 60%, transparent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--arena-route-2) 8%, transparent), 0 0 20px color-mix(in srgb, var(--arena-route-2) 9%, transparent) !important;
 }
 
 [data-native-mobile-shell] button,
@@ -212,8 +233,8 @@
 
 [data-native-mobile-shell] .arena-bottom-dock {
   background: linear-gradient(180deg, rgba(5,5,14,.82), rgba(3,3,10,.985));
-  border-top: 1px solid rgba(160,87,255,.22);
-  box-shadow: 0 -16px 48px rgba(0,0,0,.46), 0 -1px 18px rgba(95,73,255,.08);
+  border-top: 1px solid color-mix(in srgb, var(--arena-route) 24%, transparent);
+  box-shadow: 0 -16px 48px rgba(0,0,0,.46), 0 -1px 18px color-mix(in srgb, var(--arena-route) 9%, transparent);
 }
 
 [data-native-mobile-shell] .arena-nav-item {
@@ -222,19 +243,19 @@
 }
 
 [data-native-mobile-shell] .arena-nav-item[data-active="true"] {
-  color: #f5ecff;
-  background: linear-gradient(180deg, rgba(180,76,255,.12), rgba(33,187,255,.045));
-  box-shadow: inset 0 0 18px rgba(155,72,255,.05);
+  color: #f9f2ff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--arena-route) 13%, transparent), color-mix(in srgb, var(--arena-route-2) 5%, transparent));
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--arena-route) 5%, transparent);
 }
 
 [data-native-mobile-shell] .arena-nav-item[data-active="true"] svg {
-  color: var(--arena-cyan);
-  filter: drop-shadow(0 0 6px rgba(53,217,255,.42));
+  color: var(--arena-route-2);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--arena-route-2) 45%, transparent));
 }
 
 [data-native-mobile-shell] .arena-play-button {
-  background: linear-gradient(135deg, #b941ff 0%, #7a4bff 42%, #1bbdff 100%);
-  box-shadow: 0 0 0 4px rgba(5,5,14,.96), 0 0 0 5px rgba(179,74,255,.35), 0 0 24px rgba(141,67,255,.38), 0 0 22px rgba(35,190,255,.2);
+  background: linear-gradient(135deg, #c33cff 0%, #704aff 44%, #19c8ff 100%);
+  box-shadow: 0 0 0 4px rgba(5,5,14,.96), 0 0 0 5px rgba(179,74,255,.35), 0 0 26px rgba(141,67,255,.42), 0 0 24px rgba(35,190,255,.22);
 }
 
 [data-native-mobile-shell] .arena-play-button::before {
@@ -242,28 +263,28 @@
   position: absolute;
   inset: 3px;
   border-radius: 1.05rem;
-  border: 1px solid rgba(255,255,255,.2);
+  border: 1px solid rgba(255,255,255,.22);
   pointer-events: none;
 }
 
 [data-native-mobile-shell] .arena-more-sheet {
   background:
-    radial-gradient(circle at 18% 0%, rgba(184,75,255,.22), transparent 34%),
-    radial-gradient(circle at 90% 8%, rgba(35,185,255,.14), transparent 34%),
+    radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--arena-route) 23%, transparent), transparent 34%),
+    radial-gradient(circle at 90% 8%, color-mix(in srgb, var(--arena-route-2) 14%, transparent), transparent 34%),
     linear-gradient(180deg, rgba(11,9,25,.99), rgba(4,5,13,.995));
-  border-top-color: rgba(183,78,255,.3) !important;
-  box-shadow: 0 -30px 80px rgba(0,0,0,.72), 0 -1px 22px rgba(141,78,255,.12);
+  border-top-color: color-mix(in srgb, var(--arena-route) 32%, transparent) !important;
+  box-shadow: 0 -30px 80px rgba(0,0,0,.72), 0 -1px 22px color-mix(in srgb, var(--arena-route) 13%, transparent);
 }
 
 [data-native-mobile-shell] .arena-menu-tile {
   border: 1px solid rgba(255,255,255,.075);
-  background: linear-gradient(145deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--arena-route) 6%, rgba(255,255,255,.025)), rgba(255,255,255,.018));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
 }
 
 [data-native-mobile-shell] .arena-menu-tile:active {
-  border-color: rgba(53,217,255,.28);
-  background: linear-gradient(145deg, rgba(177,70,255,.1), rgba(35,189,255,.07));
+  border-color: color-mix(in srgb, var(--arena-route-2) 30%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--arena-route) 12%, transparent), color-mix(in srgb, var(--arena-route-2) 8%, transparent));
 }
 
 [data-native-mobile-shell] [data-native-full-route="true"] > main {
@@ -280,7 +301,7 @@
 
 [data-native-mobile-shell] * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(168,85,247,.35) transparent;
+  scrollbar-color: color-mix(in srgb, var(--arena-route) 38%, transparent) transparent;
 }
 
 [data-native-mobile-shell] *::-webkit-scrollbar {
@@ -289,7 +310,7 @@
 }
 
 [data-native-mobile-shell] *::-webkit-scrollbar-thumb {
-  background: linear-gradient(#a855f7, #22d3ee);
+  background: linear-gradient(var(--arena-route), var(--arena-route-2));
   border-radius: 99px;
 }
 
