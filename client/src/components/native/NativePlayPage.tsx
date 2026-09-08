@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Crown,
   KeyRound,
-  Lock,
   Search,
   ShieldCheck,
   Sparkles,
@@ -37,6 +36,65 @@ const slots = [
 
 type Tournament = any;
 type Tab = "cups" | "entries";
+
+type RarityTone = {
+  text: string;
+  border: string;
+  soft: string;
+  glow: string;
+  button: string;
+};
+
+const rarityTone: Record<TournamentRarity, RarityTone> = {
+  common: {
+    text: "text-slate-100",
+    border: "border-slate-200/30",
+    soft: "bg-slate-200/[.07]",
+    glow: "shadow-[0_0_22px_rgba(226,232,240,.12)]",
+    button: "bg-slate-100 text-slate-950",
+  },
+  rare: {
+    text: "text-sky-200",
+    border: "border-sky-300/40",
+    soft: "bg-sky-400/[.09]",
+    glow: "shadow-[0_0_24px_rgba(56,189,248,.20)]",
+    button: "bg-sky-300 text-slate-950",
+  },
+  unique: {
+    text: "text-violet-200",
+    border: "border-violet-300/40",
+    soft: "bg-violet-400/[.10]",
+    glow: "shadow-[0_0_24px_rgba(168,85,247,.22)]",
+    button: "bg-violet-300 text-slate-950",
+  },
+  epic: {
+    text: "text-rose-200",
+    border: "border-rose-300/40",
+    soft: "bg-rose-400/[.09]",
+    glow: "shadow-[0_0_24px_rgba(244,63,94,.20)]",
+    button: "bg-rose-300 text-slate-950",
+  },
+  legendary: {
+    text: "text-amber-200",
+    border: "border-amber-300/45",
+    soft: "bg-amber-300/[.10]",
+    glow: "shadow-[0_0_26px_rgba(251,191,36,.22)]",
+    button: "bg-amber-300 text-slate-950",
+  },
+};
+
+function listFrom<T>(value: unknown, keys: string[] = []): T[] {
+  const data: any = value;
+  if (Array.isArray(data)) return data as T[];
+  for (const key of keys) {
+    if (Array.isArray(data?.[key])) return data[key] as T[];
+  }
+  return [];
+}
+
+function toneFor(value: unknown) {
+  return rarityTone[normalizeTournamentRarity(value)];
+}
 
 function money(value: unknown) {
   const amount = Number(value || 0);
@@ -94,30 +152,28 @@ export default function NativePlayPage() {
   const [pinOpen, setPinOpen] = React.useState(false);
   const [pin, setPin] = React.useState("");
 
-  const { data: competitions = [], isLoading } = useQuery<Tournament[]>({
+  const { data: competitionsRaw, isLoading } = useQuery<any>({
     queryKey: ["/api/competitions"],
     queryFn: async () => {
       const response = await fetch("/api/competitions", { credentials: "include" });
       if (!response.ok) return [];
-      const data = await response.json();
-      return Array.isArray(data) ? data : data.competitions || [];
+      return response.json();
     },
     staleTime: 20_000,
     refetchInterval: 45_000,
   });
 
-  const { data: cards = [] } = useQuery<PlayerCardWithPlayer[]>({
+  const { data: cardsRaw } = useQuery<any>({
     queryKey: ["/api/user/cards"],
     queryFn: async () => {
       const response = await fetch("/api/user/cards", { credentials: "include" });
       if (!response.ok) return [];
-      const data = await response.json();
-      return Array.isArray(data) ? data : data.cards || [];
+      return response.json();
     },
     staleTime: 30_000,
   });
 
-  const { data: entries = [] } = useQuery<CompetitionEntry[]>({
+  const { data: entriesRaw } = useQuery<any>({
     queryKey: ["/api/competitions/my-entries"],
     queryFn: async () => {
       const response = await fetch("/api/competitions/my-entries", { credentials: "include" });
@@ -126,6 +182,14 @@ export default function NativePlayPage() {
     staleTime: 15_000,
     refetchInterval: 30_000,
   });
+
+  /* Native compact screens share the same QueryClient as the full website.
+     Normalize cached response shapes before using array methods so switching
+     from a desktop/full route can never crash the compact tab. */
+  const competitions = React.useMemo(() => listFrom<Tournament>(competitionsRaw, ["competitions", "items"]), [competitionsRaw]);
+  const cards = React.useMemo(() => listFrom<PlayerCardWithPlayer>(cardsRaw, ["cards", "items"]), [cardsRaw]);
+  const entries = React.useMemo(() => listFrom<CompetitionEntry>(entriesRaw, ["entries", "items"]), [entriesRaw]);
+  const selectedTone = rarityTone[rarity];
 
   const publicCompetitions = React.useMemo(
     () => competitions.filter((item) => String(item.visibility || "public").toLowerCase() !== "private"),
@@ -165,7 +229,7 @@ export default function NativePlayPage() {
   const myEntryRows = React.useMemo(() => entries
     .map((entry) => ({ entry, competition: competitionById.get(competitionId(entry)) }))
     .filter((row) => row.competition)
-    .sort((a, b) => Number(b.competition?.gameWeek || 0) - Number(a.competition?.gameWeek || 0)),
+    .sort((a, b) => Number(b.competition?.gameWeek || b.competition?.game_week || 0) - Number(a.competition?.gameWeek || a.competition?.game_week || 0)),
     [competitionById, entries],
   );
 
@@ -271,14 +335,14 @@ export default function NativePlayPage() {
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-play>
-      <section className="overflow-hidden rounded-[1.55rem] border border-white/[.08] bg-gradient-to-br from-violet-400/[.11] via-[#0a0e1c] to-cyan-300/[.06] p-4">
+      <section className={`overflow-hidden rounded-[1.55rem] border ${selectedTone.border} bg-gradient-to-br from-violet-400/[.11] via-[#0a0e1c] to-cyan-300/[.06] p-4 ${selectedTone.glow}`}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[.22em] text-violet-200/70">Gameweek {currentGameweek}</p>
-            <h2 className="mt-1 text-2xl font-black">Choose. Enter. Compete.</h2>
+            <p className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[.18em] ${selectedTone.border} ${selectedTone.soft} ${selectedTone.text}`}>Gameweek {currentGameweek} · {rarity}</p>
+            <h2 className="mt-2 text-2xl font-black">Choose. Enter. Compete.</h2>
             <p className="mt-1 max-w-sm text-xs leading-5 text-slate-400">Pick a cup, build five eligible Premier League cards, choose your captain and you are in.</p>
           </div>
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-300/10 text-violet-200"><Trophy className="h-5 w-5" /></div>
+          <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border ${selectedTone.border} ${selectedTone.soft} ${selectedTone.text}`}><Trophy className="h-5 w-5" /></div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-black/20 p-1">
           <button onClick={() => setTab("cups")} className={`rounded-xl px-3 py-2.5 text-xs font-black ${tab === "cups" ? "bg-white/10 text-white" : "text-slate-500"}`}>Open Cups</button>
@@ -288,14 +352,15 @@ export default function NativePlayPage() {
 
       {tab === "cups" ? (
         <>
-          <div className="-mx-3 mt-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none]">
-            {rarities.map((item) => (
-              <button key={item} onClick={() => setRarity(item)} className={`shrink-0 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[.12em] ${rarity === item ? "border-cyan-300/50 bg-cyan-300/12 text-cyan-100" : "border-white/8 bg-white/[.035] text-slate-500"}`}>{item}</button>
-            ))}
+          <div className="-mx-3 mt-3 flex gap-2 overflow-x-auto px-3 pb-2 [scrollbar-width:none]">
+            {rarities.map((item) => {
+              const tone = rarityTone[item];
+              return <button key={item} onClick={() => setRarity(item)} className={`shrink-0 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[.12em] ${rarity === item ? `${tone.border} ${tone.soft} ${tone.text} ${tone.glow}` : "border-white/8 bg-white/[.035] text-slate-500"}`}>{item}</button>;
+            })}
           </div>
 
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <div><p className="text-[10px] font-black uppercase tracking-[.18em] text-slate-500">{getTournamentRarityRequirement(rarity).shortLabel}</p><p className="text-sm font-black">GW{currentGameweek} {rarity} cups</p></div>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div><p className={`text-[10px] font-black uppercase tracking-[.18em] ${selectedTone.text}`}>{getTournamentRarityRequirement(rarity).shortLabel}</p><p className="text-sm font-black">GW{currentGameweek} {rarity} cups</p></div>
             <button onClick={() => setPinOpen((value) => !value)} className="inline-flex items-center gap-1.5 rounded-xl border border-violet-300/15 bg-violet-300/[.06] px-3 py-2 text-[10px] font-black text-violet-200"><KeyRound className="h-3.5 w-3.5" />Private PIN</button>
           </div>
 
@@ -318,15 +383,17 @@ export default function NativePlayPage() {
         </>
       ) : (
         <div className="mt-3 space-y-2.5">
-          {myEntryRows.length ? myEntryRows.slice(0, 12).map(({ entry, competition }) => (
-            <div key={(entry as any).id} className="rounded-2xl border border-white/[.08] bg-white/[.035] p-3.5">
+          {myEntryRows.length ? myEntryRows.slice(0, 12).map(({ entry, competition }) => {
+            const tone = toneFor(competition?.tier);
+            return <div key={(entry as any).id} className={`relative overflow-hidden rounded-2xl border ${tone.border} ${tone.soft} p-3.5`}>
+              <span className={`absolute inset-y-3 left-0 w-0.5 rounded-full ${tone.button.split(" ")[0]} ${tone.glow}`} />
               <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0"><p className="truncate text-sm font-black">{competition?.name || "Tournament"}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-[.12em] text-slate-500">GW{competition?.gameWeek || competition?.game_week || "-"} · {String(competition?.tier || "common").toUpperCase()}</p></div>
+                <div className="min-w-0"><p className="truncate text-sm font-black">{competition?.name || "Tournament"}</p><p className={`mt-1 text-[10px] font-bold uppercase tracking-[.12em] ${tone.text}`}>GW{competition?.gameWeek || competition?.game_week || "-"} · {String(competition?.tier || "common").toUpperCase()}</p></div>
                 <span className="rounded-full bg-emerald-300/10 px-2.5 py-1 text-[10px] font-black text-emerald-200">ENTERED</span>
               </div>
               <div className="mt-3 flex items-center justify-between border-t border-white/[.06] pt-2.5 text-xs"><span className="text-slate-500">5 cards locked for this entry</span><Link href="/live-lineup" className="font-black text-cyan-200">View squad</Link></div>
-            </div>
-          )) : <NativeEmpty title="You have no tournament entries yet." />}
+            </div>;
+          }) : <NativeEmpty title="You have no tournament entries yet." />}
         </div>
       )}
 
@@ -364,13 +431,14 @@ export default function NativePlayPage() {
             </div>
 
             <div className="mt-2 space-y-2">
-              {candidateCards.length ? candidateCards.map((card) => (
-                <button key={card.id} onClick={() => chooseCard(card)} className="flex w-full items-center gap-3 rounded-2xl border border-white/[.07] bg-white/[.03] p-2.5 text-left active:scale-[.995]">
+              {candidateCards.length ? candidateCards.map((card) => {
+                const tone = toneFor(card.rarity);
+                return <button key={card.id} onClick={() => chooseCard(card)} className={`flex w-full items-center gap-3 rounded-2xl border ${tone.border} bg-white/[.03] p-2.5 text-left active:scale-[.995]`}>
                   <div className="relative h-14 w-12 shrink-0 overflow-hidden rounded-xl bg-slate-900"><CardPlayerImage card={card} alt={card.player?.name || "Player"} className="h-full w-full object-cover object-top" /></div>
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{card.player?.name || "Player"}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">{cardPosition(card)} · {card.player?.team || "Premier League"}</p><div className="mt-1 flex items-center gap-1.5"><span className="rounded-full bg-white/[.06] px-2 py-0.5 text-[9px] font-black uppercase text-slate-300">{card.rarity}</span><span className="text-[9px] font-bold text-cyan-200">{Number((card as any).currentGameweekPoints || 0).toFixed(2)} PTS</span></div></div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{card.player?.name || "Player"}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">{cardPosition(card)} · {card.player?.team || "Premier League"}</p><div className="mt-1 flex items-center gap-1.5"><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${tone.soft} ${tone.text}`}>{card.rarity}</span><span className="text-[9px] font-bold text-cyan-200">{Number((card as any).currentGameweekPoints || 0).toFixed(2)} PTS</span></div></div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-slate-600" />
-                </button>
-              )) : <NativeEmpty title={`No eligible ${currentSlot.label} card found.`} compact />}
+                </button>;
+              }) : <NativeEmpty title={`No eligible ${currentSlot.label} card found.`} compact />}
             </div>
           </div>
 
@@ -390,12 +458,15 @@ function TournamentRow({ tournament, onEnter }: { tournament: Tournament; onEnte
   const open = String(tournament.status || "").toLowerCase() === "open" && tournament.entryOpen !== false;
   const fee = Number(tournament.entryFee || 0);
   const entryCount = Number(tournament.entryCount ?? tournament.entry_count ?? 0);
-  return <div className="rounded-[1.35rem] border border-white/[.08] bg-gradient-to-r from-white/[.045] to-white/[.02] p-3.5">
+  const tone = toneFor(tournament.tier);
+  const gameweek = Number(tournament.gameWeek ?? tournament.game_week ?? 0);
+  return <div className={`relative overflow-hidden rounded-[1.35rem] border ${tone.border} bg-gradient-to-r from-white/[.045] to-white/[.02] p-3.5 ${tone.glow}`}>
+    <span className={`absolute inset-y-3 left-0 w-0.5 rounded-full ${tone.button.split(" ")[0]}`} />
     <div className="flex items-start gap-3">
-      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-cyan-300/[.08] text-cyan-200"><Trophy className="h-5 w-5" /></div>
-      <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-black">{tournament.name}</p>{fee <= 0 ? <span className="shrink-0 rounded-full bg-emerald-300/12 px-2 py-0.5 text-[9px] font-black text-emerald-200">FREE</span> : null}</div><p className="mt-1 text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">{entryCount} entries · {deadline(tournament.submissionClosesAt || tournament.startsAt)}</p></div>
+      <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border ${tone.border} ${tone.soft} ${tone.text}`}><Trophy className="h-5 w-5" /></div>
+      <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-black">{tournament.name}</p>{fee <= 0 ? <span className="shrink-0 rounded-full bg-emerald-300/12 px-2 py-0.5 text-[9px] font-black text-emerald-200">FREE</span> : null}</div><p className={`mt-1 text-[10px] font-black uppercase tracking-[.1em] ${tone.text}`}>GW{gameweek || "-"} · {String(tournament.tier || "common").toUpperCase()}</p><p className="mt-1 text-[9px] font-bold uppercase tracking-[.08em] text-slate-600">{entryCount} entries · {deadline(tournament.submissionClosesAt || tournament.startsAt)}</p></div>
     </div>
-    <div className="mt-3 flex items-center justify-between border-t border-white/[.06] pt-2.5"><div className="flex items-center gap-2 text-[10px] text-slate-500"><UsersRound className="h-3.5 w-3.5" /><span>5-card team</span><ShieldCheck className="ml-1 h-3.5 w-3.5" /><span>Premier League</span></div><button onClick={onEnter} disabled={!open} className="rounded-xl bg-cyan-300 px-3.5 py-2 text-[10px] font-black text-slate-950 disabled:bg-white/5 disabled:text-slate-600">{open ? fee > 0 ? money(fee) : "Enter" : "Closed"}</button></div>
+    <div className="mt-3 flex items-center justify-between border-t border-white/[.06] pt-2.5"><div className="flex items-center gap-2 text-[10px] text-slate-500"><UsersRound className="h-3.5 w-3.5" /><span>5-card team</span><ShieldCheck className="ml-1 h-3.5 w-3.5" /><span>Premier League</span></div><button onClick={onEnter} disabled={!open} className={`rounded-xl px-3.5 py-2 text-[10px] font-black disabled:bg-white/5 disabled:text-slate-600 ${open ? tone.button : ""}`}>{open ? fee > 0 ? money(fee) : "Enter" : "Closed"}</button></div>
   </div>;
 }
 
