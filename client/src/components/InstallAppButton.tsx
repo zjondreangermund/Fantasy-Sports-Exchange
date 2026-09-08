@@ -8,8 +8,8 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 const ANDROID_APK_BASE_URL =
-  "https://github.com/zjondreangermund/Fantasy-Sports-Exchange/releases/download/android-1.1.2/Fantasy-Arena-Android.apk";
-const ANDROID_VERSION = "1.1.2";
+  "https://github.com/zjondreangermund/Fantasy-Sports-Exchange/releases/download/android-1.1.3/Fantasy-Arena-Android.apk";
+const ANDROID_VERSION = "1.1.3";
 const ANDROID_SIZE_LABEL = "5.7 MB";
 
 let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
