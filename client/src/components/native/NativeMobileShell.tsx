@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import UnreadNotificationDot from "../UnreadNotificationDot";
+import NativeAppUpdatePrompt from "./NativeAppUpdatePrompt";
 
 type NativeMobileShellProps = {
   children: React.ReactNode;
@@ -169,6 +170,8 @@ export default function NativeMobileShell({ children }: NativeMobileShellProps) 
           </section>
         </div>
       ) : null}
+
+      <NativeAppUpdatePrompt />
     </div>
   );
 }
