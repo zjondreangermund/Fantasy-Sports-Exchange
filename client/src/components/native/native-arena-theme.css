@@ -1,0 +1,311 @@
+[data-native-mobile-shell] {
+  --arena-bg: #03040a;
+  --arena-panel: rgba(8, 10, 24, 0.82);
+  --arena-panel-strong: rgba(7, 8, 19, 0.94);
+  --arena-violet: #b64cff;
+  --arena-violet-soft: #8b5cf6;
+  --arena-cyan: #35d9ff;
+  --arena-blue: #2588ff;
+  --arena-pink: #ff4fd8;
+  --arena-green: #62f6c2;
+  --arena-gold: #ffd86b;
+  --arena-line: rgba(192, 118, 255, 0.22);
+  --arena-line-cyan: rgba(53, 217, 255, 0.22);
+  background:
+    radial-gradient(circle at 15% -5%, rgba(180, 76, 255, 0.24), transparent 34%),
+    radial-gradient(circle at 95% 4%, rgba(37, 136, 255, 0.2), transparent 32%),
+    linear-gradient(180deg, #060610 0%, #020309 48%, #060510 100%);
+  color: #fff;
+}
+
+[data-native-mobile-shell]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .32;
+  background-image:
+    linear-gradient(rgba(139,92,246,.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34,211,238,.035) 1px, transparent 1px);
+  background-size: 30px 30px;
+  mask-image: linear-gradient(to bottom, #000 0%, rgba(0,0,0,.7) 58%, transparent 100%);
+}
+
+[data-native-mobile-shell]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 3px 0 0 rgba(184, 74, 255, .22), inset -3px 0 0 rgba(36, 176, 255, .18);
+  z-index: 2;
+}
+
+[data-native-mobile-shell] .arena-ambient-orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(54px);
+  pointer-events: none;
+  opacity: .38;
+  animation: arena-drift 9s ease-in-out infinite alternate;
+}
+
+[data-native-mobile-shell] .arena-header {
+  background:
+    linear-gradient(180deg, rgba(6,7,18,.98), rgba(5,5,14,.92)),
+    radial-gradient(circle at 15% 0%, rgba(186,76,255,.18), transparent 32%);
+  border-bottom: 1px solid rgba(165, 94, 255, .26);
+  box-shadow: 0 12px 40px rgba(0,0,0,.38), 0 1px 0 rgba(42,205,255,.09);
+}
+
+[data-native-mobile-shell] .arena-logo-frame {
+  position: relative;
+  background: linear-gradient(135deg, rgba(190,77,255,.85), rgba(41,189,255,.82));
+  padding: 1px;
+  box-shadow: 0 0 20px rgba(172,68,255,.28), 0 0 18px rgba(38,190,255,.18);
+}
+
+[data-native-mobile-shell] .arena-logo-frame::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 1rem;
+  border: 1px solid rgba(190, 77, 255, .12);
+  pointer-events: none;
+}
+
+[data-native-mobile-shell] .arena-live-pill {
+  border: 1px solid rgba(86,239,197,.2);
+  background: rgba(15, 64, 56, .22);
+  color: #9af7df;
+  box-shadow: inset 0 0 18px rgba(52,211,153,.05);
+}
+
+[data-native-mobile-shell] .arena-live-dot {
+  box-shadow: 0 0 0 3px rgba(82,255,201,.08), 0 0 12px rgba(82,255,201,.8);
+  animation: arena-pulse 1.8s ease-in-out infinite;
+}
+
+[data-native-mobile-shell] .arena-page-frame {
+  position: relative;
+}
+
+[data-native-mobile-shell] .arena-page-frame::before,
+[data-native-mobile-shell] .arena-page-frame::after {
+  content: "";
+  position: absolute;
+  top: 1rem;
+  bottom: 6rem;
+  width: 1px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+[data-native-mobile-shell] .arena-page-frame::before {
+  left: 5px;
+  background: linear-gradient(to bottom, transparent, rgba(187,75,255,.48), transparent 68%);
+  box-shadow: 0 0 12px rgba(187,75,255,.4);
+}
+
+[data-native-mobile-shell] .arena-page-frame::after {
+  right: 5px;
+  background: linear-gradient(to bottom, transparent, rgba(45,199,255,.42), transparent 68%);
+  box-shadow: 0 0 12px rgba(45,199,255,.35);
+}
+
+[data-native-mobile-shell] [data-native-home],
+[data-native-mobile-shell] [data-native-play],
+[data-native-mobile-shell] [data-native-squad],
+[data-native-mobile-shell] [data-native-cards],
+[data-native-mobile-shell] [data-native-market],
+[data-native-mobile-shell] [data-native-vault],
+[data-native-mobile-shell] [data-native-wallet],
+[data-native-mobile-shell] [data-native-premier-league],
+[data-native-mobile-shell] [data-native-club] {
+  position: relative;
+  z-index: 1;
+}
+
+[data-native-mobile-shell] [data-native-home] > section,
+[data-native-mobile-shell] [data-native-play] > section,
+[data-native-mobile-shell] [data-native-squad] > section,
+[data-native-mobile-shell] [data-native-cards] > section,
+[data-native-mobile-shell] [data-native-market] > section,
+[data-native-mobile-shell] [data-native-vault] > section,
+[data-native-mobile-shell] [data-native-wallet] > section,
+[data-native-mobile-shell] [data-native-premier-league] > section,
+[data-native-mobile-shell] [data-native-club] > section {
+  border-color: rgba(177, 93, 255, .2) !important;
+  background-color: var(--arena-panel) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.045),
+    inset 0 0 28px rgba(139,92,246,.025),
+    0 14px 34px rgba(0,0,0,.3);
+  backdrop-filter: blur(20px);
+}
+
+[data-native-mobile-shell] [data-native-home] > section:first-child,
+[data-native-mobile-shell] [data-native-play] > section:first-child,
+[data-native-mobile-shell] [data-native-squad] > section:first-child,
+[data-native-mobile-shell] [data-native-cards] > section:first-child,
+[data-native-mobile-shell] [data-native-market] > section:first-child,
+[data-native-mobile-shell] [data-native-vault] > section:first-child,
+[data-native-mobile-shell] [data-native-wallet] > section:first-child,
+[data-native-mobile-shell] [data-native-premier-league] > section:first-child,
+[data-native-mobile-shell] [data-native-club] > section:first-child {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(178, 77, 255, .32) !important;
+  background:
+    radial-gradient(circle at 5% 5%, rgba(202, 69, 255, .22), transparent 34%),
+    radial-gradient(circle at 96% 8%, rgba(25, 172, 255, .22), transparent 36%),
+    linear-gradient(145deg, rgba(15,11,31,.96), rgba(4,8,21,.96)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 0 0 1px rgba(35,188,255,.055),
+    0 18px 45px rgba(0,0,0,.42),
+    0 0 28px rgba(139,92,246,.08) !important;
+}
+
+[data-native-mobile-shell] [data-native-home] > section:first-child::after,
+[data-native-mobile-shell] [data-native-play] > section:first-child::after,
+[data-native-mobile-shell] [data-native-squad] > section:first-child::after,
+[data-native-mobile-shell] [data-native-cards] > section:first-child::after,
+[data-native-mobile-shell] [data-native-market] > section:first-child::after,
+[data-native-mobile-shell] [data-native-vault] > section:first-child::after,
+[data-native-mobile-shell] [data-native-wallet] > section:first-child::after,
+[data-native-mobile-shell] [data-native-premier-league] > section:first-child::after,
+[data-native-mobile-shell] [data-native-club] > section:first-child::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(188,78,255,.9), rgba(36,193,255,.9), transparent);
+  box-shadow: 0 0 12px rgba(137,86,255,.5);
+}
+
+[data-native-mobile-shell] input,
+[data-native-mobile-shell] select,
+[data-native-mobile-shell] textarea {
+  background: rgba(1, 4, 14, .72) !important;
+  border-color: rgba(152, 105, 255, .2) !important;
+  box-shadow: inset 0 0 20px rgba(53,217,255,.018);
+}
+
+[data-native-mobile-shell] input:focus,
+[data-native-mobile-shell] select:focus,
+[data-native-mobile-shell] textarea:focus {
+  border-color: rgba(53,217,255,.58) !important;
+  box-shadow: 0 0 0 2px rgba(53,217,255,.08), 0 0 20px rgba(53,217,255,.08) !important;
+}
+
+[data-native-mobile-shell] button,
+[data-native-mobile-shell] a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+[data-native-mobile-shell] button:active,
+[data-native-mobile-shell] a:active {
+  transform: scale(.985);
+}
+
+[data-native-mobile-shell] .arena-bottom-dock {
+  background: linear-gradient(180deg, rgba(5,5,14,.82), rgba(3,3,10,.985));
+  border-top: 1px solid rgba(160,87,255,.22);
+  box-shadow: 0 -16px 48px rgba(0,0,0,.46), 0 -1px 18px rgba(95,73,255,.08);
+}
+
+[data-native-mobile-shell] .arena-nav-item {
+  position: relative;
+  color: rgba(148,163,184,.62);
+}
+
+[data-native-mobile-shell] .arena-nav-item[data-active="true"] {
+  color: #f5ecff;
+  background: linear-gradient(180deg, rgba(180,76,255,.12), rgba(33,187,255,.045));
+  box-shadow: inset 0 0 18px rgba(155,72,255,.05);
+}
+
+[data-native-mobile-shell] .arena-nav-item[data-active="true"] svg {
+  color: var(--arena-cyan);
+  filter: drop-shadow(0 0 6px rgba(53,217,255,.42));
+}
+
+[data-native-mobile-shell] .arena-play-button {
+  background: linear-gradient(135deg, #b941ff 0%, #7a4bff 42%, #1bbdff 100%);
+  box-shadow: 0 0 0 4px rgba(5,5,14,.96), 0 0 0 5px rgba(179,74,255,.35), 0 0 24px rgba(141,67,255,.38), 0 0 22px rgba(35,190,255,.2);
+}
+
+[data-native-mobile-shell] .arena-play-button::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 1.05rem;
+  border: 1px solid rgba(255,255,255,.2);
+  pointer-events: none;
+}
+
+[data-native-mobile-shell] .arena-more-sheet {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(184,75,255,.22), transparent 34%),
+    radial-gradient(circle at 90% 8%, rgba(35,185,255,.14), transparent 34%),
+    linear-gradient(180deg, rgba(11,9,25,.99), rgba(4,5,13,.995));
+  border-top-color: rgba(183,78,255,.3) !important;
+  box-shadow: 0 -30px 80px rgba(0,0,0,.72), 0 -1px 22px rgba(141,78,255,.12);
+}
+
+[data-native-mobile-shell] .arena-menu-tile {
+  border: 1px solid rgba(255,255,255,.075);
+  background: linear-gradient(145deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+
+[data-native-mobile-shell] .arena-menu-tile:active {
+  border-color: rgba(53,217,255,.28);
+  background: linear-gradient(145deg, rgba(177,70,255,.1), rgba(35,189,255,.07));
+}
+
+[data-native-mobile-shell] [data-native-full-route="true"] > main {
+  min-height: 0 !important;
+  overflow: visible !important;
+  max-width: 100% !important;
+}
+
+[data-native-mobile-shell] [data-native-full-route="true"] .max-w-7xl,
+[data-native-mobile-shell] [data-native-full-route="true"] .max-w-6xl,
+[data-native-mobile-shell] [data-native-full-route="true"] .max-w-5xl {
+  max-width: 100% !important;
+}
+
+[data-native-mobile-shell] * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168,85,247,.35) transparent;
+}
+
+[data-native-mobile-shell] *::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+[data-native-mobile-shell] *::-webkit-scrollbar-thumb {
+  background: linear-gradient(#a855f7, #22d3ee);
+  border-radius: 99px;
+}
+
+@keyframes arena-pulse {
+  0%, 100% { opacity: .65; transform: scale(.9); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes arena-drift {
+  from { transform: translate3d(-8px, -4px, 0) scale(.96); }
+  to { transform: translate3d(12px, 12px, 0) scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-native-mobile-shell] .arena-ambient-orb,
+  [data-native-mobile-shell] .arena-live-dot {
+    animation: none !important;
+  }
+}
