@@ -5,7 +5,6 @@ import {
   ArrowRight,
   BellRing,
   BookOpenCheck,
-  CheckCircle2,
   ChevronRight,
   CircleDollarSign,
   Gem,
@@ -130,7 +129,7 @@ export default function NativeMobileDashboard() {
   }, [activeEntries.length, cardCount, lineupCards.length, retentionSummary?.nextBestAction]);
 
   const latestNotification = notifications?.notifications?.find((note) => !note.read) || notifications?.notifications?.[0];
-  const teamName = user?.managerTeamName || "My Club";
+  const teamName = (user as any)?.managerTeamName || "My Club";
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-4 px-4 py-4" data-native-home>
