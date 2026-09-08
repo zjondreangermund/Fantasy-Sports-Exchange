@@ -24,29 +24,29 @@ function replaceRequired(source, from, to, label) {
 
 patchFile(ADMIN_ROUTE, (original) => {
   let source = original;
-  source = replaceRequired(
-    source,
-    'import { registerAdminIntegrityRoutes } from "./adminIntegrity.routes.js";\n',
-    'import { registerAdminIntegrityRoutes } from "./adminIntegrity.routes.js";\nimport { registerAdminReferralRoutes } from "./adminReferrals.routes.js";\n',
-    "admin referral route import",
-  );
-  source = replaceRequired(
-    source,
-    '  registerAdminIntegrityRoutes(app, { requireAuth, isAdmin });\n',
-    '  registerAdminIntegrityRoutes(app, { requireAuth, isAdmin });\n  registerAdminReferralRoutes(app, { requireAuth, isAdmin });\n',
-    "admin referral route registration",
-  );
+  const referralImport = 'import { registerAdminReferralRoutes } from "./adminReferrals.routes.js";';
+  if (!source.includes(referralImport)) {
+    const importAnchor = 'import { registerAdminIntegrityRoutes } from "./adminIntegrity.routes.js";\n';
+    if (!source.includes(importAnchor)) throw new Error("Admin referral monitoring anchor not found: admin referral route import");
+    source = source.replace(importAnchor, `${importAnchor}${referralImport}\n`);
+  }
+  const referralRegistration = '  registerAdminReferralRoutes(app, { requireAuth, isAdmin });';
+  if (!source.includes(referralRegistration)) {
+    const registrationAnchor = '  registerAdminIntegrityRoutes(app, { requireAuth, isAdmin });\n';
+    if (!source.includes(registrationAnchor)) throw new Error("Admin referral monitoring anchor not found: admin referral route registration");
+    source = source.replace(registrationAnchor, `${registrationAnchor}${referralRegistration}\n`);
+  }
   return source;
 });
 
 patchFile(ADMIN_PAGE, (original) => {
   let source = original;
-  source = replaceRequired(
-    source,
-    'import AdminTournamentDirectory from "../components/admin/AdminTournamentDirectory";\n',
-    'import AdminTournamentDirectory from "../components/admin/AdminTournamentDirectory";\nimport AdminReferralPanel from "../components/admin/AdminReferralPanel";\n',
-    "referral panel import",
-  );
+  const panelImport = 'import AdminReferralPanel from "../components/admin/AdminReferralPanel";';
+  if (!source.includes(panelImport)) {
+    const importAnchor = 'import AdminTournamentDirectory from "../components/admin/AdminTournamentDirectory";\n';
+    if (!source.includes(importAnchor)) throw new Error("Admin referral monitoring anchor not found: referral panel import");
+    source = source.replace(importAnchor, `${importAnchor}${panelImport}\n`);
+  }
   source = replaceRequired(
     source,
     '  const [workspacePanel, setWorkspacePanel] = useState<"transactions" | "withdrawals" | "backoffice" | "integrity" | "tournaments" | null>(null);',
