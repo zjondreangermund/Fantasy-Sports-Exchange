@@ -119,6 +119,30 @@
   overscroll-behavior-x: contain;
 }
 
+/* The compact Collection renders many cards at once on Android. Keep this grid
+   fully static: no hover/3D transform, transition or animated glow is allowed
+   to create transient compositor layers while the page scrolls. The card's
+   metallic artwork remains, but it is painted as a stable 2D tile. */
+[data-native-mobile-shell] [data-native-static-card-grid] *,
+[data-native-mobile-shell] [data-native-static-card-grid] *::before,
+[data-native-mobile-shell] [data-native-static-card-grid] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+[data-native-mobile-shell] [data-native-static-card-grid] .fa-card-lift,
+[data-native-mobile-shell] [data-native-static-card-grid] .starter-card-static,
+[data-native-mobile-shell] [data-native-static-card-grid] [data-card-engine],
+[data-native-mobile-shell] [data-native-static-card-grid] article {
+  transform: none !important;
+  perspective: none !important;
+  will-change: auto !important;
+}
+
+[data-native-mobile-shell] [data-native-static-card-grid] .fa-card-lift > span[aria-hidden="true"] {
+  display: none !important;
+}
+
 [data-native-mobile-shell] ::-webkit-scrollbar {
   width: 0;
   height: 0;

@@ -77,23 +77,30 @@ export default function NativeCardsPage() {
       </div>
 
       {isLoading ? (
-        <div className="mt-3 grid grid-cols-3 gap-1.5">{Array.from({ length: 9 }).map((_, index) => <div key={index} className="h-[154px] animate-pulse rounded-xl bg-white/[.035]" />)}</div>
+        <div className="mt-3 grid grid-cols-3 justify-items-center gap-x-1 gap-y-2.5">{Array.from({ length: 9 }).map((_, index) => <div key={index} className="h-[154px] w-full max-w-[104px] animate-pulse rounded-xl bg-white/[.035]" />)}</div>
       ) : filtered.length ? (
         <>
-          <div className="mt-3 grid grid-cols-3 items-start gap-1.5">
+          <div className="mt-3 grid grid-cols-3 items-start justify-items-center gap-x-1 gap-y-2.5" data-native-static-card-grid>
             {filtered.slice(0, visibleCount).map((card) => (
-              <button
+              <div
                 key={card.id}
-                type="button"
-                onClick={() => setSelected(card)}
-                className="flex min-w-0 flex-col items-center rounded-xl border border-white/[.055] bg-black/15 px-0.5 pb-1.5 pt-0.5 text-center active:scale-[.985]"
+                className="flex w-full min-w-0 justify-center rounded-xl border border-white/[.055] bg-black/15 px-1 pb-1.5 pt-1.5"
               >
-                <CardThumbnail card={card} size="xs" showMeta={false} />
-                <div className="mt-1 flex w-full min-w-0 items-center justify-between gap-1 px-1">
-                  <span className="truncate rounded-md bg-white/[.05] px-1.5 py-0.5 text-[7px] font-black uppercase text-slate-500">{String(card.player?.position || "-").toUpperCase()}</span>
-                  <span className="shrink-0 rounded-md bg-cyan-300/[.08] px-1.5 py-0.5 text-[8px] font-black text-cyan-100">{gameweekPoints(card).toFixed(2)}</span>
+                <div className="w-[96px] max-w-full" data-native-static-card>
+                  <div className="mx-auto flex w-[96px] max-w-full justify-center" onClick={() => setSelected(card)}>
+                    <CardThumbnail card={card} size="xs" showMeta={false} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(card)}
+                    className="mt-1 grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 text-left"
+                    aria-label={`Open ${card.player?.name || "player"} card details`}
+                  >
+                    <span className="min-w-0 justify-self-start truncate rounded-md bg-white/[.05] px-1.5 py-0.5 text-[7px] font-black uppercase text-slate-500">{String(card.player?.position || "-").toUpperCase()}</span>
+                    <span className="justify-self-end rounded-md bg-cyan-300/[.08] px-1.5 py-0.5 text-[8px] font-black tabular-nums text-cyan-100">{gameweekPoints(card).toFixed(2)}</span>
+                  </button>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
           {visibleCount < filtered.length ? <button onClick={() => setVisibleCount((value) => value + 12)} className="mt-3 w-full rounded-2xl border border-white/[.08] bg-white/[.03] py-3 text-xs font-black text-slate-300">Show 12 more</button> : null}
