@@ -18,6 +18,10 @@ import {
 } from "lucide-react";
 import UnreadNotificationDot from "../UnreadNotificationDot";
 import NativeAppUpdatePrompt from "./NativeAppUpdatePrompt";
+import NativeRouteBoundary from "./NativeRouteBoundary";
+import NativePlayPage from "./NativePlayPage";
+import NativeSquadPage from "./NativeSquadPage";
+import NativeCardsPage from "./NativeCardsPage";
 
 type NativeMobileShellProps = {
   children: React.ReactNode;
@@ -67,9 +71,19 @@ function routeTitle(location: string) {
   return "Fantasy Arena";
 }
 
+function compactNativePage(location: string, children: React.ReactNode, nativeFull: boolean) {
+  if (nativeFull) return children;
+  if (location.startsWith("/competitions") || location.startsWith("/free") || location.startsWith("/play-free")) return <NativePlayPage />;
+  if (location.startsWith("/live-lineup") || location.startsWith("/select-squad") || location.startsWith("/my-entries")) return <NativeSquadPage />;
+  if (location.startsWith("/collection")) return <NativeCardsPage />;
+  return children;
+}
+
 export default function NativeMobileShell({ children }: NativeMobileShellProps) {
   const [location] = useLocation();
   const [moreOpen, setMoreOpen] = React.useState(false);
+  const nativeFull = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("nativeFull") === "1";
+  const pageContent = compactNativePage(location, children, nativeFull);
 
   React.useEffect(() => {
     setMoreOpen(false);
@@ -80,6 +94,18 @@ export default function NativeMobileShell({ children }: NativeMobileShellProps) 
       className="relative flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-[#050713] text-white"
       data-native-mobile-shell
     >
+      <style>{`
+        [data-native-mobile-shell] [data-native-full-route="true"] > main {
+          min-height: 0 !important;
+          overflow: visible !important;
+          max-width: 100% !important;
+        }
+        [data-native-mobile-shell] [data-native-full-route="true"] .max-w-7xl,
+        [data-native-mobile-shell] [data-native-full-route="true"] .max-w-6xl,
+        [data-native-mobile-shell] [data-native-full-route="true"] .max-w-5xl {
+          max-width: 100% !important;
+        }
+      `}</style>
       <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,.16),transparent_42%),radial-gradient(circle_at_90%_10%,rgba(139,92,246,.22),transparent_46%)]" />
 
       <header className="relative z-40 flex shrink-0 items-center justify-between border-b border-white/[.07] bg-[#070a18]/90 px-4 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] backdrop-blur-2xl">
@@ -108,7 +134,9 @@ export default function NativeMobileShell({ children }: NativeMobileShellProps) 
         className="relative z-10 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[calc(env(safe-area-inset-bottom,0px)+6.5rem)]"
         data-app-scroll-root
       >
-        <div className="min-w-0" data-page-scroll-content>{children}</div>
+        <NativeRouteBoundary key={`${location}:${nativeFull ? "full" : "compact"}`} routeKey={location}>
+          <div className="min-w-0" data-page-scroll-content data-native-full-route={nativeFull ? "true" : "false"}>{pageContent}</div>
+        </NativeRouteBoundary>
       </main>
 
       <nav
