@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { BellRing, ChevronRight, Gem, Goal, ShoppingBag, Sparkles, Trophy, UsersRound, WalletCards } from "lucide-react";
+import { BellRing, ChevronRight, Crown, Gem, ShoppingBag, Sparkles, Trophy, UsersRound, WalletCards } from "lucide-react";
 import { useAuth } from "../../hooks/use-auth";
 import type { Competition, CompetitionEntry, PlayerCardWithPlayer, Wallet } from "../../../../shared/schema";
 
@@ -40,41 +40,64 @@ export default function NativeHomePage() {
   })[0];
   const latest = notifications?.notifications?.find((row: any) => !row.read) || notifications?.notifications?.[0];
   const lineupScore = lineupCards.reduce((sum, card: any) => sum + Number(card.currentGameweekPoints ?? card.player?.currentGameweekPoints ?? 0), 0);
+  const readiness = Math.round(([cards.length >= 5, lineupCards.length === 5, activeEntries.length > 0].filter(Boolean).length / 3) * 100);
 
   const next = cards.length < 5
     ? { title: "Build your first five", body: "You need five eligible cards before you can enter a cup.", href: "/collection", cta: "My cards" }
     : activeEntries.length === 0
-      ? { title: "Enter a tournament", body: "Choose a cup and lock in GK, DEF, MID, FWD and Utility.", href: "/competitions", cta: "Play" }
+      ? { title: "Enter a tournament", body: "Choose a cup and lock in GK, DEF, MID, FWD and Utility.", href: "/competitions", cta: "Play now" }
       : lineupCards.length < 5
         ? { title: "Review your squad", body: "Make sure your five-card matchday squad is complete.", href: "/live-lineup", cta: "Squad" }
         : { title: "You are matchday ready", body: "Follow your active entry and real Premier League scoring.", href: "/live-lineup", cta: "Live squad" };
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-home-v2>
-      <section className="overflow-hidden rounded-[1.6rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_90%_0%,rgba(139,92,246,.2),transparent_34%),radial-gradient(circle_at_0%_100%,rgba(34,211,238,.11),transparent_38%),linear-gradient(145deg,#0d1427,#080a17)] p-4">
-        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200/70">Matchday HQ</p><h2 className="mt-1 truncate text-2xl font-black">{(user as any)?.managerTeamName || "My Fantasy Arena"}</h2><p className="mt-1 text-xs leading-5 text-slate-400">One screen for the things that matter before kickoff.</p></div><div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-white/8 bg-white/[.045] text-cyan-200"><Goal className="h-6 w-6" /></div></div>
-        <Link href={next.href}><button className="mt-4 flex w-full items-center gap-3 rounded-2xl border border-violet-300/15 bg-violet-300/[.07] p-3 text-left"><div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-[.15em] text-violet-200/65">Your next move</p><p className="mt-1 text-base font-black">{next.title}</p><p className="mt-1 text-[11px] leading-4 text-slate-500">{next.body}</p></div><span className="shrink-0 rounded-xl bg-white px-3 py-2 text-[10px] font-black text-slate-950">{next.cta}</span></button></Link>
+      <section className="relative overflow-hidden rounded-[1.7rem] border p-4">
+        <div className="pointer-events-none absolute -right-10 -top-16 h-44 w-44 rounded-full bg-fuchsia-500/15 blur-3xl" />
+        <div className="pointer-events-none absolute -left-8 bottom-[-4rem] h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="relative flex items-start gap-3">
+          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-[1.15rem] border border-fuchsia-300/20 bg-gradient-to-br from-fuchsia-400/15 via-violet-500/10 to-cyan-300/10 shadow-[0_0_26px_rgba(157,74,255,.16)]">
+            <Crown className="h-7 w-7 text-fuchsia-100 drop-shadow-[0_0_8px_rgba(192,76,255,.45)]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-black uppercase tracking-[.23em] text-fuchsia-200/70">Arena command deck</p>
+            <h2 className="mt-1 truncate text-[22px] font-black tracking-tight">{(user as any)?.managerTeamName || "My Fantasy Arena"}</h2>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="rounded-full border border-cyan-300/15 bg-cyan-300/[.055] px-2 py-1 text-[8px] font-black text-cyan-100">{readiness}% READY</span>
+              <span className="text-[9px] font-bold text-slate-500">{openCups.length} cups open</span>
+            </div>
+          </div>
+        </div>
+
+        <Link href={next.href}>
+          <button className="relative mt-4 flex w-full items-center gap-3 overflow-hidden rounded-2xl border border-fuchsia-300/20 bg-gradient-to-r from-fuchsia-500/[.14] via-violet-500/[.11] to-cyan-400/[.1] p-3 text-left shadow-[inset_0_0_24px_rgba(139,92,246,.05)]">
+            <div className="min-w-0 flex-1">
+              <p className="text-[8px] font-black uppercase tracking-[.18em] text-cyan-200/60">Next move</p>
+              <p className="mt-1 text-[15px] font-black text-white">{next.title}</p>
+              <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-400">{next.body}</p>
+            </div>
+            <span className="shrink-0 rounded-xl bg-gradient-to-r from-fuchsia-400 to-cyan-300 px-3 py-2 text-[9px] font-black text-slate-950 shadow-[0_0_18px_rgba(75,198,255,.18)]">{next.cta}</span>
+          </button>
+        </Link>
       </section>
 
       <section className="mt-3 grid grid-cols-3 gap-2">
-        <Link href="/wallet"><div className="rounded-2xl border border-white/[.07] bg-white/[.03] p-3"><WalletCards className="h-4 w-4 text-emerald-200" /><p className="mt-2 text-[9px] font-black uppercase text-slate-600">Wallet</p><p className="mt-1 truncate text-sm font-black">{money((wallet as any)?.balance)}</p></div></Link>
-        <Link href="/collection"><div className="rounded-2xl border border-white/[.07] bg-white/[.03] p-3"><Gem className="h-4 w-4 text-violet-200" /><p className="mt-2 text-[9px] font-black uppercase text-slate-600">Cards</p><p className="mt-1 text-sm font-black">{cards.length}</p></div></Link>
-        <Link href="/live-lineup"><div className="rounded-2xl border border-white/[.07] bg-white/[.03] p-3"><UsersRound className="h-4 w-4 text-cyan-200" /><p className="mt-2 text-[9px] font-black uppercase text-slate-600">Squad</p><p className="mt-1 text-sm font-black">{lineupCards.length}/5</p></div></Link>
+        <Link href="/wallet"><div className="rounded-2xl border border-emerald-300/10 bg-gradient-to-br from-emerald-300/[.07] to-transparent p-3"><WalletCards className="h-4 w-4 text-emerald-200" /><p className="mt-2 text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Wallet</p><p className="mt-1 truncate text-[13px] font-black">{money((wallet as any)?.balance)}</p></div></Link>
+        <Link href="/collection"><div className="rounded-2xl border border-fuchsia-300/10 bg-gradient-to-br from-fuchsia-300/[.07] to-transparent p-3"><Gem className="h-4 w-4 text-fuchsia-200" /><p className="mt-2 text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Cards</p><p className="mt-1 text-[13px] font-black">{cards.length}</p></div></Link>
+        <Link href="/live-lineup"><div className="rounded-2xl border border-cyan-300/10 bg-gradient-to-br from-cyan-300/[.07] to-transparent p-3"><UsersRound className="h-4 w-4 text-cyan-200" /><p className="mt-2 text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Squad</p><p className="mt-1 text-[13px] font-black">{lineupCards.length}/5</p></div></Link>
       </section>
 
       <section className="mt-3 grid grid-cols-3 gap-2">
-        <Link href="/competitions"><div className="flex min-h-20 flex-col justify-between rounded-2xl border border-cyan-300/10 bg-cyan-300/[.04] p-3"><Trophy className="h-5 w-5 text-cyan-200" /><div><p className="text-xs font-black">Play</p><p className="mt-0.5 text-[9px] text-slate-600">{openCups.length} open cups</p></div></div></Link>
-        <Link href="/marketplace"><div className="flex min-h-20 flex-col justify-between rounded-2xl border border-emerald-300/10 bg-emerald-300/[.035] p-3"><ShoppingBag className="h-5 w-5 text-emerald-200" /><div><p className="text-xs font-black">Market</p><p className="mt-0.5 text-[9px] text-slate-600">Buy a card</p></div></div></Link>
-        <Link href="/prize-vault"><div className="flex min-h-20 flex-col justify-between rounded-2xl border border-violet-300/10 bg-violet-300/[.04] p-3"><Sparkles className="h-5 w-5 text-violet-200" /><div><p className="text-xs font-black">Vault</p><p className="mt-0.5 text-[9px] text-slate-600">Prize chase</p></div></div></Link>
+        <Link href="/competitions"><div className="flex min-h-[78px] flex-col justify-between rounded-2xl border border-cyan-300/15 bg-gradient-to-br from-cyan-400/[.12] via-blue-500/[.06] to-transparent p-3 shadow-[inset_0_0_18px_rgba(34,211,238,.035)]"><Trophy className="h-[18px] w-[18px] text-cyan-100" /><div><p className="text-[11px] font-black">ENTER ARENA</p><p className="mt-0.5 text-[8px] text-cyan-100/45">{openCups.length} cups</p></div></div></Link>
+        <Link href="/marketplace"><div className="flex min-h-[78px] flex-col justify-between rounded-2xl border border-emerald-300/15 bg-gradient-to-br from-emerald-400/[.11] via-cyan-500/[.04] to-transparent p-3"><ShoppingBag className="h-[18px] w-[18px] text-emerald-100" /><div><p className="text-[11px] font-black">MARKET</p><p className="mt-0.5 text-[8px] text-emerald-100/45">Find cards</p></div></div></Link>
+        <Link href="/prize-vault"><div className="flex min-h-[78px] flex-col justify-between rounded-2xl border border-fuchsia-300/15 bg-gradient-to-br from-fuchsia-400/[.13] via-violet-500/[.07] to-transparent p-3"><Sparkles className="h-[18px] w-[18px] text-fuchsia-100" /><div><p className="text-[11px] font-black">VAULT</p><p className="mt-0.5 text-[8px] text-fuchsia-100/45">Prize chase</p></div></div></Link>
       </section>
 
-      {featured ? <section className="mt-3 rounded-[1.45rem] border border-emerald-300/12 bg-emerald-300/[.04] p-4"><div className="flex items-center justify-between gap-2"><div><p className="text-[9px] font-black uppercase tracking-[.15em] text-emerald-200/65">Featured cup</p><h3 className="mt-1 truncate text-base font-black">{featured.name || "Fantasy Arena tournament"}</h3></div><span className="rounded-full border border-white/8 px-2.5 py-1 text-[9px] font-black">GW{Number(featured.gameWeek || (featured as any).game_week || 0)}</span></div><div className="mt-3 flex items-end justify-between gap-3"><div><p className="text-[10px] text-slate-600">Entry</p><p className="mt-0.5 text-sm font-black text-emerald-200">{Number(featured.entryFee || 0) <= 0 ? "FREE" : money(featured.entryFee)}</p></div><div className="text-right"><p className="text-[10px] text-slate-600">Closes</p><p className="mt-0.5 text-[11px] font-black">{deadline(featured.submissionClosesAt || (featured as any).submission_closes_at)}</p></div></div><Link href="/competitions"><button className="mt-3 flex w-full items-center justify-between rounded-xl bg-white/[.07] px-3 py-2.5 text-xs font-black"><span>View this cup</span><ChevronRight className="h-4 w-4 text-emerald-200" /></button></Link></section> : null}
+      {featured ? <section className="mt-3 rounded-[1.45rem] border p-3.5"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-[8px] font-black uppercase tracking-[.17em] text-emerald-200/60">Featured cup</p><h3 className="mt-1 truncate text-[15px] font-black">{featured.name || "Fantasy Arena tournament"}</h3></div><span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[8px] font-black">GW{Number(featured.gameWeek || (featured as any).game_week || 0)}</span></div><div className="mt-3 grid grid-cols-[1fr_1fr_auto] items-end gap-2"><div><p className="text-[8px] text-slate-600">ENTRY</p><p className="mt-0.5 text-[12px] font-black text-emerald-200">{Number(featured.entryFee || 0) <= 0 ? "FREE" : money(featured.entryFee)}</p></div><div><p className="text-[8px] text-slate-600">CLOSES</p><p className="mt-0.5 text-[10px] font-black">{deadline(featured.submissionClosesAt || (featured as any).submission_closes_at)}</p></div><Link href="/competitions"><button className="grid h-9 w-9 place-items-center rounded-xl border border-cyan-300/15 bg-cyan-300/[.08]"><ChevronRight className="h-4 w-4 text-cyan-100" /></button></Link></div></section> : null}
 
-      <section className="mt-3 grid grid-cols-2 gap-2"><div className="rounded-2xl border border-white/[.07] bg-white/[.03] p-3"><p className="text-[9px] font-black uppercase text-slate-600">Active entries</p><p className="mt-1 text-xl font-black">{activeEntries.length}</p><p className="mt-1 text-[10px] text-slate-600">Tournament teams locked</p></div><div className="rounded-2xl border border-white/[.07] bg-white/[.03] p-3"><p className="text-[9px] font-black uppercase text-slate-600">Squad score</p><p className="mt-1 text-xl font-black text-cyan-200">{lineupScore.toFixed(2)}</p><p className="mt-1 text-[10px] text-slate-600">Current Arena points</p></div></section>
+      <section className="mt-3 grid grid-cols-2 gap-2"><Link href="/live-lineup"><div className="rounded-2xl border border-white/[.07] bg-white/[.03] p-3"><p className="text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Active entries</p><div className="mt-1 flex items-end justify-between"><p className="text-xl font-black">{activeEntries.length}</p><span className="text-[8px] text-slate-600">View squad</span></div></div></Link><Link href="/live-lineup"><div className="rounded-2xl border border-cyan-300/10 bg-cyan-300/[.035] p-3"><p className="text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Squad score</p><div className="mt-1 flex items-end justify-between"><p className="text-xl font-black text-cyan-100">{lineupScore.toFixed(2)}</p><span className="text-[8px] text-cyan-100/40">Arena pts</span></div></div></Link></section>
 
-      {latest ? <Link href="/account?tab=inbox"><div className="mt-3 flex items-center gap-3 rounded-2xl border border-sky-300/10 bg-sky-300/[.035] p-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-sky-300/10 text-sky-200"><BellRing className="h-4 w-4" /></div><div className="min-w-0 flex-1"><p className="truncate text-xs font-black">{latest.title || "Fantasy Arena update"}</p><p className="mt-0.5 line-clamp-1 text-[10px] text-slate-600">{latest.message || "Open your inbox for the latest update."}</p></div><ChevronRight className="h-4 w-4 text-slate-600" /></div></Link> : null}
-
-      <section className="mt-3 rounded-2xl border border-white/[.06] bg-black/20 p-3"><p className="text-[9px] font-black uppercase tracking-[.14em] text-slate-600">The game in 10 seconds</p><div className="mt-2 grid grid-cols-3 gap-2 text-center"><div className="rounded-xl bg-white/[.035] p-2"><p className="text-sm font-black text-violet-200">1</p><p className="mt-1 text-[9px] leading-3 text-slate-500">Own cards</p></div><div className="rounded-xl bg-white/[.035] p-2"><p className="text-sm font-black text-cyan-200">2</p><p className="mt-1 text-[9px] leading-3 text-slate-500">Enter five</p></div><div className="rounded-xl bg-white/[.035] p-2"><p className="text-sm font-black text-emerald-200">3</p><p className="mt-1 text-[9px] leading-3 text-slate-500">Real EPL scores</p></div></div></section>
+      {latest ? <Link href="/account?tab=inbox"><div className="mt-3 flex items-center gap-3 rounded-2xl border border-violet-300/10 bg-gradient-to-r from-violet-300/[.055] to-cyan-300/[.025] p-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-fuchsia-400/15 to-cyan-300/10 text-cyan-100"><BellRing className="h-4 w-4" /></div><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-black">{latest.title || "Fantasy Arena update"}</p><p className="mt-0.5 line-clamp-1 text-[9px] text-slate-600">{latest.message || "Open your inbox for the latest update."}</p></div><ChevronRight className="h-4 w-4 text-slate-700" /></div></Link> : null}
     </div>
   );
 }
