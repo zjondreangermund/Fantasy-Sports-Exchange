@@ -5,7 +5,7 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
-function rows(value: unknown): any[] {
+function asArray(value: unknown): any[] {
   return Array.isArray(value) ? value : [];
 }
 
@@ -29,9 +29,9 @@ export default function AdminReferralPanel({ onOpenUser, onOpenCard }: { onOpenU
 
   const data = query.data || {};
   const summary = data.summary || {};
-  const referrals = rows(data.referrals);
-  const topReferrers = rows(data.topReferrers);
-  const recentAudit = rows(data.recentAudit);
+  const referrals = asArray(data.referrals);
+  const topReferrers = asArray(data.topReferrers);
+  const recentAudit = asArray(data.recentAudit);
   const problemRows = useMemo(() => referrals.filter((row) => !row.healthy), [referrals]);
 
   const applySearch = () => setSearch(searchInput.trim());
@@ -49,7 +49,7 @@ export default function AdminReferralPanel({ onOpenUser, onOpenCard }: { onOpenU
 
     <div className={`rounded-2xl border p-4 ${summary.healthy ? "border-emerald-300/20 bg-emerald-300/10" : "border-amber-300/25 bg-amber-300/10"}`}>
       <div className="flex items-start gap-3">{summary.healthy ? <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-200" /> : <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-200" />}<div><div className="font-black">{summary.healthy ? "Referral system healthy" : "Referral system needs attention"}</div><div className="mt-1 text-xs text-white/60">Schema {summary.schemaHealthy ? "OK" : "missing fields"} • {Number(summary.unhealthyRows || 0)} broken attribution row(s) • checked {dateTime(data.checkedAt)}</div></div></div>
-      {rows(data.missingSchema).length ? <div className="mt-3 text-xs text-amber-100">Missing schema: {rows(data.missingSchema).join(", ")}</div> : null}
+      {asArray(data.missingSchema).length ? <div className="mt-3 text-xs text-amber-100">Missing schema: {asArray(data.missingSchema).join(", ")}</div> : null}
     </div>
 
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
@@ -91,7 +91,7 @@ export default function AdminReferralPanel({ onOpenUser, onOpenCard }: { onOpenU
               <div className="rounded-xl border border-white/10 bg-black/20 p-3"><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/30">Reward card</div>{row.rewardCardId ? <button type="button" onClick={() => onOpenCard?.(String(row.rewardCardId))} className="mt-1 text-left font-black text-cyan-200 hover:underline">#{row.rewardCardId}</button> : <div className="mt-1 font-black text-white/60">None</div>}<div className="mt-1 truncate text-xs text-white/45">{row.rewardSerialId || "No serial"}</div></div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-3"><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/30">Reward player</div><div className="mt-1 truncate font-black">{row.rewardPlayerName || "—"}</div><div className="mt-1 truncate text-xs text-white/45">{row.rewardPlayerTeam || "—"} • {row.rewardPlayerPosition || "—"}</div></div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-3"><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/30">Reward owner</div><div className="mt-1 break-all text-xs text-white/70">{row.rewardOwnerId || "—"}</div></div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-3"><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/30">Link health</div><div className={`mt-1 text-xs font-bold ${row.healthy ? "text-emerald-200" : "text-amber-100"}`}>{row.healthy ? "Code, users and reward ownership match" : rows(row.issues).join(" • ")}</div></div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3"><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/30">Link health</div><div className={`mt-1 text-xs font-bold ${row.healthy ? "text-emerald-200" : "text-amber-100"}`}>{row.healthy ? "Code, users and reward ownership match" : asArray(row.issues).join(" • ")}</div></div>
             </div>
           </div>)}
         </div>
