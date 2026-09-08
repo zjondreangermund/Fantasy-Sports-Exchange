@@ -6,12 +6,17 @@ const DESKTOP_VIEWPORT_WIDTH = 1280;
 const DESKTOP_VIEWPORT = `width=${DESKTOP_VIEWPORT_WIDTH}, viewport-fit=cover, user-scalable=yes`;
 const MOBILE_VIEWPORT = "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=yes";
 
-export function isInstalledMobileApp(): boolean {
+export function isNativeMobileApp(): boolean {
   if (typeof window === "undefined") return false;
   const capacitor = (window as any).Capacitor;
-  const native = typeof capacitor?.isNativePlatform === "function"
+  return typeof capacitor?.isNativePlatform === "function"
     ? Boolean(capacitor.isNativePlatform())
     : Boolean(capacitor && capacitor.getPlatform?.() !== "web");
+}
+
+export function isInstalledMobileApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const native = isNativeMobileApp();
   const standalone = window.matchMedia?.("(display-mode: standalone)").matches
     || Boolean((window.navigator as any).standalone);
   return native || standalone;
@@ -43,9 +48,8 @@ function persistSiteViewMode(mode: SiteViewMode) {
   if (typeof window === "undefined") return;
   try {
     if (isInstalledMobileApp()) {
-      // The installed app is desktop-first on every fresh app session. A manager
-      // may still switch to Mobile view for the current session without making
-      // Mobile the default the next time the app is launched.
+      // Standalone web installs may keep a session-scoped override. The native
+      // Fantasy Arena APK has its own mobile shell and does not expose this toggle.
       window.sessionStorage.setItem(APP_SESSION_VIEW_STORAGE_KEY, mode);
     } else {
       window.localStorage.setItem(SITE_VIEW_STORAGE_KEY, mode);
@@ -70,47 +74,47 @@ function clearQueryViewOverride() {
 
 export function getSiteViewMode(): SiteViewMode {
   if (typeof window === "undefined") return "mobile";
+
+  // The native APK is a dedicated phone experience. Force a device-width
+  // viewport before React paints so stale web/PWA desktop preferences can never
+  // squeeze the native interface into a 1280px desktop canvas.
+  if (isNativeMobileApp()) return "mobile";
+
   const queryMode = querySiteViewMode();
   if (queryMode) return queryMode;
 
   const stored = storedSiteViewMode();
   if (stored) return stored;
 
-  // Installed Android/iOS/PWA starts in the same full desktop layout as the PC
-  // website on every fresh app session. Ordinary mobile browsers stay mobile
-  // unless Desktop view is explicitly chosen and saved.
+  // Keep the existing standalone PWA behavior unchanged. Ordinary browsers
+  // remain mobile unless Desktop view is explicitly chosen and saved.
   if (isInstalledMobileApp()) return "desktop";
   return "mobile";
 }
 
 export function applySiteView(mode: SiteViewMode): SiteViewMode {
   if (typeof document === "undefined") return mode;
+  const effectiveMode: SiteViewMode = isNativeMobileApp() ? "mobile" : mode;
   const previousMode = document.documentElement.dataset.siteView as SiteViewMode | undefined;
-  const isInteractiveSwitch = Boolean(previousMode && previousMode !== mode);
+  const isInteractiveSwitch = Boolean(previousMode && previousMode !== effectiveMode);
   const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
   if (viewport) {
-    // Never force a fractional initial-scale for desktop mode. Android WebView
-    // and mobile Chromium render more sharply when they select the overview
-    // scale for the fixed 1280px layout viewport, matching Desktop site mode.
-    // user-scalable remains enabled so a zoomed app can still pan around.
-    viewport.setAttribute("content", mode === "desktop" ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT);
+    // Never force a fractional initial-scale for desktop mode. Mobile Chromium
+    // can choose the overview scale for the fixed 1280px web/PWA desktop view.
+    viewport.setAttribute("content", effectiveMode === "desktop" ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT);
   }
 
-  document.documentElement.dataset.siteView = mode;
-  persistSiteViewMode(mode);
-  window.dispatchEvent(new CustomEvent<SiteViewMode>("fantasy-arena:site-view", { detail: mode }));
+  document.documentElement.dataset.siteView = effectiveMode;
+  persistSiteViewMode(effectiveMode);
+  window.dispatchEvent(new CustomEvent<SiteViewMode>("fantasy-arena:site-view", { detail: effectiveMode }));
 
   if (isInteractiveSwitch) {
-    // A ?view= query used to win over the saved button choice, and dynamic
-    // viewport replacement is unreliable in Android WebView. Remove the stale
-    // override and reload so both Desktop -> Mobile and Mobile -> Desktop are
-    // deterministic and the new viewport exists before React paints.
     clearQueryViewOverride();
     window.setTimeout(() => window.location.reload(), 0);
   } else {
     window.setTimeout(() => window.dispatchEvent(new Event("resize")), 50);
   }
-  return mode;
+  return effectiveMode;
 }
 
 export function initializeSiteView(): SiteViewMode {
