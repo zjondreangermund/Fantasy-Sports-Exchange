@@ -8,12 +8,12 @@ import type { CompetitionEntry, PlayerCardWithPlayer } from "../../../../shared/
 type Tournament = any;
 type RarityKey = "common" | "rare" | "unique" | "epic" | "legendary";
 
-const rarityTone: Record<RarityKey, { text: string; border: string; soft: string; glow: string }> = {
-  common: { text: "text-slate-100", border: "border-slate-200/25", soft: "bg-slate-200/[.055]", glow: "shadow-[0_0_18px_rgba(226,232,240,.08)]" },
-  rare: { text: "text-sky-200", border: "border-sky-300/30", soft: "bg-sky-400/[.065]", glow: "shadow-[0_0_20px_rgba(56,189,248,.12)]" },
-  unique: { text: "text-violet-200", border: "border-violet-300/30", soft: "bg-violet-400/[.07]", glow: "shadow-[0_0_20px_rgba(168,85,247,.13)]" },
-  epic: { text: "text-rose-200", border: "border-rose-300/30", soft: "bg-rose-400/[.065]", glow: "shadow-[0_0_20px_rgba(244,63,94,.12)]" },
-  legendary: { text: "text-amber-200", border: "border-amber-300/35", soft: "bg-amber-300/[.07]", glow: "shadow-[0_0_22px_rgba(251,191,36,.13)]" },
+const rarityTone: Record<RarityKey, { text: string; border: string; soft: string; glow: string; bar: string }> = {
+  common: { text: "text-slate-100", border: "border-slate-200/25", soft: "bg-slate-200/[.055]", glow: "shadow-[0_0_18px_rgba(226,232,240,.08)]", bar: "bg-slate-100" },
+  rare: { text: "text-sky-200", border: "border-sky-300/30", soft: "bg-sky-400/[.065]", glow: "shadow-[0_0_20px_rgba(56,189,248,.12)]", bar: "bg-sky-300" },
+  unique: { text: "text-violet-200", border: "border-violet-300/30", soft: "bg-violet-400/[.07]", glow: "shadow-[0_0_20px_rgba(168,85,247,.13)]", bar: "bg-violet-300" },
+  epic: { text: "text-rose-200", border: "border-rose-300/30", soft: "bg-rose-400/[.065]", glow: "shadow-[0_0_20px_rgba(244,63,94,.12)]", bar: "bg-rose-300" },
+  legendary: { text: "text-amber-200", border: "border-amber-300/35", soft: "bg-amber-300/[.07]", glow: "shadow-[0_0_22px_rgba(251,191,36,.13)]", bar: "bg-amber-300" },
 };
 
 function listFrom<T>(value: unknown, keys: string[] = []): T[] {
@@ -100,7 +100,7 @@ export default function NativeSquadPage() {
         <div className="mb-3 flex items-center gap-2"><Trophy className="h-4 w-4 text-amber-300" /><h3 className="text-sm font-black">My active entries</h3></div>
         {activeEntries.length ? <div className="space-y-2">{activeEntries.map(({ entry, competition }) => {
           const tone = toneFor(competition.tier);
-          return <div key={(entry as any).id} className={`relative flex items-center gap-3 overflow-hidden rounded-2xl border ${tone.border} ${tone.soft} p-3 ${tone.glow}`}><span className={`absolute inset-y-3 left-0 w-0.5 rounded-full ${tone.text.replace("text-", "bg-")}`} /><div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${tone.border} ${tone.soft} ${tone.text}`}><Trophy className="h-4 w-4" /></div><div className="min-w-0 flex-1"><p className="truncate text-xs font-black">{competition.name}</p><p className={`mt-0.5 text-[9px] font-black uppercase tracking-[.1em] ${tone.text}`}>GW{competition.gameWeek || competition.game_week || "-"} · {String(competition.tier || "common").toUpperCase()}</p></div><span className="rounded-full bg-emerald-300/10 px-2 py-1 text-[9px] font-black text-emerald-200">LIVE</span></div>;
+          return <div key={(entry as any).id} className={`relative flex items-center gap-3 overflow-hidden rounded-2xl border ${tone.border} ${tone.soft} p-3 ${tone.glow}`}><span className={`absolute inset-y-3 left-0 w-0.5 rounded-full ${tone.bar}`} /><div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${tone.border} ${tone.soft} ${tone.text}`}><Trophy className="h-4 w-4" /></div><div className="min-w-0 flex-1"><p className="truncate text-xs font-black">{competition.name}</p><p className={`mt-0.5 text-[9px] font-black uppercase tracking-[.1em] ${tone.text}`}>GW{competition.gameWeek || competition.game_week || "-"} · {String(competition.tier || "common").toUpperCase()}</p></div><span className="rounded-full bg-emerald-300/10 px-2 py-1 text-[9px] font-black text-emerald-200">LIVE</span></div>;
         })}</div> : <p className="rounded-2xl border border-dashed border-white/[.07] p-4 text-center text-xs text-slate-500">No live entries yet.</p>}
         <Link href="/competitions" className="mt-3 flex items-center justify-between rounded-2xl bg-violet-300/[.06] px-3.5 py-3 text-xs font-black text-violet-100"><span>Enter another tournament</span><ChevronRight className="h-4 w-4" /></Link>
       </section>
