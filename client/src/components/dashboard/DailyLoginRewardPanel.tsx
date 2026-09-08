@@ -5,6 +5,7 @@ import { apiRequest, queryClient } from "../../lib/queryClient";
 import { useToast } from "../../hooks/use-toast";
 import { Badge } from "../ui/badge";
 import { PremiumPanel } from "../premium";
+import CardPlayerImage from "../CardPlayerImage";
 
 type DailyRewardCard = {
   id: number;
@@ -123,8 +124,8 @@ export default function DailyLoginRewardPanel() {
     <PremiumPanel>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-sky-300/20 bg-sky-300/10 text-sky-200">
-            {player?.imageUrl ? <img src={player.imageUrl} alt={player.name} className="h-full w-full object-contain object-top" /> : <Gift className="h-7 w-7" />}
+          <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-sky-300/20 bg-sky-300/10 text-sky-200">
+            {status.card && player ? <CardPlayerImage card={status.card as any} alt={player.name} className="h-full w-full object-contain object-top" /> : <Gift className="h-7 w-7" />}
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
