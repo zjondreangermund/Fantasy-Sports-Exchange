@@ -4,9 +4,15 @@ import { appSchema, playerCards, users } from "./schema.ts";
 // Keep the runtime referral tables visible to drizzle-kit. Referral routes also
 // converge older production shapes at runtime, but db:push must never treat
 // these durable attribution tables as orphaned objects that can be deleted.
+//
+// Do not declare `code` unique here. Older production data predates this Drizzle
+// schema and drizzle-kit may propose truncating the durable referral-code table
+// when adding a generated unique constraint. Runtime schema convergence checks
+// normalized duplicates first and creates the safe case-insensitive unique
+// index only when the existing data proves it is safe to do so.
 export const referralCodes = appSchema.table("referral_codes", {
   userId: varchar("user_id", { length: 255 }).primaryKey().references(() => users.id, { onDelete: "cascade" }),
-  code: text("code").notNull().unique(),
+  code: text("code").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

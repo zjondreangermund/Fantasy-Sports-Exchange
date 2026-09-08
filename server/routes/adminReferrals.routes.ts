@@ -50,6 +50,28 @@ export function registerAdminReferralRoutes(app: Express, deps: { requireAuth: a
         from app.referrals
       `))[0] || {};
 
+      const codeSummaryRow = rowsOf(await db.execute(sql`
+        select
+          count(*)::int as "totalCodes",
+          count(distinct user_id)::int as "codeOwners",
+          count(distinct upper(btrim(code)))::int as "distinctCodes",
+          count(*) filter (where nullif(btrim(code), '') is null)::int as "blankCodes",
+          count(*) filter (where exists (
+            select 1 from app.referrals r
+            where upper(btrim(coalesce(r.referral_code, ''))) = upper(btrim(referral_codes.code))
+          ))::int as "usedCodes"
+        from app.referral_codes
+      `))[0] || {};
+
+      const claimSummaryRow = rowsOf(await db.execute(sql`
+        select
+          count(*) filter (where action='referral.claim.success')::int as "claimSuccess",
+          count(*) filter (where action='referral.claim.duplicate')::int as "claimDuplicate",
+          count(*) filter (where action='referral.claim.rejected')::int as "claimRejected",
+          count(*) filter (where action='referral.claim.failed')::int as "claimFailed"
+        from app.audit_logs
+      `))[0] || {};
+
       const rawRows = rowsOf(await db.execute(sql`
         select
           r.id,
@@ -110,6 +132,34 @@ export function registerAdminReferralRoutes(app: Express, deps: { requireAuth: a
         return haystack.includes(search);
       });
 
+      const referralCodes = rowsOf(await db.execute(sql`
+        select
+          rc.user_id as "ownerUserId",
+          coalesce(u.manager_team_name, u.name, u.email, rc.user_id) as "ownerName",
+          u.email as "ownerEmail",
+          rc.code,
+          rc.created_at as "createdAt",
+          count(r.id)::int as "confirmedReferrals",
+          count(r.id) filter (where r.reward_card_id is not null)::int as "rewardsGranted",
+          max(r.created_at) as "lastReferralAt"
+        from app.referral_codes rc
+        left join app.users u on u.id=rc.user_id
+        left join app.referrals r
+          on upper(btrim(coalesce(r.referral_code, ''))) = upper(btrim(rc.code))
+        group by rc.user_id, u.manager_team_name, u.name, u.email, rc.code, rc.created_at
+        order by "confirmedReferrals" desc, "lastReferralAt" desc nulls last, rc.created_at desc nulls last
+        limit 500
+      `)).map((row: any) => ({
+        ...row,
+        used: num(row.confirmedReferrals) > 0,
+      })).filter((row: any) => {
+        if (!search) return true;
+        return [row.ownerUserId, row.ownerName, row.ownerEmail, row.code, row.confirmedReferrals]
+          .map((value) => String(value || "").toLowerCase())
+          .join(" ")
+          .includes(search);
+      });
+
       const topReferrers = rowsOf(await db.execute(sql`
         select
           r.referrer_user_id as "userId",
@@ -144,6 +194,11 @@ export function registerAdminReferralRoutes(app: Express, deps: { requireAuth: a
       `));
 
       const unhealthyRows = referrals.filter((row: any) => !row.healthy);
+      const totalCodes = num(codeSummaryRow.totalCodes);
+      const distinctCodes = num(codeSummaryRow.distinctCodes);
+      const duplicateCodeRows = Math.max(0, totalCodes - distinctCodes);
+      const usedCodes = num(codeSummaryRow.usedCodes);
+      const unusedCodes = Math.max(0, totalCodes - usedCodes);
       const summary = {
         totalReferrals: num(summaryRow.totalReferrals),
         rewardedReferrals: num(summaryRow.rewardedReferrals),
@@ -151,15 +206,27 @@ export function registerAdminReferralRoutes(app: Express, deps: { requireAuth: a
         uniqueReferrers: num(summaryRow.uniqueReferrers),
         last24h: num(summaryRow.last24h),
         last7d: num(summaryRow.last7d),
+        totalCodes,
+        codeOwners: num(codeSummaryRow.codeOwners),
+        distinctCodes,
+        usedCodes,
+        unusedCodes,
+        duplicateCodeRows,
+        blankCodes: num(codeSummaryRow.blankCodes),
+        claimSuccess: num(claimSummaryRow.claimSuccess),
+        claimDuplicate: num(claimSummaryRow.claimDuplicate),
+        claimRejected: num(claimSummaryRow.claimRejected),
+        claimFailed: num(claimSummaryRow.claimFailed),
         unhealthyRows: unhealthyRows.length,
         schemaHealthy: missingSchema.length === 0,
-        healthy: missingSchema.length === 0 && unhealthyRows.length === 0,
+        healthy: missingSchema.length === 0 && unhealthyRows.length === 0 && duplicateCodeRows === 0 && num(codeSummaryRow.blankCodes) === 0,
       };
 
       return res.json({
         summary,
         missingSchema,
         referrals,
+        referralCodes,
         topReferrers,
         recentAudit,
         checkedAt: new Date().toISOString(),
