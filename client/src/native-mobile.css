@@ -61,14 +61,16 @@
    than children of the scrolling page. Removing the page stacking context lets
    their own z-index sit above the bottom dock. Any long sheet gets independent
    touch scrolling so its final CTA can always be reached on smaller phones. */
-[data-native-mobile-shell] [role="dialog"][class*="fixed"][class*="inset-0"] {
+[data-native-mobile-shell] [role="dialog"][class*="fixed"][class*="inset-0"],
+[data-native-mobile-shell] [data-native-market] > [class*="fixed"][class*="inset-0"] {
   overflow-y: auto !important;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
 }
 
-[data-native-mobile-shell] [role="dialog"][class*="fixed"][class*="inset-0"] > section {
+[data-native-mobile-shell] [role="dialog"][class*="fixed"][class*="inset-0"] > section,
+[data-native-mobile-shell] [data-native-market] > [class*="fixed"][class*="inset-0"] > section {
   max-height: calc(100dvh - env(safe-area-inset-top, 0px)) !important;
   overflow-y: auto !important;
   overscroll-behavior-y: contain;
@@ -80,7 +82,8 @@
 /* When a modal/sub-screen is open the persistent dock should not compete with
    the action sheet or cover its purchase/submit controls. Chrome WebView on the
    supported Android builds includes :has(). */
-[data-native-mobile-shell]:has([role="dialog"]) .arena-bottom-dock {
+[data-native-mobile-shell]:has([role="dialog"]) .arena-bottom-dock,
+[data-native-mobile-shell]:has([data-native-market] > [class*="fixed"][class*="inset-0"]) .arena-bottom-dock {
   opacity: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
