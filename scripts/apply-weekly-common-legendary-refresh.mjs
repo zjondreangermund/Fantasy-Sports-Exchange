@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import "./apply-common-reward-position-balance.mjs";
 import "./verify-referral-history-integrity.mjs";
+import "./apply-admin-referral-monitoring.mjs";
+import "./verify-admin-referral-monitoring.mjs";
 
 function patchFile(file, transform) {
   const source = fs.readFileSync(file, "utf8");
