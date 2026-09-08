@@ -13,6 +13,7 @@ const squad = read("client/src/components/native/NativeSquadPage.tsx");
 const cards = read("client/src/components/native/NativeCardsPage.tsx");
 const thumbnail = read("client/src/components/CardThumbnail.tsx");
 const wallet = read("client/src/components/native/NativeWalletPage.tsx");
+const prebuild = read("scripts/prepare-play-gameweek-navigation.mjs");
 
 const requiredWebsiteRoutes = [
   "/",
@@ -88,13 +89,19 @@ for (const token of ["text-slate-100", "text-sky-200", "text-violet-200", "text-
 expect(play.includes("Gameweek {currentGameweek} · {rarity}"), "Play hero no longer shows rarity-colored gameweek context");
 expect(play.includes("GW{gameweek || \"-\"}"), "Tournament cards no longer show gameweek badges");
 
-/* Collection should be dense and deterministic: one fixed tile footer for
-   position + points, no nested interactive intelligence button floating over
-   the compact grid, and no duplicated position/team line below the card. */
+/* Collection must stay static and centered on Android. The xs stabilization
+   patch must run before Vite, otherwise the old animated glow/3D compositor is
+   already baked into the client bundle by the time the server build patches it. */
+expect(prebuild.includes('await import("./apply-starter-draft-mobile-rendering.mjs")'), "Compact xs card stabilization no longer runs before the client build");
 expect(thumbnail.includes("showMeta?: boolean"), "CardThumbnail lost compact metadata control");
 expect(cards.includes('size="xs" showMeta={false}'), "Native Collection is not using compact metadata-free cards");
-expect(cards.includes("grid-cols-3 items-start gap-1.5"), "Native Collection card spacing is no longer compact");
-expect(!cards.includes('size="xs" selectable'), "Native Collection reintroduced nested/floating card controls");
+expect(cards.includes("data-native-static-card-grid"), "Native Collection lost its static card grid marker");
+expect(cards.includes("justify-items-center gap-x-1 gap-y-2.5"), "Native Collection cards are no longer centered in their grid blocks");
+expect(cards.includes('className="w-[96px] max-w-full" data-native-static-card'), "Native Collection card/footer width is no longer locked together");
+expect(cards.includes("grid-cols-[minmax(0,1fr)_auto]"), "Native Collection position and GW points are no longer anchored to the same card width");
+expect(!cards.includes("active:scale-[.985]"), "Native Collection reintroduced animated card tile scaling");
+expect(nativeCss.includes("[data-native-static-card-grid] *"), "Native Collection lost its transition/animation compositor guard");
+expect(nativeCss.includes(".fa-card-lift > span[aria-hidden=\"true\"]"), "Native Collection no longer suppresses the legacy moving glow fallback");
 expect(cards.includes("gameweekPoints(card).toFixed(2)"), "Native Collection no longer anchors GW points to each card tile");
 
 if (failures.length) {
@@ -102,4 +109,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Native mobile route/layout verification passed (${requiredWebsiteRoutes.length} live routes, ${requiredCompactMappings.length} compact mappings, scroll clearance, cache normalization, rarity neon and compact cards).`);
+console.log(`Native mobile route/layout verification passed (${requiredWebsiteRoutes.length} live routes, ${requiredCompactMappings.length} compact mappings, scroll clearance, cache normalization, rarity neon and static centered cards).`);
