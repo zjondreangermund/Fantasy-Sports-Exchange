@@ -17,6 +17,7 @@ import LivePulseDock from "./components/LivePulseDock";
 import MatchdayQuickDock from "./components/MatchdayQuickDock";
 import MarketplaceFloorNotice from "./components/MarketplaceFloorNotice";
 import MobileNavDock from "./components/MobileNavDock";
+import NativeMobileShell from "./components/native/NativeMobileShell";
 import SiteFooter from "./components/SiteFooter";
 import PageScene, { routeToPageSceneVariant } from "./components/PageScene";
 import SecurityModeBanner from "./components/SecurityModeBanner";
@@ -24,7 +25,7 @@ import GuidedHoverHelp from "./components/GuidedHoverHelp";
 import GlobalActionToasts from "./components/GlobalActionToasts";
 import { useAuth } from "./hooks/use-auth";
 import { useScrollRepair } from "./hooks/use-scroll-repair";
-import { applySiteView, getSiteViewMode, type SiteViewMode } from "./lib/site-view";
+import { applySiteView, getSiteViewMode, isNativeMobileApp, type SiteViewMode } from "./lib/site-view";
 import { Skeleton } from "./components/ui/skeleton";
 
 import NotFound from "./pages/not-found";
@@ -39,6 +40,7 @@ const OnboardingPacksScene = React.lazy(() => import("./pages/onboarding-packs")
 const OnboardingTunnelPage = React.lazy(() => import("./pages/onboarding-tunnel"));
 const CardRevealPage = React.lazy(() => import("./pages/card-reveal"));
 const DashboardPage = React.lazy(() => import("./pages/dashboard"));
+const NativeMobileDashboard = React.lazy(() => import("./components/native/NativeMobileDashboard"));
 const AnalyticsPage = React.lazy(() => import("./pages/analytics"));
 const LiveLineupPage = React.lazy(() => import("./pages/live-lineup"));
 const SelectSquadPage = React.lazy(() => import("./pages/select-squad"));
@@ -94,6 +96,7 @@ function AdminLiveDataRoute() { return <AdminGate><AdminLiveDataPage /></AdminGa
 function AdminTestConsoleRoute() { return <AdminGate><AdminTestConsolePage /></AdminGate>; }
 function AdminSeasonSimulatorRoute() { return <AdminGate><AdminSeasonSimulatorPage /></AdminGate>; }
 function CardLabRoute() { return <AdminGate><CardLabPage /></AdminGate>; }
+function DashboardRoute() { return isNativeMobileApp() ? <NativeMobileDashboard /> : <DashboardPage />; }
 
 function AuthenticatedRouter() {
   const { data: onboarding, isLoading } = useQuery<{ completed: boolean }>({ queryKey: ["/api/onboarding/status"] });
@@ -120,8 +123,8 @@ function AuthenticatedRouter() {
         {legalRouteElements()}
         <Route path="/free" component={CompetitionsPage} />
         <Route path="/play-free" component={CompetitionsPage} />
-        <Route path="/" component={DashboardPage} />
-        <Route path="/dashboard" component={DashboardPage} />
+        <Route path="/" component={DashboardRoute} />
+        <Route path="/dashboard" component={DashboardRoute} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/live-lineup" component={LiveLineupPage} />
         <Route path="/select-squad" component={SelectSquadPage} />
@@ -154,6 +157,7 @@ function AuthenticatedRouter() {
 function AuthenticatedApp() {
   const [siteView, setSiteView] = React.useState<SiteViewMode>(() => getSiteViewMode());
   const [location] = useLocation();
+  const nativeApp = isNativeMobileApp();
   const isPlayRoute = location.startsWith("/competitions") || location.startsWith("/my-entries") || location.startsWith("/prize-vault") || location.startsWith("/free") || location.startsWith("/play-free");
   const isInfoRoute = publicInfoPaths.includes(location);
   const showMarketplaceFloors = location.startsWith("/collection") || location.startsWith("/marketplace");
@@ -178,6 +182,13 @@ function AuthenticatedApp() {
   // space away from the starter draft, and gives onboarding its own touch scroll.
   if (onboardingStatus && !onboardingStatus.completed) {
     return <div className="h-[100dvh] w-full overflow-hidden bg-[#02040d]"><AuthenticatedRouter /></div>;
+  }
+
+  // The native APK is intentionally its own compact mobile product. It reuses
+  // the same authenticated routes and APIs, but never mounts the desktop sidebar,
+  // stadium layers, floating docks or desktop view controls.
+  if (nativeApp) {
+    return <NativeMobileShell><AuthenticatedRouter /></NativeMobileShell>;
   }
 
   return (
@@ -221,12 +232,13 @@ function AppContent() {
 }
 
 export default function App() {
+  const nativeApp = isNativeMobileApp();
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
           <SecurityModeBanner />
-          <GuidedHoverHelp />
+          {!nativeApp ? <GuidedHoverHelp /> : null}
           <AppContent />
           <GlobalActionToasts />
           <Toaster />
