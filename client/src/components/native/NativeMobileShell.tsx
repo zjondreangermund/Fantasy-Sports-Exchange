@@ -22,6 +22,11 @@ import NativeRouteBoundary from "./NativeRouteBoundary";
 import NativePlayPage from "./NativePlayPage";
 import NativeSquadPage from "./NativeSquadPage";
 import NativeCardsPage from "./NativeCardsPage";
+import NativeMarketPage from "./NativeMarketPage";
+import NativeVaultPage from "./NativeVaultPage";
+import NativeWalletPage from "./NativeWalletPage";
+import NativePremierLeaguePage from "./NativePremierLeaguePage";
+import NativeClubPage from "./NativeClubPage";
 
 type NativeMobileShellProps = {
   children: React.ReactNode;
@@ -41,11 +46,11 @@ const primaryItems: NavItem[] = [
 ];
 
 const moreItems: Array<NavItem & { description: string }> = [
-  { label: "Marketplace", href: "/marketplace", icon: ShoppingBag, description: "Buy cards and manage your listings" },
-  { label: "Prize Vault", href: "/prize-vault", icon: Sparkles, description: "See the rarity ladders and rewards" },
-  { label: "Wallet", href: "/wallet", icon: WalletCards, description: "Balance, deposits and transactions" },
-  { label: "Premier League", href: "/premier-league", icon: Trophy, description: "Fixtures and matchday context" },
-  { label: "Profile & Inbox", href: "/account", icon: CircleUserRound, description: "Your club, alerts and referrals" },
+  { label: "Marketplace", href: "/marketplace", icon: ShoppingBag, description: "Fast card browsing and buying" },
+  { label: "Prize Vault", href: "/prize-vault", icon: Sparkles, description: "Current prize and rarity ladders" },
+  { label: "Wallet", href: "/wallet", icon: WalletCards, description: "Balance, activity and money actions" },
+  { label: "Premier League", href: "/premier-league", icon: Trophy, description: "Matches, table and injuries" },
+  { label: "My Club", href: "/account", icon: CircleUserRound, description: "Profile, inbox and referrals" },
   { label: "Scoring Rules", href: "/legal/scoring", icon: BookOpen, description: "Understand exactly how points work" },
   { label: "Help Centre", href: "/help", icon: ShieldQuestion, description: "Rules, support and account help" },
 ];
@@ -76,6 +81,11 @@ function compactNativePage(location: string, children: React.ReactNode, nativeFu
   if (location.startsWith("/competitions") || location.startsWith("/free") || location.startsWith("/play-free")) return <NativePlayPage />;
   if (location.startsWith("/live-lineup") || location.startsWith("/select-squad") || location.startsWith("/my-entries")) return <NativeSquadPage />;
   if (location.startsWith("/collection")) return <NativeCardsPage />;
+  if (location.startsWith("/marketplace")) return <NativeMarketPage />;
+  if (location.startsWith("/prize-vault")) return <NativeVaultPage />;
+  if (location.startsWith("/wallet")) return <NativeWalletPage />;
+  if (location.startsWith("/premier-league") || location.startsWith("/leagues")) return <NativePremierLeaguePage />;
+  if (location.startsWith("/account") || location.startsWith("/profile")) return <NativeClubPage />;
   return children;
 }
 
@@ -178,8 +188,8 @@ export default function NativeMobileShell({ children }: NativeMobileShellProps) 
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[.22em] text-violet-300/75">Club menu</p>
-                <h2 className="mt-1 text-xl font-black">More ways to play</h2>
+                <p className="text-[10px] font-black uppercase tracking-[.22em] text-violet-300/75">Arena menu</p>
+                <h2 className="mt-1 text-xl font-black">Everything else, one tap away</h2>
               </div>
               <button type="button" onClick={() => setMoreOpen(false)} className="grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-white/5" aria-label="Close menu"><X className="h-5 w-5" /></button>
             </div>
