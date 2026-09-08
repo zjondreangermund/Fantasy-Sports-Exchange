@@ -19,6 +19,7 @@ import {
 import UnreadNotificationDot from "../UnreadNotificationDot";
 import NativeAppUpdatePrompt from "./NativeAppUpdatePrompt";
 import NativeRouteBoundary from "./NativeRouteBoundary";
+import NativeHomePage from "./NativeHomePage";
 import NativePlayPage from "./NativePlayPage";
 import NativeSquadPage from "./NativeSquadPage";
 import NativeCardsPage from "./NativeCardsPage";
@@ -78,6 +79,7 @@ function routeTitle(location: string) {
 
 function compactNativePage(location: string, children: React.ReactNode, nativeFull: boolean) {
   if (nativeFull) return children;
+  if (location === "/" || location === "/dashboard") return <NativeHomePage />;
   if (location.startsWith("/competitions") || location.startsWith("/free") || location.startsWith("/play-free")) return <NativePlayPage />;
   if (location.startsWith("/live-lineup") || location.startsWith("/select-squad") || location.startsWith("/my-entries")) return <NativeSquadPage />;
   if (location.startsWith("/collection")) return <NativeCardsPage />;
