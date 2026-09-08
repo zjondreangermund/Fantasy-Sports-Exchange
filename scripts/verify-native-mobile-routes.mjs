@@ -4,9 +4,11 @@ import path from "node:path";
 const root = process.cwd();
 const appPath = path.join(root, "client/src/App.tsx");
 const shellPath = path.join(root, "client/src/components/native/NativeMobileShell.tsx");
+const boundaryPath = path.join(root, "client/src/components/native/NativeRouteBoundary.tsx");
 
 const app = fs.readFileSync(appPath, "utf8");
 const shell = fs.readFileSync(shellPath, "utf8");
+const boundary = fs.readFileSync(boundaryPath, "utf8");
 
 const requiredWebsiteRoutes = [
   "/",
@@ -49,8 +51,10 @@ for (const component of requiredCompactMappings) {
   if (!shell.includes(component)) failures.push(`APK compact mapping missing ${component}`);
 }
 
-if (!shell.includes("nativeFull=1")) {
-  failures.push("APK shell lost its live website/full-route escape hatch");
+const shellCanSwitchToFull = shell.includes('get("nativeFull")') && shell.includes('=== "1"');
+const recoveryCanOpenFull = boundary.includes("nativeFull=1");
+if (!shellCanSwitchToFull || !recoveryCanOpenFull) {
+  failures.push("APK lost its live website/full-route escape hatch");
 }
 
 if (!shell.includes("NativeRouteBoundary")) {
