@@ -1,5 +1,10 @@
 import fs from "node:fs";
 
+// Compact xs cards must be patched before Vite builds the client bundle. Running
+// this here keeps Android/PWA/native collection cards off the 3D glow compositor
+// path instead of applying the stabilization only after the client was built.
+await import("./apply-starter-draft-mobile-rendering.mjs");
+
 const landingPath = "client/src/pages/landing.tsx";
 let landing = fs.readFileSync(landingPath, "utf8");
 
