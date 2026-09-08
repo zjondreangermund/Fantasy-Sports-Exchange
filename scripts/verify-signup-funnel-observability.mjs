@@ -27,5 +27,6 @@ requireText(indexHtml, "https://fantasy-sports-exchange-production-d05c.up.railw
 requireText(capacitor, "https://fantasy-sports-exchange-production-d05c.up.railway.app", "live Capacitor URL");
 
 console.log("Signup funnel observability and live URL alignment verified.");
+await import("./prepare-native-auth-attribution-compat.mjs");
 await import("./apply-signup-source-attribution-v3.mjs");
 await import("./verify-signup-source-attribution-v3.mjs");
