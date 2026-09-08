@@ -13,6 +13,9 @@ const squad = read("client/src/components/native/NativeSquadPage.tsx");
 const cards = read("client/src/components/native/NativeCardsPage.tsx");
 const thumbnail = read("client/src/components/CardThumbnail.tsx");
 const wallet = read("client/src/components/native/NativeWalletPage.tsx");
+const market = read("client/src/components/native/NativeMarketPage.tsx");
+const updatePrompt = read("client/src/components/native/NativeAppUpdatePrompt.tsx");
+const routeBridge = read("client/src/components/native/NativeFullRouteBridge.tsx");
 const prebuild = read("scripts/prepare-play-gameweek-navigation.mjs");
 
 const requiredWebsiteRoutes = [
@@ -62,6 +65,24 @@ const recoveryCanOpenFull = boundary.includes('searchParams.set("nativeFull", "1
 expect(shellCanSwitchToFull && recoveryCanOpenFull, "APK lost its automatic live website/full-route escape hatch");
 expect(shell.includes("NativeRouteBoundary"), "APK shell lost its blank-route recovery boundary");
 
+/* Query-only routes need a hard same-WebView navigation because Wouter's route
+   location is path-based. Without this, Full tools and /account?tab=inbox can
+   look like dead buttons while the compact component remains mounted. */
+expect(updatePrompt.includes("useNativeFullRouteBridge"), "Native shell lifecycle no longer mounts the full-route/query bridge");
+expect(routeBridge.includes('get("nativeFull") === "1"'), "Native route bridge no longer recognizes Full tools routes");
+expect(routeBridge.includes("samePathQueryChange"), "Native route bridge no longer handles same-path query navigation");
+expect(routeBridge.includes("window.location.assign"), "Native route bridge no longer performs a same-WebView hard navigation");
+
+const nativeDir = path.join(root, "client/src/components/native");
+for (const file of fs.readdirSync(nativeDir).filter((name) => name.endsWith(".tsx"))) {
+  const source = fs.readFileSync(path.join(nativeDir, file), "utf8");
+  const fullRouteLinks = source.match(/href=(?:\"[^\"]*nativeFull=1[^\"]*\"|\{`[^`]*nativeFull=1[^`]*`\})/g) || [];
+  for (const link of fullRouteLinks) {
+    const route = link.match(/\/(?:competitions|live-lineup|collection|marketplace|prize-vault|wallet|premier-league|account|legal\/scoring|help)/)?.[0];
+    if (!route || !requiredWebsiteRoutes.includes(route)) failures.push(`${file} has an unverified nativeFull destination: ${link}`);
+  }
+}
+
 /* Bottom navigation must reserve real layout height. If it floats over the
    scroller again, the last tournament/card/entry disappears behind the tabs. */
 expect(nativeCss.includes(".arena-bottom-dock"), "Native CSS no longer owns bottom dock clearance");
@@ -70,6 +91,11 @@ expect(nativeCss.includes("main[data-app-scroll-root]"), "Native app scroll root
 expect(nativeCss.includes("-webkit-overflow-scrolling: touch"), "Native momentum scrolling guard is missing");
 expect(nativeCss.includes("touch-action: pan-y"), "Native vertical touch scrolling guard is missing");
 expect(nativeCss.includes("scroll-padding-bottom"), "Native app lost bottom scroll clearance");
+expect(nativeCss.includes("z-index: auto !important"), "Native content still traps fixed sub-screens below the bottom dock");
+expect(nativeCss.includes('[role="dialog"][class*="fixed"][class*="inset-0"] > section'), "Native dialogs lost their independent scroll guard");
+expect(nativeCss.includes('[data-native-market] > [class*="fixed"][class*="inset-0"] > section'), "Marketplace purchase sheet lost its independent scroll guard");
+expect(nativeCss.includes(":has([role=\"dialog\"])") || nativeCss.includes(':has([role="dialog"])'), "Native dock is no longer hidden while a modal/sub-screen is open");
+expect(market.includes("fixed inset-0 z-[120] flex items-end"), "Marketplace purchase sheet structure changed without updating the native scroll guard");
 
 /* Compact pages share a React Query cache with full website pages. Response
    objects and arrays must be normalized before array methods are called. */
@@ -109,4 +135,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Native mobile route/layout verification passed (${requiredWebsiteRoutes.length} live routes, ${requiredCompactMappings.length} compact mappings, scroll clearance, cache normalization, rarity neon and static centered cards).`);
+console.log(`Native mobile route/layout verification passed (${requiredWebsiteRoutes.length} live routes, ${requiredCompactMappings.length} compact mappings, query/full-route bridge, sub-screen scrolling, cache normalization, rarity neon and static centered cards).`);
