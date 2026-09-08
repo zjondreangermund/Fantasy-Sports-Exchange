@@ -10,7 +10,7 @@ import "./card-image-sizing.css";
 import "./onboarding-card-clipping-fix.css";
 import "./legal-tabs-slider.css";
 import { patchFetchForApiBase } from "./lib/api-base";
-import { initializeSiteView } from "./lib/site-view";
+import { initializeSiteView, isNativeMobileApp } from "./lib/site-view";
 
 initializeSiteView();
 patchFetchForApiBase();
@@ -23,7 +23,10 @@ if (!rootElement) {
 
 createRoot(rootElement).render(<App />);
 
-if ("serviceWorker" in navigator) {
+// The native APK loads the live site inside Capacitor and does not need the web
+// PWA service worker competing with the WebView cache. Browser/PWA behavior is
+// unchanged and keeps the existing service worker/update flow.
+if ("serviceWorker" in navigator && !isNativeMobileApp()) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .getRegistrations()
