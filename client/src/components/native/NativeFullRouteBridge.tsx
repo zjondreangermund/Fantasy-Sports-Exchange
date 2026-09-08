@@ -10,7 +10,7 @@ import * as React from "react";
  * explicitly asks for the full live website route, or when only the query/hash
  * changes on the current path.
  */
-export default function NativeFullRouteBridge() {
+export function useNativeFullRouteBridge() {
   React.useEffect(() => {
     const onClickCapture = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -46,6 +46,9 @@ export default function NativeFullRouteBridge() {
     document.addEventListener("click", onClickCapture, true);
     return () => document.removeEventListener("click", onClickCapture, true);
   }, []);
+}
 
+export default function NativeFullRouteBridge() {
+  useNativeFullRouteBridge();
   return null;
 }

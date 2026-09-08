@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Download, RefreshCw, ShieldCheck, Sparkles, X } from "lucide-react";
+import { useNativeFullRouteBridge } from "./NativeFullRouteBridge";
 
 const RELEASES_API = "https://api.github.com/repos/zjondreangermund/Fantasy-Sports-Exchange/releases?per_page=20";
 const CACHE_KEY = "fantasy-arena-native-update-v1";
@@ -94,6 +95,7 @@ function writeCache(value: CachedUpdate) {
 }
 
 export default function NativeAppUpdatePrompt() {
+  useNativeFullRouteBridge();
   const currentVersion = React.useMemo(installedVersion, []);
   const [release, setRelease] = React.useState<AndroidRelease | null>(null);
   const [dismissed, setDismissed] = React.useState(false);
