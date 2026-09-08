@@ -1,0 +1,99 @@
+/* Fantasy Arena native APK polish. Everything in this file is scoped to the
+   Capacitor-only shell so the desktop website and standalone web/PWA stay
+   visually unchanged. */
+
+[data-native-mobile-shell] {
+  color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+[data-native-mobile-shell] * {
+  box-sizing: border-box;
+}
+
+[data-native-mobile-shell] button,
+[data-native-mobile-shell] a,
+[data-native-mobile-shell] [role="button"] {
+  touch-action: manipulation;
+}
+
+[data-native-mobile-shell] .premium-page {
+  min-height: auto !important;
+  padding: 0.85rem 0.85rem 1.25rem !important;
+  background: transparent !important;
+}
+
+[data-native-mobile-shell] .premium-page > .pointer-events-none.absolute.inset-0 {
+  opacity: 0.48;
+}
+
+[data-native-mobile-shell] .premium-page > .relative.mx-auto {
+  width: 100%;
+  max-width: 42rem !important;
+  gap: 0 !important;
+}
+
+[data-native-mobile-shell] .fa-premium-panel {
+  border-radius: 1.45rem !important;
+  border-color: rgba(255,255,255,.075) !important;
+  box-shadow: 0 14px 34px rgba(0,0,0,.22) !important;
+}
+
+[data-native-mobile-shell] .fa-page-title {
+  font-size: clamp(1.55rem, 7.5vw, 2.1rem) !important;
+  line-height: 1.05 !important;
+  letter-spacing: -0.035em !important;
+}
+
+[data-native-mobile-shell] .fa-premium-button {
+  min-height: 44px;
+  border-radius: 0.95rem !important;
+  letter-spacing: .06em !important;
+}
+
+[data-native-mobile-shell] input,
+[data-native-mobile-shell] select,
+[data-native-mobile-shell] textarea {
+  font-size: 16px !important;
+}
+
+[data-native-mobile-shell] img {
+  -webkit-user-drag: none;
+}
+
+[data-native-mobile-shell] table {
+  font-size: .75rem;
+}
+
+[data-native-mobile-shell] [class*="max-w-7xl"],
+[data-native-mobile-shell] [class*="max-w-6xl"],
+[data-native-mobile-shell] [class*="max-w-5xl"] {
+  max-width: 42rem !important;
+}
+
+[data-native-mobile-shell] [data-radix-scroll-area-viewport] {
+  overscroll-behavior: contain;
+}
+
+[data-native-mobile-shell] ::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+@media (max-width: 540px) {
+  [data-native-mobile-shell] .fa-premium-panel {
+    padding: .95rem !important;
+  }
+
+  [data-native-mobile-shell] .premium-page .grid {
+    min-width: 0;
+  }
+
+  [data-native-mobile-shell] .premium-page p,
+  [data-native-mobile-shell] .premium-page h1,
+  [data-native-mobile-shell] .premium-page h2,
+  [data-native-mobile-shell] .premium-page h3 {
+    overflow-wrap: anywhere;
+  }
+}
