@@ -86,7 +86,8 @@ export default function MandatoryReplacementClaimDialog() {
   return (
     <Dialog open={Boolean(claim)} onOpenChange={() => {}}>
       <DialogContent
-        className="z-[120] max-w-xl border-amber-300/30 bg-[#080c18] text-white shadow-2xl [&>button]:hidden"
+        data-replacement-claim-dialog
+        className="z-[120] max-w-xl border-amber-300/30 bg-[#080c18] text-white shadow-2xl [&>button.absolute]:hidden"
         onEscapeKeyDown={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
@@ -122,16 +123,18 @@ export default function MandatoryReplacementClaimDialog() {
           <Trophy className="mr-1 inline h-3.5 w-3.5" />You must complete this claim before continuing normally in Fantasy Arena. If more than one player has left the EPL, the next replacement will appear immediately after this one.
         </div>
 
-        <Button
-          type="button"
-          onClick={() => claimMutation.mutate(Number(claim.id))}
-          disabled={claimMutation.isPending || isFetching}
-          className="h-12 w-full bg-amber-300 text-base font-black text-slate-950 hover:bg-amber-200"
-        >
-          <Sparkles className="mr-2 h-5 w-5" />
-          {claimMutation.isPending ? "Claiming random replacement…" : `Claim ${rarity} ${position} replacement`}
-        </Button>
-        <div className="text-center text-[10px] font-bold uppercase tracking-[.13em] text-white/35">Required replacement claim {claimNumber} · no fee</div>
+        <div className="sticky bottom-0 z-10 -mx-1 rounded-2xl border border-amber-300/15 bg-[#080c18]/95 p-1.5 pb-[calc(.375rem+env(safe-area-inset-bottom,0px))] shadow-[0_-12px_28px_rgba(8,12,24,.92)] backdrop-blur-xl">
+          <Button
+            type="button"
+            onClick={() => claimMutation.mutate(Number(claim.id))}
+            disabled={claimMutation.isPending || isFetching}
+            className="h-12 w-full bg-amber-300 text-base font-black text-slate-950 hover:bg-amber-200"
+          >
+            <Sparkles className="mr-2 h-5 w-5" />
+            {claimMutation.isPending ? "Claiming random replacement…" : `Claim ${rarity} ${position} replacement`}
+          </Button>
+          <div className="mt-1.5 text-center text-[10px] font-bold uppercase tracking-[.13em] text-white/35">Required replacement claim {claimNumber} · no fee</div>
+        </div>
       </DialogContent>
     </Dialog>
   );
