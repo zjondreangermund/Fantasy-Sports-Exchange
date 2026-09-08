@@ -1,4 +1,4 @@
-const CACHE_NAME = "fantasy-site-v18-lion-jpg";
+const CACHE_NAME = "fantasy-site-v19-safe-images";
 const APP_SHELL = [
   "/",
   "/manifest.json?v=fa-install-2026-09",
@@ -32,6 +32,10 @@ self.addEventListener("fetch", (event) => {
   const reqUrl = new URL(event.request.url);
   const isSameOrigin = reqUrl.origin === self.location.origin;
 
+  // Provider/CDN requests should be handled by the browser itself. Fantasy Arena
+  // player portraits use the same-origin image proxy and resilient fallback chain.
+  if (!isSameOrigin) return;
+
   if (reqUrl.pathname.startsWith("/api/")) {
     event.respondWith(fetch(event.request));
     return;
@@ -51,10 +55,9 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (
-    isSameOrigin &&
-    (reqUrl.pathname.startsWith("/assets/") ||
-      reqUrl.pathname.startsWith("/prizes/") ||
-      reqUrl.pathname.startsWith("/brand/"))
+    reqUrl.pathname.startsWith("/assets/") ||
+    reqUrl.pathname.startsWith("/prizes/") ||
+    reqUrl.pathname.startsWith("/brand/")
   ) {
     event.respondWith(
       fetch(event.request, { cache: "no-store" })
