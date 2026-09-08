@@ -1,0 +1,24 @@
+name: Native mobile route guard
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-native-routes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify APK routes stay connected to live website
+        run: node scripts/verify-native-mobile-routes.mjs

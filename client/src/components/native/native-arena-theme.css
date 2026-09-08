@@ -1,0 +1,332 @@
+[data-native-mobile-shell] {
+  --arena-bg: #03040a;
+  --arena-panel: rgba(8, 10, 24, 0.82);
+  --arena-panel-strong: rgba(7, 8, 19, 0.94);
+  --arena-violet: #b64cff;
+  --arena-cyan: #35d9ff;
+  --arena-route: #b64cff;
+  --arena-route-2: #35d9ff;
+  --arena-green: #62f6c2;
+  --arena-gold: #ffd86b;
+  background:
+    radial-gradient(circle at 15% -5%, color-mix(in srgb, var(--arena-route) 24%, transparent), transparent 34%),
+    radial-gradient(circle at 95% 4%, color-mix(in srgb, var(--arena-route-2) 20%, transparent), transparent 32%),
+    linear-gradient(180deg, #060610 0%, #020309 48%, #060510 100%);
+  color: #fff;
+}
+
+[data-native-mobile-shell][data-arena-route="home"] { --arena-route: #c34cff; --arena-route-2: #35d9ff; }
+[data-native-mobile-shell][data-arena-route="play"] { --arena-route: #ff4fd8; --arena-route-2: #35d9ff; }
+[data-native-mobile-shell][data-arena-route="squad"] { --arena-route: #35d9ff; --arena-route-2: #6977ff; }
+[data-native-mobile-shell][data-arena-route="cards"] { --arena-route: #a855f7; --arena-route-2: #ff5bd7; }
+[data-native-mobile-shell][data-arena-route="market"] { --arena-route: #31e7be; --arena-route-2: #35d9ff; }
+[data-native-mobile-shell][data-arena-route="vault"] { --arena-route: #b64cff; --arena-route-2: #ffd86b; }
+[data-native-mobile-shell][data-arena-route="wallet"] { --arena-route: #62f6c2; --arena-route-2: #35d9ff; }
+[data-native-mobile-shell][data-arena-route="league"] { --arena-route: #368cff; --arena-route-2: #35d9ff; }
+[data-native-mobile-shell][data-arena-route="club"] { --arena-route: #d34cff; --arena-route-2: #7585ff; }
+
+[data-native-mobile-shell]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .34;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--arena-route) 4.5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--arena-route-2) 3.5%, transparent) 1px, transparent 1px);
+  background-size: 30px 30px;
+  mask-image: linear-gradient(to bottom, #000 0%, rgba(0,0,0,.7) 58%, transparent 100%);
+}
+
+[data-native-mobile-shell]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow:
+    inset 3px 0 0 color-mix(in srgb, var(--arena-route) 24%, transparent),
+    inset -3px 0 0 color-mix(in srgb, var(--arena-route-2) 20%, transparent);
+  z-index: 2;
+}
+
+[data-native-mobile-shell] .arena-ambient-orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(54px);
+  pointer-events: none;
+  opacity: .38;
+  animation: arena-drift 9s ease-in-out infinite alternate;
+}
+
+[data-native-mobile-shell] .arena-header {
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--arena-route) 19%, transparent), transparent 35%),
+    radial-gradient(circle at 92% 0%, color-mix(in srgb, var(--arena-route-2) 12%, transparent), transparent 35%),
+    linear-gradient(180deg, rgba(6,7,18,.985), rgba(5,5,14,.94));
+  border-bottom: 1px solid color-mix(in srgb, var(--arena-route) 30%, transparent);
+  box-shadow: 0 12px 40px rgba(0,0,0,.4), 0 1px 0 color-mix(in srgb, var(--arena-route-2) 10%, transparent);
+}
+
+[data-native-mobile-shell] .arena-logo-frame {
+  position: relative;
+  background: linear-gradient(135deg, var(--arena-route), var(--arena-route-2));
+  padding: 1px;
+  box-shadow:
+    0 0 20px color-mix(in srgb, var(--arena-route) 28%, transparent),
+    0 0 18px color-mix(in srgb, var(--arena-route-2) 18%, transparent);
+}
+
+[data-native-mobile-shell] .arena-logo-frame::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--arena-route) 14%, transparent);
+  pointer-events: none;
+}
+
+[data-native-mobile-shell] .arena-live-pill {
+  border: 1px solid rgba(86,239,197,.2);
+  background: rgba(15, 64, 56, .22);
+  color: #9af7df;
+  box-shadow: inset 0 0 18px rgba(52,211,153,.05);
+}
+
+[data-native-mobile-shell] .arena-live-dot {
+  box-shadow: 0 0 0 3px rgba(82,255,201,.08), 0 0 12px rgba(82,255,201,.8);
+  animation: arena-pulse 1.8s ease-in-out infinite;
+}
+
+[data-native-mobile-shell] .arena-page-frame {
+  position: relative;
+}
+
+[data-native-mobile-shell] .arena-page-frame::before,
+[data-native-mobile-shell] .arena-page-frame::after {
+  content: "";
+  position: absolute;
+  top: 1rem;
+  bottom: 6rem;
+  width: 1px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+[data-native-mobile-shell] .arena-page-frame::before {
+  left: 5px;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--arena-route) 52%, transparent), transparent 68%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--arena-route) 42%, transparent);
+}
+
+[data-native-mobile-shell] .arena-page-frame::after {
+  right: 5px;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--arena-route-2) 48%, transparent), transparent 68%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--arena-route-2) 36%, transparent);
+}
+
+[data-native-mobile-shell] [data-native-home],
+[data-native-mobile-shell] [data-native-home-v2],
+[data-native-mobile-shell] [data-native-play],
+[data-native-mobile-shell] [data-native-squad],
+[data-native-mobile-shell] [data-native-cards],
+[data-native-mobile-shell] [data-native-market],
+[data-native-mobile-shell] [data-native-vault],
+[data-native-mobile-shell] [data-native-wallet],
+[data-native-mobile-shell] [data-native-premier-league],
+[data-native-mobile-shell] [data-native-club] {
+  position: relative;
+  z-index: 1;
+}
+
+[data-native-mobile-shell] [data-native-home] > section,
+[data-native-mobile-shell] [data-native-home-v2] > section,
+[data-native-mobile-shell] [data-native-play] > section,
+[data-native-mobile-shell] [data-native-squad] > section,
+[data-native-mobile-shell] [data-native-cards] > section,
+[data-native-mobile-shell] [data-native-market] > section,
+[data-native-mobile-shell] [data-native-vault] > section,
+[data-native-mobile-shell] [data-native-wallet] > section,
+[data-native-mobile-shell] [data-native-premier-league] > section,
+[data-native-mobile-shell] [data-native-club] > section {
+  border-color: color-mix(in srgb, var(--arena-route) 22%, transparent) !important;
+  background-color: var(--arena-panel) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.045),
+    inset 0 0 28px color-mix(in srgb, var(--arena-route) 3%, transparent),
+    0 14px 34px rgba(0,0,0,.3);
+  backdrop-filter: blur(20px);
+}
+
+[data-native-mobile-shell] [data-native-home] > section:first-child,
+[data-native-mobile-shell] [data-native-home-v2] > section:first-child,
+[data-native-mobile-shell] [data-native-play] > section:first-child,
+[data-native-mobile-shell] [data-native-squad] > section:first-child,
+[data-native-mobile-shell] [data-native-cards] > section:first-child,
+[data-native-mobile-shell] [data-native-market] > section:first-child,
+[data-native-mobile-shell] [data-native-vault] > section:first-child,
+[data-native-mobile-shell] [data-native-wallet] > section:first-child,
+[data-native-mobile-shell] [data-native-premier-league] > section:first-child,
+[data-native-mobile-shell] [data-native-club] > section:first-child {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--arena-route) 34%, transparent) !important;
+  background:
+    radial-gradient(circle at 5% 5%, color-mix(in srgb, var(--arena-route) 23%, transparent), transparent 34%),
+    radial-gradient(circle at 96% 8%, color-mix(in srgb, var(--arena-route-2) 22%, transparent), transparent 36%),
+    linear-gradient(145deg, rgba(15,11,31,.96), rgba(4,8,21,.96)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 0 0 1px color-mix(in srgb, var(--arena-route-2) 6%, transparent),
+    0 18px 45px rgba(0,0,0,.42),
+    0 0 30px color-mix(in srgb, var(--arena-route) 9%, transparent) !important;
+}
+
+[data-native-mobile-shell] [data-native-home] > section:first-child::after,
+[data-native-mobile-shell] [data-native-home-v2] > section:first-child::after,
+[data-native-mobile-shell] [data-native-play] > section:first-child::after,
+[data-native-mobile-shell] [data-native-squad] > section:first-child::after,
+[data-native-mobile-shell] [data-native-cards] > section:first-child::after,
+[data-native-mobile-shell] [data-native-market] > section:first-child::after,
+[data-native-mobile-shell] [data-native-vault] > section:first-child::after,
+[data-native-mobile-shell] [data-native-wallet] > section:first-child::after,
+[data-native-mobile-shell] [data-native-premier-league] > section:first-child::after,
+[data-native-mobile-shell] [data-native-club] > section:first-child::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--arena-route), var(--arena-route-2), transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--arena-route) 50%, transparent);
+}
+
+[data-native-mobile-shell] [data-native-home-v2] > section:nth-child(2) > a > div,
+[data-native-mobile-shell] [data-native-home-v2] > section:nth-child(3) > a > div {
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--arena-route) 4%, transparent), 0 8px 20px rgba(0,0,0,.18);
+}
+
+[data-native-mobile-shell] input,
+[data-native-mobile-shell] select,
+[data-native-mobile-shell] textarea {
+  background: rgba(1, 4, 14, .72) !important;
+  border-color: color-mix(in srgb, var(--arena-route) 20%, transparent) !important;
+  box-shadow: inset 0 0 20px color-mix(in srgb, var(--arena-route-2) 2%, transparent);
+}
+
+[data-native-mobile-shell] input:focus,
+[data-native-mobile-shell] select:focus,
+[data-native-mobile-shell] textarea:focus {
+  border-color: color-mix(in srgb, var(--arena-route-2) 60%, transparent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--arena-route-2) 8%, transparent), 0 0 20px color-mix(in srgb, var(--arena-route-2) 9%, transparent) !important;
+}
+
+[data-native-mobile-shell] button,
+[data-native-mobile-shell] a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+[data-native-mobile-shell] button:active,
+[data-native-mobile-shell] a:active {
+  transform: scale(.985);
+}
+
+[data-native-mobile-shell] .arena-bottom-dock {
+  background: linear-gradient(180deg, rgba(5,5,14,.82), rgba(3,3,10,.985));
+  border-top: 1px solid color-mix(in srgb, var(--arena-route) 24%, transparent);
+  box-shadow: 0 -16px 48px rgba(0,0,0,.46), 0 -1px 18px color-mix(in srgb, var(--arena-route) 9%, transparent);
+}
+
+[data-native-mobile-shell] .arena-nav-item {
+  position: relative;
+  color: rgba(148,163,184,.62);
+}
+
+[data-native-mobile-shell] .arena-nav-item[data-active="true"] {
+  color: #f9f2ff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--arena-route) 13%, transparent), color-mix(in srgb, var(--arena-route-2) 5%, transparent));
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--arena-route) 5%, transparent);
+}
+
+[data-native-mobile-shell] .arena-nav-item[data-active="true"] svg {
+  color: var(--arena-route-2);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--arena-route-2) 45%, transparent));
+}
+
+[data-native-mobile-shell] .arena-play-button {
+  background: linear-gradient(135deg, #c33cff 0%, #704aff 44%, #19c8ff 100%);
+  box-shadow: 0 0 0 4px rgba(5,5,14,.96), 0 0 0 5px rgba(179,74,255,.35), 0 0 26px rgba(141,67,255,.42), 0 0 24px rgba(35,190,255,.22);
+}
+
+[data-native-mobile-shell] .arena-play-button::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 1.05rem;
+  border: 1px solid rgba(255,255,255,.22);
+  pointer-events: none;
+}
+
+[data-native-mobile-shell] .arena-more-sheet {
+  background:
+    radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--arena-route) 23%, transparent), transparent 34%),
+    radial-gradient(circle at 90% 8%, color-mix(in srgb, var(--arena-route-2) 14%, transparent), transparent 34%),
+    linear-gradient(180deg, rgba(11,9,25,.99), rgba(4,5,13,.995));
+  border-top-color: color-mix(in srgb, var(--arena-route) 32%, transparent) !important;
+  box-shadow: 0 -30px 80px rgba(0,0,0,.72), 0 -1px 22px color-mix(in srgb, var(--arena-route) 13%, transparent);
+}
+
+[data-native-mobile-shell] .arena-menu-tile {
+  border: 1px solid rgba(255,255,255,.075);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--arena-route) 6%, rgba(255,255,255,.025)), rgba(255,255,255,.018));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+
+[data-native-mobile-shell] .arena-menu-tile:active {
+  border-color: color-mix(in srgb, var(--arena-route-2) 30%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--arena-route) 12%, transparent), color-mix(in srgb, var(--arena-route-2) 8%, transparent));
+}
+
+[data-native-mobile-shell] [data-native-full-route="true"] > main {
+  min-height: 0 !important;
+  overflow: visible !important;
+  max-width: 100% !important;
+}
+
+[data-native-mobile-shell] [data-native-full-route="true"] .max-w-7xl,
+[data-native-mobile-shell] [data-native-full-route="true"] .max-w-6xl,
+[data-native-mobile-shell] [data-native-full-route="true"] .max-w-5xl {
+  max-width: 100% !important;
+}
+
+[data-native-mobile-shell] * {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--arena-route) 38%, transparent) transparent;
+}
+
+[data-native-mobile-shell] *::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+[data-native-mobile-shell] *::-webkit-scrollbar-thumb {
+  background: linear-gradient(var(--arena-route), var(--arena-route-2));
+  border-radius: 99px;
+}
+
+@keyframes arena-pulse {
+  0%, 100% { opacity: .65; transform: scale(.9); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes arena-drift {
+  from { transform: translate3d(-8px, -4px, 0) scale(.96); }
+  to { transform: translate3d(12px, 12px, 0) scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-native-mobile-shell] .arena-ambient-orb,
+  [data-native-mobile-shell] .arena-live-dot {
+    animation: none !important;
+  }
+}
