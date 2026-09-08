@@ -5,6 +5,13 @@ import { ArrowDownLeft, ArrowUpRight, ChevronRight, Clock3, Lock, ReceiptText, S
 import { Button } from "../ui/button";
 import type { Transaction, Wallet, WithdrawalRequest } from "../../../../shared/schema";
 
+function arrayFrom<T>(value: unknown, keys: string[] = []): T[] {
+  const data: any = value;
+  if (Array.isArray(data)) return data as T[];
+  for (const key of keys) if (Array.isArray(data?.[key])) return data[key] as T[];
+  return [];
+}
+
 function money(value: unknown) {
   const amount = Number(value || 0);
   return `N$${Number.isFinite(amount) ? amount.toFixed(2) : "0.00"}`;
@@ -52,7 +59,7 @@ export default function NativeWalletPage() {
     staleTime: 10_000,
     refetchInterval: 30_000,
   });
-  const { data: transactions = [] } = useQuery<Transaction[]>({
+  const { data: transactionsRaw } = useQuery<any>({
     queryKey: ["/api/transactions"],
     queryFn: async () => {
       const response = await fetch("/api/transactions", { credentials: "include" });
@@ -60,7 +67,7 @@ export default function NativeWalletPage() {
     },
     staleTime: 15_000,
   });
-  const { data: withdrawals = [] } = useQuery<WithdrawalRequest[]>({
+  const { data: withdrawalsRaw } = useQuery<any>({
     queryKey: ["/api/wallet/withdrawals"],
     queryFn: async () => {
       const response = await fetch("/api/wallet/withdrawals", { credentials: "include" });
@@ -69,10 +76,12 @@ export default function NativeWalletPage() {
     staleTime: 15_000,
   });
 
+  const transactions = React.useMemo(() => arrayFrom<Transaction>(transactionsRaw, ["transactions", "items"]), [transactionsRaw]);
+  const withdrawals = React.useMemo(() => arrayFrom<WithdrawalRequest>(withdrawalsRaw, ["withdrawals", "requests", "items"]), [withdrawalsRaw]);
   const balance = Number((wallet as any)?.balance || 0);
   const locked = Number((wallet as any)?.lockedBalance || (wallet as any)?.locked_balance || 0);
-  const txRows = Array.isArray(transactions) ? transactions.slice(0, 8) : [];
-  const requestRows = Array.isArray(withdrawals) ? withdrawals.slice(0, 8) : [];
+  const txRows = transactions.slice(0, 8);
+  const requestRows = withdrawals.slice(0, 8);
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-wallet>
