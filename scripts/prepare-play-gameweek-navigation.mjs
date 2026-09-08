@@ -37,3 +37,4 @@ if (!landing.includes('data-auth-copy="login-signup"')) {
 }
 
 await import("./apply-play-gameweek-navigation.mjs");
+await import("./apply-common-open-entry-ui.mjs");
