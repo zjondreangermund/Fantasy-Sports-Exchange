@@ -18,5 +18,5 @@
     "skipLibCheck": true
   },
   "include": ["server/**/*", "shared/**/*"],
-  "exclude": ["client", "node_modules"]
+  "exclude": ["client", "node_modules", "shared/referral-schema.ts"]
 }

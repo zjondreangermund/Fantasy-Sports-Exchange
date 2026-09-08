@@ -1,5 +1,5 @@
 import { integer, text, timestamp, varchar } from "drizzle-orm/pg-core";
-import { appSchema, playerCards, users } from "./schema.js";
+import { appSchema, playerCards, users } from "./schema.ts";
 
 // Keep the runtime referral tables visible to drizzle-kit. Referral routes also
 // converge older production shapes at runtime, but db:push must never treat
