@@ -2,7 +2,18 @@ import fs from "node:fs";
 
 function replaceRequired(source, from, to, label) {
   if (source.includes(to)) return source;
-  if (!source.includes(from)) throw new Error(`[lineup-rarity-glows] ${label} anchor not found`);
+  if (!source.includes(from)) {
+    // The play-navigation prebuild patch may rewrite the initials line before
+    // this script runs. Anchor the rarity tone to the stable expanded-card line
+    // instead so desktop lineup glows survive the full production patch chain.
+    if (label === "desktop player rarity tone") {
+      const fallback = "                        const expanded = expandedCardId === Number(player.cardId);";
+      const fallbackTo = `${fallback}\n                        const playerGlow = lineupGlow(player.rarity);`;
+      if (source.includes(fallbackTo)) return source;
+      if (source.includes(fallback)) return source.replace(fallback, fallbackTo);
+    }
+    throw new Error(`[lineup-rarity-glows] ${label} anchor not found`);
+  }
   return source.replace(from, to);
 }
 
