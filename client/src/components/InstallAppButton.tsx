@@ -80,7 +80,7 @@ export default function InstallAppButton() {
     return () => window.clearTimeout(timer);
   }, [installed]);
 
-  if (installed) return null;
+  if (isInstalledMobileApp()) return null;
 
   const dismissPrompt = () => {
     try { window.localStorage.setItem(INSTALL_PROMPT_SNOOZE_KEY, String(Date.now() + INSTALL_PROMPT_SNOOZE_MS)); } catch { /* storage may be restricted */ }
@@ -134,7 +134,7 @@ export default function InstallAppButton() {
         data-android-size={isAndroidBrowser ? ANDROID_SIZE_LABEL : undefined}
       >
         <Download className="h-4 w-4" />
-        <span className="hidden sm:inline">{installing ? "Installing…" : "Install App"}</span>
+        <span>{installing ? "Installing…" : "Install App"}</span>
       </button>
 
       {promptOpen ? (
@@ -149,7 +149,7 @@ export default function InstallAppButton() {
             {isAndroidBrowser ? <p className="mt-3 rounded-2xl border border-emerald-300/12 bg-emerald-300/[.05] px-3 py-2 text-xs text-emerald-100">Android app {ANDROID_VERSION} · {ANDROID_SIZE_LABEL}</p> : null}
             <div className="mt-5 grid grid-cols-2 gap-2">
               <button type="button" onClick={dismissPrompt} className="h-11 rounded-2xl border border-white/10 bg-white/[.04] text-sm font-black text-white/75">Not now</button>
-              <button type="button" onClick={install} disabled={installing} className="h-11 rounded-2xl bg-gradient-to-r from-cyan-300 via-sky-300 to-violet-400 px-3 text-sm font-black text-slate-950 shadow-[0_0_30px_rgba(34,211,238,.25)] disabled:opacity-60">{installing ? "Installing…" : isAndroidBrowser ? "Download App" : "Install App"}</button>
+              <button type="button" onClick={install} disabled={installing} className="h-11 rounded-2xl bg-gradient-to-r from-cyan-300 via-sky-300 to-violet-400 px-3 text-sm font-black text-slate-950 shadow-[0_0_30px_rgba(34,211,238,.25)] disabled:opacity-60">{installing ? "Installing…" : "Install App"}</button>
             </div>
           </section>
         </div>
