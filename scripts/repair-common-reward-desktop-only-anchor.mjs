@@ -3,8 +3,8 @@ import fs from "node:fs";
 // This compatibility patch runs immediately before the desktop-only website
 // transition. Production validation may already have inserted InstallAppButton
 // beside the legacy mobile/desktop toggle, while Android builds start clean.
-// Normalize both paths, then update the older Common-reward patch/verifier so
-// the new product split is enforced consistently.
+// Normalize both paths, then update older build patches/verifiers so the new
+// product split is enforced consistently.
 
 const appPath = "client/src/App.tsx";
 let app = fs.readFileSync(appPath, "utf8");
@@ -47,4 +47,17 @@ verifier = verifier.replace(
   'console.log("Common rewards verified: weekly and referral cards balance tournament positions while player identity remains random; referral rewards are atomic/idempotent; signed-in web users retain Install App access; native APK owns compact mobile UI and browser/PWA traffic is desktop-only.");',
 );
 fs.writeFileSync(verifierPath, verifier);
-console.log("[desktop-only-install-app] legacy desktop-first installed-app verification now matches the APK-only mobile product split.");
+console.log("[desktop-only-install-app] weekly reward verifier now matches the APK-only mobile product split.");
+
+const integrityPath = "scripts/verify-site-value-image-admin-integrity.mjs";
+let integrity = fs.readFileSync(integrityPath, "utf8");
+integrity = integrity.replace(
+  'includes(view, \'if (isInstalledMobileApp()) return "desktop";\', "Installed mobile apps must default to the desktop website layout on each fresh session.");',
+  'includes(view, \'return isNativeMobileApp() ? "mobile" : "desktop";\', "Native APK must own the compact mobile UI while browser/PWA traffic stays desktop-only.");',
+);
+integrity = integrity.replace(
+  'includes(app, "Switch to desktop site view", "Managers must be able to toggle between desktop and mobile views.");',
+  'assert.ok(!app.includes("Switch to desktop site view") && !app.includes("Switch to mobile site view"), "The retired browser desktop/mobile view toggle must not be rendered.");\nassert.ok(!app.includes("MobileNavDock"), "The retired browser mobile navigation dock must not be mounted.");',
+);
+fs.writeFileSync(integrityPath, integrity);
+console.log("[desktop-only-install-app] site integrity verifier now requires desktop web plus native-APK mobile UI.");
