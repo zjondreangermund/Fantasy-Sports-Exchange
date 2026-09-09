@@ -20,6 +20,25 @@ function gameweekPoints(card: PlayerCardWithPlayer) {
   return Number((card as any).currentGameweekPoints ?? (card as any).gameweekPoints ?? 0);
 }
 
+function totalPoints(card: PlayerCardWithPlayer) {
+  const value = Number((card as any).totalPoints ?? (card.player as any)?.totalPoints ?? gameweekPoints(card));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function cardLevel(card: PlayerCardWithPlayer) {
+  const value = Number((card as any).level ?? 1);
+  return Number.isFinite(value) ? Math.max(1, Math.round(value)) : 1;
+}
+
+function cardForm(card: PlayerCardWithPlayer) {
+  const value = Number((card as any).form ?? (card.player as any)?.form ?? 0);
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function compactStat(value: number, digits = 1) {
+  return Number(value.toFixed(digits)).toLocaleString(undefined, { maximumFractionDigits: digits });
+}
+
 export default function NativeCardsPage() {
   const [rarity, setRarity] = React.useState<RarityFilter>("all");
   const [search, setSearch] = React.useState("");
@@ -77,7 +96,7 @@ export default function NativeCardsPage() {
       </div>
 
       {isLoading ? (
-        <div className="mt-3 grid grid-cols-3 justify-items-center gap-x-1 gap-y-2.5">{Array.from({ length: 9 }).map((_, index) => <div key={index} className="h-[154px] w-full max-w-[104px] animate-pulse rounded-xl bg-white/[.035]" />)}</div>
+        <div className="mt-3 grid grid-cols-3 justify-items-center gap-x-1 gap-y-2.5">{Array.from({ length: 9 }).map((_, index) => <div key={index} className="h-[176px] w-full max-w-[104px] animate-pulse rounded-xl bg-white/[.035]" />)}</div>
       ) : filtered.length ? (
         <>
           <div className="mt-3 grid grid-cols-3 items-start justify-items-center gap-x-1 gap-y-2.5" data-native-static-card-grid>
@@ -88,8 +107,19 @@ export default function NativeCardsPage() {
               >
                 <div className="w-[96px] max-w-full" data-native-static-card>
                   <div className="mx-auto flex w-[96px] max-w-full justify-center" onClick={() => setSelected(card)}>
-                    <CardThumbnail card={card} size="xs" showMeta={false} />
+                    <CardThumbnail card={card} size="xs" showMeta={false} showStats={false} />
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(card)}
+                    className="mt-1 grid w-full grid-cols-3 gap-1 text-left"
+                    aria-label={`Open ${card.player?.name || "player"} card stats`}
+                    data-native-card-stats
+                  >
+                    <MiniStat label="LVL" value={String(cardLevel(card))} />
+                    <MiniStat label="PTS" value={compactStat(totalPoints(card), 1)} />
+                    <MiniStat label="FORM" value={compactStat(cardForm(card), 1)} />
+                  </button>
                   <button
                     type="button"
                     onClick={() => setSelected(card)}
@@ -97,7 +127,7 @@ export default function NativeCardsPage() {
                     aria-label={`Open ${card.player?.name || "player"} card details`}
                   >
                     <span className="min-w-0 justify-self-start truncate rounded-md bg-white/[.05] px-1.5 py-0.5 text-[7px] font-black uppercase text-slate-500">{String(card.player?.position || "-").toUpperCase()}</span>
-                    <span className="justify-self-end rounded-md bg-cyan-300/[.08] px-1.5 py-0.5 text-[8px] font-black tabular-nums text-cyan-100">{gameweekPoints(card).toFixed(2)}</span>
+                    <span className="justify-self-end rounded-md bg-cyan-300/[.08] px-1.5 py-0.5 text-[8px] font-black tabular-nums text-cyan-100">GW {gameweekPoints(card).toFixed(2)}</span>
                   </button>
                 </div>
               </div>
@@ -115,6 +145,10 @@ export default function NativeCardsPage() {
       {selected ? <CardDetails card={selected} onClose={() => setSelected(null)} /> : null}
     </div>
   );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return <span className="min-w-0 rounded-md border border-white/[.07] bg-white/[.04] px-0.5 py-1 text-center"><span className="block text-[5px] font-black uppercase tracking-[.08em] text-slate-600">{label}</span><span className="mt-0.5 block truncate text-[7px] font-black tabular-nums text-white/90">{value}</span></span>;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
