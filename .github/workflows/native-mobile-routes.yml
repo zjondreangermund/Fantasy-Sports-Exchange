@@ -22,3 +22,5 @@ jobs:
           node-version: 20
       - name: Verify APK routes stay connected to live website
         run: node scripts/verify-native-mobile-routes.mjs
+      - name: Verify native buy sell and loan flows
+        run: node scripts/verify-native-card-trading.mjs

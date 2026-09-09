@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import "./apply-native-trading-integrity.mjs";
 
 function patchFile(file, transform) {
   const source = fs.readFileSync(file, "utf8");
