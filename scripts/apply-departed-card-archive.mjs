@@ -25,9 +25,14 @@ const claimAnchor = `    if (!claim?.id) continue;\n\n    const prettyRarity = r
 const claimReplacement = `    if (!claim?.id) continue;\n\n    // Remove the departed card from the user's collection immediately while\n    // keeping the card row and claim linkage intact for admin/audit history.\n    await db.execute(sql\`\n      update app.player_cards\n      set owner_id=null, for_sale=false, price=0\n      where id=\${sourceCardId} and owner_id=\${userId}\n    \`);\n\n    const prettyRarity = rarity.charAt(0).toUpperCase() + rarity.slice(1);`;
 source = replaceRequired(source, claimAnchor, claimReplacement, "archive source card after creating departure claim");
 
-const oldMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} card stays in your collection as a record, but it is no longer eligible for Premier League tournaments. Mint one free ${prettyRarity} replacement from the current Premier League player pool for future entries.`,'.replace(/\\`/g, "`");
-const newMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} card has been removed from your playable collection and archived in transfer history. Mint one free ${prettyRarity} replacement from the current Premier League player pool for future entries.`,'.replace(/\\`/g, "`");
-source = replaceRequired(source, oldMessage, newMessage, "departure notification copy");
+// The same-position replacement patch runs later in the production generator
+// chain. Leave its original notification anchor untouched until then, and only
+// rewrite the final same-position copy once that patch is present.
+if (source.includes("EPL_REPLACEMENT_SAME_POSITION_V1")) {
+  const oldMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card stays in your collection as a record, but it is no longer eligible for Premier League tournaments. Claim one free random current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity. Fantasy Arena will keep reminding you until the replacement is claimed.`,'.replace(/\\`/g, "`");
+  const newMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card has been removed from your playable collection and archived in transfer history. Claim one free random current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity. Fantasy Arena will keep reminding you until the replacement is claimed.`,'.replace(/\\`/g, "`");
+  source = replaceRequired(source, oldMessage, newMessage, "final same-position departure notification copy");
+}
 
 // The admin transfer report is injected by apply-transfer-admin-pan-fix.mjs before
 // this patch runs. Preserve historical affected-user/card counts after owner_id is
