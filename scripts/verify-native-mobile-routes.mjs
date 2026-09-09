@@ -107,9 +107,13 @@ expect(squad.includes("listFrom<CompetitionEntry>(entriesRaw"), "Squad does not 
 expect(cards.includes("normalizeCards(cardsRaw)"), "Collection does not normalize cached card response shapes");
 expect(wallet.includes("arrayFrom<Transaction>(transactionsRaw"), "Wallet does not normalize cached transaction response shapes");
 
-/* Every tournament/gameweek surface should retain the rarity neon language. */
-for (const token of ["text-slate-100", "text-sky-200", "text-violet-200", "text-rose-200", "text-amber-200"]) {
+/* Every tournament/gameweek surface should retain the rarity neon language.
+   Play intentionally uses the stronger Android palette, while Squad keeps the
+   established softer palette until its separate visual pass. */
+for (const token of ["text-cyan-50", "text-blue-100", "text-fuchsia-100", "text-rose-100", "text-amber-100"]) {
   expect(play.includes(token), `Play rarity neon palette is missing ${token}`);
+}
+for (const token of ["text-slate-100", "text-sky-200", "text-violet-200", "text-rose-200", "text-amber-200"]) {
   expect(squad.includes(token), `Squad rarity neon palette is missing ${token}`);
 }
 expect(play.includes("Gameweek {currentGameweek} · {rarity}"), "Play hero no longer shows rarity-colored gameweek context");

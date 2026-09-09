@@ -1,12 +1,10 @@
 import * as React from "react";
 import { Capacitor } from "@capacitor/core";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Bell, BellOff, Loader2, Smartphone } from "lucide-react";
+import { Bell, BellOff, Loader2, Smartphone, X } from "lucide-react";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { isInstalledMobileApp } from "../lib/site-view";
 import { useToast } from "../hooks/use-toast";
-import { Button } from "./ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 
 type PushStatus = {
   configured?: boolean;
@@ -21,6 +19,27 @@ type DevicePermission = NotificationPermission | "prompt" | "prompt-with-rationa
 type EnabledDevice =
   | { kind: "web"; subscription: PushSubscription }
   | { kind: "native"; token: string };
+
+type PushTestPreset =
+  | "entries_open"
+  | "starts_soon"
+  | "lineup_lock"
+  | "gameweek_live"
+  | "prize_won"
+  | "replacement_required"
+  | "community_mention"
+  | "cancellation_refund";
+
+const PUSH_TEST_PRESETS: Array<{ id: PushTestPreset; label: string; hint: string }> = [
+  { id: "entries_open", label: "Entries open", hint: "New gameweek tournaments are available" },
+  { id: "starts_soon", label: "Starts soon", hint: "24-hour gameweek reminder" },
+  { id: "lineup_lock", label: "Lineup lock", hint: "Two-hour deadline warning" },
+  { id: "gameweek_live", label: "Gameweek live", hint: "Your entered teams are live" },
+  { id: "prize_won", label: "Prize won", hint: "Tournament settlement / reward" },
+  { id: "replacement_required", label: "Replacement", hint: "Premier League player replacement claim" },
+  { id: "community_mention", label: "Community mention", hint: "Another manager mentioned you" },
+  { id: "cancellation_refund", label: "Cancellation / refund", hint: "Tournament cancelled and entry refunded" },
+];
 
 const PROMPT_SNOOZE_KEY = "fantasy_arena_push_prompt_snoozed_until";
 const PROMPT_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -127,6 +146,8 @@ export default function PushNotificationControl() {
   const [subscriptionChecked, setSubscriptionChecked] = React.useState(false);
   const [promptReady, setPromptReady] = React.useState(false);
   const [promptOpen, setPromptOpen] = React.useState(false);
+  const [testOpen, setTestOpen] = React.useState(false);
+  const [testPreset, setTestPreset] = React.useState<PushTestPreset>("entries_open");
   const [permission, setPermission] = React.useState<DevicePermission>(
     webSupported ? Notification.permission : "prompt",
   );
@@ -268,12 +289,32 @@ export default function PushNotificationControl() {
       await queryClient.invalidateQueries({ queryKey: ["/api/push/status"] });
       toast({
         title: "Mobile notifications enabled",
-        description: "Fantasy Arena can now notify this installed app about tournaments, prizes and required card replacements.",
+        description: "Fantasy Arena can now notify this device about tournaments, prizes and required card replacements.",
       });
+      window.setTimeout(() => setTestOpen(true), 250);
     },
     onError: (error: any) => toast({
       title: "Notifications were not enabled",
       description: String(error?.message || "Please check your phone notification settings and try again."),
+      variant: "destructive",
+    }),
+  });
+
+  const testMutation = useMutation({
+    mutationFn: async (preset: PushTestPreset) => {
+      const response = await apiRequest("POST", "/api/push/test", { preset, delaySeconds: 12 });
+      return response.json();
+    },
+    onSuccess: (body: any) => {
+      setTestOpen(false);
+      toast({
+        title: "Test notification scheduled",
+        description: `${String(body?.title || "Fantasy Arena test")} will be sent in ${Number(body?.delaySeconds || 12)} seconds. Close or minimize the app now.`,
+      });
+    },
+    onError: (error: any) => toast({
+      title: "Could not schedule test notification",
+      description: String(error?.message || "Make sure notifications are enabled and try again."),
       variant: "destructive",
     }),
   });
@@ -294,6 +335,7 @@ export default function PushNotificationControl() {
     onSuccess: async () => {
       setNativeToken(null);
       setWebSubscription(null);
+      setTestOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["/api/push/status"] });
       toast({ title: "Mobile notifications disabled", description: "This device will no longer receive Fantasy Arena push alerts." });
     },
@@ -306,11 +348,11 @@ export default function PushNotificationControl() {
 
   if (!supported || !configured) return null;
 
-  const busy = enableMutation.isPending || disableMutation.isPending;
+  const busy = enableMutation.isPending || disableMutation.isPending || testMutation.isPending;
   const toggle = () => {
     if (busy) return;
     if (enabled) {
-      if (window.confirm("Turn off Fantasy Arena mobile notifications on this device?")) disableMutation.mutate();
+      setTestOpen(true);
       return;
     }
     enableMutation.mutate();
@@ -327,34 +369,59 @@ export default function PushNotificationControl() {
         type="button"
         onClick={toggle}
         disabled={busy}
-        aria-label={enabled ? "Disable mobile notifications" : "Enable mobile notifications"}
-        title={enabled ? "Mobile notifications enabled" : permission === "denied" ? "Allow notifications in phone settings" : "Enable mobile notifications"}
-        className={`inline-flex h-9 items-center gap-1.5 rounded-xl border px-2 text-[11px] font-bold disabled:opacity-60 ${enabled ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100" : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10"}`}
+        aria-label={enabled ? "Open notification tests" : "Enable mobile notifications"}
+        title={enabled ? "Alerts on — tap to test" : permission === "denied" ? "Allow notifications in phone settings" : "Enable mobile notifications"}
+        className={`pointer-events-auto inline-flex h-9 touch-manipulation items-center gap-1.5 rounded-xl border px-2 text-[11px] font-bold disabled:opacity-60 ${enabled ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100" : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10"}`}
         data-push-notification-control
       >
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : enabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
-        <span className="hidden lg:inline">{enabled ? "Alerts on" : "Alerts"}</span>
+        <span>{enabled ? "Alerts on" : "Alerts"}</span>
       </button>
 
-      <Dialog open={promptOpen} onOpenChange={(open) => { if (!open) snoozePrompt(); }}>
-        <DialogContent className="z-[125] max-w-md border-cyan-300/25 bg-[#080c18] text-white">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-black"><Smartphone className="h-5 w-5 text-cyan-200" />Turn on mobile notifications</DialogTitle>
-            <DialogDescription className="leading-6 text-white/60">
-              Get alerts from your installed Fantasy Arena app even when it is closed.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-2xl border border-white/10 bg-white/[.04] p-4 text-sm leading-6 text-white/75">
-            We will notify you about tournament entry deadlines, live gameweeks, results and prizes, plus required replacement claims when one of your players leaves the Premier League.
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button type="button" variant="outline" onClick={snoozePrompt} className="border-white/15 bg-white/5 text-white hover:bg-white/10">Not now</Button>
-            <Button type="button" onClick={() => enableMutation.mutate()} disabled={enableMutation.isPending} className="bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200">
-              {enableMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bell className="mr-2 h-4 w-4" />}Enable notifications
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {promptOpen ? (
+        <div className="fixed inset-0 z-[240] flex items-end justify-center bg-black/80 p-3 backdrop-blur-md sm:items-center" role="dialog" aria-modal="true" aria-label="Turn on mobile notifications" data-push-enable-dialog>
+          <button type="button" className="absolute inset-0 cursor-default" onClick={snoozePrompt} aria-label="Close notification prompt" />
+          <section className="pointer-events-auto relative z-10 w-full max-w-md rounded-[1.75rem] border border-cyan-300/25 bg-[#080c18] p-5 text-white shadow-[0_30px_100px_rgba(0,0,0,.7)]">
+            <button type="button" onClick={snoozePrompt} className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5" aria-label="Close"><X className="h-4 w-4" /></button>
+            <Smartphone className="h-6 w-6 text-cyan-200" />
+            <h2 className="mt-3 text-xl font-black">Turn on mobile notifications</h2>
+            <p className="mt-2 text-sm leading-6 text-white/60">Get Fantasy Arena alerts even when the app is closed: tournament deadlines, gameweek starts, results, prizes and replacement claims.</p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button type="button" onClick={snoozePrompt} className="h-11 touch-manipulation rounded-2xl border border-white/15 bg-white/5 text-sm font-black text-white">Not now</button>
+              <button type="button" onClick={() => enableMutation.mutate()} disabled={enableMutation.isPending} className="h-11 touch-manipulation rounded-2xl bg-cyan-300 text-sm font-black text-slate-950 disabled:opacity-50">{enableMutation.isPending ? "Enabling…" : "Enable alerts"}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {testOpen ? (
+        <div className="fixed inset-0 z-[245] flex items-end justify-center bg-black/85 p-3 backdrop-blur-md sm:items-center" role="dialog" aria-modal="true" aria-label="Test app notifications" data-push-self-test-dialog>
+          <button type="button" className="absolute inset-0 cursor-default" onClick={() => setTestOpen(false)} aria-label="Close notification test" />
+          <section className="pointer-events-auto relative z-10 max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-[1.75rem] border border-cyan-300/25 bg-[#080c18] p-4 text-white shadow-[0_30px_100px_rgba(0,0,0,.74)]">
+            <button type="button" onClick={() => setTestOpen(false)} className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5" aria-label="Close"><X className="h-4 w-4" /></button>
+            <div className="flex items-center gap-2"><Bell className="h-5 w-5 text-cyan-200" /><h2 className="text-xl font-black">Test app notifications</h2></div>
+            <p className="mt-2 pr-8 text-sm leading-6 text-white/60">Choose a notification type, then tap <strong className="text-white">Send in 12 sec</strong> and close or minimize Fantasy Arena.</p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {PUSH_TEST_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setTestPreset(preset.id)}
+                  className={`pointer-events-auto min-h-[62px] touch-manipulation rounded-2xl border p-3 text-left active:scale-[.99] ${testPreset === preset.id ? "border-cyan-300/55 bg-cyan-300/[.12] text-white shadow-[0_0_22px_rgba(34,211,238,.12)]" : "border-white/10 bg-white/[.035] text-white/75"}`}
+                  data-push-test-preset={preset.id}
+                >
+                  <span className="block text-xs font-black">{preset.label}</span>
+                  <span className="mt-1 block text-[10px] leading-4 text-slate-500">{preset.hint}</span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 grid grid-cols-[1fr_1.25fr] gap-2">
+              <button type="button" onClick={() => disableMutation.mutate()} disabled={disableMutation.isPending} className="h-11 touch-manipulation rounded-2xl border border-rose-300/20 bg-rose-300/[.06] text-xs font-black text-rose-100 disabled:opacity-50">Turn off alerts</button>
+              <button type="button" onClick={() => testMutation.mutate(testPreset)} disabled={testMutation.isPending} className="h-11 touch-manipulation rounded-2xl bg-gradient-to-r from-cyan-300 via-sky-300 to-violet-400 text-xs font-black text-slate-950 shadow-[0_0_26px_rgba(34,211,238,.22)] disabled:opacity-50">{testMutation.isPending ? "Scheduling…" : "Send in 12 sec"}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </>
   );
 }
