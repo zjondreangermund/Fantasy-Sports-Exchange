@@ -49,3 +49,4 @@ await import("./apply-lineup-rarity-glows-v2.mjs");
 await import("./repair-common-reward-desktop-only-anchor.mjs");
 await import("./apply-squad-hub-premier-desktop-web.mjs");
 await import("./repair-squad-hub-jsx.mjs");
+await import("./apply-match-centre-popup.mjs");
