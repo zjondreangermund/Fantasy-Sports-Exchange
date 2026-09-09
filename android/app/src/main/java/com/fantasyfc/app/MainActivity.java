@@ -11,7 +11,7 @@ import androidx.core.splashscreen.SplashScreen;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
-    private static final String NATIVE_APP_UA = "FantasyArenaNative/1.1.3";
+    private static final String NATIVE_APP_UA = "FantasyArenaNative/1.1.4";
     private static final String APP_BASE_URL = "https://fantasy-sports-exchange-production-d05c.up.railway.app";
 
     @Override
