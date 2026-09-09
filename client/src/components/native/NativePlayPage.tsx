@@ -47,39 +47,39 @@ type RarityTone = {
 
 const rarityTone: Record<TournamentRarity, RarityTone> = {
   common: {
-    text: "text-slate-100",
-    border: "border-slate-200/30",
-    soft: "bg-slate-200/[.07]",
-    glow: "shadow-[0_0_22px_rgba(226,232,240,.12)]",
-    button: "bg-slate-100 text-slate-950",
+    text: "text-cyan-50",
+    border: "border-cyan-100/75",
+    soft: "bg-cyan-100/[.15]",
+    glow: "shadow-[0_0_36px_rgba(207,250,254,.42),0_0_72px_rgba(34,211,238,.18)]",
+    button: "bg-cyan-100 bg-gradient-to-r from-white via-cyan-100 to-sky-300 text-slate-950 shadow-[0_0_24px_rgba(207,250,254,.55)]",
   },
   rare: {
-    text: "text-sky-200",
-    border: "border-sky-300/40",
-    soft: "bg-sky-400/[.09]",
-    glow: "shadow-[0_0_24px_rgba(56,189,248,.20)]",
-    button: "bg-sky-300 text-slate-950",
+    text: "text-blue-100",
+    border: "border-blue-400/80",
+    soft: "bg-blue-500/[.18]",
+    glow: "shadow-[0_0_38px_rgba(59,130,246,.58),0_0_76px_rgba(37,99,235,.24)]",
+    button: "bg-blue-400 bg-gradient-to-r from-sky-300 via-blue-400 to-blue-600 text-white shadow-[0_0_26px_rgba(59,130,246,.62)]",
   },
   unique: {
-    text: "text-violet-200",
-    border: "border-violet-300/40",
-    soft: "bg-violet-400/[.10]",
-    glow: "shadow-[0_0_24px_rgba(168,85,247,.22)]",
-    button: "bg-violet-300 text-slate-950",
+    text: "text-fuchsia-100",
+    border: "border-fuchsia-400/85",
+    soft: "bg-fuchsia-500/[.18]",
+    glow: "shadow-[0_0_40px_rgba(217,70,239,.62),0_0_82px_rgba(139,92,246,.28)]",
+    button: "bg-fuchsia-400 bg-gradient-to-r from-fuchsia-300 via-purple-500 to-violet-600 text-white shadow-[0_0_28px_rgba(217,70,239,.68)]",
   },
   epic: {
-    text: "text-rose-200",
-    border: "border-rose-300/40",
-    soft: "bg-rose-400/[.09]",
-    glow: "shadow-[0_0_24px_rgba(244,63,94,.20)]",
-    button: "bg-rose-300 text-slate-950",
+    text: "text-rose-100",
+    border: "border-rose-400/85",
+    soft: "bg-rose-500/[.19]",
+    glow: "shadow-[0_0_42px_rgba(244,63,94,.64),0_0_86px_rgba(239,68,68,.28)]",
+    button: "bg-rose-400 bg-gradient-to-r from-rose-300 via-red-400 to-fuchsia-500 text-white shadow-[0_0_30px_rgba(244,63,94,.70)]",
   },
   legendary: {
-    text: "text-amber-200",
-    border: "border-amber-300/45",
-    soft: "bg-amber-300/[.10]",
-    glow: "shadow-[0_0_26px_rgba(251,191,36,.22)]",
-    button: "bg-amber-300 text-slate-950",
+    text: "text-amber-100",
+    border: "border-amber-300/90",
+    soft: "bg-amber-300/[.18]",
+    glow: "shadow-[0_0_42px_rgba(251,191,36,.64),0_0_88px_rgba(245,158,11,.28)]",
+    button: "bg-amber-300 bg-gradient-to-r from-yellow-200 via-amber-300 to-orange-400 text-slate-950 shadow-[0_0_30px_rgba(251,191,36,.72)]",
   },
 };
 
@@ -335,18 +335,18 @@ export default function NativePlayPage() {
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-play>
-      <section className={`overflow-hidden rounded-[1.55rem] border ${selectedTone.border} bg-gradient-to-br from-violet-400/[.11] via-[#0a0e1c] to-cyan-300/[.06] p-4 ${selectedTone.glow}`}>
+      <section className={`overflow-hidden rounded-[1.55rem] border ${selectedTone.border} ${selectedTone.soft} bg-gradient-to-br from-violet-400/[.11] via-[#0a0e1c] to-cyan-300/[.06] p-4 ${selectedTone.glow}`}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className={`inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-[.18em] ${selectedTone.border} ${selectedTone.soft} ${selectedTone.text}`}>Gameweek {currentGameweek} · {rarity}</p>
             <h2 className="mt-2 text-2xl font-black">Choose. Enter. Compete.</h2>
             <p className="mt-1 max-w-sm text-xs leading-5 text-slate-400">Pick a cup, build five eligible Premier League cards, choose your captain and you are in.</p>
           </div>
-          <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border ${selectedTone.border} ${selectedTone.soft} ${selectedTone.text}`}><Trophy className="h-5 w-5" /></div>
+          <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border ${selectedTone.border} ${selectedTone.soft} ${selectedTone.text} ${selectedTone.glow}`}><Trophy className="h-5 w-5" /></div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-black/20 p-1">
-          <button onClick={() => setTab("cups")} className={`rounded-xl px-3 py-2.5 text-xs font-black ${tab === "cups" ? "bg-white/10 text-white" : "text-slate-500"}`}>Open Cups</button>
-          <button onClick={() => setTab("entries")} className={`rounded-xl px-3 py-2.5 text-xs font-black ${tab === "entries" ? "bg-white/10 text-white" : "text-slate-500"}`}>My Entries · {myEntryRows.length}</button>
+          <button onClick={() => setTab("cups")} className={`rounded-xl px-3 py-2.5 text-xs font-black ${tab === "cups" ? `${selectedTone.soft} ${selectedTone.text} ${selectedTone.glow}` : "text-slate-500"}`}>Open Cups</button>
+          <button onClick={() => setTab("entries")} className={`rounded-xl px-3 py-2.5 text-xs font-black ${tab === "entries" ? `${selectedTone.soft} ${selectedTone.text} ${selectedTone.glow}` : "text-slate-500"}`}>My Entries · {myEntryRows.length}</button>
         </div>
       </section>
 
@@ -355,19 +355,19 @@ export default function NativePlayPage() {
           <div className="-mx-3 mt-3 flex gap-2 overflow-x-auto px-3 pb-2 [scrollbar-width:none]">
             {rarities.map((item) => {
               const tone = rarityTone[item];
-              return <button key={item} onClick={() => setRarity(item)} className={`shrink-0 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[.12em] ${rarity === item ? `${tone.border} ${tone.soft} ${tone.text} ${tone.glow}` : "border-white/8 bg-white/[.035] text-slate-500"}`}>{item}</button>;
+              return <button key={item} onClick={() => setRarity(item)} className={`shrink-0 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[.12em] ${tone.border} ${tone.soft} ${tone.text} ${rarity === item ? `${tone.glow} opacity-100` : "opacity-55"}`}>{item}</button>;
             })}
           </div>
 
           <div className="mt-2 flex items-center justify-between gap-2">
             <div><p className={`text-[10px] font-black uppercase tracking-[.18em] ${selectedTone.text}`}>{getTournamentRarityRequirement(rarity).shortLabel}</p><p className="text-sm font-black">GW{currentGameweek} {rarity} cups</p></div>
-            <button onClick={() => setPinOpen((value) => !value)} className="inline-flex items-center gap-1.5 rounded-xl border border-violet-300/15 bg-violet-300/[.06] px-3 py-2 text-[10px] font-black text-violet-200"><KeyRound className="h-3.5 w-3.5" />Private PIN</button>
+            <button onClick={() => setPinOpen((value) => !value)} className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-[10px] font-black ${selectedTone.border} ${selectedTone.soft} ${selectedTone.text}`}><KeyRound className="h-3.5 w-3.5" />Private PIN</button>
           </div>
 
           {pinOpen ? (
-            <div className="mt-2 flex gap-2 rounded-2xl border border-violet-300/15 bg-violet-300/[.05] p-2">
+            <div className={`mt-2 flex gap-2 rounded-2xl border p-2 ${selectedTone.border} ${selectedTone.soft}`}>
               <input value={pin} onChange={(event) => setPin(event.target.value.toUpperCase())} onKeyDown={(event) => { if (event.key === "Enter") pinMutation.mutate(); }} placeholder="ENTER PIN" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 text-xs font-bold uppercase text-white outline-none" />
-              <button onClick={() => pinMutation.mutate()} disabled={pinMutation.isPending} className="rounded-xl bg-violet-400 px-3 py-2.5 text-xs font-black text-white">{pinMutation.isPending ? "..." : "Find"}</button>
+              <button onClick={() => pinMutation.mutate()} disabled={pinMutation.isPending} className={`rounded-xl px-3 py-2.5 text-xs font-black ${selectedTone.button}`}>{pinMutation.isPending ? "..." : "Find"}</button>
             </div>
           ) : null}
 
@@ -385,7 +385,7 @@ export default function NativePlayPage() {
         <div className="mt-3 space-y-2.5">
           {myEntryRows.length ? myEntryRows.slice(0, 12).map(({ entry, competition }) => {
             const tone = toneFor(competition?.tier);
-            return <div key={(entry as any).id} className={`relative overflow-hidden rounded-2xl border ${tone.border} ${tone.soft} p-3.5`}>
+            return <div key={(entry as any).id} className={`relative overflow-hidden rounded-2xl border ${tone.border} ${tone.soft} ${tone.glow} p-3.5`}>
               <span className={`absolute inset-y-3 left-0 w-0.5 rounded-full ${tone.button.split(" ")[0]} ${tone.glow}`} />
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0"><p className="truncate text-sm font-black">{competition?.name || "Tournament"}</p><p className={`mt-1 text-[10px] font-bold uppercase tracking-[.12em] ${tone.text}`}>GW{competition?.gameWeek || competition?.game_week || "-"} · {String(competition?.tier || "common").toUpperCase()}</p></div>
@@ -433,7 +433,7 @@ export default function NativePlayPage() {
             <div className="mt-2 space-y-2">
               {candidateCards.length ? candidateCards.map((card) => {
                 const tone = toneFor(card.rarity);
-                return <button key={card.id} onClick={() => chooseCard(card)} className={`flex w-full items-center gap-3 rounded-2xl border ${tone.border} bg-white/[.03] p-2.5 text-left active:scale-[.995]`}>
+                return <button key={card.id} onClick={() => chooseCard(card)} className={`flex w-full items-center gap-3 rounded-2xl border ${tone.border} ${tone.soft} ${tone.glow} p-2.5 text-left active:scale-[.995]`}>
                   <div className="relative h-14 w-12 shrink-0 overflow-hidden rounded-xl bg-slate-900"><CardPlayerImage card={card} alt={card.player?.name || "Player"} className="h-full w-full object-cover object-top" /></div>
                   <div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{card.player?.name || "Player"}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">{cardPosition(card)} · {card.player?.team || "Premier League"}</p><div className="mt-1 flex items-center gap-1.5"><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${tone.soft} ${tone.text}`}>{card.rarity}</span><span className="text-[9px] font-bold text-cyan-200">{Number((card as any).currentGameweekPoints || 0).toFixed(2)} PTS</span></div></div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-slate-600" />
@@ -445,7 +445,7 @@ export default function NativePlayPage() {
           <footer className="absolute inset-x-0 bottom-0 border-t border-white/[.08] bg-[#080b19]/95 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.6rem)] pt-2.5 backdrop-blur-xl">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0"><p className="truncate text-xs font-black">{selectedIds.filter(Boolean).length}/5 selected</p><p className="text-[10px] text-slate-500">{captainId ? "Captain chosen · ready to submit" : complete ? "Choose a captain" : "Complete all five positions"}</p></div>
-              <button onClick={() => joinMutation.mutate()} disabled={!complete || !captainId || joinMutation.isPending} className="rounded-2xl bg-cyan-300 px-5 py-3 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-35">{joinMutation.isPending ? "Submitting…" : Number(selected.entryFee || 0) > 0 ? `Enter · ${money(selected.entryFee)}` : "Enter FREE"}</button>
+              <button onClick={() => joinMutation.mutate()} disabled={!complete || !captainId || joinMutation.isPending} className={`rounded-2xl px-5 py-3 text-xs font-black disabled:cursor-not-allowed disabled:opacity-35 ${toneFor(selected.tier).button}`}>{joinMutation.isPending ? "Submitting…" : Number(selected.entryFee || 0) > 0 ? `Enter · ${money(selected.entryFee)}` : "Enter FREE"}</button>
             </div>
           </footer>
         </div>
@@ -460,10 +460,10 @@ function TournamentRow({ tournament, onEnter }: { tournament: Tournament; onEnte
   const entryCount = Number(tournament.entryCount ?? tournament.entry_count ?? 0);
   const tone = toneFor(tournament.tier);
   const gameweek = Number(tournament.gameWeek ?? tournament.game_week ?? 0);
-  return <div className={`relative overflow-hidden rounded-[1.35rem] border ${tone.border} bg-gradient-to-r from-white/[.045] to-white/[.02] p-3.5 ${tone.glow}`}>
-    <span className={`absolute inset-y-3 left-0 w-0.5 rounded-full ${tone.button.split(" ")[0]}`} />
+  return <div className={`relative overflow-hidden rounded-[1.35rem] border ${tone.border} ${tone.soft} bg-gradient-to-r from-white/[.045] to-white/[.02] p-3.5 ${tone.glow}`}>
+    <span className={`absolute inset-y-3 left-0 w-0.5 rounded-full ${tone.button.split(" ")[0]} ${tone.glow}`} />
     <div className="flex items-start gap-3">
-      <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border ${tone.border} ${tone.soft} ${tone.text}`}><Trophy className="h-5 w-5" /></div>
+      <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl border ${tone.border} ${tone.soft} ${tone.text} ${tone.glow}`}><Trophy className="h-5 w-5" /></div>
       <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-black">{tournament.name}</p>{fee <= 0 ? <span className="shrink-0 rounded-full bg-emerald-300/12 px-2 py-0.5 text-[9px] font-black text-emerald-200">FREE</span> : null}</div><p className={`mt-1 text-[10px] font-black uppercase tracking-[.1em] ${tone.text}`}>GW{gameweek || "-"} · {String(tournament.tier || "common").toUpperCase()}</p><p className="mt-1 text-[9px] font-bold uppercase tracking-[.08em] text-slate-600">{entryCount} entries · {deadline(tournament.submissionClosesAt || tournament.startsAt)}</p></div>
     </div>
     <div className="mt-3 flex items-center justify-between border-t border-white/[.06] pt-2.5"><div className="flex items-center gap-2 text-[10px] text-slate-500"><UsersRound className="h-3.5 w-3.5" /><span>5-card team</span><ShieldCheck className="ml-1 h-3.5 w-3.5" /><span>Premier League</span></div><button onClick={onEnter} disabled={!open} className={`rounded-xl px-3.5 py-2 text-[10px] font-black disabled:bg-white/5 disabled:text-slate-600 ${open ? tone.button : ""}`}>{open ? fee > 0 ? money(fee) : "Enter" : "Closed"}</button></div>
