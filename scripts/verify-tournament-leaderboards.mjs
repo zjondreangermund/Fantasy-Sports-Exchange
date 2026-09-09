@@ -46,16 +46,20 @@ requireText(scoreUpdater, "scoringPrecision: 4", "Official tournament scoring sn
 requireText(scoreUpdater, "identityStatus: String(score?.identity_status", "Scoring snapshots must explain each player's verification status.");
 requireText(scoreUpdater, "this.nextLast5Scores(card.last5Scores, latestScore)", "Player scoring history must preserve the exact official player score.");
 
-requireText(page, ".slice(0, 5)", "Tournament cards must show a compact top-five leaderboard.");
-requireText(page, "pageSize=100", "The full leaderboard must load 100 teams per page.");
+requireText(page, "PLAY_TOURNAMENT_LEADERBOARD_25_V1", "Play tournament cards need the explicit leaderboard launcher.");
+requireText(page, "View standings & scoring", "The Play leaderboard button must explain that standings and scoring are available.");
+requireText(page, "pageSize=25", "The Play leaderboard must load 25 entries per page.");
+requireText(page, "25 teams per page", "The leaderboard dialog must state the 25-team page size.");
+requireText(page, "25 per page", "The tournament card leaderboard launcher must show the 25-team page size.");
 requireText(page, "Previous", "The full leaderboard needs a previous-page control.");
-requireText(page, "Next", "The full leaderboard needs a next-page control.");
-requireText(page, "Open all", "Tournament cards need an Open all leaderboard action.");
+requireText(page, "Next", "The full leaderboard needs a next-page control when more entries exist.");
+requireText(page, "Showing ", "Leaderboard pagination must show the visible entry range.");
+requireText(page, "player.contribution", "Leaderboard team rows must show the player's actual team contribution including captain effects.");
 requireText(page, "How points were earned", "Player scoring actions must be visible in submitted teams.");
 requireText(page, "maximumFractionDigits: 4", "Tournament standings must show precise four-decimal scores.");
 requireText(page, "player.identityStatus !== \"verified\"", "Unverified or refreshing player scores must explain their status to users.");
 requireText(page, "const LIVE_SCORE_REFRESH_MS = 15_000", "Visible tournament standings must refresh every 15 seconds.");
-requireText(page, "<TournamentLeaderboardPreview comp={comp} />", "The tournament card must render its leaderboard.");
+requireText(page, "<TournamentLeaderboardPreview comp={comp} />", "The tournament card must render its leaderboard launcher.");
 requireText(generatedCard, "<TournamentLeaderboardPreview comp={comp} />", "The build-generated tournament card must retain its leaderboard.");
 
 // The old GW1 test window expired on 23 Aug 2026 and must no longer be applied
@@ -68,4 +72,4 @@ requireText(freeCupSync, 'String(tier) === "common"', "The temporary FREE Cup ov
 requireText(freeCupSync, '["completed", "cancelled"]', "Completed or cancelled tournaments must never be reopened by the GW2 test override.");
 requireText(freeCupSync, "GW2 FREE Common Card Cup forced OPEN until 13:30 CAT on 29 Aug 2026, today's first Premier League kickoff.", "The FREE Cup sync must report when the GW2 Common first-kickoff override is applied.");
 
-console.log("Tournament leaderboards, official player scoring details and the GW2 FREE Common first-kickoff entry window verified.");
+console.log("Play tournament leaderboard launcher, 25-team pagination, official player scoring details and the GW2 FREE Common first-kickoff entry window verified.");
