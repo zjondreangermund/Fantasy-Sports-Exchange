@@ -10,6 +10,8 @@ const boundary = read("client/src/components/native/NativeRouteBoundary.tsx");
 const nativeCss = read("client/src/native-mobile.css");
 const play = read("client/src/components/native/NativePlayPage.tsx");
 const squad = read("client/src/components/native/NativeSquadPage.tsx");
+const enteredTeam = read("client/src/components/tournaments/TournamentEntryTeamCard.tsx");
+const enteredLineupPatch = read("scripts/apply-entered-team-lineup-view.mjs");
 const cards = read("client/src/components/native/NativeCardsPage.tsx");
 const thumbnail = read("client/src/components/CardThumbnail.tsx");
 const wallet = read("client/src/components/native/NativeWalletPage.tsx");
@@ -108,14 +110,18 @@ expect(cards.includes("normalizeCards(cardsRaw)"), "Collection does not normaliz
 expect(wallet.includes("arrayFrom<Transaction>(transactionsRaw"), "Wallet does not normalize cached transaction response shapes");
 
 /* Every tournament/gameweek surface should retain the rarity neon language.
-   Play intentionally uses the stronger Android palette, while Squad keeps the
-   established softer palette until its separate visual pass. */
+   Squad now delegates its rarity treatment to the reusable submitted-team card
+   so the exact same tournament entry renders consistently on compact and full views. */
 for (const token of ["text-cyan-50", "text-blue-100", "text-fuchsia-100", "text-rose-100", "text-amber-100"]) {
   expect(play.includes(token), `Play rarity neon palette is missing ${token}`);
 }
-for (const token of ["text-slate-100", "text-sky-200", "text-violet-200", "text-rose-200", "text-amber-200"]) {
-  expect(squad.includes(token), `Squad rarity neon palette is missing ${token}`);
+for (const token of ["#e2e8f0", "#38bdf8", "#c084fc", "#fb7185", "#fbbf24"]) {
+  expect(enteredTeam.includes(token), `Entered-team rarity neon palette is missing ${token}`);
 }
+expect(squad.includes("TournamentEntryTeamCard"), "Native Squad no longer renders submitted tournament teams");
+expect(squad.includes("Your entered teams"), "Native Squad no longer explains that squads are tournament entries");
+expect(enteredLineupPatch.includes("Your tournament squads"), "Detailed lineup no longer adds the entered tournament teams section");
+expect(enteredTeam.includes("/entries/${entryId}"), "Entered-team card no longer loads the immutable submitted lineup scoring endpoint");
 expect(play.includes("Gameweek {currentGameweek} · {rarity}"), "Play hero no longer shows rarity-colored gameweek context");
 expect(play.includes("GW{gameweek || \"-\"}"), "Tournament cards no longer show gameweek badges");
 
@@ -139,4 +145,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Native mobile route/layout verification passed (${requiredWebsiteRoutes.length} live routes, ${requiredCompactMappings.length} compact mappings, query/full-route bridge, sub-screen scrolling, cache normalization, rarity neon and static centered cards).`);
+console.log(`Native mobile route/layout verification passed (${requiredWebsiteRoutes.length} live routes, ${requiredCompactMappings.length} compact mappings, query/full-route bridge, sub-screen scrolling, cache normalization, rarity neon, entered tournament teams and static centered cards).`);
