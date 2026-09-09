@@ -34,10 +34,10 @@ export const TOURNAMENT_RARITY_REQUIREMENTS: Record<TournamentRarity, {
   description: string;
 }> = {
   common: {
-    requiredTournamentRarityCards: 0,
-    allowedRarities: ["common", "rare", "unique", "epic", "legendary"],
-    shortLabel: "Any 5 cards",
-    description: "A Common tournament accepts any five eligible cards, regardless of rarity.",
+    requiredTournamentRarityCards: 5,
+    allowedRarities: ["common"],
+    shortLabel: "5 Common",
+    description: "A Common tournament requires five Common cards.",
   },
   rare: {
     requiredTournamentRarityCards: 4,
@@ -83,12 +83,12 @@ export function isCardRarityAllowedInTournament(cardRarity: unknown, tournamentR
   return requirement.allowedRarities.includes(normalizeTournamentRarity(cardRarity));
 }
 
-export function validateTournamentRarityLineup(cardRarities: unknown[], tournamentRarity: unknown) {
+export function validatePartialTournamentRarityLineup(cardRarities: unknown[], tournamentRarity: unknown) {
   const tier = normalizeTournamentRarity(tournamentRarity);
   const requirement = TOURNAMENT_RARITY_REQUIREMENTS[tier];
   const normalized = (Array.isArray(cardRarities) ? cardRarities : []).map(normalizeTournamentRarity);
-  if (normalized.length !== TOURNAMENT_CARD_COUNT) {
-    return { valid: false, message: `Exactly ${TOURNAMENT_CARD_COUNT} cards are required.` };
+  if (normalized.length > TOURNAMENT_CARD_COUNT) {
+    return { valid: false, message: `Exactly ${TOURNAMENT_CARD_COUNT} cards are allowed.` };
   }
   const disallowed = normalized.find((rarity) => !requirement.allowedRarities.includes(rarity));
   if (disallowed) {
@@ -97,6 +97,27 @@ export function validateTournamentRarityLineup(cardRarities: unknown[], tourname
       message: `${tier} tournaments may only use ${requirement.allowedRarities.join(", ")} cards.`,
     };
   }
+  const exactTierCount = normalized.filter((rarity) => rarity === tier).length;
+  const remainingSlots = TOURNAMENT_CARD_COUNT - normalized.length;
+  if (exactTierCount + remainingSlots < requirement.requiredTournamentRarityCards) {
+    const stillNeeded = requirement.requiredTournamentRarityCards - exactTierCount;
+    return {
+      valid: false,
+      message: `${requirement.shortLabel} is required. You still need ${stillNeeded} ${tier} card${stillNeeded === 1 ? "" : "s"}.`,
+    };
+  }
+  return { valid: true, message: requirement.description };
+}
+
+export function validateTournamentRarityLineup(cardRarities: unknown[], tournamentRarity: unknown) {
+  const tier = normalizeTournamentRarity(tournamentRarity);
+  const requirement = TOURNAMENT_RARITY_REQUIREMENTS[tier];
+  const normalized = (Array.isArray(cardRarities) ? cardRarities : []).map(normalizeTournamentRarity);
+  if (normalized.length !== TOURNAMENT_CARD_COUNT) {
+    return { valid: false, message: `Exactly ${TOURNAMENT_CARD_COUNT} cards are required.` };
+  }
+  const partialValidation = validatePartialTournamentRarityLineup(normalized, tier);
+  if (!partialValidation.valid) return partialValidation;
   const exactTierCount = normalized.filter((rarity) => rarity === tier).length;
   if (exactTierCount < requirement.requiredTournamentRarityCards) {
     return {
