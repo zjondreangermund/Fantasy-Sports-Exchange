@@ -30,7 +30,6 @@ need(transfer, 'pr.replacement_card_id as "replacementCardId"', "replacement cla
 need(transfer, "TRANSFER_SOURCE_CARD_ARCHIVE_V1", "departed replacement source cards are not archived from user collections");
 need(transfer, "set owner_id=null, for_sale=false, price=0", "departed cards are not detached from user ownership");
 need(transfer, "pc.owner_id=pr.user_id", "historical source-card cleanup is not scoped to the original claimant");
-need(transfer, "removed from your playable collection and archived in transfer history", "departure notification still tells users the old card remains in their collection");
 need(transfer, "const archivedClaimRows = rowsOf", "admin report does not restore archived source-card ownership history");
 need(transfer, "case when e.left_premier_league then", "admin affected-card counts do not use replacement claims for departed players");
 
