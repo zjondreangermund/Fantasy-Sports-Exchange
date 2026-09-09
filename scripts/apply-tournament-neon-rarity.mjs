@@ -10,6 +10,16 @@ function replaceOnce(from, to, label) {
   console.log(`[tournament-neon] ${label}`);
 }
 
+function replaceAll(from, to, label) {
+  const count = source.split(from).length - 1;
+  if (!count) {
+    if (source.includes(to)) return;
+    throw new Error(`[tournament-neon] ${label} anchor not found`);
+  }
+  source = source.split(from).join(to);
+  console.log(`[tournament-neon] ${label} (${count})`);
+}
+
 const oldTheme = `const rarityTheme: Record<TournamentRarity, { accent: string; glow: string; gradient: string }> = {
   common: { accent: "#60a5fa", glow: "rgba(59,130,246,.45)", gradient: "from-blue-500/25 via-slate-900/70 to-black" },
   rare: { accent: "#168cff", glow: "rgba(22,140,255,.48)", gradient: "from-blue-500/25 via-slate-900/70 to-black" },
@@ -47,9 +57,14 @@ replaceOnce(
 );
 
 replaceOnce(
-  `<div className="h-full rounded-full" style={{ width: \`\${p}%\`, background: t.accent, boxShadow: \`0 0 18px \${t.glow}\` }} />`,
-  `<div className="h-full rounded-full" style={{ width: \`\${p}%\`, background: \`linear-gradient(90deg,\${t.secondary},\${t.accent})\`, boxShadow: \`0 0 22px \${t.glow}\` }} />`,
-  "upgraded neon prize progress",
+  `<div className="h-full rounded-full" style={{ width: \`\${capacityProgress}%\`, background: t.accent, boxShadow: \`0 0 18px \${t.glow}\` }} />`,
+  `<div className="h-full rounded-full" style={{ width: \`\${capacityProgress}%\`, background: \`linear-gradient(90deg,\${t.secondary},\${t.accent})\`, boxShadow: \`0 0 22px \${t.glow}\` }} />`,
+  "upgraded Free Cup neon progress",
+);
+replaceOnce(
+  `<div className="h-full rounded-full" style={{ width: \`\${vaultProgress}%\`, background: t.accent, boxShadow: \`0 0 18px \${t.glow}\` }} />`,
+  `<div className="h-full rounded-full" style={{ width: \`\${vaultProgress}%\`, background: \`linear-gradient(90deg,\${t.secondary},\${t.accent})\`, boxShadow: \`0 0 22px \${t.glow}\` }} />`,
+  "upgraded Prize Vault neon progress",
 );
 
 replaceOnce(
@@ -58,10 +73,10 @@ replaceOnce(
   "tinted prize ladder control",
 );
 
-replaceOnce(
+replaceAll(
   `style={{ background: canEnter ? t.accent : "#334155", color: r === "legendary" && canEnter ? "#111827" : "white" }}`,
   `style={{ background: canEnter ? \`linear-gradient(135deg,\${t.secondary},\${t.accent})\` : "#334155", color: canEnter ? t.buttonText : "#cbd5e1", border: canEnter ? \`1px solid \${t.accent}\` : "1px solid #475569", boxShadow: canEnter ? \`0 0 24px \${t.glow}\` : "none", textShadow: canEnter && t.buttonText === "#ffffff" ? "0 1px 5px rgba(0,0,0,.55)" : "none" }}`,
-  "made entry CTA rarity-neon",
+  "made all entry CTAs rarity-neon",
 );
 
 fs.writeFileSync(file, source);
