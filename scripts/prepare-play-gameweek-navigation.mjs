@@ -45,3 +45,4 @@ await import("./apply-play-gameweek-navigation.mjs");
 await import("./apply-native-play-leaderboard-25.mjs");
 await import("./apply-common-open-entry-ui.mjs");
 await import("./apply-lineup-rarity-glows.mjs");
+await import("./restore-lineup-portrait-anchor.mjs");
