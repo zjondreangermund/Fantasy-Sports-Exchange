@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   android:
-    name: Build Fantasy Arena Android 1.1.8
+    name: Build Fantasy Arena Android 1.1.9
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -63,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64" ]; then
-            echo "FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64 is required for Android 1.1.8 native push." >&2
+            echo "FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64 is required for Android 1.1.9 native push." >&2
             exit 1
           fi
           printf '%s' "$FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > android/app/google-services.json
@@ -81,10 +81,6 @@ jobs:
 
       - name: Replace bundled website with compact remote shell
         run: |
-          # The native app is intentionally configured to load the live Fantasy Arena URL
-          # from capacitor.config.ts. Bundling the entire production web build duplicated
-          # hundreds of MB of player/media assets inside the APK and made mobile downloads
-          # unnecessarily fragile. Keep only a tiny offline fallback shell in the package.
           rm -rf dist
           mkdir -p dist
           cat > dist/index.html <<'EOF'
@@ -108,25 +104,27 @@ jobs:
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
-      - name: Verify Android identity, Firebase, safe lion splash and native auth return configuration
+      - name: Verify Android identity, Firebase, unmasked lion launch and native auth return configuration
         run: |
           grep -q 'applicationId "com.fantasyfc.app"' android/app/build.gradle
           grep -q 'appId: "com.fantasyfc.app"' capacitor.config.ts
-          grep -q 'versionCode 10' android/app/build.gradle
-          grep -q 'versionName "1.1.8"' android/app/build.gradle
+          grep -q 'versionCode 11' android/app/build.gradle
+          grep -q 'versionName "1.1.9"' android/app/build.gradle
           grep -q "setUseWideViewPort(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "setLoadWithOverviewMode(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "setTextZoom(100)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "LAYER_TYPE_HARDWARE" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
-          grep -q "FantasyArenaNative/1.1.8" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "FantasyArenaNative/1.1.9" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "showBrandLaunchOverlay" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "R.mipmap.fantasy_arena_logo" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "ImageView.ScaleType.FIT_CENTER" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "logoSize = dp(220)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q 'android:scheme="fantasyarena"' android/app/src/main/AndroidManifest.xml
           grep -q 'android:host="auth"' android/app/src/main/AndroidManifest.xml
           grep -q 'android:path="/callback"' android/app/src/main/AndroidManifest.xml
-          grep -q 'android:windowSplashScreenBackground' android/app/src/main/res/values-v31/styles.xml
-          grep -q '@drawable/fantasy_arena_splash_safe' android/app/src/main/res/values/styles.xml
-          grep -q '@drawable/fantasy_arena_splash_safe' android/app/src/main/res/values-v31/styles.xml
-          grep -q 'android:width="152dp"' android/app/src/main/res/drawable/fantasy_arena_splash_safe.xml
-          grep -q '@mipmap/fantasy_arena_logo' android/app/src/main/res/drawable/fantasy_arena_splash_safe.xml
+          grep -q '@drawable/splash_transparent' android/app/src/main/res/values/styles.xml
+          grep -q '@drawable/splash_transparent' android/app/src/main/res/values-v31/styles.xml
+          grep -q '@android:color/transparent' android/app/src/main/res/drawable/splash_transparent.xml
           cmp client/public/brand/fantasy-arena-logo.jpg android/app/src/main/res/mipmap-nodpi/fantasy_arena_logo.jpg
           test -s android/app/google-services.json
 
@@ -151,7 +149,12 @@ jobs:
           PUBLIC_APK="android-artifacts/Fantasy-Arena-Android.apk"
           mkdir -p android-artifacts
 
+          HAS_RELEASE_SIGNING=false
           if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$ANDROID_KEY_ALIAS" ] && [ -n "$ANDROID_KEY_PASSWORD" ]; then
+            HAS_RELEASE_SIGNING=true
+          fi
+
+          if [ "$HAS_RELEASE_SIGNING" = true ]; then
             test -f "$RELEASE_UNSIGNED"
             printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/fantasy-arena-release.jks"
             "$BUILD_TOOLS/zipalign" -f -p 4 "$RELEASE_UNSIGNED" "$RUNNER_TEMP/Fantasy-Arena-aligned.apk"
@@ -163,14 +166,18 @@ jobs:
               --out "$PUBLIC_APK" \
               "$RUNNER_TEMP/Fantasy-Arena-aligned.apk"
             echo "kind=release-signed" >> "$GITHUB_OUTPUT"
-          else
-            # Until persistent release-signing secrets are configured, publish one compact,
-            # Android-SDK-signed test package rather than an unsigned release package.
-            # The fixed android-1.1.8 release is not overwritten on future builds, so its
-            # signing certificate remains stable for users of this release.
+          elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            # PRs may validate with the runner debug certificate. It is never
+            # published to users, because a new runner certificate would break
+            # Android in-place updates on the next version.
             test -f "$DEBUG_APK"
             cp "$DEBUG_APK" "$PUBLIC_APK"
-            echo "kind=debug-signed" >> "$GITHUB_OUTPUT"
+            echo "kind=debug-ci-only" >> "$GITHUB_OUTPUT"
+          else
+            echo "Stable Android publishing requires the persistent release-signing secrets:" >&2
+            echo "ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD" >&2
+            echo "Refusing to publish another ephemeral debug-signed APK because Android would reject future updates." >&2
+            exit 1
           fi
 
       - name: Verify APK before publishing
@@ -181,11 +188,11 @@ jobs:
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           test -s "$APK"
           unzip -t "$APK" >/dev/null
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" | tee android-artifacts/APK-SIGNING.txt
           "$BUILD_TOOLS/aapt" dump badging "$APK" | tee android-artifacts/APK-BADGING.txt
           grep -q "package: name='com.fantasyfc.app'" android-artifacts/APK-BADGING.txt
-          grep -q "versionCode='10'" android-artifacts/APK-BADGING.txt
-          grep -q "versionName='1.1.8'" android-artifacts/APK-BADGING.txt
+          grep -q "versionCode='11'" android-artifacts/APK-BADGING.txt
+          grep -q "versionName='1.1.9'" android-artifacts/APK-BADGING.txt
 
           SIZE_BYTES="$(stat -c%s "$APK")"
           MAX_BYTES=$((50 * 1024 * 1024))
@@ -201,7 +208,7 @@ jobs:
 
       - name: Prepare build information
         run: |
-          printf 'Fantasy Arena Android 1.1.8\nCommit: %s\nBuilt: %s\nPackage: com.fantasyfc.app\nFirebase native push: enabled\nKind: %s\nSize bytes: %s\nSHA-256: %s\n\nThe APK passed Firebase package validation, ZIP integrity, Android package metadata, protected lion splash identity and apksigner verification before publication.\n' \
+          printf 'Fantasy Arena Android 1.1.9\nCommit: %s\nBuilt: %s\nPackage: com.fantasyfc.app\nFirebase native push: enabled\nKind: %s\nSize bytes: %s\nSHA-256: %s\n\nAndroid 12 system splash: black only. Full lion + Fantasy Arena wordmark: unmasked native FIT_CENTER overlay. Production publishing refuses ephemeral debug signing so future APK updates keep one stable certificate.\n' \
             "$GITHUB_SHA" \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             "${{ steps.select_apk.outputs.kind }}" \
@@ -212,24 +219,26 @@ jobs:
       - name: Upload verified Android build
         uses: actions/upload-artifact@v4
         with:
-          name: fantasy-arena-android-1.1.8
+          name: fantasy-arena-android-1.1.9
           path: android-artifacts/*
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish direct Android 1.1.8 download
+      - name: Publish direct Android 1.1.9 download
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view android-1.1.8 >/dev/null 2>&1; then
-            echo "Stable android-1.1.8 release already exists; leaving its verified APK and signing certificate unchanged."
+          test "${{ steps.select_apk.outputs.kind }}" = "release-signed"
+          if gh release view android-1.1.9 >/dev/null 2>&1; then
+            echo "Stable android-1.1.9 release already exists; leaving its signed APK unchanged."
           else
-            gh release create android-1.1.8 \
+            gh release create android-1.1.9 \
               android-artifacts/Fantasy-Arena-Android.apk \
               android-artifacts/SHA256SUMS.txt \
+              android-artifacts/APK-SIGNING.txt \
               android-artifacts/BUILD-INFO.txt \
-              --title "Fantasy Arena Android 1.1.8" \
-              --notes "Fantasy Arena Android 1.1.8: protected full lion splash artwork, tappable native notification controls and self-tests, stronger neon rarity treatment on Play, and cleaner compact card stats below the player artwork."
+              --title "Fantasy Arena Android 1.1.9" \
+              --notes "Fantasy Arena Android 1.1.9: unmasked full Fantasy Arena lion/wordmark launch screen, Firebase native notifications, readable notification test controls, and persistent release signing required for reliable future in-place updates."
           fi
