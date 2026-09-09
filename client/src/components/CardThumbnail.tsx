@@ -11,6 +11,7 @@ type CardThumbnailProps = {
   onClick?: () => void;
   showPrice?: boolean;
   showMeta?: boolean;
+  showStats?: boolean;
 };
 
 function CardThumbnailBase({
@@ -21,6 +22,7 @@ function CardThumbnailBase({
   onClick,
   showPrice = false,
   showMeta = true,
+  showStats = true,
 }: CardThumbnailProps) {
   const player = card.player || ({} as any);
   const fantasyCard = toFantasyCardData(card, { imageWidth: size === "lg" ? 640 : size === "xs" ? 280 : 420 });
@@ -34,6 +36,7 @@ function CardThumbnailBase({
         onClick={onClick}
         interactive={selectable || Boolean(onClick)}
         showPrice={showPrice}
+        showStats={showStats}
       />
 
       {showPrice && Number(card.price || 0) > 0 ? (
