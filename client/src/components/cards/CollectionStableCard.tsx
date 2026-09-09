@@ -7,6 +7,7 @@ type Props = {
   selected?: boolean;
   onClick?: () => void;
   showPrice?: boolean;
+  showStats?: boolean;
   size?: "sm" | "md";
 };
 
@@ -90,7 +91,7 @@ function isFallbackImage(image: string) {
   return image.includes("/players/fallback") || image.includes("fallback.svg");
 }
 
-export default function CollectionStableCard({ player, selected = false, onClick, showPrice = false, size = "sm" }: Props) {
+export default function CollectionStableCard({ player, selected = false, onClick, showPrice = false, showStats = true, size = "sm" }: Props) {
   const rarity = normalizeRarity(player.rarity);
   const palette = RARITY_PALETTE[rarity] || RARITY_PALETTE.common;
   const dim = SIZE[size] || SIZE.sm;
@@ -154,15 +155,17 @@ export default function CollectionStableCard({ player, selected = false, onClick
 
         <div style={{ position: "absolute", left: "50%", top: 118 * scale, transform: "translateX(-50%)", borderRadius: 999, background: `linear-gradient(180deg, rgba(255,255,255,.26), rgba(0,0,0,.25)), ${palette.plate}`, border: "1px solid rgba(255,255,255,.48)", padding: `${3 * scale}px ${9 * scale}px`, fontSize: 7.5 * scale, fontWeight: 950, letterSpacing: ".14em", whiteSpace: "nowrap", color: palette.ink, textShadow: rarity === "common" ? "0 1px 1px rgba(255,255,255,.55)" : "0 2px 4px rgba(0,0,0,.65)", boxShadow: `0 0 18px ${palette.glow}, inset 0 1px 0 rgba(255,255,255,.35)` }}>{rarityLabel}</div>
 
-        <div style={{ position: "absolute", left: 11 * scale, right: 11 * scale, bottom: 33 * scale, padding: `${6 * scale}px ${7 * scale}px`, borderRadius: 12 * scale, background: "linear-gradient(180deg, rgba(2,6,23,.84), rgba(2,6,23,.60))", border: "1px solid rgba(255,255,255,.35)", boxShadow: `0 9px 18px rgba(0,0,0,.64), 0 0 16px ${palette.glow}, inset 0 1px 0 rgba(255,255,255,.21)`, textAlign: "center" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 * scale }}>
-            <StatChip label="LEVEL" value={level} scale={scale} glow={palette.glow} />
-            <StatChip label="PTS" value={points} scale={scale} glow={palette.glow} />
-            <StatChip label="FORM" value={form} scale={scale} glow={palette.glow} />
+        {showStats ? (
+          <div style={{ position: "absolute", left: 11 * scale, right: 11 * scale, bottom: 33 * scale, padding: `${6 * scale}px ${7 * scale}px`, borderRadius: 12 * scale, background: "linear-gradient(180deg, rgba(2,6,23,.84), rgba(2,6,23,.60))", border: "1px solid rgba(255,255,255,.35)", boxShadow: `0 9px 18px rgba(0,0,0,.64), 0 0 16px ${palette.glow}, inset 0 1px 0 rgba(255,255,255,.21)`, textAlign: "center" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 * scale }}>
+              <StatChip label="LEVEL" value={level} scale={scale} glow={palette.glow} />
+              <StatChip label="PTS" value={points} scale={scale} glow={palette.glow} />
+              <StatChip label="FORM" value={form} scale={scale} glow={palette.glow} />
+            </div>
+            <div style={{ marginTop: 4 * scale, fontSize: 7.4 * scale, fontWeight: 900, color: "rgba(255,255,255,.72)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: ".07em" }}>{player.position || "N/A"} • {team}</div>
+            {showPrice && price > 0 ? <div style={{ marginTop: 2 * scale, fontSize: 7.6 * scale, fontWeight: 950, color: "#bbf7d0" }}>N${price.toFixed(2)}</div> : null}
           </div>
-          <div style={{ marginTop: 4 * scale, fontSize: 7.4 * scale, fontWeight: 900, color: "rgba(255,255,255,.72)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: ".07em" }}>{player.position || "N/A"} • {team}</div>
-          {showPrice && price > 0 ? <div style={{ marginTop: 2 * scale, fontSize: 7.6 * scale, fontWeight: 950, color: "#bbf7d0" }}>N${price.toFixed(2)}</div> : null}
-        </div>
+        ) : null}
 
         <div style={{ position: "absolute", left: 9 * scale, right: 9 * scale, bottom: 7 * scale, minHeight: 24 * scale, display: "grid", placeItems: "center", borderRadius: 999, background: `linear-gradient(180deg, rgba(255,255,255,.20), rgba(0,0,0,.20)), ${palette.plate}`, border: "1px solid rgba(255,255,255,.44)", boxShadow: `0 0 20px ${palette.glow}, inset 0 1px 0 rgba(255,255,255,.36)` }}>
           <div style={{ maxWidth: "94%", fontSize: 11.2 * scale, lineHeight: 1, fontWeight: 950, letterSpacing: ".03em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: palette.ink, textShadow: rarity === "common" ? "0 1px 1px rgba(255,255,255,.55)" : "0 3px 5px rgba(0,0,0,.74)" }}>{nameOf(player)}</div>
