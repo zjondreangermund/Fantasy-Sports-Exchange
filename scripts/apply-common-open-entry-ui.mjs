@@ -7,6 +7,7 @@ const marketplacePath = "client/src/pages/marketplace-v2.tsx";
 const legalPath = "client/src/pages/legal-centre.tsx";
 
 function replaceRequired(source, from, to, label) {
+  if (label.startsWith("native marketplace") && source.includes("NATIVE_MARKET_BUY_LOAN_V2")) return source;
   if (source.includes(to)) return source;
   if (!source.includes(from)) throw new Error(`[rarity-entry] ${label} could not be located`);
   return source.replace(from, to);
