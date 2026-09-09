@@ -173,7 +173,7 @@ async function createDepartureClaims(input: {
     await createNotificationOnce(db, {
       userId,
       title: `${input.playerName} left the Premier League`,
-      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} card stays in your collection as a record, but it is no longer eligible for Premier League tournaments. Mint one free ${prettyRarity} replacement from the current Premier League player pool for future entries.`,
+      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} source card has been archived out of your playable collection and kept in Fantasy Arena's admin/audit history. Mint one free ${prettyRarity} replacement from the current Premier League player pool for future entries.`,
       dedupeKey: `replacement-claim:${Number(claim.id)}`,
     });
   }
