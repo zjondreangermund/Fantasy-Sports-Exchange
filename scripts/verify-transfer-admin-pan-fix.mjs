@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import "./apply-departed-card-archive.mjs";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 const transfer = read("server/services/playerTransferMonitoring.ts");
@@ -26,6 +27,12 @@ need(transfer, 'u.manager_team_name as "managerTeamName"', "affected manager tea
 need(transfer, 'pc.rarity::text as rarity', "affected card rarities are not exposed");
 need(transfer, 'pr.replacement_card_id as "replacementCardId"', "replacement claim status is not exposed");
 
+need(transfer, "TRANSFER_SOURCE_CARD_ARCHIVE_V1", "departed replacement source cards are not archived from user collections");
+need(transfer, "set owner_id=null, for_sale=false, price=0", "departed cards are not detached from user ownership");
+need(transfer, "pr.source_card_id=pc.id", "archived card row is no longer linked to its replacement claim");
+need(transfer, "pc.owner_id=pr.user_id", "historical source-card cleanup is not scoped to the original claimant");
+need(transfer, "where id=${sourceCardId} and owner_id=${userId}", "new departure claims do not remove the correct source card from the correct user");
+
 need(route, 'app.get("/api/admin/player-transfers", requireAuth, isAdmin', "admin player-transfer endpoint is not admin protected");
 need(retention, 'registerAdminPlayerTransferRoutes(app, { requireAuth, isAdmin: walletAdmin })', "admin transfer route is not registered with the existing admin guard");
 need(panel, 'queryKey: ["/api/admin/player-transfers?limit=150"]', "admin UI does not consume the transfer report");
@@ -40,4 +47,4 @@ need(scroll, "overflow: visible !important", "Desktop view does not release shel
 need(scroll, "overflow-x: auto !important", "Desktop app scroll root does not permit horizontal movement");
 need(scroll, "touch-action: auto !important", "Desktop view still restricts native pinch/pan gestures");
 
-console.log("Player transfer monitoring verified: canonical club identities suppress provider-name noise, admins can see affected users/cards/claims, and zoomed Desktop view releases horizontal pan locks.");
+console.log("Player transfer monitoring verified: canonical club identities suppress provider-name noise, departed source cards are removed from user collections while card/claim database history is preserved, and zoomed Desktop view releases horizontal pan locks.");

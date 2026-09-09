@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import "./apply-departed-card-archive.mjs";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 const need = (source, token, message) => assert.ok(source.includes(token), message);
@@ -25,6 +26,7 @@ need(transfer, "EPL_REPLACEMENT_SAME_POSITION_V1", "same-position replacement ma
 need(transfer, 'source.position::text as "sourcePosition"', "replacement claims do not expose the departed player position");
 need(transfer, 'and p.position::text=${sourcePosition}', "replacement candidates are not restricted to the same position");
 need(transfer, "same ${prettyRarity} rarity", "departure notification does not explain same-rarity protection");
+need(transfer, "removed from your playable collection and archived in transfer history", "departed source card still appears to remain in the user collection");
 need(app, "<MandatoryReplacementClaimDialog />", "mandatory EPL replacement dialog is not mounted globally");
 need(app, "<PushNotificationControl />", "installed-app push notification control is not mounted globally");
 need(dialog, "onEscapeKeyDown={(event) => event.preventDefault()}", "replacement dialog can still be dismissed with Escape");
@@ -89,7 +91,7 @@ need(serviceWorker, 'self.addEventListener("notificationclick"', "service worker
 need(capacitorConfig, "PushNotifications", "Capacitor foreground notification presentation is not configured");
 need(androidWorkflow, "FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64", "Android build cannot receive its Firebase client configuration securely");
 
-console.log("EPL departure replacements verified: same rarity + same position, mandatory claim popup, installed PWA and native Android push, under-minimum Prize Ladder 80/20 winner fallback, and bank/reserve tournament finance reconciliation are protected.");
+console.log("EPL departure replacements verified: same rarity + same position, departed source cards archived out of user collections, mandatory claim popup, installed PWA and native Android push, under-minimum Prize Ladder 80/20 winner fallback, and bank/reserve tournament finance reconciliation are protected.");
 
 // This verifier is the final shared mutating/checkpoint pass in every production
 // build target after the large generated tournament/notification patch stack. Keep
