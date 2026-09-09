@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   android:
-    name: Build Fantasy Arena Android 1.1.4
+    name: Build Fantasy Arena Android 1.1.5
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -96,22 +96,24 @@ jobs:
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
-      - name: Verify Android identity and native auth return configuration
+      - name: Verify Android identity, lion splash and native auth return configuration
         run: |
           grep -q 'applicationId "com.fantasyfc.app"' android/app/build.gradle
           grep -q 'appId: "com.fantasyfc.app"' capacitor.config.ts
-          grep -q 'versionCode 6' android/app/build.gradle
-          grep -q 'versionName "1.1.4"' android/app/build.gradle
+          grep -q 'versionCode 7' android/app/build.gradle
+          grep -q 'versionName "1.1.5"' android/app/build.gradle
           grep -q "setUseWideViewPort(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "setLoadWithOverviewMode(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "setTextZoom(100)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "LAYER_TYPE_HARDWARE" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
-          grep -q "FantasyArenaNative/1.1.4" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "FantasyArenaNative/1.1.5" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q 'android:scheme="fantasyarena"' android/app/src/main/AndroidManifest.xml
           grep -q 'android:host="auth"' android/app/src/main/AndroidManifest.xml
           grep -q 'android:path="/callback"' android/app/src/main/AndroidManifest.xml
           grep -q 'android:windowSplashScreenBackground' android/app/src/main/res/values-v31/styles.xml
-          grep -q '@drawable/splash_logo' android/app/src/main/res/values-v31/styles.xml
+          grep -q '@mipmap/fantasy_arena_logo' android/app/src/main/res/values/styles.xml
+          grep -q '@mipmap/fantasy_arena_logo' android/app/src/main/res/values-v31/styles.xml
+          cmp client/public/brand/fantasy-arena-logo.jpg android/app/src/main/res/mipmap-nodpi/fantasy_arena_logo.jpg
 
       - name: Build Android APKs
         working-directory: android
@@ -149,7 +151,7 @@ jobs:
           else
             # Until persistent release-signing secrets are configured, publish one compact,
             # Android-SDK-signed test package rather than an unsigned release package.
-            # The fixed android-1.1.4 release is not overwritten on future builds, so its
+            # The fixed android-1.1.5 release is not overwritten on future builds, so its
             # signing certificate remains stable for users of this release.
             test -f "$DEBUG_APK"
             cp "$DEBUG_APK" "$PUBLIC_APK"
@@ -167,8 +169,8 @@ jobs:
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
           "$BUILD_TOOLS/aapt" dump badging "$APK" | tee android-artifacts/APK-BADGING.txt
           grep -q "package: name='com.fantasyfc.app'" android-artifacts/APK-BADGING.txt
-          grep -q "versionCode='6'" android-artifacts/APK-BADGING.txt
-          grep -q "versionName='1.1.4'" android-artifacts/APK-BADGING.txt
+          grep -q "versionCode='7'" android-artifacts/APK-BADGING.txt
+          grep -q "versionName='1.1.5'" android-artifacts/APK-BADGING.txt
 
           SIZE_BYTES="$(stat -c%s "$APK")"
           MAX_BYTES=$((50 * 1024 * 1024))
@@ -184,7 +186,7 @@ jobs:
 
       - name: Prepare build information
         run: |
-          printf 'Fantasy Arena Android 1.1.4\nCommit: %s\nBuilt: %s\nPackage: com.fantasyfc.app\nKind: %s\nSize bytes: %s\nSHA-256: %s\n\nThe APK passed ZIP integrity, Android package metadata and apksigner verification before publication.\n' \
+          printf 'Fantasy Arena Android 1.1.5\nCommit: %s\nBuilt: %s\nPackage: com.fantasyfc.app\nKind: %s\nSize bytes: %s\nSHA-256: %s\n\nThe APK passed ZIP integrity, Android package metadata, lion splash identity and apksigner verification before publication.\n' \
             "$GITHUB_SHA" \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             "${{ steps.select_apk.outputs.kind }}" \
@@ -195,24 +197,24 @@ jobs:
       - name: Upload verified Android build
         uses: actions/upload-artifact@v4
         with:
-          name: fantasy-arena-android-1.1.4
+          name: fantasy-arena-android-1.1.5
           path: android-artifacts/*
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish direct Android 1.1.4 download
+      - name: Publish direct Android 1.1.5 download
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view android-1.1.4 >/dev/null 2>&1; then
-            echo "Stable android-1.1.4 release already exists; leaving its verified APK and signing certificate unchanged."
+          if gh release view android-1.1.5 >/dev/null 2>&1; then
+            echo "Stable android-1.1.5 release already exists; leaving its verified APK and signing certificate unchanged."
           else
-            gh release create android-1.1.4 \
+            gh release create android-1.1.5 \
               android-artifacts/Fantasy-Arena-Android.apk \
               android-artifacts/SHA256SUMS.txt \
               android-artifacts/BUILD-INFO.txt \
-              --title "Fantasy Arena Android 1.1.4" \
-              --notes "Verified compact Fantasy Arena Android package with the refreshed black neon launch screen, native Google-login return and Prize Vault mobile artwork updates. The APK is integrity-checked and signature-verified before publication."
+              --title "Fantasy Arena Android 1.1.5" \
+              --notes "Verified compact Fantasy Arena Android package using the exact current lion Fantasy Arena logo on the black launch screen, with native Google-login return and the updated mobile experience. The APK is integrity-checked and signature-verified before publication."
           fi
