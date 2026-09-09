@@ -90,3 +90,12 @@ need(capacitorConfig, "PushNotifications", "Capacitor foreground notification pr
 need(androidWorkflow, "FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64", "Android build cannot receive its Firebase client configuration securely");
 
 console.log("EPL departure replacements verified: same rarity + same position, mandatory claim popup, installed PWA and native Android push, under-minimum Prize Ladder 80/20 winner fallback, and bank/reserve tournament finance reconciliation are protected.");
+
+// This verifier is the final shared mutating/checkpoint pass in every production
+// build target after the large generated tournament/notification patch stack. Keep
+// UI polish and self-test controls here so earlier source generators cannot erase
+// them before Vite/TypeScript compilation.
+await import("./apply-tournament-neon-rarity.mjs");
+await import("./apply-notification-self-test.mjs");
+await import("./verify-tournament-neon-rarity.mjs");
+await import("./verify-notification-self-test.mjs");
