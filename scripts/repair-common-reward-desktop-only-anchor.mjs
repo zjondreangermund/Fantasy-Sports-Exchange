@@ -12,9 +12,26 @@ const installBeforeLegacyToggle = '<div className="flex shrink-0 items-center ga
 const legacyToggle = '<div className="flex shrink-0 items-center gap-1.5"><button type="button" onClick={() => setSiteView(';
 if (app.includes(installBeforeLegacyToggle)) {
   app = app.replace(installBeforeLegacyToggle, legacyToggle);
-  fs.writeFileSync(appPath, app);
   console.log("[desktop-only-install-app] normalized the already-patched legacy header before removing the browser mobile toggle.");
 }
+
+// PATCH_CHAIN_TOGGLE_NORMALIZER_V2
+// Other check-time patches can reformat the old view-toggle callback. Remove
+// the complete toggle block by its stable accessibility copy instead of relying
+// on the exact callback text, while preserving ThemeToggle as the header anchor
+// that the desktop-only patch expects.
+if (app.includes("Switch to desktop site view") || app.includes("Switch to mobile site view")) {
+  const headerStart = '<div className="flex shrink-0 items-center gap-1.5">';
+  const marker = app.includes("Switch to desktop site view") ? "Switch to desktop site view" : "Switch to mobile site view";
+  const markerIndex = app.indexOf(marker);
+  const start = app.lastIndexOf(headerStart, markerIndex);
+  const themeClose = '<ThemeToggle /></div>';
+  const end = app.indexOf(themeClose, markerIndex);
+  if (start < 0 || end < 0) throw new Error("[desktop-only-install-app] could not normalize the legacy browser view toggle");
+  app = app.slice(0, start) + `${headerStart}<ThemeToggle /></div>` + app.slice(end + themeClose.length);
+  console.log("[desktop-only-install-app] removed the retired browser mobile/desktop toggle using its stable accessibility marker.");
+}
+fs.writeFileSync(appPath, app);
 
 const patchPath = "scripts/apply-common-reward-position-balance.mjs";
 let source = fs.readFileSync(patchPath, "utf8");
