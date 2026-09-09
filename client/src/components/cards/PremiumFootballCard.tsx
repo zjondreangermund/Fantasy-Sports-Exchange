@@ -12,6 +12,7 @@ export type PremiumFootballCardProps = {
   selected?: boolean;
   onClick?: () => void;
   showPrice?: boolean;
+  showStats?: boolean;
   className?: string;
   size?: PremiumCardSize;
   interactive?: boolean;
@@ -56,6 +57,7 @@ function PremiumFootballCardBase({
   selected = false,
   onClick,
   showPrice = false,
+  showStats = true,
   className = "",
   size = "md",
   interactive = true,
@@ -151,6 +153,7 @@ function PremiumFootballCardBase({
             selected={selected}
             onClick={directInteraction ? onClick : undefined}
             showPrice={showPrice}
+            showStats={showStats}
             size="md"
           />
         </div>
