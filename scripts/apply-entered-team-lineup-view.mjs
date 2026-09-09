@@ -45,7 +45,7 @@ replaceRequired(
 
 replaceRequired(
   `<h1 className="mt-2 text-3xl font-black tracking-tight text-white">Live Lineup</h1>\n            <p className="mt-1 max-w-3xl text-sm text-slate-400">Official season statistics are shown on player cards. Team-feed events remain separate and are never assigned to an individual player without a verified player event.</p>`,
-  `<h1 className="mt-2 text-3xl font-black tracking-tight text-white">Tournament Lineups</h1>\n            <p className="mt-1 max-w-3xl text-sm text-slate-400">Your submitted teams are shown with the tournament they entered, the exact five locked cards, captain contribution and live/final tournament score.</p>`,
+  `<h1 className="mt-2 text-3xl font-black tracking-tight text-white">Tournament Lineups</h1>\n            <p className="mt-1 max-w-3xl text-sm text-slate-400">Your submitted teams are shown with the tournament they entered, the exact five locked cards, captain contribution and live/final tournament score. Team-feed events remain separate and are never assigned to an individual player without a verified player event.</p>`,
   "lineup heading",
 );
 
