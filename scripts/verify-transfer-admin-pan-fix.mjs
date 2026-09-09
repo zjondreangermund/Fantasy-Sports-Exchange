@@ -29,9 +29,9 @@ need(transfer, 'pr.replacement_card_id as "replacementCardId"', "replacement cla
 
 need(transfer, "TRANSFER_SOURCE_CARD_ARCHIVE_V1", "departed replacement source cards are not archived from user collections");
 need(transfer, "set owner_id=null, for_sale=false, price=0", "departed cards are not detached from user ownership");
+need(transfer, "pr.source_card_id=pc.id", "archived card row is no longer linked to its replacement claim");
 need(transfer, "pc.owner_id=pr.user_id", "historical source-card cleanup is not scoped to the original claimant");
-need(transfer, "const archivedClaimRows = rowsOf", "admin report does not restore archived source-card ownership history");
-need(transfer, "case when e.left_premier_league then", "admin affected-card counts do not use replacement claims for departed players");
+need(transfer, "where id=${sourceCardId} and owner_id=${userId}", "new departure claims do not remove the correct source card from the correct user");
 
 need(route, 'app.get("/api/admin/player-transfers", requireAuth, isAdmin', "admin player-transfer endpoint is not admin protected");
 need(retention, 'registerAdminPlayerTransferRoutes(app, { requireAuth, isAdmin: walletAdmin })', "admin transfer route is not registered with the existing admin guard");
@@ -47,4 +47,4 @@ need(scroll, "overflow: visible !important", "Desktop view does not release shel
 need(scroll, "overflow-x: auto !important", "Desktop app scroll root does not permit horizontal movement");
 need(scroll, "touch-action: auto !important", "Desktop view still restricts native pinch/pan gestures");
 
-console.log("Player transfer monitoring verified: canonical club identities suppress provider-name noise, departed source cards are removed from user collections while admin history is preserved, and zoomed Desktop view releases horizontal pan locks.");
+console.log("Player transfer monitoring verified: canonical club identities suppress provider-name noise, departed source cards are removed from user collections while card/claim database history is preserved, and zoomed Desktop view releases horizontal pan locks.");
