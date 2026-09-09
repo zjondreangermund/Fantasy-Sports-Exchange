@@ -1,23 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <!--
-      Android 12+ applies the system splash icon mask to the animated icon.
-      Keep a 288dp transparent canvas and place the exact lion artwork inside
-      the adaptive-icon safe zone so the crown and FANTASY ARENA wordmark are
-      never clipped by Samsung/Android splash masks.
+      Android 12+ masks the splash icon. A transparent outer canvas can be
+      ignored when Android calculates the icon bounds, which caused Samsung to
+      crop the lion artwork and the FANTASY ARENA wordmark. Keep the full 288dp
+      icon canvas opaque black (the same as the splash background) and center a
+      smaller copy of the exact lion artwork inside it. Android can mask the
+      outer black canvas while the complete artwork remains safely inside.
     -->
     <item
         android:width="288dp"
         android:height="288dp"
         android:gravity="center">
         <shape android:shape="rectangle">
-            <solid android:color="@android:color/transparent" />
+            <solid android:color="#000000" />
         </shape>
     </item>
 
     <item
-        android:width="172dp"
-        android:height="172dp"
+        android:width="152dp"
+        android:height="152dp"
         android:gravity="center">
         <bitmap
             android:src="@mipmap/fantasy_arena_logo"
