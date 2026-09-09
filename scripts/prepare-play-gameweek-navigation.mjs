@@ -46,3 +46,6 @@ await import("./apply-native-play-leaderboard-25.mjs");
 await import("./apply-common-open-entry-ui.mjs");
 await import("./apply-native-prize-vault-button.mjs");
 await import("./apply-lineup-rarity-glows-v2.mjs");
+await import("./repair-common-reward-desktop-only-anchor.mjs");
+await import("./apply-squad-hub-premier-desktop-web.mjs");
+await import("./repair-squad-hub-jsx.mjs");
