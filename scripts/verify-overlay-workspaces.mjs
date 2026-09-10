@@ -1,3 +1,6 @@
+await import("./apply-gw4-promo-launch.mjs");
+await import("./verify-gw4-promo-launch.mjs");
+
 import fs from "node:fs";
 
 const admin = fs.readFileSync("client/src/pages/admin.tsx", "utf8");
