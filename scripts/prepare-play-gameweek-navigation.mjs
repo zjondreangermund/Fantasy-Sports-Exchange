@@ -4,6 +4,9 @@ import fs from "node:fs";
 // this here keeps Android/PWA/native collection cards off the 3D glow compositor
 // path instead of applying the stabilization only after the client was built.
 await import("./apply-starter-draft-mobile-rendering.mjs");
+// Keep the working verified portrait selected when equivalent image candidate
+// arrays are recreated by React Query/profile enrichment during collection renders.
+await import("./apply-stable-collection-portrait-state.mjs");
 
 const landingPath = "client/src/pages/landing.tsx";
 let landing = fs.readFileSync(landingPath, "utf8");
