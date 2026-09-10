@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import "./verify-current-epl-community-entry-notifications.mjs";
 import "./apply-departed-card-archive.mjs";
 
 const read = (path) => fs.readFileSync(path, "utf8");
