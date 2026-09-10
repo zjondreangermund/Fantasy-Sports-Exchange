@@ -15,15 +15,18 @@ function replaceAny(source, variants, replacement, label) {
 let source = fs.readFileSync(ONBOARDING, "utf8");
 
 if (!source.includes(MARKER)) {
-  source = replaceAny(
-    source,
-    [
-      'const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"];\n// STARTER_DRAFT_MOBILE_RENDERING_V1: stable native-size cards and explicit incomplete-selection CTA on mobile.\n',
-      'const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"];\n',
-    ],
-    'const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"];\n// STARTER_DRAFT_PLAYER_DETAILS_V1: always show the live Premier League club and canonical position below Starter Draft choices.\n',
-    "marker",
-  );
+  const mobileMarker = "// STARTER_DRAFT_MOBILE_RENDERING_V1: stable native-size cards and explicit incomplete-selection CTA on mobile.\n";
+  const detailsMarker = "// STARTER_DRAFT_PLAYER_DETAILS_V1: always show the live Premier League club and canonical position below Starter Draft choices.\n";
+  if (source.includes(mobileMarker)) {
+    source = source.replace(mobileMarker, `${mobileMarker}${detailsMarker}`);
+  } else {
+    source = replaceAny(
+      source,
+      ['const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"];\n'],
+      'const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"];\n' + detailsMarker,
+      "marker",
+    );
+  }
 
   source = replaceAny(
     source,
