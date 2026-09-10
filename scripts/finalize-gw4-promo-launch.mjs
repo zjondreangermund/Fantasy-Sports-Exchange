@@ -10,10 +10,11 @@ if (legalCount < 2) throw new Error("[gw4-promo] expected both onboarding and au
 app = app.replaceAll(legalAnchor, `${legalAnchor}${routeLine}`);
 
 if (!app.includes('sendGw4PromoEvent("tournament_open_after_signup")')) {
-  const effectAnchor = '  if (isLoading && !isPublicPath) return <RouteFallback />;\n';
-  const effect = `  React.useEffect(() => {\n    if (!user) return;\n    if (isNativeMobileApp()) reportNativeAccountLinked(String((user as any)?.id || (user as any)?.claims?.sub || ""));\n    const params = new URLSearchParams(window.location.search);\n    if (window.location.pathname === "/competitions" && params.get("promo") === GW4_PROMO_CAMPAIGN) {\n      void sendGw4PromoEvent("tournament_open_after_signup");\n      clearPostSignupTarget();\n    }\n  }, [user]);\n\n`;
-  if (!app.includes(effectAnchor)) throw new Error("[gw4-promo] AppContent insertion point missing");
-  app = app.replace(effectAnchor, `${effect}${effectAnchor}`);
+  const effect = `  React.useEffect(() => {\n    if (!user) return;\n    if (isNativeMobileApp()) reportNativeAccountLinked(String((user as any)?.id || (user as any)?.claims?.sub || ""));\n    const params = new URLSearchParams(window.location.search);\n    if (window.location.pathname === "/competitions" && params.get("promo") === GW4_PROMO_CAMPAIGN) {\n      void sendGw4PromoEvent("tournament_open_after_signup");\n      clearPostSignupTarget();\n    }\n  }, [user]);\n`;
+  const appContentOffset = app.indexOf("function AppContent() {");
+  const loadingOffset = app.indexOf("\n  if (isLoading)", appContentOffset);
+  if (appContentOffset < 0 || loadingOffset < 0) throw new Error("[gw4-promo] AppContent insertion point missing");
+  app = `${app.slice(0, loadingOffset + 1)}${effect}${app.slice(loadingOffset + 1)}`;
 }
 fs.writeFileSync(appPath, app);
 
