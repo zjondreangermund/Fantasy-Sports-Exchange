@@ -15,19 +15,10 @@ function replaceRequired(source, from, to, label) {
   return source.replace(from, to);
 }
 
-patch("client/src/components/cards/CollectionStableCard.tsx", (original) => {
-  let source = original;
-  source = source.replace(
-    'import { type CSSProperties, useEffect, useMemo, useState } from "react";',
-    'import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";',
-  );
-
-  const oldState = `  const [imageIndex, setImageIndex] = useState(0);\n  useEffect(() => { setImageIndex(0); }, [player.id, imageCandidates]);\n  const image = imageCandidates[imageIndex] || "/players/fallback.svg";`;
-  const newState = `  const [imageIndex, setImageIndex] = useState(0);\n  const imageCandidateKey = imageCandidates.join("\\u001f");\n  const lastDisplayedImage = useRef(imageCandidates[0] || "/players/fallback.svg");\n  useEffect(() => {\n    // STABLE_CARD_IMAGE_REFRESH_V1: profile queries can add a verified source after\n    // the card has already found a working fallback. Keep the currently displayed\n    // source if it is still in the candidate set instead of flashing/disappearing.\n    const retainedIndex = imageCandidates.indexOf(lastDisplayedImage.current);\n    setImageIndex(retainedIndex >= 0 ? retainedIndex : 0);\n  }, [player.id, imageCandidateKey]);\n  const image = imageCandidates[imageIndex] || "/players/fallback.svg";\n  useEffect(() => { lastDisplayedImage.current = image; }, [image]);`;
-  source = replaceRequired(source, oldState, newState, "stable image candidate state");
-  return source;
-});
-
+// Collection and full-card profile queries may return a card-fallback payload or a
+// newer provider image after the original collection portrait has already rendered.
+// Keep the original verified candidates and add the refreshed provider portrait to
+// the end of that list instead of blanking every previous source.
 patch("client/src/components/cards/CollectionProfileCard.tsx", (original) => {
   let source = original;
   const oldBlock = `    const identityVerified = Boolean(data && data.source && data.source !== "card-fallback");\n    const verifiedImage = identityVerified ? data?.player?.imageUrl || undefined : undefined;\n    const displayCard = data\n      ? ({\n          ...card,\n          totalPoints: data.stats?.totalPoints ?? (card as any).totalPoints,\n          player: {\n            ...(card.player as any),\n            ...data.player,\n            name: data.player?.name || card.player?.name,\n            team: data.player?.team || card.player?.team,\n            position: data.player?.position || card.player?.position,\n            imageUrl: verifiedImage,\n            verifiedImageUrl: verifiedImage,\n            identityVerified,\n            identitySource: identityVerified\n              ? data.source === "api-football"\n                ? "api-football"\n                : "fpl"\n              : "unverified-card-data",\n            totalPoints: data.stats?.totalPoints ?? (card.player as any)?.totalPoints,\n            photo: null,\n            photoUrl: null,\n            image: null,\n            image_url: null,\n            officialPortraitUrl: null,\n            headshotUrl: null,\n            cutoutUrl: null,\n            code: identityVerified ? (card.player as any)?.code : null,\n          },\n        } as PlayerCardWithPlayer)\n      : card;`;
