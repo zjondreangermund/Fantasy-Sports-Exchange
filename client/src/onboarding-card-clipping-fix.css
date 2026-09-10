@@ -1,30 +1,60 @@
 /*
- * Starter Draft card rendering fix.
+ * Starter Draft card rendering + alignment fix.
  *
- * The unified Collection card is rendered at full size and scaled down inside
- * PremiumFootballCard. The Starter Draft choice wrapper used overflow-hidden,
- * which clipped the unscaled card box before the visual transform was applied.
- * Keep the selection tile and canonical card renderer overflow-visible so the
- * complete metallic card remains visible in all three mobile columns.
+ * The unified Collection card renders xs onboarding cards at a stable native
+ * 96px width. Keep all three choices inside the real phone viewport instead of
+ * shrinking the grid to 94% and then letting the cards overflow its columns.
+ * This makes 320px, 360px, 390px and wider phones share the same centred row.
  */
+[data-onboarding-scroll-root] main {
+  box-sizing: border-box;
+}
+
 [data-onboarding-scroll-root] main section > div:last-child {
-  width: min(94%, 32rem) !important;
-  max-width: min(94%, 32rem) !important;
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 22.5rem !important;
   margin-inline: auto !important;
-  column-gap: clamp(0.3rem, 1.6vw, 0.8rem) !important;
-  padding-inline: 0.25rem !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  justify-items: center !important;
+  align-items: start !important;
+  column-gap: clamp(0.15rem, 1.25vw, 0.65rem) !important;
+  padding-inline: 0 !important;
 }
 
 [data-onboarding-scroll-root] main section > div:last-child > button {
-  width: min(100%, 6.5rem) !important;
-  max-width: 6.5rem !important;
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 6.25rem !important;
+  min-width: 0 !important;
+  justify-self: center !important;
   overflow: visible !important;
 }
 
+[data-onboarding-scroll-root] main section > div:last-child > button > :where(div, span) {
+  margin-inline: auto;
+}
+
+[data-onboarding-scroll-root] .starter-card-static,
 [data-onboarding-scroll-root] [data-card-engine="collection-profile-card"] {
+  margin-inline: auto !important;
   overflow: visible !important;
 }
 
 [data-onboarding-scroll-root] [data-card-engine="collection-profile-card"] > div {
   overflow: visible !important;
+}
+
+@media (max-width: 350px) {
+  [data-onboarding-scroll-root] main {
+    padding-inline: 0.35rem !important;
+  }
+
+  [data-onboarding-scroll-root] main section > div:last-child {
+    column-gap: 0.1rem !important;
+  }
+
+  [data-onboarding-scroll-root] main section > div:last-child > button {
+    max-width: 6rem !important;
+  }
 }
