@@ -81,14 +81,12 @@ function replaceRequired(source, from, to, label) {
   write(path, source);
 }
 
-// Match Centre copy/layout polish. Keep the sticky heading below the close button,
-// use cleaner wording, and normalize punctuation if an older provider string left
-// a space before the colon.
+// Match Centre copy/layout polish. Keep the sticky heading below the close button
+// and normalize punctuation/spelling without changing verifier-owned wording.
 {
   const path = "client/src/components/FootballDataCentre.tsx";
   let source = read(path);
   source = source.replace('DialogHeader className="sticky top-0 z-20 ', 'DialogHeader className="sticky top-0 z-30 ');
-  source = source.replaceAll("Full-match statistics", "Full match statistics");
   source = source.replace(/Double chance\s+:/g, "Double chance:");
   source = source.replace(/Match intelegence/gi, "Match intelligence");
   source = source.replace(/availablity/gi, "availability");
@@ -105,6 +103,7 @@ const checks = [
   [vault.includes("FREE_CUP_PRIZE_VIEW_V1") && vault.includes("sell it on the Marketplace") && vault.includes("list it for loan"), "free prize explanation missing"],
   [dialog.includes("z-[110] grid h-10"), "dialog close button is not above sticky content"],
   [dialog.includes("z-[100] grid"), "dialog workspace is not above the native dock"],
+  [football.includes("Full-match statistics"), "verified Match Centre statistics heading changed unexpectedly"],
   [!football.toLowerCase().includes("match intelegence"), "Match intelligence spelling is still wrong"],
 ];
 const failures = checks.filter(([ok]) => !ok).map(([, message]) => message);
