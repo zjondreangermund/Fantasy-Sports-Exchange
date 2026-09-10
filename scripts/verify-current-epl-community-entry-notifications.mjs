@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 await import("./prepare-current-epl-common-patcher.mjs");
+await import("./prepare-admin-referral-current-epl-compat.mjs");
 await import("./apply-community-24h-retention.mjs");
 await import("./apply-current-epl-reward-guards.mjs");
 await import("./apply-stable-player-card-images.mjs");
@@ -20,6 +21,7 @@ const notifications = read("server/services/notifications.ts");
 const authStorage = read("server/replit_integrations/auth/storage.ts");
 const weekly = read("server/services/dailyLoginReward.ts");
 const weeklyPatcher = read("scripts/apply-common-reward-position-balance.mjs");
+const adminReferralPatcher = read("scripts/apply-admin-referral-monitoring.mjs");
 const referralPostguard = read("scripts/apply-current-epl-referral-postguard.mjs");
 const weeklyRefresh = read("scripts/apply-weekly-common-legendary-refresh.mjs");
 const rewardRepair = read("server/services/tournamentRewards.ts");
@@ -74,6 +76,7 @@ need(helperSegment, "coalesce(p.fpl_id, 0) > 0", "generated weekly Common offici
 need(helperSegment, "NOT IN ('departed', 'superseded', 'unlinked', 'archived')", "generated weekly Common departed-player exclusion");
 need(weekly, "coalesce(p.fpl_id, 0) > 0", "runtime weekly FPL identity filter");
 need(weekly, "NOT IN ('departed', 'superseded', 'unlinked', 'archived')", "runtime weekly departed-player exclusion");
+need(adminReferralPatcher, "CURRENT_EPL_ADMIN_REFERRAL_IDEMPOTENCY_V1", "repeat-build referral compatibility");
 need(referralPostguard, '!["departed", "superseded", "unlinked", "archived"].includes(status)', "referral archived-player postguard");
 need(weeklyRefresh, 'import "./apply-current-epl-referral-postguard.mjs";', "referral postguard build ordering");
 need(rewardRepair, "CURRENT_EPL_REWARD_REPAIR_V2", "tournament reward-repair EPL guard");
