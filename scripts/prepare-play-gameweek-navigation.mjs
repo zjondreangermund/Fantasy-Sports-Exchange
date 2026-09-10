@@ -52,3 +52,4 @@ await import("./repair-squad-hub-jsx.mjs");
 await import("./apply-match-centre-popup.mjs");
 await import("./fix-native-prize-links-premier-label.mjs");
 await import("./apply-free-cup-prize-overlay-polish.mjs");
+await import("./apply-marketplace-club-identities.mjs");
