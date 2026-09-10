@@ -21,7 +21,6 @@ const weeklyPatcher = read("scripts/apply-common-reward-position-balance.mjs");
 const referrals = read("server/routes/referrals.routes.ts");
 const rewardRepair = read("server/services/tournamentRewards.ts");
 const freeCupAwards = read("scripts/apply-free-card-cup-auto-awards.mjs");
-const stableCard = read("client/src/components/cards/CollectionStableCard.tsx");
 const collectionProfileCard = read("client/src/components/cards/CollectionProfileCard.tsx");
 const cardProfileModal = read("client/src/components/cards/CardProfileModal.tsx");
 
@@ -50,12 +49,12 @@ need(economy, "you finished #", "entrant settlement result notification");
 need(economy, "Think your squad can take the next one?", "public winner encouragement copy");
 need(economy, "public-settlement-winner", "public settlement dedupe");
 
-need(stableCard, "STABLE_CARD_IMAGE_REFRESH_V1", "stable card image refresh guard");
-need(stableCard, "lastDisplayedImage", "last working portrait retention");
 need(collectionProfileCard, "retainedImages", "collection profile portrait candidates");
 need(collectionProfileCard, "existingVerified", "collection profile identity preservation");
+need(collectionProfileCard, "verifiedImageUrl: retainedPrimary", "collection profile portrait retention");
 need(cardProfileModal, "retainedImages", "modal portrait candidates");
 need(cardProfileModal, "existingVerified", "modal identity preservation");
+need(cardProfileModal, "verifiedImageUrl: retainedPrimary", "modal portrait retention");
 
 const helperStart = weeklyPatcher.indexOf("async function findWeeklyCommonPlayerForPosition");
 const helperEnd = helperStart >= 0 ? weeklyPatcher.indexOf("async function", helperStart + 20) : -1;
