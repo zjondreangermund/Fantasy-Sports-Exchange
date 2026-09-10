@@ -22,6 +22,10 @@ async function logout(): Promise<void> {
     method: "POST",
     credentials: "include",
   }).catch(() => undefined);
+
+  // LOGOUT_SIGNIN_REDIRECT_V1: always leave authenticated routes after signing out.
+  // replace() keeps Android/Desktop Back from reopening the private screen.
+  if (typeof window !== "undefined") window.location.replace("/");
 }
 
 export function useAuth() {
