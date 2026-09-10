@@ -82,12 +82,17 @@ includesAll(adapter, [
 ], "Card adapter identity gate");
 
 includesAll(modal, [
-  'const identityVerified = data.source !== "card-fallback"',
-  'identitySource: identityVerified ? (data.source === "api-football" ? "api-football" : "fpl") : "unverified-card-data"',
-  "photo: null",
-  "cutoutUrl: null",
+  'const profileVerified = data.source !== "card-fallback"',
+  "const existingVerified = Boolean(originalPlayer.identityVerified)",
+  '|| ["fpl", "api-football", "fpl+api-football", "api-football-current-squad"].includes',
+  "const identityVerified = profileVerified || existingVerified",
+  "const retainedImages = Array.from(new Set([",
+  "verifiedImageUrl: retainedPrimary",
+  'identitySource: profileVerified ? (data.source === "api-football" ? "api-football" : "fpl") : originalPlayer.identitySource || "unverified-card-data"',
+  "code: identityVerified ? originalPlayer.code : null",
 ], "Card profile identity gate");
-expect(!modal.includes("data.player?.imageUrl || card.player?.imageUrl"), "Unverified profile cards must not reuse the collection card's stale image");
+expect(!modal.includes("data.player?.imageUrl || card.player?.imageUrl"), "Unverified profile cards must not blindly reuse the collection card's stale image");
+expect(!modal.includes("const identityVerified = true"), "Profile cards must never bypass provider/existing verified identity checks");
 
 expect(server.includes("buildFplPlayerIndex(bootstrap).resolve({ name, team })"), "Image resolver must use the strict FPL identity resolver");
 const imageRouteStart = server.indexOf('app.get("/api/player-image/resolve"');
@@ -122,4 +127,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Strict provider identity links, guarded stored-ID/code reuse, verified-only player images and crash-safe fixture responses verified.");
+console.log("Strict provider identity links, guarded stored-ID/code reuse, verified-only retained player images and crash-safe fixture responses verified.");
