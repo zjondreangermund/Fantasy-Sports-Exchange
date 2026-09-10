@@ -47,7 +47,7 @@ patch(AUTH_STORAGE, (original) => {
   source = replaceRequired(
     source,
     `  async upsertUser(userData: UpsertUser): Promise<User> {\n    const [user] = await db\n`,
-    `  async upsertUser(userData: UpsertUser): Promise<User> {\n    const incomingUserId = String(userData.id || "");\n    const existingUser = incomingUserId ? await this.getUser(incomingUserId) : undefined;\n    const [user] = await db\n`,
+    `  async upsertUser(userData: UpsertUser): Promise<User> {\n    const incomingUserId = String((userData as any)?.id || "");\n    const existingUser = incomingUserId ? await this.getUser(incomingUserId) : undefined;\n    const [user] = await db\n`,
     "new-account detection",
   );
   source = replaceRequired(
