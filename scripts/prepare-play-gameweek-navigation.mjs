@@ -7,6 +7,9 @@ await import("./apply-starter-draft-mobile-rendering.mjs");
 // Keep the working verified portrait selected when equivalent image candidate
 // arrays are recreated by React Query/profile enrichment during collection renders.
 await import("./apply-stable-collection-portrait-state.mjs");
+// Signup choices must show the player's current Premier League club and canonical
+// GK/DEF/MID/FWD position clearly below the card without bringing back stat overlap.
+await import("./apply-starter-draft-player-details.mjs");
 
 const landingPath = "client/src/pages/landing.tsx";
 let landing = fs.readFileSync(landingPath, "utf8");
