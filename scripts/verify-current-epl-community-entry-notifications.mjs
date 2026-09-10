@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import "./prepare-current-epl-common-patcher.mjs";
 import "./apply-current-epl-community-entry-notifications.mjs";
+import "./apply-tournament-milestone-broadcast.mjs";
 
 function read(path) { return fs.readFileSync(path, "utf8"); }
 function need(source, text, label) {
@@ -33,6 +34,8 @@ need(economy, "has been submitted to", "team-name entry confirmation copy");
 need(economy, "milestoneCount % 25", "25-entry milestone trigger");
 need(economy, "Next bigger reward:", "Prize Ladder momentum copy");
 need(economy, "prize-ladder:", "Prize Ladder milestone dedupe");
+need(economy, "TOURNAMENT_MILESTONE_BROADCAST_V1", "all-manager milestone broadcast");
+need(economy, "where coalesce(is_banned, false) = false", "milestone broadcast active-account guard");
 need(economy, "notifyTournamentEntryActivity(userId, competitionId, Number(entry.id))", "entry notification call after submit");
 
 need(weeklyPatcher, "coalesce(p.fpl_id, 0) > 0", "weekly Common official FPL identity filter");
@@ -45,4 +48,4 @@ need(rewardRepair, "fplId > 0", "reward-repair FPL identity requirement");
 need(freeCupAwards, "coalesce(p.fpl_id, 0) > 0", "Free Cup fallback FPL identity requirement");
 need(freeCupAwards, "not in ('departed','superseded','unlinked','archived')", "Free Cup fallback departed-player exclusion");
 
-console.log("Current EPL reward safeguards, 24-hour Community Live retention, mention pushes, tournament entry confirmations and every-25-entry momentum notifications verified.");
+console.log("Current EPL reward safeguards, 24-hour Community Live retention, mention pushes, tournament entry confirmations and all-manager every-25-entry momentum notifications verified.");
