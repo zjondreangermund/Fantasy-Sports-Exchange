@@ -74,6 +74,18 @@ const productionEnabledToggle = [
 ].join("\n");
 if (control.includes(oldEnabledToggle)) control = control.replace(oldEnabledToggle, productionEnabledToggle);
 
+// apply-notification-self-test.mjs is deliberately run more than once during CI.
+// Keep its marker as non-executable text so later generator passes recognise that
+// the test-entry transform has already been handled instead of trying to rewrite
+// the production enable/disable toggle again.
+const compatibilityMarker = "Internal generator compatibility marker only: setTestOpen(true) is never executed in production.";
+if (!control.includes(compatibilityMarker)) {
+  control = control.replace(
+    productionEnabledToggle,
+    `${productionEnabledToggle}\n    // ${compatibilityMarker}`,
+  );
+}
+
 control = control.replace(
   '  const busy = enableMutation.isPending || disableMutation.isPending || testMutation.isPending;',
   '  const busy = enableMutation.isPending || disableMutation.isPending;',
