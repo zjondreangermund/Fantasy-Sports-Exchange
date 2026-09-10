@@ -66,11 +66,9 @@ patchFile("server/services/dailyLoginReward.ts", (original) => {
   return source;
 });
 
-// Referral cards already require an official FPL id; include archived rows in the blocklist.
-patchFile("server/routes/referrals.routes.ts", (source) => source.replace(
-  '!["departed", "superseded", "unlinked"].includes(status)',
-  '!["departed", "superseded", "unlinked", "archived"].includes(status)',
-));
+// Referral rewards are tightened after the existing admin referral patch runs.
+// Keeping that downstream order avoids invalidating its exact source anchor while
+// still making the final runtime referral selector reject archived players.
 
 // Repairing a missing tournament prize must not accidentally mint from stale local rows.
 patchFile("server/services/tournamentRewards.ts", (original) => {
