@@ -2,6 +2,7 @@ import fs from "node:fs";
 import "./apply-common-reward-position-balance.mjs";
 import "./verify-referral-history-integrity.mjs";
 import "./apply-admin-referral-monitoring.mjs";
+import "./apply-current-epl-referral-postguard.mjs";
 import "./verify-admin-referral-monitoring.mjs";
 
 function patchFile(file, transform) {
