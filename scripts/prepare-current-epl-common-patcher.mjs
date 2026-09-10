@@ -11,7 +11,7 @@ if (!source.includes("CURRENT_EPL_WEEKLY_ANCHOR_V1")) {
   source = source.replaceAll(leagueLine, `${leagueLine}${strict}`);
   source = source.replace(
     "  const oldPlayerBlock = `",
-    "  // CURRENT_EPL_WEEKLY_ANCHOR_V1: legacy selector anchor is strict too.\\n  const oldPlayerBlock = `",
+    "  // CURRENT_EPL_WEEKLY_ANCHOR_V1: legacy selector anchor is strict too.\n  const oldPlayerBlock = `",
   );
   fs.writeFileSync(file, source);
   console.log("[current-epl-weekly] prepared strict legacy selector anchors");
