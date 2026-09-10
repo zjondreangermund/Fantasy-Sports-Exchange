@@ -76,7 +76,11 @@ includesAll(modal, [
   "Zero-value placeholder games have been removed",
   'return "API-Football verified"',
   "verifiedImageUrl",
-  'const identityVerified = data.source !== "card-fallback"',
+  'const profileVerified = data.source !== "card-fallback"',
+  "const existingVerified = Boolean(originalPlayer.identityVerified)",
+  "const identityVerified = profileVerified || existingVerified",
+  "const retainedImages = Array.from(new Set([",
+  "verifiedImageUrl: retainedPrimary",
 ], "Card profile modal");
 expect(!modal.includes("while (padded.length < 10)"), "Client fallback must not fabricate ten match records");
 expect(!modal.includes("data.player?.imageUrl || card.player?.imageUrl"), "Unverified profiles must not promote stale collection images");
@@ -103,4 +107,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Verified player identities, API-Football match actions with official FPL history fallback, goalkeeper stats and full-screen profile modal behavior are wired correctly.");
+console.log("Verified player identities, API-Football match actions with official FPL history fallback, goalkeeper stats, retained verified portraits and full-screen profile modal behavior are wired correctly.");
