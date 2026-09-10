@@ -1,3 +1,5 @@
+await import("./finalize-gw4-promo-launch.mjs");
+
 import fs from "node:fs";
 
 function read(path) { return fs.readFileSync(path, "utf8"); }
@@ -39,7 +41,7 @@ need(main, 'reportNativeFirstOpen();', "native first launch reporting");
 need(app, 'reportNativeAccountLinked', "native installation-to-user linking");
 
 need(admin, '<Gw4PromoAnalyticsCard />', "campaign-specific admin analytics");
-need(promoRoutes, 'Normal tournament', "campaign isolation explanation");
+need(promoRoutes, 'Normal tournament entries are intentionally not included', "campaign isolation explanation");
 need(wallet, 'data-wallet-coming-soon', "desktop wallet transparency label");
 need(nativeWallet, 'data-native-wallet-coming-soon', "native wallet transparency label");
 
@@ -47,6 +49,8 @@ need(fpl, 'premierleague25/photos/players/${dimensions}/${id}.png', "current Pre
 need(cardImage, 'premierleague25/photos/players/250x250/${match[1]}.png', "client PL card fallback URL");
 need(serverIndex, 'CURRENT_PL_PLAYER_PHOTO_FALLBACKS', "proxy legacy/current PL fallback list");
 
+const authenticatedPromoRoutes = app.split('<Route path="/gw4-free" component={Gw4PromoAuthenticatedRedirect} />').length - 1;
+if (authenticatedPromoRoutes < 2) throw new Error("[gw4-promo] promo redirect must work during onboarding and for completed accounts");
 if (app.includes('>Desktop view<') || app.includes('>Mobile view<') || app.includes('Switch to desktop site view')) {
   throw new Error("[gw4-promo] retired desktop/mobile product wording is still user-visible");
 }
