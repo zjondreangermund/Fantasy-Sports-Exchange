@@ -3,6 +3,7 @@ export const GW4_PROMO_PATH = "/gw4-free";
 export const GW4_PROMO_TARGET = "/competitions?tab=open&gameweek=4&rarity=common&promo=gw4_free_common_2026";
 
 const VISITOR_KEY = "fantasy_arena_marketing_visitor_id";
+const SESSION_KEY = "fantasy_arena_marketing_session_id";
 const ATTRIBUTION_KEY = "fantasy_arena_gw4_promo_attribution";
 const POST_SIGNUP_KEY = "fantasy_arena_post_signup_target";
 const INSTALL_ID_KEY = "fantasy_arena_native_install_id";
@@ -35,6 +36,14 @@ function safeStorageSet(key: string, value: string) {
   try { window.localStorage.setItem(key, value); } catch { /* storage can be restricted in social browsers */ }
 }
 
+function safeSessionGet(key: string) {
+  try { return window.sessionStorage.getItem(key) || ""; } catch { return ""; }
+}
+
+function safeSessionSet(key: string, value: string) {
+  try { window.sessionStorage.setItem(key, value); } catch { /* storage can be restricted in social browsers */ }
+}
+
 function normalizeSource(value: string) {
   const raw = clean(value, 200).toLowerCase();
   if (/instagram/.test(raw)) return "instagram";
@@ -45,14 +54,27 @@ function normalizeSource(value: string) {
   return raw.replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 40) || "other";
 }
 
+function generateId(prefix: string) {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 export function getMarketingVisitorId() {
   if (typeof window === "undefined") return "";
   const existing = safeStorageGet(VISITOR_KEY);
   if (existing) return existing;
-  const generated = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `fa-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  const generated = generateId("fa");
   safeStorageSet(VISITOR_KEY, generated);
+  return generated;
+}
+
+export function getMarketingSessionId() {
+  if (typeof window === "undefined") return "";
+  const existing = safeSessionGet(SESSION_KEY);
+  if (existing) return existing;
+  const generated = generateId("session");
+  safeSessionSet(SESSION_KEY, generated);
   return generated;
 }
 
@@ -62,9 +84,10 @@ export function currentGw4Attribution(): StoredAttribution {
   let stored: Partial<StoredAttribution> = {};
   try { stored = JSON.parse(safeStorageGet(ATTRIBUTION_KEY) || "{}"); } catch { stored = {}; }
   const explicitSource = params.get("utm_source") || params.get("source") || "";
+  const metaSignal = params.has("fbclid") ? "facebook" : params.has("igshid") ? "instagram" : "";
   const referrer = typeof document !== "undefined" ? document.referrer : "";
   return {
-    source: normalizeSource(explicitSource || String(stored.source || "") || referrer),
+    source: normalizeSource(explicitSource || metaSignal || String(stored.source || "") || referrer),
     medium: clean(params.get("utm_medium") || stored.medium || "", 80),
     campaign: clean(params.get("utm_campaign") || stored.campaign || GW4_PROMO_CAMPAIGN, 160) || GW4_PROMO_CAMPAIGN,
     content: clean(params.get("utm_content") || stored.content || "", 160),
@@ -109,6 +132,7 @@ export function sendGw4PromoEvent(event: Gw4PromoEvent, extra: Record<string, un
   const payload = {
     event,
     visitorId: getMarketingVisitorId(),
+    sessionId: getMarketingSessionId(),
     path: `${window.location.pathname}${window.location.search}`,
     source: attribution.source,
     medium: attribution.medium,
@@ -129,9 +153,7 @@ function getNativeInstallationId() {
   if (typeof window === "undefined") return "";
   const existing = safeStorageGet(INSTALL_ID_KEY);
   if (existing) return existing;
-  const value = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `install-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+  const value = generateId("install");
   safeStorageSet(INSTALL_ID_KEY, value);
   return value;
 }
