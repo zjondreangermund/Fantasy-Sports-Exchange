@@ -26,7 +26,9 @@ need(transfer, "EPL_REPLACEMENT_SAME_POSITION_V1", "same-position replacement ma
 need(transfer, 'source.position::text as "sourcePosition"', "replacement claims do not expose the departed player position");
 need(transfer, 'and p.position::text=${sourcePosition}', "replacement candidates are not restricted to the same position");
 need(transfer, "same ${prettyRarity} rarity", "departure notification does not explain same-rarity protection");
-need(transfer, "removed from your playable collection and archived in transfer history", "departed source card still appears to remain in the user collection");
+need(transfer, "is archived from your playable collection as soon as any active tournament lock clears", "departure notification does not explain lock-safe source-card archive timing");
+need(transfer, "cl.card_id=pc.id", "departed source-card archive does not protect active tournament locks");
+need(transfer, "cl.expires_at is null or cl.expires_at > now()", "departed source-card archive does not wait for active tournament locks to clear");
 need(app, "<MandatoryReplacementClaimDialog />", "mandatory EPL replacement dialog is not mounted globally");
 need(app, "<PushNotificationControl />", "installed-app push notification control is not mounted globally");
 need(dialog, "onEscapeKeyDown={(event) => event.preventDefault()}", "replacement dialog can still be dismissed with Escape");
@@ -91,7 +93,7 @@ need(serviceWorker, 'self.addEventListener("notificationclick"', "service worker
 need(capacitorConfig, "PushNotifications", "Capacitor foreground notification presentation is not configured");
 need(androidWorkflow, "FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64", "Android build cannot receive its Firebase client configuration securely");
 
-console.log("EPL departure replacements verified: same rarity + same position, departed source cards archived out of user collections, mandatory claim popup, installed PWA and native Android push, under-minimum Prize Ladder 80/20 winner fallback, and bank/reserve tournament finance reconciliation are protected.");
+console.log("EPL departure replacements verified: same rarity + same position, departed source cards archive after active tournament locks clear, mandatory claim popup, installed PWA and native Android push, under-minimum Prize Ladder 80/20 winner fallback, and bank/reserve tournament finance reconciliation are protected.");
 
 // This verifier is the final shared mutating/checkpoint pass in every production
 // build target after the large generated tournament/notification patch stack. Keep

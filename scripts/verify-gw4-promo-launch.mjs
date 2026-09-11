@@ -46,8 +46,8 @@ need(wallet, 'data-wallet-coming-soon', "desktop wallet transparency label");
 need(nativeWallet, 'data-native-wallet-coming-soon', "native wallet transparency label");
 
 need(fpl, 'premierleague25/photos/players/${dimensions}/${id}.png', "current Premier League player URL");
-need(cardImage, 'premierleague25/photos/players/250x250/${match[1]}.png', "client PL card fallback URL");
-need(serverIndex, 'CURRENT_PL_PLAYER_PHOTO_FALLBACKS', "proxy legacy/current PL fallback list");
+need(cardImage, 'premierleague25/photos/players/110x140/${match[1]}.png', "client PL card portrait fallback URL");
+need(serverIndex, 'CURRENT_PL_PLAYER_PHOTO_FALLBACKS_V2', "proxy current/legacy PL fallback list V2");
 
 const authenticatedPromoRoutes = app.split('<Route path="/gw4-free" component={Gw4PromoAuthenticatedRedirect} />').length - 1;
 if (authenticatedPromoRoutes < 2) throw new Error("[gw4-promo] promo redirect must work during onboarding and for completed accounts");
@@ -55,4 +55,4 @@ if (app.includes('>Desktop view<') || app.includes('>Mobile view<') || app.inclu
   throw new Error("[gw4-promo] retired desktop/mobile product wording is still user-visible");
 }
 
-console.log("GW4 promo verified: ad-only acquisition funnel, tournament deep return, app install attribution, wallet launch transparency and current player-photo fallbacks.");
+console.log("GW4 promo verified: ad-only acquisition funnel, tournament deep return, app install attribution, wallet launch transparency and reliable current player-photo fallbacks.");
