@@ -30,6 +30,7 @@ import { appUrl, authStartupWarnings, getSessionSecret, googleAuthEnabled, googl
 const app = express();
 const httpServer = createServer(app);
 const playerImageCache = new Map<string, { expiresAt: number; url: string | null }>();
+const CANONICAL_HOST = "playfantasyarena.com";
 
 declare module "http" {
   interface IncomingMessage {
@@ -38,6 +39,12 @@ declare module "http" {
 }
 
 app.set("trust proxy", 1);
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === "production" && req.hostname.toLowerCase() === `www.${CANONICAL_HOST}`) {
+    return res.redirect(308, `https://${CANONICAL_HOST}${req.originalUrl}`);
+  }
+  next();
+});
 app.use(cookieParser());
 
 const PgSession = pgSession(session);
