@@ -54,6 +54,9 @@ await import("./apply-native-prize-vault-button.mjs");
 await import("./apply-lineup-rarity-glows-v2.mjs");
 await import("./repair-common-reward-desktop-only-anchor.mjs");
 await import("./apply-squad-hub-premier-desktop-web.mjs");
+// Final website presentation guard: undo the old forced 1280px desktop canvas
+// and let ordinary browsers use their real device width automatically.
+await import("./apply-responsive-web-default.mjs");
 await import("./repair-squad-hub-jsx.mjs");
 await import("./apply-match-centre-popup.mjs");
 await import("./fix-native-prize-links-premier-label.mjs");
