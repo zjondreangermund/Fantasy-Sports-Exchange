@@ -9,6 +9,30 @@ if (!source.includes("CONFIRMED_EPL_DEPARTURE_EVIDENCE_V1")) {
 }
 
 // Preserve the exact idempotency anchors expected by apply-transfer-admin-pan-fix.mjs.
+// The confirmed-departure helper block must not sit between the alias-cleanup helper
+// and processFplRosterChanges(), because the older generator treats that pair as one
+// stable insertion anchor and would otherwise add a duplicate cleanup function.
+const helperMarker = "// CONFIRMED_EPL_DEPARTURE_EVIDENCE_V1";
+const cleanupMarker = "async function suppressHistoricalTeamAliasNoise() {";
+const processMarker = "export async function processFplRosterChanges(existingRows: any[], currentFplIds: number[]) {";
+let helperStart = source.indexOf(helperMarker);
+let cleanupStart = source.indexOf(cleanupMarker);
+let processStart = source.indexOf(processMarker);
+
+if (cleanupStart >= 0 && helperStart > cleanupStart && processStart > helperStart) {
+  const helperBlock = source.slice(helperStart, processStart).trim();
+  source = source.slice(0, helperStart) + source.slice(processStart);
+  cleanupStart = source.indexOf(cleanupMarker);
+  source = source.slice(0, cleanupStart) + `${helperBlock}\n\n` + source.slice(cleanupStart);
+}
+
+helperStart = source.indexOf(helperMarker);
+cleanupStart = source.indexOf(cleanupMarker);
+processStart = source.indexOf(processMarker);
+if (!(helperStart >= 0 && cleanupStart > helperStart && processStart > cleanupStart)) {
+  throw new Error("[confirmed-epl-departure] helper placement is not transfer-generator safe");
+}
+
 // The independent verification can run immediately after the established base lines
 // without changing behavior, while allowing every npm pre-hook to safely re-run.
 const processOrders = [
