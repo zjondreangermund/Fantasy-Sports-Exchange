@@ -40,3 +40,8 @@ if (source !== original) {
 } else {
   console.log("[departed-card-archive] lock-safe source-card archive behavior already applied.");
 }
+
+// A missing FPL roster row is not sufficient evidence that a player left the EPL.
+// Apply the independent current-squad verification and false-departure repair only
+// after the lock-safe archive transformation above has established its final anchors.
+await import("./apply-confirmed-epl-departures.mjs");
