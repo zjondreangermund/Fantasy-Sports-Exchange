@@ -13,9 +13,11 @@ import "./native-mobile.css";
 import "./push-notification-visibility.css";
 import { patchFetchForApiBase } from "./lib/api-base";
 import { initializeSiteView, isNativeMobileApp } from "./lib/site-view";
+import { captureGw4MetaHomepageVisit } from "./lib/gw4-promo";
 
 initializeSiteView();
 patchFetchForApiBase();
+captureGw4MetaHomepageVisit();
 
 const rootElement = document.getElementById("root");
 
