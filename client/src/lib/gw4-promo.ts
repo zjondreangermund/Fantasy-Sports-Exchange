@@ -78,14 +78,32 @@ export function getMarketingSessionId() {
   return generated;
 }
 
+function freshMetaTrafficSource() {
+  if (typeof window === "undefined") return "";
+  const params = new URLSearchParams(window.location.search);
+  const explicitSource = normalizeSource(params.get("utm_source") || params.get("source") || "");
+  const referrer = typeof document !== "undefined" ? document.referrer.toLowerCase() : "";
+
+  if (params.has("fbclid")) return /instagram/.test(referrer) ? "instagram" : "facebook";
+  if (params.has("igshid")) return "instagram";
+  if (["facebook", "instagram", "meta"].includes(explicitSource)) return explicitSource;
+  if (/instagram/.test(referrer)) return "instagram";
+  if (/facebook|fb\.com|m\.facebook|l\.facebook/.test(referrer)) return "facebook";
+  return "";
+}
+
 export function currentGw4Attribution(): StoredAttribution {
   if (typeof window === "undefined") return { source: "direct", medium: "", campaign: GW4_PROMO_CAMPAIGN, content: "" };
   const params = new URLSearchParams(window.location.search);
   let stored: Partial<StoredAttribution> = {};
   try { stored = JSON.parse(safeStorageGet(ATTRIBUTION_KEY) || "{}"); } catch { stored = {}; }
   const explicitSource = params.get("utm_source") || params.get("source") || "";
-  const metaSignal = params.has("fbclid") ? "facebook" : params.has("igshid") ? "instagram" : "";
   const referrer = typeof document !== "undefined" ? document.referrer : "";
+  const metaSignal = params.has("fbclid")
+    ? (/instagram/i.test(referrer) ? "instagram" : "facebook")
+    : params.has("igshid")
+      ? "instagram"
+      : "";
   return {
     source: normalizeSource(explicitSource || metaSignal || String(stored.source || "") || referrer),
     medium: clean(params.get("utm_medium") || stored.medium || "", 80),
@@ -99,6 +117,26 @@ export function rememberGw4Promo() {
   const attribution = { ...currentGw4Attribution(), campaign: GW4_PROMO_CAMPAIGN };
   safeStorageSet(ATTRIBUTION_KEY, JSON.stringify(attribution));
   safeStorageSet(POST_SIGNUP_KEY, GW4_PROMO_TARGET);
+}
+
+export function captureGw4MetaHomepageVisit() {
+  if (typeof window === "undefined" || window.location.pathname !== "/") return;
+  const source = freshMetaTrafficSource();
+  if (!source) return;
+
+  const sessionId = getMarketingSessionId();
+  const sessionKey = `fantasy_arena_meta_home_landing:${GW4_PROMO_CAMPAIGN}:${sessionId}`;
+  if (safeSessionGet(sessionKey)) return;
+
+  const attribution = {
+    ...currentGw4Attribution(),
+    source,
+    campaign: GW4_PROMO_CAMPAIGN,
+  };
+  safeStorageSet(ATTRIBUTION_KEY, JSON.stringify(attribution));
+  safeStorageSet(POST_SIGNUP_KEY, GW4_PROMO_TARGET);
+  safeSessionSet(sessionKey, "1");
+  void sendGw4PromoEvent("promo_click");
 }
 
 export function getPostSignupTarget() {
