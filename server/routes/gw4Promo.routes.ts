@@ -1,8 +1,12 @@
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
 
 export const GW4_PROMO_CAMPAIGN = "gw4_free_common_2026";
+const FANTASY_ARENA_ADMIN_NOTIFICATION_EMAIL = String(
+  process.env.FANTASY_ARENA_ADMIN_NOTIFICATION_EMAIL || "lbcplaya@gmail.com",
+).trim().toLowerCase();
 
 function clean(value: unknown, max = 160) {
   return String(value || "").trim().replace(/[\u0000-\u001F\u007F]/g, "").slice(0, max);
@@ -26,6 +30,34 @@ function normalizeSource(value: unknown) {
   return raw.replace(/[^a-z0-9_-]/g, "-").replace(/-+/g, "-").slice(0, 40) || "other";
 }
 
+async function notifyAdminSignupStarted(meta: {
+  visitorId: string;
+  sessionId: string;
+  source: string;
+  content: string;
+}) {
+  await ensureNotificationsSchema();
+  const adminResult = await db.execute(sql`
+    select id as "userId"
+    from app.users
+    where lower(coalesce(email, '')) = ${FANTASY_ARENA_ADMIN_NOTIFICATION_EMAIL}
+    limit 1
+  `);
+  const admin = rowsOf(adminResult)[0] || null;
+  const adminUserId = String(admin?.userId || "");
+  if (!adminUserId) return;
+
+  const source = meta.source || "direct";
+  const content = meta.content ? ` · ${meta.content}` : "";
+  const dedupeIdentity = clean(meta.visitorId || meta.sessionId, 96).replace(/[^a-zA-Z0-9._:-]/g, "") || "unknown";
+  await createNotificationOnce(db, {
+    userId: adminUserId,
+    title: "👤 GW4 ad visitor started signup",
+    message: `A ${source} visitor started the GW4 Free Common signup${content}. This is a signup start, not a completed new account yet.`,
+    dedupeKey: `admin:gw4-signup-start:${dedupeIdentity}`,
+  });
+}
+
 export function registerGw4PromoRoutes(app: Express, deps: { requireAuth: any; isAdmin: any }) {
   const { requireAuth, isAdmin } = deps;
 
@@ -42,11 +74,13 @@ export function registerGw4PromoRoutes(app: Express, deps: { requireAuth: any; i
       const event = clean(req.body?.event, 64);
       if (!allowed.has(event)) return res.status(400).json({ message: "Unsupported promotion event" });
       const visitorId = clean(req.body?.visitorId, 96).replace(/[^a-zA-Z0-9._:-]/g, "");
+      const sessionId = clean(req.body?.sessionId, 96).replace(/[^a-zA-Z0-9._:-]/g, "");
       const installationId = clean(req.body?.installationId, 96).replace(/[^a-zA-Z0-9._:-]/g, "");
       if (!visitorId && !installationId) return res.status(400).json({ message: "Missing visitor identifier" });
       const meta = {
         event,
         visitorId,
+        sessionId,
         installationId,
         path: clean(req.body?.path || req.path, 240),
         source: normalizeSource(req.body?.source || req.get?.("referer") || "direct"),
@@ -57,6 +91,13 @@ export function registerGw4PromoRoutes(app: Express, deps: { requireAuth: any; i
       };
       const userId = requestUserId(req) || null;
       await db.execute(sql`insert into app.audit_logs (user_id, action, meta) values (${userId}, 'marketing.gw4_free', ${JSON.stringify(meta)}::jsonb)`);
+
+      if (event === "promo_signup_click" && visitorId) {
+        await notifyAdminSignupStarted({ visitorId, sessionId, source: meta.source, content: meta.content }).catch((error) => {
+          console.error("GW4 signup-start admin notification failed:", error);
+        });
+      }
+
       return res.status(202).json({ ok: true });
     } catch (error) {
       console.warn("GW4 promotion event failed:", error);
@@ -83,10 +124,22 @@ export function registerGw4PromoRoutes(app: Express, deps: { requireAuth: any; i
       `));
       const events = Object.fromEntries(eventRows.map((row: any) => [String(row.event || ""), Number(row.count || 0)]));
 
+      const landingRow = rowsOf(await db.execute(sql`
+        select
+          count(distinct coalesce(nullif(meta->>'sessionId',''), id::text))::int as sessions,
+          count(distinct nullif(meta->>'visitorId',''))::int as visitors
+        from app.audit_logs
+        where action = 'marketing.gw4_free'
+          and meta->>'event' = 'promo_click'
+          and meta->>'campaign' = ${GW4_PROMO_CAMPAIGN}
+          and created_at >= now() - ${intervalText}::interval
+          and (${useSourceFilter} = false or lower(coalesce(meta->>'source','')) = ${sourceFilter})
+      `))[0] || {};
+
       const authRows = rowsOf(await db.execute(sql`
         select action, count(distinct coalesce(nullif(meta->>'visitorId',''), user_id, id::text))::int as count
         from app.audit_logs
-        where action in ('marketing.gw4_auth_started','marketing.gw4_signup_completed','marketing.gw4_login_completed')
+        where action in ('marketing.auth_started','marketing.signup_completed','marketing.login_completed')
           and created_at >= now() - ${intervalText}::interval
           and meta->>'campaign' = ${GW4_PROMO_CAMPAIGN}
           and (${useSourceFilter} = false or lower(coalesce(meta->>'source','')) = ${sourceFilter})
@@ -97,7 +150,7 @@ export function registerGw4PromoRoutes(app: Express, deps: { requireAuth: any; i
       const starterRow = rowsOf(await db.execute(sql`
         with promo_users as (
           select distinct user_id from app.audit_logs
-          where action = 'marketing.gw4_signup_completed'
+          where action = 'marketing.signup_completed'
             and created_at >= now() - ${intervalText}::interval
             and meta->>'campaign' = ${GW4_PROMO_CAMPAIGN}
             and (${useSourceFilter} = false or lower(coalesce(meta->>'source','')) = ${sourceFilter})
@@ -110,7 +163,7 @@ export function registerGw4PromoRoutes(app: Express, deps: { requireAuth: any; i
       const linkedInstallRow = rowsOf(await db.execute(sql`
         with promo_users as (
           select distinct user_id from app.audit_logs
-          where action = 'marketing.gw4_signup_completed'
+          where action = 'marketing.signup_completed'
             and created_at >= now() - ${intervalText}::interval
             and meta->>'campaign' = ${GW4_PROMO_CAMPAIGN}
             and (${useSourceFilter} = false or lower(coalesce(meta->>'source','')) = ${sourceFilter})
@@ -135,7 +188,7 @@ export function registerGw4PromoRoutes(app: Express, deps: { requireAuth: any; i
         with starts as (
           select distinct on (meta->>'visitorId') meta, created_at
           from app.audit_logs
-          where action = 'marketing.gw4_auth_started'
+          where action = 'marketing.auth_started'
             and created_at >= now() - ${intervalText}::interval
             and meta->>'campaign' = ${GW4_PROMO_CAMPAIGN}
             and (${useSourceFilter} = false or lower(coalesce(meta->>'source','')) = ${sourceFilter})
@@ -143,14 +196,14 @@ export function registerGw4PromoRoutes(app: Express, deps: { requireAuth: any; i
         ), completions as (
           select distinct on (meta->>'visitorId') meta->>'visitorId' as visitor_id, user_id, action, created_at
           from app.audit_logs
-          where action in ('marketing.gw4_signup_completed','marketing.gw4_login_completed')
+          where action in ('marketing.signup_completed','marketing.login_completed')
             and meta->>'campaign' = ${GW4_PROMO_CAMPAIGN}
           order by meta->>'visitorId', created_at desc
         )
         select s.meta->>'visitorId' as "visitorId", coalesce(s.meta->>'source','direct') as source,
           coalesce(s.meta->>'content','') as content, s.created_at as "startedAt",
-          case when c.action = 'marketing.gw4_signup_completed' then 'new_signup'
-               when c.action = 'marketing.gw4_login_completed' then 'returning_login'
+          case when c.action = 'marketing.signup_completed' then 'new_signup'
+               when c.action = 'marketing.login_completed' then 'returning_login'
                else 'started_only' end as outcome,
           u.email, coalesce(u.manager_team_name, u.name) as "clubName"
         from starts s
@@ -163,7 +216,7 @@ export function registerGw4PromoRoutes(app: Express, deps: { requireAuth: any; i
         with completed as (
           select distinct on (user_id) user_id, meta, created_at
           from app.audit_logs
-          where action = 'marketing.gw4_signup_completed'
+          where action = 'marketing.signup_completed'
             and created_at >= now() - ${intervalText}::interval
             and meta->>'campaign' = ${GW4_PROMO_CAMPAIGN}
             and (${useSourceFilter} = false or lower(coalesce(meta->>'source','')) = ${sourceFilter})
@@ -181,33 +234,43 @@ export function registerGw4PromoRoutes(app: Express, deps: { requireAuth: any; i
       `)).map((row: any) => ({ ...row, signedUpAt: row.signedUpAt ? new Date(row.signedUpAt).toISOString() : "" }));
 
       const bySource = rowsOf(await db.execute(sql`
-        with clicks as (
+        with landings as (
           select lower(coalesce(meta->>'source','direct')) as source,
-            count(distinct nullif(meta->>'visitorId',''))::int as clicks
+            count(distinct coalesce(nullif(meta->>'sessionId',''), id::text))::int as sessions,
+            count(distinct nullif(meta->>'visitorId',''))::int as visitors
           from app.audit_logs where action='marketing.gw4_free' and meta->>'event'='promo_click'
             and meta->>'campaign'=${GW4_PROMO_CAMPAIGN} and created_at >= now() - ${intervalText}::interval
           group by lower(coalesce(meta->>'source','direct'))
         ), signups as (
           select lower(coalesce(meta->>'source','direct')) as source,
             count(distinct user_id)::int as signups
-          from app.audit_logs where action='marketing.gw4_signup_completed'
+          from app.audit_logs where action='marketing.signup_completed'
             and meta->>'campaign'=${GW4_PROMO_CAMPAIGN} and created_at >= now() - ${intervalText}::interval
           group by lower(coalesce(meta->>'source','direct'))
         )
-        select coalesce(c.source,s.source,'direct') as source, coalesce(c.clicks,0)::int as clicks, coalesce(s.signups,0)::int as signups
-        from clicks c full join signups s on s.source=c.source
-        order by clicks desc, signups desc
+        select coalesce(l.source,s.source,'direct') as source,
+          coalesce(l.sessions,0)::int as sessions,
+          coalesce(l.visitors,0)::int as visitors,
+          coalesce(l.visitors,0)::int as clicks,
+          coalesce(s.signups,0)::int as signups
+        from landings l full join signups s on s.source=l.source
+        order by sessions desc, visitors desc, signups desc
       `));
+
+      const adLandingSessions = Number(landingRow.sessions || 0);
+      const uniqueVisitors = Number(landingRow.visitors || 0);
 
       return res.json({
         campaign: GW4_PROMO_CAMPAIGN,
         hours,
         metrics: {
-          adLandingClicks: Number(events.promo_click || 0),
+          adLandingClicks: uniqueVisitors,
+          adLandingSessions,
+          uniqueVisitors,
           signupButtonClicks: Number(events.promo_signup_click || 0),
-          authStarted: Number(auth["marketing.gw4_auth_started"] || 0),
-          newAccounts: Number(auth["marketing.gw4_signup_completed"] || 0),
-          returningLogins: Number(auth["marketing.gw4_login_completed"] || 0),
+          authStarted: Number(auth["marketing.auth_started"] || 0),
+          newAccounts: Number(auth["marketing.signup_completed"] || 0),
+          returningLogins: Number(auth["marketing.login_completed"] || 0),
           starter5Completed: Number(starterRow.completed || 0),
           tournamentOpenedAfterSignup: Number(events.tournament_open_after_signup || 0),
           appDownloadClicks: Number(events.app_download_click || 0),
