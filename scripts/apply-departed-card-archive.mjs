@@ -45,3 +45,4 @@ if (source !== original) {
 // Apply the independent current-squad verification and false-departure repair only
 // after the lock-safe archive transformation above has established its final anchors.
 await import("./apply-confirmed-epl-departures.mjs");
+await import("./normalize-confirmed-epl-departure-idempotency.mjs");
