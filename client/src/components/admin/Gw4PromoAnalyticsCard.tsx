@@ -73,8 +73,7 @@ export default function Gw4PromoAnalyticsCard() {
     { label: "Campaign installs", value: metrics?.campaignLinkedInstalls || 0, icon: Smartphone },
   ];
 
-  const trackedMetaPath = `/gw4-free?utm_source=meta&utm_medium=paid_social&utm_campaign=${encodeURIComponent(data?.campaign || "gw4_free_common_2026")}`;
-  const trackedMetaUrl = typeof window === "undefined" ? trackedMetaPath : `${window.location.origin}${trackedMetaPath}`;
+  const trackedMetaUrl = "https://playfantasyarena.com";
   const copyTrackedMetaUrl = async () => {
     try {
       await navigator.clipboard.writeText(trackedMetaUrl);
@@ -88,12 +87,12 @@ export default function Gw4PromoAnalyticsCard() {
   return (
     <Card className="border-fuchsia-300/15 bg-[linear-gradient(135deg,rgba(168,85,247,.11),rgba(8,15,30,.92),rgba(34,211,238,.07))] p-4 text-white sm:p-5" data-gw4-promo-analytics>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div><div className="text-[10px] font-black uppercase tracking-[.2em] text-fuchsia-200/70">GW4 Free Common promotion · last 7 days</div><h2 className="mt-1 text-xl font-black">Paid-ad funnel only</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">Fantasy Arena counts visits that actually reach the dedicated GW4 landing page. Meta can report more ad clicks because repeated clicks, blocked page loads and people who close the in-app browser before the page finishes are not the same as completed landing sessions.</p></div>
+        <div><div className="text-[10px] font-black uppercase tracking-[.2em] text-fuchsia-200/70">GW4 Free Common promotion · last 7 days</div><h2 className="mt-1 text-xl font-black">Paid-ad funnel only</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">Fantasy Arena now counts Meta-attributed visits that reach playfantasyarena.com as well as visits to the dedicated GW4 landing page. Direct homepage visitors are not added to this funnel. Meta can still report more clicks because repeated clicks, blocked loads and people who close the in-app browser before the page finishes are not completed landing sessions.</p></div>
         <Badge className="w-fit bg-cyan-300/10 text-cyan-100">{data?.campaign || "gw4_free_common_2026"}</Badge>
       </div>
 
       <div className="mt-4 flex flex-col gap-2 rounded-2xl border border-cyan-300/15 bg-cyan-300/[.05] p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0"><div className="text-[9px] font-black uppercase tracking-[.14em] text-cyan-200/70">Tracked Meta ad destination</div><div className="mt-1 truncate text-[11px] font-semibold text-slate-300">{trackedMetaUrl}</div><div className="mt-1 text-[10px] text-slate-500">Use this destination for the paid campaign. Meta click IDs are also recognised as a Facebook/Instagram fallback when UTM source is missing.</div></div>
+        <div className="min-w-0"><div className="text-[9px] font-black uppercase tracking-[.14em] text-cyan-200/70">Current Meta ad destination</div><div className="mt-1 truncate text-[11px] font-semibold text-slate-300">{trackedMetaUrl}</div><div className="mt-1 text-[10px] text-slate-500">You can keep the ad destination exactly as playfantasyarena.com. Facebook/Instagram click IDs, explicit Meta source tags and Meta referrers are recognised on the homepage and carried into signup attribution.</div></div>
         <Button type="button" size="sm" variant="outline" onClick={copyTrackedMetaUrl} className="shrink-0 border-cyan-300/20 bg-cyan-300/[.06] text-cyan-100 hover:bg-cyan-300/10">{copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}{copied ? "Copied" : "Copy URL"}</Button>
       </div>
 
