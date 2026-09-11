@@ -64,3 +64,6 @@ await import("./apply-native-logout-signup-polish.mjs");
 // Final signup guard: the card artwork keeps the player name; the line below
 // is reserved for the current club and canonical position only.
 await import("./enforce-starter-draft-team-label.mjs");
+// Final confirmation guard: one valid tap gives immediate feedback, prevents
+// duplicate mint submissions, and recovers if the response is interrupted.
+await import("./apply-starter-confirm-single-tap.mjs");
