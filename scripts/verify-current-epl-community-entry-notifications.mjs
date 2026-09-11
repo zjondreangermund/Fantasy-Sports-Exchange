@@ -8,6 +8,8 @@ await import("./apply-stable-player-card-images.mjs");
 await import("./apply-tournament-entry-notifications.mjs");
 await import("./apply-tournament-settlement-broadcasts.mjs");
 await import("./apply-admin-live-ops-notifications.mjs");
+await import("./apply-notification-truth-guards.mjs");
+await import("./verify-notification-truth-guards.mjs");
 
 function read(path) { return fs.readFileSync(path, "utf8"); }
 function need(source, text, label) {
