@@ -47,6 +47,10 @@ need(notifications, "ADMIN_LIVE_OPS_PUSH_V1", "admin-only live operations notifi
 need(notifications, "lbcplaya@gmail.com", "Fantasy Arena owner notification account");
 need(notifications, "createFantasyArenaAdminNotificationOnce", "admin notification helper");
 need(notifications, "TOURNAMENT_ENTRY_NOTIFICATION_RECONCILE_V1", "recent-entry notification reconciliation marker");
+need(notifications, "TOURNAMENT_ENTRY_NOTIFICATION_DELIVERY_REPAIR_V2", "missing delivery-job recovery marker");
+need(notifications, "ensureTournamentNotificationDeliveryJobs", "delivery-job recovery helper");
+need(notifications, "not exists (select 1 from app.notification_native_push_deliveries", "missing native delivery detection");
+need(notifications, "not exists (select 1 from app.notification_push_deliveries", "missing web delivery detection");
 need(notifications, "reconcileRecentTournamentEntryNotifications", "recent-entry notification reconciliation helper");
 need(notifications, "ce.joined_at >= now() - interval '14 days'", "recent-entry repair window");
 need(nativePush, "reconcileRecentTournamentEntryNotifications", "native push worker reconciliation hook");
@@ -97,4 +101,4 @@ need(rewardRepair, "fplId > 0", "reward-repair FPL identity requirement");
 need(freeCupAwards, "coalesce(p.fpl_id, 0) > 0", "Free Cup fallback FPL identity requirement");
 need(freeCupAwards, "not in ('departed','superseded','unlinked','archived')", "Free Cup fallback departed-player exclusion");
 
-console.log("Current EPL reward safeguards, rolling 24-hour Community Live retention, mention pushes, stable player portraits, durable/self-healing tournament entry confirmations, every-25-entry momentum alerts, settlement winner broadcasts, and admin-only signup/entry push notifications verified.");
+console.log("Current EPL reward safeguards, rolling 24-hour Community Live retention, mention pushes, stable player portraits, atomic/self-healing tournament entry confirmations plus delivery-job recovery, every-25-entry momentum alerts, settlement winner broadcasts, and admin-only signup/entry push notifications verified.");
