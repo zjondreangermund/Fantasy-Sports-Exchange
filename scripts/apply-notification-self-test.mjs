@@ -73,6 +73,10 @@ patchFile("client/src/components/PushNotificationControl.tsx", (input) => {
     'title={enabled ? "Alerts on — tap to test" : permission === "denied" ? "Allow notifications in phone settings" : "Enable mobile notifications"}',
     'title={enabled ? "Notifications on — tap to turn off" : permission === "denied" ? "Allow notifications in phone settings" : "Enable mobile notifications"}',
   );
+
+  // Canonical source uses a conditional div test lab. Older generated source used
+  // a Dialog wrapper. Remove either shape completely.
+  source = source.replace(/\n      \{testOpen \? \([\s\S]*?\n      \) : null\}\n/, "\n");
   source = source.replace(
     /\n\s*<Dialog open=\{testOpen\} onOpenChange=\{setTestOpen\}>[\s\S]*?<\/Dialog>\n/,
     "\n",
