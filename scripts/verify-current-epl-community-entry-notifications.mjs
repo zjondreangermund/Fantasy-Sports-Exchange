@@ -8,6 +8,7 @@ await import("./apply-stable-player-card-images.mjs");
 await import("./apply-tournament-entry-notifications.mjs");
 await import("./apply-tournament-settlement-broadcasts.mjs");
 await import("./apply-admin-live-ops-notifications.mjs");
+await import("./apply-durable-tournament-entry-notifications.mjs");
 await import("./apply-notification-truth-guards.mjs");
 await import("./verify-notification-truth-guards.mjs");
 
@@ -20,6 +21,7 @@ const communityServer = read("server/routes/communityChatV2.routes.ts");
 const communityClient = read("client/src/lib/community-chat.ts");
 const economy = read("server/routes/economyIntegrity.routes.ts");
 const notifications = read("server/services/notifications.ts");
+const nativePush = read("server/services/nativePush.ts");
 const authStorage = read("server/replit_integrations/auth/storage.ts");
 const weekly = read("server/services/dailyLoginReward.ts");
 const weeklyPatcher = read("scripts/apply-common-reward-position-balance.mjs");
@@ -44,6 +46,11 @@ need(notifications, "app.notification_native_push_deliveries", "native push deli
 need(notifications, "ADMIN_LIVE_OPS_PUSH_V1", "admin-only live operations notification marker");
 need(notifications, "lbcplaya@gmail.com", "Fantasy Arena owner notification account");
 need(notifications, "createFantasyArenaAdminNotificationOnce", "admin notification helper");
+need(notifications, "TOURNAMENT_ENTRY_NOTIFICATION_RECONCILE_V1", "recent-entry notification reconciliation marker");
+need(notifications, "reconcileRecentTournamentEntryNotifications", "recent-entry notification reconciliation helper");
+need(notifications, "ce.joined_at >= now() - interval '14 days'", "recent-entry repair window");
+need(nativePush, "reconcileRecentTournamentEntryNotifications", "native push worker reconciliation hook");
+need(nativePush, "lastTournamentEntryReconcileAt", "reconciliation throttle");
 need(authStorage, "const existingUser = incomingUserId ? await this.getUser", "genuine new-account detection");
 need(authStorage, "🚀 New Fantasy Arena signup", "admin signup push copy");
 need(authStorage, "admin:new-signup:", "admin signup push dedupe");
@@ -57,6 +64,10 @@ need(economy, "where coalesce(is_banned, false) = false", "all-active-manager br
 need(economy, "notifyTournamentEntryActivity(userId, competitionId, Number(entry.id))", "entry notification call after submit");
 need(economy, "🎟️ New tournament entry", "admin every-entry push copy");
 need(economy, "admin:competition:", "admin every-entry push dedupe");
+need(economy, "DURABLE_TOURNAMENT_ENTRY_NOTIFICATIONS_V1", "atomic entry notification marker");
+need(economy, "await ensureNotificationsSchema();\n      const entry = await db.transaction", "notification schema before entry transaction");
+need(economy, "await createNotificationOnce(tx,", "entrant notification in entry transaction");
+need(economy, "await createFantasyArenaAdminNotificationOnce(tx,", "admin notification in entry transaction");
 
 need(economy, "TOURNAMENT_SETTLEMENT_BROADCAST_V1", "settlement broadcast marker");
 need(economy, "CHAMPION!", "winner congratulations notification");
@@ -86,4 +97,4 @@ need(rewardRepair, "fplId > 0", "reward-repair FPL identity requirement");
 need(freeCupAwards, "coalesce(p.fpl_id, 0) > 0", "Free Cup fallback FPL identity requirement");
 need(freeCupAwards, "not in ('departed','superseded','unlinked','archived')", "Free Cup fallback departed-player exclusion");
 
-console.log("Current EPL reward safeguards, rolling 24-hour Community Live retention, mention pushes, stable player portraits, tournament entry confirmations, every-25-entry momentum alerts, settlement winner broadcasts, and admin-only signup/entry push notifications verified.");
+console.log("Current EPL reward safeguards, rolling 24-hour Community Live retention, mention pushes, stable player portraits, durable/self-healing tournament entry confirmations, every-25-entry momentum alerts, settlement winner broadcasts, and admin-only signup/entry push notifications verified.");
