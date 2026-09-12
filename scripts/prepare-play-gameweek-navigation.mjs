@@ -64,6 +64,7 @@ await import("./apply-free-cup-prize-overlay-polish.mjs");
 await import("./apply-marketplace-club-identities.mjs");
 await import("./apply-featured-cup-entry-details.mjs");
 await import("./apply-native-logout-signup-polish.mjs");
+await import("./apply-native-admin-safe-logout.mjs");
 // Final signup guard: the card artwork keeps the player name; the line below
 // is reserved for the current club and canonical position only.
 await import("./enforce-starter-draft-team-label.mjs");
