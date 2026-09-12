@@ -2,8 +2,12 @@ import fs from "node:fs";
 
 const NOTIFICATIONS = "server/services/notifications.ts";
 const AUTH_STORAGE = "server/replit_integrations/auth/storage.ts";
+const DATABASE_STORAGE = "server/storage.ts";
 const ECONOMY = "server/routes/economyIntegrity.routes.ts";
+const NOTIFICATION_ROUTES = "server/routes/notifications.routes.ts";
 const MARKER = "ADMIN_LIVE_OPS_PUSH_V1";
+const STORAGE_MARKER = "ADMIN_LIVE_OPS_STORAGE_PUSH_V1";
+const TIMING_MARKER = "PRODUCTION_NOTIFICATION_TIMING_V1";
 
 function patch(path, transform) {
   const before = fs.readFileSync(path, "utf8");
@@ -59,6 +63,27 @@ patch(AUTH_STORAGE, (original) => {
   return source;
 });
 
+// Some authentication/onboarding paths create users through DatabaseStorage rather
+// than Replit Auth's upsertUser. Cover that path too. The shared dedupe key makes
+// this safe even if both creation paths run for the same account.
+patch(DATABASE_STORAGE, (original) => {
+  if (original.includes(STORAGE_MARKER)) return original;
+  let source = original;
+  source = replaceRequired(
+    source,
+    'import { db } from "./db.js";\n',
+    `import { db } from "./db.js";\nimport { createFantasyArenaAdminNotificationOnce } from "./services/notifications.js";\n\n// ${STORAGE_MARKER}: every genuine account-creation path alerts the owner exactly once.\n`,
+    "database storage admin notification import",
+  );
+  source = replaceRequired(
+    source,
+    `    } as any).returning();\n    return created;\n  }\n\n  async updateUser`,
+    `    } as any).returning();\n    if (created) {\n      const identity = created.name || created.email || "New Arena manager";\n      await createFantasyArenaAdminNotificationOnce(db, {\n        title: "🚀 New Fantasy Arena signup",\n        message: \`${'${identity}'} just created a Fantasy Arena account. Open Admin to follow their onboarding and campaign journey.\`,\n        dedupeKey: \`admin:new-signup:${'${created.id}'}\`,\n      }).catch((error) => {\n        console.error("Admin signup notification failed:", error);\n      });\n    }\n    return created;\n  }\n\n  async updateUser`,
+    "database storage new-account admin push",
+  );
+  return source;
+});
+
 patch(ECONOMY, (original) => {
   if (original.includes(MARKER)) return original;
   let source = original;
@@ -76,4 +101,13 @@ patch(ECONOMY, (original) => {
   return source;
 });
 
-console.log("Admin-only signup and every-tournament-entry Fantasy Arena push notifications are ready for the owner account.");
+patch(NOTIFICATION_ROUTES, (original) => {
+  if (original.includes(TIMING_MARKER)) return original;
+  let source = original;
+  const oldBlock = `    if (typeof minutes === "number" && minutes > 0 && minutes <= 24 * 60) {\n      await createNotificationOnce(db, {\n        userId,\n        title: \`Gameweek \${nextGameweek} starts soon\`,\n        message: \`Gameweek \${nextGameweek} starts within 24 hours. Check submitted teams, captains and unused eligible cards in My Teams & Prizes.\`,\n        dedupeKey: \`gameweek:\${nextGameweek}:starts-within-24h\`,\n      });\n    }`;
+  const newBlock = `    // ${TIMING_MARKER}: the first 24-hour reminder is explicitly a lineup-lock warning.\n    // The scheduler runs every 15 minutes and createNotificationOnce keeps it exactly-once per gameweek.\n    if (openRows.length && typeof minutes === "number" && minutes > 0 && minutes <= 24 * 60) {\n      await createNotificationOnce(db, {\n        userId,\n        title: \`Gameweek \${nextGameweek} lineup locks within 24 hours\`,\n        message: \`Gameweek \${nextGameweek} locks within 24 hours. Review your submitted teams and captains, or complete any remaining tournament entries before the deadline.\`,\n        dedupeKey: \`gameweek:\${nextGameweek}:locks-within-24h\`,\n      });\n    }`;
+  source = replaceRequired(source, oldBlock, newBlock, "24-hour lineup-lock notification");
+  return source;
+});
+
+console.log("Production signup, tournament-entry and 24h/2h lineup-lock notifications are ready; existing live, result, refund, mention and player-change notifications stay unchanged.");
