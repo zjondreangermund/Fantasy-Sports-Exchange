@@ -11,6 +11,7 @@ import "./onboarding-card-clipping-fix.css";
 import "./legal-tabs-slider.css";
 import "./native-mobile.css";
 import "./push-notification-visibility.css";
+import "./browser-zoom-pan.css";
 import { patchFetchForApiBase } from "./lib/api-base";
 import { initializeSiteView, isNativeMobileApp } from "./lib/site-view";
 import { captureGw4MetaHomepageVisit } from "./lib/gw4-promo";
