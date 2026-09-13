@@ -3,8 +3,8 @@ export type SiteViewMode = "mobile" | "desktop";
 export const SITE_VIEW_STORAGE_KEY = "fantasy_arena_site_view";
 const APP_SESSION_VIEW_STORAGE_KEY = "fantasy_arena_app_session_view";
 const DESKTOP_VIEWPORT_WIDTH = 1280;
-const DESKTOP_VIEWPORT = `width=${DESKTOP_VIEWPORT_WIDTH}, viewport-fit=cover, user-scalable=yes`;
-const MOBILE_VIEWPORT = "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=yes";
+const DESKTOP_VIEWPORT = `width=${DESKTOP_VIEWPORT_WIDTH}, minimum-scale=0.1, maximum-scale=5, viewport-fit=cover, user-scalable=yes`;
+const MOBILE_VIEWPORT = "width=device-width, initial-scale=1, minimum-scale=0.25, maximum-scale=5, viewport-fit=cover, user-scalable=yes";
 
 export function isNativeMobileApp(): boolean {
   if (typeof window === "undefined") return false;
@@ -99,8 +99,9 @@ export function applySiteView(mode: SiteViewMode): SiteViewMode {
   const isInteractiveSwitch = Boolean(previousMode && previousMode !== effectiveMode);
   const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
   if (viewport) {
-    // Never force a fractional initial-scale for desktop mode. Mobile Chromium
-    // can choose the overview scale for the fixed 1280px web/PWA desktop view.
+    // Browser views explicitly retain pinch zoom. Desktop-on-phone also allows a
+    // deeper minimum scale so users can zoom out far enough to inspect wide
+    // leaderboard/scoring surfaces before panning to individual columns.
     viewport.setAttribute("content", effectiveMode === "desktop" ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT);
   }
 
