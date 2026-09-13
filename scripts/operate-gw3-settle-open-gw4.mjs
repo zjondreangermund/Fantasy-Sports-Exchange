@@ -126,7 +126,8 @@ async function main() {
 
     const gw4Deadline = await realGameweekDeadline(OPEN_GW);
     if (Date.now() >= gw4Deadline.getTime()) {
-      throw new Error(`GW${OPEN_GW} live Premier League entry deadline has already passed; refusing to reopen entries`);
+      console.log(`[gw3-gw4-operator] GW${OPEN_GW} live Premier League entry deadline passed at ${gw4Deadline.toISOString()}; operator is now obsolete and will skip without reopening entries or failing application startup`);
+      return;
     }
 
     const adminId = await resolveAdminId(client);
