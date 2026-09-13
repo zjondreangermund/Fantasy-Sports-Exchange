@@ -90,11 +90,11 @@ const finalSiteView = read("client/src/lib/site-view.ts");
 const finalApp = read("client/src/App.tsx");
 const checks = [
   [finalSiteView.includes('const effectiveMode: SiteViewMode = "mobile";'), "fixed desktop viewport is still active"],
-  [finalSiteView.includes('const MOBILE_VIEWPORT = "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=yes";'), "standard device-width viewport is missing"],
+  [finalSiteView.includes('const MOBILE_VIEWPORT = "width=device-width, initial-scale=1, minimum-scale=0.25, maximum-scale=5, viewport-fit=cover, user-scalable=yes";'), "standard device-width zoomable viewport is missing"],
   [!finalSiteView.includes('return isNativeMobileApp() ? "mobile" : "desktop";'), "desktop-only browser mode is still present"],
   [!finalApp.includes("Switch to desktop site view") && !finalApp.includes("Switch to mobile site view"), "manual view toggle is still present"],
 ];
 const failures = checks.filter(([ok]) => !ok).map(([, message]) => message);
 if (failures.length) throw new Error(`[responsive-web] verification failed: ${failures.join("; ")}`);
 
-console.log("[responsive-web] Browser/PWA restored to normal device-width responsive layout; native APK routing remains unchanged.");
+console.log("[responsive-web] Browser/PWA restored to normal device-width responsive layout with explicit pinch zoom; native APK routing remains unchanged.");
