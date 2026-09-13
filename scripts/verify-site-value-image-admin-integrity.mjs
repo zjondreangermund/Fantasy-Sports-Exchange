@@ -97,7 +97,7 @@ includes(view, 'if (isInstalledMobileApp()) return "desktop";', "Installed mobil
 includes(view, 'APP_SESSION_VIEW_STORAGE_KEY = "fantasy_arena_app_session_view"', "Installed app view overrides must be session-scoped so Desktop remains the next-launch default.");
 includes(view, "window.sessionStorage.setItem(APP_SESSION_VIEW_STORAGE_KEY, mode)", "Installed app view changes must use session storage.");
 includes(view, "SITE_VIEW_STORAGE_KEY", "The desktop/mobile preference must persist in ordinary browsers.");
-includes(view, "const DESKTOP_VIEWPORT = `width=${DESKTOP_VIEWPORT_WIDTH}, viewport-fit=cover, user-scalable=yes`;", "Desktop app mode must let the browser choose a sharp overview scale instead of forcing a fractional scale.");
+includes(view, "const DESKTOP_VIEWPORT = `width=${DESKTOP_VIEWPORT_WIDTH}, minimum-scale=0.1, maximum-scale=5, viewport-fit=cover, user-scalable=yes`;", "Desktop app mode must remain freely zoomable without forcing an initial fractional scale.");
 assert.ok(!view.includes("deviceWidth / DESKTOP_VIEWPORT_WIDTH") && !view.includes("initialScale.toFixed"), "Desktop app mode must not manually downscale the page into a blurry raster.");
 includes(view, "clearQueryViewOverride();", "The view toggle must clear stale query overrides so Mobile view can be restored.");
 includes(view, "window.location.reload()", "Desktop/mobile switching must reload the layout viewport for deterministic Android WebView behavior.");

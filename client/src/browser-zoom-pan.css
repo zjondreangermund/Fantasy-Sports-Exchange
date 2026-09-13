@@ -1,0 +1,96 @@
+/*
+ * BROWSER_ZOOM_PAN_V1
+ *
+ * Browser/PWA users must be able to pinch-zoom and then pan to every part of
+ * wide Fantasy Arena surfaces such as tournament leaderboards and score rows.
+ * This file is imported last so older scroll-lock CSS cannot silently remove
+ * those gestures. It changes interaction only; it does not alter tournament,
+ * scoring, card, lineup or economy behavior.
+ */
+
+/* Mobile responsive pages still keep horizontal page overflow clipped, but the
+ * gesture authority must allow descendants (tabs, tables and dialogs) to own a
+ * horizontal scroll when they need one. */
+html[data-site-view="mobile"],
+html[data-site-view="mobile"] body,
+html[data-site-view="mobile"] [data-app-scroll-root],
+html[data-site-view="mobile"] .app-scroll-root {
+  touch-action: pan-x pan-y pinch-zoom !important;
+}
+
+/* Desktop-on-phone is a 1280px layout viewed through a smaller visual viewport.
+ * Releasing the authenticated shell's clipping lets Chrome/Samsung Internet/PWA
+ * move the zoomed visual viewport left/right instead of trapping the user in the
+ * centre of the page. */
+html[data-site-view="desktop"].app-scroll-locked,
+html[data-site-view="desktop"].app-scroll-locked body,
+html[data-site-view="desktop"].app-scroll-locked #root {
+  height: auto !important;
+  min-height: 100% !important;
+  max-height: none !important;
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  overscroll-behavior: auto !important;
+  touch-action: auto !important;
+}
+
+html[data-site-view="desktop"] .app-shell,
+html[data-site-view="desktop"] .app-content {
+  max-height: none !important;
+  overflow: visible !important;
+  overscroll-behavior: auto !important;
+  touch-action: auto !important;
+}
+
+html[data-site-view="desktop"] [data-app-scroll-root],
+html[data-site-view="desktop"] .app-scroll-root {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  overscroll-behavior: auto !important;
+  touch-action: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+html[data-site-view="desktop"] [data-page-scroll-content],
+html[data-site-view="desktop"] [data-page-scroll-content] > :where(main, section, article, div),
+html[data-site-view="desktop"] [data-scroll-region="true"] {
+  touch-action: auto !important;
+}
+
+/* Radix dialogs are portalled directly under body. They previously hid x
+ * overflow, so a zoomed leaderboard could have its points column outside the
+ * reachable area. Keep normal vertical scrolling, but permit horizontal scroll
+ * and pinch/pan when content is wider than the phone. */
+html[data-site-view="mobile"] [role="dialog"],
+html[data-site-view="desktop"] [role="dialog"] {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  touch-action: pan-x pan-y pinch-zoom !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Explicit horizontal regions remain horizontally reachable at any zoom level. */
+html[data-site-view="mobile"] :where(
+  .overflow-x-auto,
+  [role="tablist"],
+  [data-mobile-x-scroll="true"],
+  .mobile-x-scroll,
+  .stat-x-scroll,
+  .player-stats-scroll,
+  .admin-wide-scroll
+),
+html[data-site-view="desktop"] :where(
+  .overflow-x-auto,
+  [role="tablist"],
+  [data-mobile-x-scroll="true"],
+  .mobile-x-scroll,
+  .stat-x-scroll,
+  .player-stats-scroll,
+  .admin-wide-scroll
+) {
+  overflow-x: auto !important;
+  touch-action: pan-x pan-y pinch-zoom !important;
+  -webkit-overflow-scrolling: touch;
+}
