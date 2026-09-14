@@ -4,6 +4,7 @@ import vm from "node:vm";
 
 const read = (file) => fs.readFileSync(file, "utf8");
 const account = read("client/src/pages/account.tsx");
+const nativeClub = read("client/src/components/native/NativeClubPage.tsx");
 const dashboard = read("client/src/pages/dashboard.tsx");
 const chat = read("client/src/components/FloatingSupportWidget.tsx");
 const notifications = read("client/src/lib/notifications.ts");
@@ -25,6 +26,8 @@ function includes(source, expected, message) {
 
 includes(account, "const markOneMutation = useMutation", "The notification inbox must preserve individual Read actions.");
 includes(account, "const markAllMutation = useMutation", "The notification inbox must preserve Mark all read.");
+includes(nativeClub, "openNotification(note, navigate)", "Native inbox alerts must open their routed destination.");
+includes(nativeClub, "aria-label={`Open notification:", "Native inbox alerts must be accessible tap targets.");
 includes(account, "Open mentioned message", "Mention alerts must open their exact community message.");
 includes(account, 'new URLSearchParams(window.location.search).get("tab") === "inbox"', "Dashboard notification links must open the Inbox tab.");
 assert.ok(!account.includes('if (value === "inbox") void markNotificationsSeen()'), "Opening Inbox must not silently mark every notification as read.");
