@@ -230,7 +230,7 @@ const awardBlock = `        let freeCardAward: any = null;
             userId: winnerUserId,
             type: "win",
             title: "🏆 Congratulations — 1st place Rare card",
-            message: "You won " + competition.name + " with " + toMoney(winner.totalScore).toFixed(1) + " points. Your random RARE card prize is ready. Open this Inbox message and tap Claim prize; exactly one card will be added to your Collection.",
+            message: "You won " + competition.name + " with " + toMoney(winner.totalScore).toFixed(1) + " points. Your random RARE card prize is ready. Open this Inbox message and tap Claim prize; exactly one card will be added to your Collection. The random draw uses the full current Premier League player pool across all clubs.",
             dedupeKey: "competition:" + competitionId + ":entry:" + winnerEntryId + ":free-card-claim-ready",
           });
 
