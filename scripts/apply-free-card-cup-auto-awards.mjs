@@ -44,7 +44,7 @@ replaceOnce(
 `        const prizeType = String(competition.prizeType || "goods").toLowerCase();
         const prizeVault = isOfficialPrizeVaultCompetition(competition);
         const prizeCardRarity = String(competition.prizeCardRarity || "").toLowerCase();
-        // FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS
+        // FREE_CARD_CUP_AUTO_AWARD_V2_ALL_PLAYERS\n        // FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS
         const freeCardCup = Number(competition.entryFee || 0) <= 0
           && Boolean(prizeCardRarity)
           && String(competition.prizeKey || "").toLowerCase().startsWith("free-");
