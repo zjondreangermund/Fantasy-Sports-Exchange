@@ -24,6 +24,7 @@ const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 const PREMIER_LEAGUE_KEYS = new Set(["premierleague", "englishpremierleague", "epl"]);
 let cardLockGuardPromise: Promise<void> | null = null;
 let prizeAwardSchemaPromise: Promise<void> | null = null;
+const COMMON_COLLECTION_CAP = 20;
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -161,6 +162,68 @@ async function isAdminUser(userId: string): Promise<boolean> {
   return Boolean(user?.email && configuredEmails.includes(String(user.email).toLowerCase()));
 }
 
+async function ensureCommonCardChoiceSchema(executor: any = db) {
+  await executor.execute(sql`
+    create table if not exists app.common_card_reward_choices (
+      id bigserial primary key,
+      user_id varchar(255) not null references app.users(id),
+      competition_entry_id integer not null unique references app.competition_entries(id),
+      status text not null default 'pending' check (status in ('pending','replaced','forfeited')),
+      replacement_card_id integer references app.player_cards(id),
+      replaced_card_id integer references app.player_cards(id),
+      created_at timestamptz not null default now(),
+      resolved_at timestamptz
+    )
+  `);
+}
+
+async function resolveCommonCardChoice(tx:any,userId:string,choiceId:number,action:string,replaceCardId:number){
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`common-cap:${userId}`}))`);
+  await ensureCommonCardChoiceSchema(tx);
+  const choice=rowsOf(await tx.execute(sql`
+    select x.id,x.status,x.competition_entry_id as "entryId",x.replacement_card_id as "replacementCardId",ce.rank,c.id as "competitionId"
+    from app.common_card_reward_choices x join app.competition_entries ce on ce.id=x.competition_entry_id join app.competitions c on c.id=ce.competition_id
+    where x.id=${choiceId} and x.user_id=${userId} for update of x,ce
+  `))[0];
+  if(!choice)throw new Error("Common card choice not found");
+  if(String(choice.status)!=="pending")return {alreadyResolved:true,status:String(choice.status),cardId:Number(choice.replacementCardId||0)||null};
+  if(action==="keep"){
+    await tx.execute(sql`update app.common_card_reward_choices set status='forfeited',resolved_at=now() where id=${choiceId} and status='pending'`);
+    return {status:"forfeited",keptExisting:true};
+  }
+  if(action!=="replace"||!Number.isInteger(replaceCardId)||replaceCardId<=0)throw new Error("Choose an eligible Common card to replace");
+  const commonCount=Number(rowsOf(await tx.execute(sql`select count(*)::int as count from app.player_cards where owner_id=${userId} and rarity::text='common'`))[0]?.count||0);
+  if(commonCount<COMMON_COLLECTION_CAP)throw new Error("Your collection is below the Common card cap; claim the prize normally");
+  const source=rowsOf(await tx.execute(sql`select id from app.player_cards where id=${replaceCardId} and owner_id=${userId} and rarity::text='common' and for_sale=false for update`))[0];
+  if(!source)throw new Error("That Common card cannot be replaced");
+  const candidate=rowsOf(await tx.execute(sql`
+    select p.id as "playerId",p.name as "playerName",p.team as "playerTeam" from app.players p
+    where regexp_replace(lower(coalesce(p.league,'')), '[^a-z0-9]+', '', 'g') in ('premierleague','englishpremierleague','epl')
+      and coalesce(p.fpl_id,0)>0 and lower(coalesce(p.status,'')) not in ('departed','superseded','unlinked','archived')
+      and not exists(select 1 from app.player_cards owned where owned.owner_id=${userId} and owned.player_id=p.id and owned.rarity::text='common')
+      and (select count(*) from app.player_cards supply where supply.player_id=p.id and supply.rarity::text='common')<1000
+    order by random() limit 1
+  `))[0];
+  if(!candidate)throw new Error("No non-duplicate Premier League Common card is currently available");
+  const playerId=Number(candidate.playerId);
+  await tx.execute(sql`select pg_advisory_xact_lock(99242,${playerId})`);
+  await tx.execute(sql`update app.player_cards set owner_id=null,for_sale=false,price=0 where id=${replaceCardId} and owner_id=${userId}`);
+  const state=rowsOf(await tx.execute(sql`select count(*)::int as count,coalesce(max(serial_number),0)::int as "maxSerial" from app.player_cards where player_id=${playerId} and rarity::text='common'`))[0];
+  if(Number(state?.count||0)>=1000)throw new Error("The selected player supply was exhausted; please try again");
+  const nextSerial=Number(state?.maxSerial||0)+1;
+  const initials=String(candidate.playerName||"PLAYER").split(/\s+/).filter(Boolean).map((part:string)=>part[0]).join("").toUpperCase().slice(0,3)||"PLY";
+  const serialId=`${initials}-C-${playerId}-${String(nextSerial).padStart(4,"0")}`;
+  const card=rowsOf(await tx.execute(sql`
+    insert into app.player_cards (player_id,owner_id,rarity,serial_id,serial_number,max_supply,level,xp,decisive_score,last_5_scores,for_sale,price,acquired_at)
+    values (${playerId},${userId},'common',${serialId},${nextSerial},1000,1,0,35,'[0,0,0,0,0]'::jsonb,false,0,now()) returning id,rarity::text as rarity
+  `))[0];
+  const entryId=Number(choice.entryId);
+  await tx.execute(sql`update app.competition_entries set prize_card_id=${Number(card.id)} where id=${entryId} and prize_card_id is null`);
+  await tx.execute(sql`update app.common_card_reward_choices set status='replaced',replacement_card_id=${Number(card.id)},replaced_card_id=${replaceCardId},resolved_at=now() where id=${choiceId} and status='pending'`);
+  await createNotificationOnce(tx,{userId,type:"runner_up",title:`Common replacement claimed — ${String(candidate.playerName)}`,message:`${String(candidate.playerName)} (${String(candidate.playerTeam)}) replaced one Common card. Your collection remains at ${COMMON_COLLECTION_CAP}, with no duplicate player card.`,dedupeKey:`competition:${Number(choice.competitionId)}:entry:${entryId}:common-cap-replaced`});
+  return {status:"replaced",card:{...card,playerName:String(candidate.playerName),playerTeam:String(candidate.playerTeam)}};
+}
+
 async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) {
   await tx.execute(sql`select pg_advisory_xact_lock(99241, ${entryId})`);
   const award = rowsOf(await tx.execute(sql`
@@ -196,6 +259,24 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
 
   const rarity = rank === 1 ? "rare" : "common";
   const maxSupply = rarity === "rare" ? 100 : 1000;
+  if(rarity==="common"){
+    const commonCount=Number(rowsOf(await tx.execute(sql`select count(*)::int as count from app.player_cards where owner_id=${userId} and rarity::text='common'`))[0]?.count||0);
+    if(commonCount>=COMMON_COLLECTION_CAP){
+      await ensureCommonCardChoiceSchema(tx);
+      const choice=rowsOf(await tx.execute(sql`
+        insert into app.common_card_reward_choices(user_id,competition_entry_id) values(${userId},${entryId})
+        on conflict(competition_entry_id) do update set competition_entry_id=excluded.competition_entry_id
+        returning id,status,replacement_card_id as "replacementCardId"
+      `))[0];
+      if(String(choice?.status)==="replaced"&&Number(choice?.replacementCardId||0)>0){
+        const existing=rowsOf(await tx.execute(sql`select pc.id,pc.rarity::text as rarity,p.name as "playerName",p.team as "playerTeam" from app.player_cards pc join app.players p on p.id=pc.player_id where pc.id=${Number(choice.replacementCardId)} and pc.owner_id=${userId}`))[0];
+        return {...existing,competitionId:Number(award.competitionId),entryId,rank,replayed:true};
+      }
+      if(String(choice?.status)==="forfeited")throw new Error("This Common prize was kept as your existing collection");
+      await createNotificationOnce(tx,{userId,type:"runner_up",title:"Choose your Common card replacement",message:`Your Common collection has reached ${COMMON_COLLECTION_CAP} cards. Keep your current collection or replace one eligible Common card to claim this prize. No card has been minted yet.`,dedupeKey:`competition:${Number(award.competitionId)}:entry:${entryId}:common-cap-choice`});
+      return {pendingChoice:true,choiceId:Number(choice.id),cap:COMMON_COLLECTION_CAP,competitionId:Number(award.competitionId),entryId,rank,replayed:false};
+    }
+  }
   const candidates = rowsOf(await tx.execute(sql`
     select p.id as "playerId", p.name as "playerName", p.team as "playerTeam"
     from app.players p
@@ -501,13 +582,37 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const entryId = Number(req.params.entryId);
       if (!Number.isInteger(entryId) || entryId <= 0) return res.status(400).json({ message: "Valid prize entry required" });
       const card = await db.transaction((tx) => claimFreeCommonCupCard(tx, userId, entryId));
-      return res.json({ success: true, card, message: card.replayed ? "Prize already claimed" : "Prize card claimed successfully" });
+      return res.json({ success:true,card,pendingChoice:card.pendingChoice===true,message:card.pendingChoice?"Choose whether to keep your collection or replace one Common card":card.replayed?"Prize already claimed":"Prize card claimed successfully" });
     } catch (error: any) {
       const message = error?.message || "Could not claim prize card";
       const status = message === "Prize claim not found" ? 404 : message.includes("no FREE Common Cup") ? 400 : 500;
       if (status === 500) console.error("Failed to claim FREE Common Cup card:", error);
       return res.status(status).json({ message });
     }
+  });
+
+  app.get("/api/common-card-reward-choices",requireAuth,async(req:any,res)=>{
+    try{
+      await ensureCommonCardChoiceSchema();
+      const userId=String(req.authUserId||"");
+      const choices=rowsOf(await db.execute(sql`select x.id,x.status,x.created_at as "createdAt",ce.id as "entryId",ce.rank,c.name as "competitionName" from app.common_card_reward_choices x join app.competition_entries ce on ce.id=x.competition_entry_id join app.competitions c on c.id=ce.competition_id where x.user_id=${userId} and x.status='pending' order by x.created_at asc`));
+      const cards=choices.length?rowsOf(await db.execute(sql`
+        select pc.id,p.name as "playerName",p.team,p.position::text as position,p.image_url as "imageUrl" from app.player_cards pc join app.players p on p.id=pc.player_id
+        where pc.owner_id=${userId} and pc.rarity::text='common' and pc.for_sale=false
+          and not exists(select 1 from app.competition_entries ce join app.competitions c on c.id=ce.competition_id where c.status::text in ('active','closed') and ce.lineup_card_ids @> to_jsonb(array[pc.id]::integer[]))
+        order by p.position::text,p.name,pc.id
+      `)):[];
+      return res.json({cap:COMMON_COLLECTION_CAP,choices,cards});
+    }catch(error:any){console.error("Failed to load Common card choices:",error);return res.status(500).json({message:error?.message||"Failed to load Common card choices"});}
+  });
+
+  app.post("/api/common-card-reward-choices/:choiceId",requireAuth,async(req:any,res)=>{
+    try{
+      const choiceId=Number(req.params.choiceId);
+      if(!Number.isInteger(choiceId)||choiceId<=0)return res.status(400).json({message:"Valid reward choice required"});
+      const result=await db.transaction(tx=>resolveCommonCardChoice(tx,String(req.authUserId||""),choiceId,String(req.body?.action||"").toLowerCase(),Number(req.body?.replaceCardId||0)));
+      return res.json({success:true,...result});
+    }catch(error:any){const message=String(error?.message||"Could not resolve Common card choice");const status=/not found/i.test(message)?404:/choose|cannot|below|available|exhausted/i.test(message)?400:500;if(status===500)console.error("Failed to resolve Common card choice:",error);return res.status(status).json({message});}
   });
 
   app.get("/api/admin/wallet-postings/integrity", requireAuth, async (req: any, res) => {
