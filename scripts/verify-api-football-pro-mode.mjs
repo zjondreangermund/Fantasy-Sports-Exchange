@@ -33,6 +33,11 @@ requireText(sync, 'if (jobType === "injuries") return syncInjuries();', "injury 
 requireText(sync, 'if (jobType === "transfers") return syncTransfers();', "transfer job routing missing");
 requireText(sync, 'setInterval(() => safeRun("live"), LIVE_POLL_MINUTES * 60000)', "live scheduler missing");
 requireText(sync, 'setInterval(() => safeRun("lineups"), LINEUPS_POLL_MINUTES * 60000)', "lineup scheduler missing");
+requireText(sync, "STARTING_XI_PLAYER_NOTIFICATIONS_V1", "confirmed starting-XI notification trigger missing");
+requireText(sync, "from app.competition_entries ce", "starting alerts must target submitted tournament lineups");
+requireText(sync, "f.kickoff_at between c.start_date and c.end_date", "starting alerts must match the active tournament window");
+requireText(sync, "fixture:${fixtureId}:starter:${apiPlayerId}", "starting alerts must be deduplicated per fixture and player");
+requireText(sync, "createNotificationOnce(db", "starting alerts must use the Inbox and push delivery pipeline");
 requireText(sync, 'setInterval(() => safeRun("injuries"), INJURY_SYNC_MINUTES * 60000)', "injury scheduler missing");
 requireText(sync, 'setInterval(() => safeRun("transfers"), TRANSFER_SYNC_HOURS * 3600000)', "transfer scheduler missing");
 requireText(sync, "API_FOOTBALL_PRO_SUMMARY_V1", "Pro quota summary missing");
