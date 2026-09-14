@@ -6,7 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const file = path.join(root, "server", "routes", "economyIntegrity.routes.ts");
 let source = fs.readFileSync(file, "utf8");
 
-const MARKER = "FREE_CARD_CUP_AUTO_AWARD_V2_ALL_PLAYERS";
+const MARKER = "FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS";
 if (source.includes(MARKER)) {
   console.log("[free-card-cups] Verified all-player randomized card awards already applied");
   process.exit(0);
@@ -44,7 +44,7 @@ replaceOnce(
 `        const prizeType = String(competition.prizeType || "goods").toLowerCase();
         const prizeVault = isOfficialPrizeVaultCompetition(competition);
         const prizeCardRarity = String(competition.prizeCardRarity || "").toLowerCase();
-        // FREE_CARD_CUP_AUTO_AWARD_V2_ALL_PLAYERS
+        // FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS
         const freeCardCup = Number(competition.entryFee || 0) <= 0
           && Boolean(prizeCardRarity)
           && String(competition.prizeKey || "").toLowerCase().startsWith("free-");
@@ -229,10 +229,47 @@ const awardBlock = `        let freeCardAward: any = null;
           await createNotificationOnce(tx, {
             userId: winnerUserId,
             type: "win",
-            title: "Congratulations — you won a " + String(freeCardAward.rarity || prizeCardRarity).toUpperCase() + " player card",
-            message: "You won " + competition.name + " with " + toMoney(winner.totalScore).toFixed(1) + " points. Your randomized " + prizeAward.title + " (" + String(freeCardAward.playerTeam || "Premier League") + ") has been added to Collection. The draw uses the full current Premier League player pool across all clubs.",
-            dedupeKey: "competition:" + competitionId + ":entry:" + winnerEntryId + ":free-card-award",
+            title: "🏆 Congratulations — 1st place Rare card",
+            message: "You won " + competition.name + " with " + toMoney(winner.totalScore).toFixed(1) + " points. Your random RARE card prize is ready. Open this Inbox message and tap Claim prize; exactly one card will be added to your Collection.",
+            dedupeKey: "competition:" + competitionId + ":entry:" + winnerEntryId + ":free-card-claim-ready",
           });
+
+          for (let index = 1; index < Math.min(3, ranked.length); index += 1) {
+            const placed = ranked[index];
+            const placedEntryId = Number(placed.id);
+            const placedUserId = String(placed.userId || "");
+            const placedRank = index + 1;
+            const placedPrize = {
+              key: "free-common-card-rank-" + placedRank,
+              title: "Random Common Player Card",
+              value: 0,
+              category: "card",
+              rarity: "common",
+              rank: placedRank,
+              claimPending: true,
+            };
+            await tx.execute(sql\`
+              update app.competition_entries
+              set tiebreak_meta = jsonb_set(coalesce(tiebreak_meta, '{}'::jsonb), '{settlement,prizeAward}', \${JSON.stringify(placedPrize)}::jsonb, true)
+              where id = \${placedEntryId} and competition_id = \${competitionId} and prize_card_id is null
+            \`);
+            await tx.execute(sql\`
+              insert into app.competition_prize_awards
+                (competition_id, entry_id, user_id, game_week, rarity, prize_key, prize_title, prize_value, prize_category, status, metadata)
+              values
+                (\${competitionId}, \${placedEntryId}, \${placedUserId}, \${Number(competition.gameWeek)}, 'common',
+                 \${String(placedPrize.key)}, \${String(placedPrize.title)}, 0, 'card', 'pending_claim',
+                 \${JSON.stringify({ rank: placedRank, freeCommonCup: true, oneCardOnly: true })}::jsonb)
+              on conflict (competition_id, entry_id) do nothing
+            \`);
+            await createNotificationOnce(tx, {
+              userId: placedUserId,
+              type: "runner_up",
+              title: "🎉 Congratulations — #" + placedRank + " wins a Common card",
+              message: "You finished #" + placedRank + " in " + competition.name + " with " + toMoney(placed.totalScore).toFixed(1) + " points. Your random COMMON card prize is ready. Open this Inbox message and tap Claim prize; exactly one card will be added to your Collection.",
+              dedupeKey: "competition:" + competitionId + ":entry:" + placedEntryId + ":free-card-claim-ready",
+            });
+          }
         }
 
         let awardRecord: any = freeCardAward ? {
