@@ -1,10 +1,11 @@
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Bell, CheckCheck, ChevronRight, Copy, Gift, Share2, ShieldCheck, Trophy, UserRound, UsersRound } from "lucide-react";
 import { Button } from "../ui/button";
 import { queryClient } from "../../lib/queryClient";
 import { useToast } from "../../hooks/use-toast";
+import { openNotification } from "../../lib/notifications";
 
 type Tab = "club" | "inbox" | "referrals";
 
@@ -22,6 +23,7 @@ function dateLabel(value: unknown) {
 
 export default function NativeClubPage() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const initialTab = React.useMemo<Tab>(() => {
     if (typeof window === "undefined") return "club";
     const requested = new URLSearchParams(window.location.search).get("tab");
@@ -127,7 +129,7 @@ export default function NativeClubPage() {
 
       {tab === "inbox" ? <div className="mt-3">
         <div className="mb-2 flex items-center justify-between px-1"><div><p className="text-[10px] font-black uppercase tracking-[.15em] text-slate-600">Notifications</p><p className="text-sm font-black">{Number(inbox?.unreadCount || 0)} unread</p></div>{Number(inbox?.unreadCount || 0) > 0 ? <button onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending} className="inline-flex items-center gap-1.5 rounded-xl border border-white/8 bg-white/[.03] px-3 py-2 text-[10px] font-black text-slate-300"><CheckCheck className="h-3.5 w-3.5" />Mark all read</button> : null}</div>
-        <div className="space-y-2">{notifications.slice(0, 8).map((note: any) => <div key={note.id} className={`rounded-2xl border p-3 ${note.read ? "border-white/[.06] bg-white/[.025]" : "border-cyan-300/12 bg-cyan-300/[.045]"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black">{note.title || "Fantasy Arena"}</p><p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{note.message || "You have a new update."}</p></div>{!note.read ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-cyan-300" /> : null}</div><p className="mt-2 text-[9px] text-slate-700">{dateLabel(note.createdAt || note.created_at)}</p></div>)}{!notifications.length ? <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">Your inbox is clear.</div> : null}</div>
+        <div className="space-y-2">{notifications.slice(0, 8).map((note: any) => <button type="button" key={note.id} onClick={() => { void openNotification(note, navigate); }} className={`block w-full rounded-2xl border p-3 text-left transition active:scale-[.99] ${note.read ? "border-white/[.06] bg-white/[.025]" : "border-cyan-300/12 bg-cyan-300/[.045]"}`} aria-label={`Open notification: ${note.title || "Fantasy Arena"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black">{note.title || "Fantasy Arena"}</p><p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{note.message || "You have a new update."}</p></div>{!note.read ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-cyan-300" /> : null}</div><div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] text-slate-700">{dateLabel(note.createdAt || note.created_at)}</p><span className="inline-flex items-center gap-0.5 text-[9px] font-black uppercase tracking-wider text-cyan-200/70">Open<ChevronRight className="h-3 w-3" /></span></div></button>)}{!notifications.length ? <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">Your inbox is clear.</div> : null}</div>
       </div> : null}
 
       {tab === "referrals" ? <div className="mt-3 space-y-3">
