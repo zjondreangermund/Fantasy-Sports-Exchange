@@ -83,6 +83,22 @@ export default function NativeClubPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
   });
 
+  const claimPrizeMutation = useMutation({
+    mutationFn: async (entryId: number) => {
+      const response = await fetch(`/api/competitions/prizes/${entryId}/claim`, { method: "POST", credentials: "include" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.message || "Could not claim prize card");
+      return body;
+    },
+    onSuccess: (body: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/competitions/my-entries"] });
+      toast({ title: body?.card?.replayed ? "Prize already claimed" : "Prize card claimed!", description: body?.card?.playerName ? `${body.card.playerName} is now in your Collection.` : "Your card is now in Collection." });
+    },
+    onError: (error: any) => toast({ title: "Prize claim failed", description: error?.message || "Please try again.", variant: "destructive" }),
+  });
+
   const cards = cardsFrom(cardsRaw);
   const rows = Array.isArray(entries) ? entries : [];
   const wins = rows.filter((entry: any) => Number(entry.rank || entry.finalRank || 0) === 1 || String(entry.status || "").toLowerCase() === "winner").length;
@@ -108,6 +124,8 @@ export default function NativeClubPage() {
   const copyReferral = async () => {
     try { await navigator.clipboard.writeText(String(referral?.url || "")); toast({ title: "Referral link copied" }); } catch { toast({ title: "Could not copy", variant: "destructive" }); }
   };
+
+  const selectedPrizeEntryId = Number(String(selectedNotification?.dedupeKey || "").match(/^competition:\\d+:entry:(\\d+):free-card-claim-ready$/)?.[1] || 0);
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-club>
@@ -135,7 +153,8 @@ export default function NativeClubPage() {
           <h3 className="mt-2 text-lg font-black leading-tight">{selectedNotification.title || "Fantasy Arena"}</h3>
           <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-300">{selectedNotification.message || "You have a new update."}</p>
           <p className="mt-5 text-[10px] text-slate-600">{dateLabel(selectedNotification.createdAt || selectedNotification.created_at)}</p>
-          {notificationDestination(selectedNotification) !== "/account?tab=inbox" ? <Button type="button" onClick={() => navigate(notificationDestination(selectedNotification))} className="mt-4 h-11 w-full rounded-2xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200">View related page<ChevronRight className="ml-2 h-4 w-4" /></Button> : null}
+          {selectedPrizeEntryId > 0 ? <Button type="button" onClick={() => claimPrizeMutation.mutate(selectedPrizeEntryId)} disabled={claimPrizeMutation.isPending} className="mt-4 h-11 w-full rounded-2xl bg-emerald-300 font-black text-emerald-950 hover:bg-emerald-200"><Gift className="mr-2 h-4 w-4" />{claimPrizeMutation.isPending ? "Claiming…" : "Claim prize card"}</Button> : null}
+          {notificationDestination(selectedNotification) !== "/account?tab=inbox" ? <Button type="button" onClick={() => navigate(notificationDestination(selectedNotification))} variant="outline" className="mt-2 h-11 w-full rounded-2xl border-white/10 bg-white/[.04] font-black text-white">View My Teams & Prizes<ChevronRight className="ml-2 h-4 w-4" /></Button> : null}
         </section> : <>
           <div className="mb-2 flex items-center justify-between px-1"><div><p className="text-[10px] font-black uppercase tracking-[.15em] text-slate-600">Notifications</p><p className="text-sm font-black">{Number(inbox?.unreadCount || 0)} unread</p></div>{Number(inbox?.unreadCount || 0) > 0 ? <button onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending} className="inline-flex items-center gap-1.5 rounded-xl border border-white/8 bg-white/[.03] px-3 py-2 text-[10px] font-black text-slate-300"><CheckCheck className="h-3.5 w-3.5" />Mark all read</button> : null}</div>
           <div className="space-y-2">{notifications.slice(0, 8).map((note: any) => <button type="button" key={note.id} onClick={() => { setSelectedNotification(note); void markNotificationRead(note.id); }} className={`block w-full rounded-2xl border p-3 text-left transition active:scale-[.99] ${note.read ? "border-white/[.06] bg-white/[.025]" : "border-cyan-300/12 bg-cyan-300/[.045]"}`} aria-label={`Read notification: ${note.title || "Fantasy Arena"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black">{note.title || "Fantasy Arena"}</p><p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{note.message || "You have a new update."}</p></div>{!note.read ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-cyan-300" /> : null}</div><div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] text-slate-700">{dateLabel(note.createdAt || note.created_at)}</p><span className="inline-flex items-center gap-0.5 text-[9px] font-black uppercase tracking-wider text-cyan-200/70">Read<ChevronRight className="h-3 w-3" /></span></div></button>)}{!notifications.length ? <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">Your inbox is clear.</div> : null}</div>
