@@ -6,10 +6,11 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
-import { Bell, User as UserIcon, Mail, CheckCircle2, Gift, Copy, Link2, Shield, Gavel, Users, Banknote, Trophy, Medal, Sparkles, Crown } from "lucide-react";
+import { Bell, User as UserIcon, Mail, CheckCircle2, Gift, Copy, Link2, Shield, Gavel, Users, Banknote, Trophy, Medal, Sparkles, Crown, ChevronRight } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { queryClient } from "../lib/queryClient";
-import { Link } from "wouter";
+import { openNotification } from "../lib/notifications";
+import { Link, useLocation } from "wouter";
 import { LiveHero, LivePageShell, LiveStatCard } from "../components/layout/LivePageShell";
 
 type NotificationItem = {
@@ -20,6 +21,10 @@ type NotificationItem = {
   message: string;
   read: boolean;
   createdAt: string | null;
+  notificationKind?: string | null;
+  dedupeKey?: string | null;
+  communityMessageId?: number | null;
+  replacementClaimId?: number | null;
 };
 
 type NotificationResponse = {
@@ -62,6 +67,7 @@ function listFromCards(data: UserCardResponse | undefined) {
 
 export default function AccountPage() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [teamNameInput, setTeamNameInput] = useState("");
   const [copyingLink, setCopyingLink] = useState(false);
 
@@ -264,7 +270,7 @@ export default function AccountPage() {
           <Card className="border-white/10 bg-white/[0.06] p-5 text-white backdrop-blur-xl">
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold">Notifications</h2><Button variant="outline" size="sm" onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending}>Mark all read</Button></div>
             {inboxLoading ? <div className="space-y-3"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div> : inbox?.notifications?.length ? (
-              <div className="space-y-3">{inbox.notifications.map((note) => <div key={note.id} className={`rounded-xl border border-white/10 p-3 ${note.read ? "bg-black/20 opacity-80" : "bg-primary/10"}`}><div className="flex items-start justify-between gap-3"><div><p className="font-medium text-sm">{note.title}</p><p className="text-sm text-white/55 mt-1">{note.message}</p><p className="text-xs text-white/40 mt-2">{note.createdAt ? new Date(note.createdAt).toLocaleString() : ""}</p></div>{!note.read && <Button size="sm" variant="ghost" onClick={() => markOneMutation.mutate(note.id)}><CheckCircle2 className="w-4 h-4 mr-1" />Read</Button>}</div></div>)}</div>
+              <div className="space-y-3">{inbox.notifications.map((note) => <button type="button" key={note.id} onClick={() => { void openNotification(note, navigate); }} className={`block w-full rounded-xl border border-white/10 p-3 text-left transition hover:border-primary/40 ${note.read ? "bg-black/20 opacity-80" : "bg-primary/10"}`} aria-label={`Open notification: ${note.title || "Fantasy Arena"}`}><div className="flex items-start justify-between gap-3"><div><p className="font-medium text-sm">{note.title}</p><p className="text-sm text-white/55 mt-1">{note.message}</p><p className="text-xs text-white/40 mt-2">{note.createdAt ? new Date(note.createdAt).toLocaleString() : ""}</p></div><span className="inline-flex shrink-0 items-center gap-1 text-xs text-white/50">{note.read ? "Open" : "Open & mark read"}<ChevronRight className="h-4 w-4" /></span></div></button>)}</div>
             ) : <p className="text-sm text-white/50">No notifications yet.</p>}
           </Card>
         </TabsContent>
