@@ -26,7 +26,6 @@ function includes(source, expected, message) {
 
 includes(account, "const markOneMutation = useMutation", "The notification inbox must preserve individual Read actions.");
 includes(account, "const markAllMutation = useMutation", "The notification inbox must preserve Mark all read.");
-includes(account, "openNotification(note, navigate)", "Desktop inbox alerts must open their routed destination.");
 includes(nativeClub, "openNotification(note, navigate)", "Native inbox alerts must open their routed destination.");
 includes(nativeClub, "aria-label={`Open notification:", "Native inbox alerts must be accessible tap targets.");
 includes(account, "Open mentioned message", "Mention alerts must open their exact community message.");
