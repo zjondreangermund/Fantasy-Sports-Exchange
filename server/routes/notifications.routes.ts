@@ -259,6 +259,7 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
       await syncGameweekNotifications(userId);
       const notifications = rowsOf(await db.execute(sql`
         select n.id, n.user_id as "userId", n.type::text as type, n.title, n.message, n.read,
+               n.dedupe_key as "dedupeKey",
                n.created_at as "createdAt",
                case when n.dedupe_key like 'community-mention:%'
                  then split_part(n.dedupe_key, ':', 2)::bigint else null end as "communityMessageId",
