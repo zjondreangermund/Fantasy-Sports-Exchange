@@ -233,6 +233,25 @@ export class ScoreUpdateService {
     }
   }
 
+  private async sendLiveLeaderboardImpactAlerts(competition:any){
+    const competitionId=Number(competition?.id||0);
+    if(!competitionId||String(competition?.status||"")!=="active")return;
+    await db.execute(sql`create table if not exists app.competition_live_alert_state(competition_id integer not null references app.competitions(id),entry_id integer not null references app.competition_entries(id),user_id varchar(255) not null references app.users(id),rank integer not null,total_score numeric not null default 0,metrics jsonb not null default '{}'::jsonb,sequence integer not null default 0,updated_at timestamptz not null default now(),primary key(competition_id,entry_id))`);
+    const standings=rowsOf(await db.execute(sql`select ce.id as "entryId",ce.user_id as "userId",coalesce(ce.total_score,0)::float as "totalScore",coalesce(ce.tiebreak_meta->'scoring','{}'::jsonb) as scoring,row_number() over(order by coalesce(ce.total_score,0) desc,ce.joined_at asc,ce.id asc)::int as rank from app.competition_entries ce where ce.competition_id=${competitionId} order by rank asc`));
+    for(const row of standings){
+      const entryId=Number(row.entryId),rank=Number(row.rank),score=Number(row.totalScore||0),scoring=asObject(row.scoring);
+      const metrics={goals:toNumber(scoring.goalsScored),assists:toNumber(scoring.assists),saves:toNumber(scoring.goalkeeperSaves)};
+      const previous=rowsOf(await db.execute(sql`select rank,total_score::float as "totalScore",metrics,sequence from app.competition_live_alert_state where competition_id=${competitionId} and entry_id=${entryId}`))[0];
+      const old=asObject(previous?.metrics);let title="",message="";
+      if(previous&&Number(previous.rank)!==rank){const improved=rank<Number(previous.rank);title=improved?`🚀 You moved up to #${rank}`:`⚠️ You dropped to #${rank}`;message=`Your team moved from #${Number(previous.rank)} to #${rank} in ${String(competition.name||"your tournament")}. Live points are still changing.`;}
+      else if(previous&&(metrics.goals>toNumber(old.goals)||metrics.assists>toNumber(old.assists)||Math.floor(metrics.saves/3)>Math.floor(toNumber(old.saves)/3))){title=metrics.goals>toNumber(old.goals)?"⚽ Goal — vital points added":metrics.assists>toNumber(old.assists)?"🎯 Assist — your score changed":"🧤 Save points added";message=`Your lineup gained a vital live contribution in ${String(competition.name||"your tournament")}. You are #${rank} on ${score.toFixed(2)} pts.`;}
+      else if(previous&&rank<=4&&Number(previous.totalScore)!==score){const next=standings[rank]||null;const gap=next?score-Number(next.totalScore||0):999;const hasGk=(Array.isArray(scoring.cardScores)?scoring.cardScores:[]).some((card:any)=>String(card?.officialPosition||"").toUpperCase()==="GK"&&Number(card?.minutesPlayed||0)>0);if(hasGk&&gap>=0&&gap<=4){title="🧤 Your position is still at risk";message=`You are #${rank}, only ${gap.toFixed(2)} pts ahead in ${String(competition.name||"your tournament")}. Goalkeeper concession and clean-sheet points can still change the table.`;}}
+      const sequence=Number(previous?.sequence||0)+(title?1:0);
+      await db.execute(sql`insert into app.competition_live_alert_state(competition_id,entry_id,user_id,rank,total_score,metrics,sequence,updated_at) values(${competitionId},${entryId},${String(row.userId)},${rank},${score},${JSON.stringify(metrics)}::jsonb,${sequence},now()) on conflict(competition_id,entry_id) do update set rank=excluded.rank,total_score=excluded.total_score,metrics=excluded.metrics,sequence=excluded.sequence,updated_at=now()`);
+      if(title)await createNotificationOnce(db,{userId:String(row.userId),type:rank<=3?"runner_up":"system",title,message,dedupeKey:`competition:${competitionId}:entry:${entryId}:live-impact:${sequence}`});
+    }
+  }
+
   private entryDeadline(competition: any, event: any, fixtures: any[]) {
     const eventDeadline = event?.deadline_time ? new Date(String(event.deadline_time)) : null;
     if (eventDeadline && Number.isFinite(eventDeadline.getTime())) return eventDeadline;
@@ -532,7 +551,7 @@ export class ScoreUpdateService {
         const persistCards = item.final || gameWeek === currentGameweek;
         const result = await this.scoreCompetitionEntries(item.competition, bootstrap, await liveFor(gameWeek), item.final, persistCards);
         updatedEntries += result.updatedCount;
-        if (!item.final) await this.sendDeciderAlerts(item.competition, bootstrap, fixtures);
+        if(!item.final){await this.sendLiveLeaderboardImpactAlerts(item.competition);await this.sendDeciderAlerts(item.competition,bootstrap,fixtures);}
         if (item.final && result.complete) await this.setCompetitionStatus(Number(item.competition.id), "closed");
       }
       console.log(`✅ Updated ${updatedEntries} tournament entries; Tuesday-finalized snapshots remain immutable.`);
@@ -568,7 +587,7 @@ export class ScoreUpdateService {
     const final = this.isSettlementFinal(comp);
     const currentGameweek = this.currentOrNextGameweek(bootstrap);
     const result = await this.scoreCompetitionEntries(comp, bootstrap, await fplApi.getLiveGameweek(gameWeek), final, final || gameWeek === currentGameweek);
-    if (!final) await this.sendDeciderAlerts(comp, bootstrap, fixtures);
+    if(!final){await this.sendLiveLeaderboardImpactAlerts(comp);await this.sendDeciderAlerts(comp,bootstrap,fixtures);}
     if (final && result.complete) await this.setCompetitionStatus(Number(comp.id), "closed");
     return result;
   }
