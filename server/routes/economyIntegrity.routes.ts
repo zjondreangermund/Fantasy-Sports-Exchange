@@ -161,6 +161,103 @@ async function isAdminUser(userId: string): Promise<boolean> {
   return Boolean(user?.email && configuredEmails.includes(String(user.email).toLowerCase()));
 }
 
+async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) {
+  await tx.execute(sql`select pg_advisory_xact_lock(99241, ${entryId})`);
+  const award = rowsOf(await tx.execute(sql`
+    select ce.id as "entryId", ce.user_id as "userId", ce.rank, ce.prize_card_id as "prizeCardId",
+      c.id as "competitionId", c.name as "competitionName", c.status::text as "competitionStatus",
+      c.tier::text as tier, coalesce(c.entry_fee,0)::float as "entryFee",
+      coalesce(c.prize_key,'') as "prizeKey"
+    from app.competition_entries ce
+    join app.competitions c on c.id=ce.competition_id
+    where ce.id=${entryId}
+    for update of ce
+  `))[0];
+  if (!award || String(award.userId) !== userId) throw new Error("Prize claim not found");
+  const rank = Number(award.rank || 0);
+  const freeCommonCup = String(award.competitionStatus) === "completed"
+    && String(award.tier) === "common"
+    && Number(award.entryFee || 0) <= 0
+    && String(award.prizeKey || "").toLowerCase().startsWith("free-")
+    && rank >= 1 && rank <= 3;
+  if (!freeCommonCup) throw new Error("This entry has no FREE Common Cup card prize to claim");
+
+  const existingCardId = Number(award.prizeCardId || 0);
+  if (existingCardId > 0) {
+    const existing = rowsOf(await tx.execute(sql`
+      select pc.id, pc.rarity::text as rarity, p.name as "playerName", p.team as "playerTeam"
+      from app.player_cards pc join app.players p on p.id=pc.player_id
+      where pc.id=${existingCardId} and pc.owner_id=${userId}
+      limit 1
+    `))[0];
+    if (!existing) throw new Error("Claimed prize card is missing from your Collection");
+    return { ...existing, competitionId: Number(award.competitionId), entryId, rank, replayed: true };
+  }
+
+  const rarity = rank === 1 ? "rare" : "common";
+  const maxSupply = rarity === "rare" ? 100 : 1000;
+  const candidates = rowsOf(await tx.execute(sql`
+    select p.id as "playerId", p.name as "playerName", p.team as "playerTeam"
+    from app.players p
+    where regexp_replace(lower(coalesce(p.league,'')), '[^a-z0-9]+', '', 'g') in ('premierleague','englishpremierleague','epl')
+      and coalesce(p.fpl_id,0) > 0
+      and lower(coalesce(p.status,'')) not in ('departed','superseded','unlinked','archived')
+      and not exists (
+        select 1 from app.player_cards owned
+        where owned.owner_id=${userId} and owned.player_id=p.id and owned.rarity::text=${rarity}
+      )
+      and (select count(*) from app.player_cards supply where supply.player_id=p.id and supply.rarity::text=${rarity}) < ${maxSupply}
+    order by random()
+    limit 200
+  `));
+
+  let card: any = null;
+  for (const candidate of candidates) {
+    const playerId = Number(candidate.playerId);
+    await tx.execute(sql`select pg_advisory_xact_lock(99242, ${playerId})`);
+    const state = rowsOf(await tx.execute(sql`
+      select count(*)::int as count, coalesce(max(serial_number),0)::int as "maxSerial",
+        exists(select 1 from app.player_cards where owner_id=${userId} and player_id=${playerId} and rarity::text=${rarity}) as owned
+      from app.player_cards where player_id=${playerId} and rarity::text=${rarity}
+    `))[0];
+    if (Boolean(state?.owned) || Number(state?.count || 0) >= maxSupply) continue;
+    const nextSerial = Number(state?.maxSerial || 0) + 1;
+    const initials = String(candidate.playerName || "PLAYER").split(/\s+/).filter(Boolean).map((part: string) => part[0]).join("").toUpperCase().slice(0,3) || "PLY";
+    const serialId = initials + "-" + rarity.charAt(0).toUpperCase() + "-" + playerId + "-" + String(nextSerial).padStart(4,"0");
+    card = rowsOf(await tx.execute(sql`
+      insert into app.player_cards
+        (player_id,owner_id,rarity,serial_id,serial_number,max_supply,level,xp,decisive_score,last_5_scores,for_sale,price,acquired_at)
+      values
+        (${playerId},${userId},${rarity},${serialId},${nextSerial},${maxSupply},1,0,35,'[0,0,0,0,0]'::jsonb,false,0,now())
+      returning id, rarity::text as rarity
+    `))[0];
+    if (card) {
+      card.playerName = String(candidate.playerName);
+      card.playerTeam = String(candidate.playerTeam);
+      break;
+    }
+  }
+  if (!card) throw new Error("No eligible current Premier League prize card is available");
+
+  const prizeTitle = "Random " + rarity.charAt(0).toUpperCase() + rarity.slice(1) + " Player Card";
+  await tx.execute(sql`
+    update app.competition_entries
+    set prize_card_id=${Number(card.id)},
+      tiebreak_meta=jsonb_set(coalesce(tiebreak_meta,'{}'::jsonb),'{settlement,prizeAward}',
+        ${JSON.stringify({ key: "free-card-claimed", category: "card", value: 0 })}::jsonb
+          || jsonb_build_object('title',${prizeTitle},'rarity',${rarity},'cardId',${Number(card.id)},'claimed',true),true)
+    where id=${entryId} and user_id=${userId} and prize_card_id is null
+  `);
+  await createNotificationOnce(tx, {
+    userId,
+    type: rank === 1 ? "win" : "runner_up",
+    title: "🏆 Prize claimed — " + String(card.playerName),
+    message: "Congratulations! Your random " + rarity.toUpperCase() + " prize card is " + String(card.playerName) + " (" + String(card.playerTeam) + "). Exactly one card was added to your Collection.",
+    dedupeKey: "competition:" + Number(award.competitionId) + ":entry:" + entryId + ":free-card-claimed",
+  });
+  return { ...card, competitionId: Number(award.competitionId), entryId, rank, replayed: false };
+}
+
 export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEconomyIntegrityRoutesDeps) {
   const { requireAuth } = deps;
 
@@ -392,6 +489,23 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const status = message === "Tournament not found" ? 404 :
         validationMessages.includes(message) || message.includes("tournaments require") || message.includes("tournaments may only use") ? 400 : 500;
       if (status === 500) console.error("Failed to join competition atomically:", error);
+      return res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/competitions/prizes/:entryId/claim", requireAuth, async (req: any, res) => {
+    try {
+      await ensurePrizeAwardSchema();
+      await ensureNotificationsSchema();
+      const userId = String(req.authUserId || "");
+      const entryId = Number(req.params.entryId);
+      if (!Number.isInteger(entryId) || entryId <= 0) return res.status(400).json({ message: "Valid prize entry required" });
+      const card = await db.transaction((tx) => claimFreeCommonCupCard(tx, userId, entryId));
+      return res.json({ success: true, card, message: card.replayed ? "Prize already claimed" : "Prize card claimed successfully" });
+    } catch (error: any) {
+      const message = error?.message || "Could not claim prize card";
+      const status = message === "Prize claim not found" ? 404 : message.includes("no FREE Common Cup") ? 400 : 500;
+      if (status === 500) console.error("Failed to claim FREE Common Cup card:", error);
       return res.status(status).json({ message });
     }
   });
