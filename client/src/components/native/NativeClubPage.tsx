@@ -5,7 +5,7 @@ import { Bell, CheckCheck, ChevronRight, Copy, Gift, Share2, ShieldCheck, Trophy
 import { Button } from "../ui/button";
 import { queryClient } from "../../lib/queryClient";
 import { useToast } from "../../hooks/use-toast";
-import { openNotification } from "../../lib/notifications";
+import { markNotificationRead, notificationDestination } from "../../lib/notifications";
 
 type Tab = "club" | "inbox" | "referrals";
 
@@ -30,6 +30,7 @@ export default function NativeClubPage() {
     return requested === "inbox" || requested === "referrals" ? requested : "club";
   }, []);
   const [tab, setTab] = React.useState<Tab>(initialTab);
+  const [selectedNotification, setSelectedNotification] = React.useState<any | null>(null);
 
   const { data: user } = useQuery<any>({ queryKey: ["/api/user"], staleTime: 30_000 });
   const { data: cardsRaw } = useQuery<any>({
@@ -128,8 +129,17 @@ export default function NativeClubPage() {
       </div> : null}
 
       {tab === "inbox" ? <div className="mt-3">
-        <div className="mb-2 flex items-center justify-between px-1"><div><p className="text-[10px] font-black uppercase tracking-[.15em] text-slate-600">Notifications</p><p className="text-sm font-black">{Number(inbox?.unreadCount || 0)} unread</p></div>{Number(inbox?.unreadCount || 0) > 0 ? <button onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending} className="inline-flex items-center gap-1.5 rounded-xl border border-white/8 bg-white/[.03] px-3 py-2 text-[10px] font-black text-slate-300"><CheckCheck className="h-3.5 w-3.5" />Mark all read</button> : null}</div>
-        <div className="space-y-2">{notifications.slice(0, 8).map((note: any) => <button type="button" key={note.id} onClick={() => { void openNotification(note, navigate); }} className={`block w-full rounded-2xl border p-3 text-left transition active:scale-[.99] ${note.read ? "border-white/[.06] bg-white/[.025]" : "border-cyan-300/12 bg-cyan-300/[.045]"}`} aria-label={`Open notification: ${note.title || "Fantasy Arena"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black">{note.title || "Fantasy Arena"}</p><p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{note.message || "You have a new update."}</p></div>{!note.read ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-cyan-300" /> : null}</div><div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] text-slate-700">{dateLabel(note.createdAt || note.created_at)}</p><span className="inline-flex items-center gap-0.5 text-[9px] font-black uppercase tracking-wider text-cyan-200/70">Open<ChevronRight className="h-3 w-3" /></span></div></button>)}{!notifications.length ? <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">Your inbox is clear.</div> : null}</div>
+        {selectedNotification ? <section className="rounded-[1.4rem] border border-cyan-300/15 bg-[linear-gradient(145deg,rgba(8,20,31,.98),rgba(8,9,20,.98))] p-4">
+          <button type="button" onClick={() => setSelectedNotification(null)} className="mb-4 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[.12em] text-cyan-200/75"><ChevronRight className="h-3.5 w-3.5 rotate-180" />Back to inbox</button>
+          <p className="text-[9px] font-black uppercase tracking-[.16em] text-slate-600">Inbox message</p>
+          <h3 className="mt-2 text-lg font-black leading-tight">{selectedNotification.title || "Fantasy Arena"}</h3>
+          <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-300">{selectedNotification.message || "You have a new update."}</p>
+          <p className="mt-5 text-[10px] text-slate-600">{dateLabel(selectedNotification.createdAt || selectedNotification.created_at)}</p>
+          {notificationDestination(selectedNotification) !== "/account?tab=inbox" ? <Button type="button" onClick={() => navigate(notificationDestination(selectedNotification))} className="mt-4 h-11 w-full rounded-2xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200">View related page<ChevronRight className="ml-2 h-4 w-4" /></Button> : null}
+        </section> : <>
+          <div className="mb-2 flex items-center justify-between px-1"><div><p className="text-[10px] font-black uppercase tracking-[.15em] text-slate-600">Notifications</p><p className="text-sm font-black">{Number(inbox?.unreadCount || 0)} unread</p></div>{Number(inbox?.unreadCount || 0) > 0 ? <button onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending} className="inline-flex items-center gap-1.5 rounded-xl border border-white/8 bg-white/[.03] px-3 py-2 text-[10px] font-black text-slate-300"><CheckCheck className="h-3.5 w-3.5" />Mark all read</button> : null}</div>
+          <div className="space-y-2">{notifications.slice(0, 8).map((note: any) => <button type="button" key={note.id} onClick={() => { setSelectedNotification(note); void markNotificationRead(note.id); }} className={`block w-full rounded-2xl border p-3 text-left transition active:scale-[.99] ${note.read ? "border-white/[.06] bg-white/[.025]" : "border-cyan-300/12 bg-cyan-300/[.045]"}`} aria-label={`Read notification: ${note.title || "Fantasy Arena"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black">{note.title || "Fantasy Arena"}</p><p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{note.message || "You have a new update."}</p></div>{!note.read ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-cyan-300" /> : null}</div><div className="mt-2 flex items-center justify-between gap-2"><p className="text-[9px] text-slate-700">{dateLabel(note.createdAt || note.created_at)}</p><span className="inline-flex items-center gap-0.5 text-[9px] font-black uppercase tracking-wider text-cyan-200/70">Read<ChevronRight className="h-3 w-3" /></span></div></button>)}{!notifications.length ? <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">Your inbox is clear.</div> : null}</div>
+        </>}
       </div> : null}
 
       {tab === "referrals" ? <div className="mt-3 space-y-3">
