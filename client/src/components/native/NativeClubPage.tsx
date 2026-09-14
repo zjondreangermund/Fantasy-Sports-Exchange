@@ -125,7 +125,7 @@ export default function NativeClubPage() {
     try { await navigator.clipboard.writeText(String(referral?.url || "")); toast({ title: "Referral link copied" }); } catch { toast({ title: "Could not copy", variant: "destructive" }); }
   };
 
-  const selectedPrizeEntryId = Number(String(selectedNotification?.dedupeKey || "").match(/^competition:\\d+:entry:(\\d+):free-card-claim-ready$/)?.[1] || 0);
+  const selectedPrizeEntryId = Number(String(selectedNotification?.dedupeKey || "").match(/^competition:\d+:entry:(\d+):free-card-claim-ready$/)?.[1] || 0);
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-club>
