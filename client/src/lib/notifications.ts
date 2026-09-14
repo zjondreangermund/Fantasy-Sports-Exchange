@@ -81,8 +81,9 @@ export async function openNotification(
     return;
   }
 
-  await markNotificationRead(notification.id);
-  navigate(notificationDestination(notification));
+  const destination = notificationDestination(notification);
+  navigate(destination);
+  void markNotificationRead(notification.id);
 }
 
 function markCacheRead() {
