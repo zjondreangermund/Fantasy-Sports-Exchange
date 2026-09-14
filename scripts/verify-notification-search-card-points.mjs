@@ -26,8 +26,10 @@ function includes(source, expected, message) {
 
 includes(account, "const markOneMutation = useMutation", "The notification inbox must preserve individual Read actions.");
 includes(account, "const markAllMutation = useMutation", "The notification inbox must preserve Mark all read.");
-includes(nativeClub, "openNotification(note, navigate)", "Native inbox alerts must open their routed destination.");
-includes(nativeClub, "aria-label={`Open notification:", "Native inbox alerts must be accessible tap targets.");
+includes(nativeClub, "setSelectedNotification(note)", "Native inbox alerts must open their full Inbox message.");
+includes(nativeClub, "void markNotificationRead(note.id)", "Reading a native Inbox message must mark only that alert as read.");
+includes(nativeClub, "View related page", "Notification destinations must remain optional actions inside the Inbox message.");
+includes(nativeClub, "aria-label={`Read notification:", "Native inbox alerts must be accessible tap targets.");
 includes(account, "Open mentioned message", "Mention alerts must open their exact community message.");
 includes(account, 'new URLSearchParams(window.location.search).get("tab") === "inbox"', "Dashboard notification links must open the Inbox tab.");
 assert.ok(!account.includes('if (value === "inbox") void markNotificationsSeen()'), "Opening Inbox must not silently mark every notification as read.");
