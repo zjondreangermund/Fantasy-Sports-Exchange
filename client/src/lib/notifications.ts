@@ -11,6 +11,7 @@ export type ArenaNotification = {
   message?: string | null;
   type?: string | null;
   notificationKind?: string | null;
+  dedupeKey?: string | null;
   communityMessageId?: number | null;
   replacementClaimId?: number | null;
 };
@@ -61,6 +62,8 @@ export async function openCommunityMention(notification: ArenaNotification) {
 
 export function notificationDestination(notification: ArenaNotification): string {
   if (notification.replacementClaimId) return "/account?tab=inbox";
+  const decider = String(notification.dedupeKey || "").match(/^competition:(\d+):decider:/);
+  if (decider) return `/competitions?leaderboard=${decider[1]}`;
   const subject = `${notification.notificationKind || ""} ${notification.type || ""} ${notification.title || ""} ${notification.message || ""}`.toLocaleLowerCase("en");
   if (/\b(prize|reward|winner|won|claim|settlement)\b/.test(subject)) return "/my-entries";
   if (/\b(tournament|competition|gameweek|lineup|leaderboard|cup)\b/.test(subject)) return "/competitions";
