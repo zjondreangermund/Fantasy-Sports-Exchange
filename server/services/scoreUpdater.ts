@@ -17,6 +17,7 @@ import { fplApi } from "./fplApi.js";
 import { buildFplPlayerIndex } from "./fplPlayerIdentity.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats, calculateLineupScore, mergePlayerStatsWithDetailedStats } from "./scoring.js";
 import { loadDetailedScoringContext, resolveDetailedStatsForPlayer, type DetailedScoringContext } from "./apiFootballScoringBridge.js";
+import { createNotificationOnce } from "./notifications.js";
 
 const RARITY_PRESTIGE: Record<string, number> = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };
 const SCORE_REFRESH_INTERVAL_MS = Math.max(
@@ -166,6 +167,70 @@ export class ScoreUpdateService {
 
   private fixturesForGameweek(fixtures: any[], gameWeek: number) {
     return (Array.isArray(fixtures) ? fixtures : []).filter((fixture: any) => Number(fixture?.event) === Number(gameWeek));
+  }
+
+  private fixtureIsFinished(fixture: any) {
+    if (fixture?.finished === true || fixture?.finished_provisional === true) return true;
+    const kickoff = fixture?.kickoff_time ? new Date(String(fixture.kickoff_time)).getTime() : 0;
+    return Boolean(fixture?.started) && kickoff > 0 && Date.now() - kickoff >= 3 * 60 * 60 * 1000;
+  }
+
+  private async sendDeciderAlerts(competition: any, bootstrap: any, fixtures: any[]) {
+    const competitionId = Number(competition?.id || 0);
+    const gameWeek = Number(competition?.gameWeek || competition?.game_week || 0);
+    if (!competitionId || !gameWeek || String(competition?.status || "") !== "active") return;
+    const gameweekFixtures = this.fixturesForGameweek(fixtures, gameWeek);
+    const remaining = gameweekFixtures.filter((fixture: any) => !this.fixtureIsFinished(fixture));
+    if (gameweekFixtures.length === 0 || remaining.length !== 1) return;
+    const fixture = remaining[0];
+    const fixtureId = Number(fixture?.id || 0);
+    const teamIds = new Set([Number(fixture?.team_h || 0), Number(fixture?.team_a || 0)].filter(Boolean));
+    if (!fixtureId || teamIds.size !== 2) return;
+
+    const elementTeam = new Map<number, number>();
+    for (const element of Array.isArray(bootstrap?.elements) ? bootstrap.elements : []) elementTeam.set(Number(element?.id || 0), Number(element?.team || 0));
+    const teamName = new Map<number, string>();
+    for (const team of Array.isArray(bootstrap?.teams) ? bootstrap.teams : []) teamName.set(Number(team?.id || 0), String(team?.short_name || team?.name || "Team"));
+
+    const leaders = rowsOf(await db.execute(sql`
+      select ce.id as "entryId", ce.user_id as "userId",
+        coalesce(nullif(btrim(u.manager_team_name), ''), nullif(btrim(u.name), ''), split_part(coalesce(u.email, ''), '@', 1), 'Arena Manager') as "teamName",
+        coalesce(ce.total_score, 0)::float as "totalScore",
+        coalesce(ce.tiebreak_meta->'scoring'->'cardScores', '[]'::jsonb) as "cardScores",
+        row_number() over (order by
+          coalesce(ce.total_score, 0) desc,
+          coalesce(nullif(ce.tiebreak_meta->'scoring'->>'captainBasePoints', '')::float, 0) desc,
+          coalesce(nullif(ce.tiebreak_meta->'scoring'->>'providerRatingTotal', '')::float, 0) desc,
+          coalesce(nullif(ce.tiebreak_meta->'scoring'->>'goalsScored', '')::float, 0) desc,
+          coalesce(nullif(ce.tiebreak_meta->'scoring'->>'assists', '')::float, 0) desc,
+          ce.joined_at asc, ce.id asc
+        )::int as rank
+      from app.competition_entries ce
+      left join app.users u on u.id = ce.user_id
+      where ce.competition_id = ${competitionId}
+      order by rank asc limit 3
+    `));
+    if (leaders.length < 2) return;
+    const involvedNames = (leader: any) => (Array.isArray(leader?.cardScores) ? leader.cardScores : [])
+      .filter((card: any) => teamIds.has(elementTeam.get(Number(card?.elementId || 0)) || 0))
+      .map((card: any) => String(card?.officialPlayerName || "").trim()).filter(Boolean);
+    const involvedByUser = new Map<string, string[]>(leaders.map((leader: any) => [String(leader.userId), involvedNames(leader)]));
+    if (![...involvedByUser.values()].some((names) => names.length > 0)) return;
+
+    const leader = leaders[0];
+    const fixtureLabel = `${teamName.get(Number(fixture.team_h)) || "Home"} vs ${teamName.get(Number(fixture.team_a)) || "Away"}`;
+    const tournamentName = String(competition?.name || `GW${gameWeek} tournament`);
+    for (const recipient of leaders) {
+      const rank = Number(recipient.rank || 0);
+      const ownPlayers = involvedByUser.get(String(recipient.userId)) || [];
+      const gap = Math.max(0, Number(leader.totalScore || 0) - Number(recipient.totalScore || 0));
+      const playerText = ownPlayers.length ? ` ${ownPlayers.join(" & ")} ${ownPlayers.length === 1 ? "is" : "are"} still to play.` : " A rival still has a player to play.";
+      const title = rank === 1 ? "👑 Your lead is under threat!" : rank === 2 ? "👀 One match could change everything" : "🔥 The podium fight isn't over";
+      const message = rank === 1
+        ? `You lead ${String(leaders[1]?.teamName || "P2")} by ${(Number(recipient.totalScore || 0) - Number(leaders[1]?.totalScore || 0)).toFixed(2)} pts in ${tournamentName}.${playerText} Final fixture: ${fixtureLabel}.`
+        : `You're ${gap.toFixed(2)} pts behind ${String(leader.teamName || "P1")} in ${tournamentName}.${playerText} Final fixture: ${fixtureLabel}.`;
+      await createNotificationOnce(db, { userId: String(recipient.userId), title, message, dedupeKey: `competition:${competitionId}:decider:${fixtureId}` });
+    }
   }
 
   private entryDeadline(competition: any, event: any, fixtures: any[]) {
@@ -467,6 +532,7 @@ export class ScoreUpdateService {
         const persistCards = item.final || gameWeek === currentGameweek;
         const result = await this.scoreCompetitionEntries(item.competition, bootstrap, await liveFor(gameWeek), item.final, persistCards);
         updatedEntries += result.updatedCount;
+        if (!item.final) await this.sendDeciderAlerts(item.competition, bootstrap, fixtures);
         if (item.final && result.complete) await this.setCompetitionStatus(Number(item.competition.id), "closed");
       }
       console.log(`✅ Updated ${updatedEntries} tournament entries; Tuesday-finalized snapshots remain immutable.`);
@@ -502,6 +568,7 @@ export class ScoreUpdateService {
     const final = this.isSettlementFinal(comp);
     const currentGameweek = this.currentOrNextGameweek(bootstrap);
     const result = await this.scoreCompetitionEntries(comp, bootstrap, await fplApi.getLiveGameweek(gameWeek), final, final || gameWeek === currentGameweek);
+    if (!final) await this.sendDeciderAlerts(comp, bootstrap, fixtures);
     if (final && result.complete) await this.setCompetitionStatus(Number(comp.id), "closed");
     return result;
   }

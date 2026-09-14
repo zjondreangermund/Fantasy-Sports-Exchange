@@ -171,6 +171,8 @@ export async function disableNativePushSubscription(userId: string, tokenValue: 
 
 function notificationUrl(dedupeKey: unknown): string {
   const key = String(dedupeKey || "");
+  const decider = key.match(/^competition:(\d+):decider:/);
+  if (decider) return `/competitions?leaderboard=${decider[1]}`;
   if (key.startsWith("replacement-claim:")) return "/collection";
   if (key.startsWith("community-mention:")) return "/community";
   if (key.startsWith("competition:") || key.startsWith("gameweek:")) return "/my-entries";
