@@ -15,6 +15,9 @@ need(server, "const rarity = rank === 1 ? \"rare\" : \"common\"", "FREE Common C
 need(server, "rank >= 1 && rank <= 3", "Only the top three FREE Common Cup entries may claim.");
 need(server, "ce.prize_card_id as \"prizeCardId\"", "Claims must reuse an existing awarded card.");
 need(server, "where id=${entryId} and user_id=${userId} and prize_card_id is null", "One-card-only database guard is missing.");
+need(server, "${prizeTitle}::text", "Prize metadata title must have an explicit PostgreSQL type.");
+need(server, "${rarity}::text", "Prize metadata rarity must have an explicit PostgreSQL type.");
+need(server, "${Number(card.id)}::integer", "Prize metadata card ID must have an explicit PostgreSQL type.");
 need(server, "Exactly one card was added to your Collection.", "Claim confirmation must state the one-card result.");
 
 need(awards, "FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS", "Top-three settlement patch marker is missing.");
