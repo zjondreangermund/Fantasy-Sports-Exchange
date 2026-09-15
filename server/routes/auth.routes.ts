@@ -20,6 +20,12 @@ const NATIVE_STATE_PREFIX = "fanative";
 const NATIVE_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 const NATIVE_TICKET_TTL_MS = 3 * 60 * 1000;
 
+function safeEqualText(actual: string, expected: string): boolean {
+  const actualBuffer = Buffer.from(actual);
+  const expectedBuffer = Buffer.from(expected);
+  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
 function isNativeLoginRequest(req: any): boolean {
   const userAgent = String(req.get?.("user-agent") || "");
   return String(req.query?.native || "") === "1" || userAgent.includes(NATIVE_USER_AGENT_MARKER);
@@ -132,6 +138,51 @@ export async function registerAuthModeRoutes(app: Express, deps: RegisterAuthRou
     registerReplitAuthRoutes,
     passport,
   } = deps;
+
+  // Temporary automation/audit access. This never activates unless all three
+  // Railway variables are explicitly set. The secret is accepted only through
+  // a request header so it does not appear in URLs, redirects, or normal API logs.
+  // The expiry is mandatory, and the feature can be shut off without a code deploy.
+  if (String(process.env.TEMP_AUDIT_LOGIN_ENABLED || "").toLowerCase() === "true") {
+    app.get("/api/auth/audit-login", async (req: any, res) => {
+      res.setHeader("Cache-Control", "no-store");
+      const expectedToken = String(process.env.TEMP_AUDIT_LOGIN_TOKEN || "");
+      const suppliedToken = String(req.get?.("x-fantasy-audit-token") || "");
+      const userId = String(process.env.TEMP_AUDIT_LOGIN_USER_ID || "").trim();
+      const expiresAt = Date.parse(String(process.env.TEMP_AUDIT_LOGIN_EXPIRES_AT || ""));
+
+      if (!expectedToken || !suppliedToken || !safeEqualText(suppliedToken, expectedToken)) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      if (!Number.isFinite(expiresAt) || Date.now() >= expiresAt) {
+        return res.status(410).json({ message: "Temporary audit login expired" });
+      }
+      if (!userId) return res.status(503).json({ message: "Temporary audit login is not configured" });
+
+      try {
+        const { storage } = await import("../storage.js");
+        const user: any = await storage.getUser(userId);
+        if (!user) return res.status(404).json({ message: "Configured audit user was not found" });
+
+        const sessionUser = {
+          id: user.id,
+          name: user.name || "Demo User",
+          email: user.email || "",
+          photo: user.avatarUrl || undefined,
+        };
+        await new Promise<void>((resolve, reject) => {
+          req.logIn(sessionUser, (error: any) => error ? reject(error) : resolve());
+        });
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((error: any) => error ? reject(error) : resolve());
+        });
+        return res.redirect("/");
+      } catch (error: any) {
+        console.error("Temporary audit login failed:", error?.message || error);
+        return res.status(500).json({ message: "Temporary audit login failed" });
+      }
+    });
+  }
 
   if (isReplit) {
     await setupAuth(app);
