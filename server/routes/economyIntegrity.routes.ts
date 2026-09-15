@@ -326,7 +326,12 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
     set prize_card_id=${Number(card.id)},
       tiebreak_meta=jsonb_set(coalesce(tiebreak_meta,'{}'::jsonb),'{settlement,prizeAward}',
         ${JSON.stringify({ key: "free-card-claimed", category: "card", value: 0 })}::jsonb
-          || jsonb_build_object('title',${prizeTitle},'rarity',${rarity},'cardId',${Number(card.id)},'claimed',true),true)
+          || jsonb_build_object(
+            'title', ${prizeTitle}::text,
+            'rarity', ${rarity}::text,
+            'cardId', ${Number(card.id)}::integer,
+            'claimed', true
+          ), true)
     where id=${entryId} and user_id=${userId} and prize_card_id is null
   `);
   await createNotificationOnce(tx, {
