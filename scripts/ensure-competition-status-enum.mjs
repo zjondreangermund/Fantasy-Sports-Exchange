@@ -61,6 +61,10 @@ async function main() {
   } finally {
     await client.end();
   }
+
+  // Runtime source files are copied back over build-time patches by Railway/Nixpacks.
+  // Re-apply the current-gameweek policy immediately before the paid/free syncs run.
+  await import("./apply-current-tournament-gameweek-policy.mjs");
 }
 
 main().catch((error) => {

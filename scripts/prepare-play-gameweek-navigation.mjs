@@ -74,3 +74,6 @@ await import("./enforce-starter-draft-team-label.mjs");
 // Final confirmation guard: one valid tap gives immediate feedback, prevents
 // duplicate mint submissions, and recovers if the response is interrupted.
 await import("./apply-starter-confirm-single-tap.mjs");
+// Run after every existing Play/UI patcher. This avoids depending on the source
+// shape left behind by npm precheck and always makes the newest live GW default.
+await import("./apply-current-tournament-ui-policy.mjs");
