@@ -161,7 +161,16 @@ export async function registerAuthModeRoutes(app: Express, deps: RegisterAuthRou
 
       try {
         const { storage } = await import("../storage.js");
-        const user: any = await storage.getUser(userId);
+        let user: any = await storage.getUser(userId);
+        if (!user && userId === "demo-buyer-1") {
+          user = await storage.createUser({
+            id: userId,
+            email: "audit-preview@local.test",
+            name: "Fantasy Arena Preview",
+          });
+          const wallet = await storage.getWallet(userId);
+          if (!wallet) await storage.createWallet({ userId, balance: 0, lockedBalance: 0 } as any);
+        }
         if (!user) return res.status(404).json({ message: "Configured audit user was not found" });
 
         const sessionUser = {
