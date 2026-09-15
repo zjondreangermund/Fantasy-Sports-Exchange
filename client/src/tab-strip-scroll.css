@@ -1,0 +1,35 @@
+/* TAB_STRIP_SCROLL_V1
+ * Keep non-grid tab bars swipeable on every browser. Imported last so older
+ * page-level overflow and wrapping utilities cannot disable the gesture. */
+[data-app-scroll-root] [role="tablist"]:not(.grid),
+[data-native-mobile-shell] [role="tablist"]:not(.grid),
+.arena-filter-chips {
+  box-sizing: border-box;
+  display: flex !important;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y pinch-zoom !important;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+[data-app-scroll-root] [role="tablist"]:not(.grid) > *,
+[data-native-mobile-shell] [role="tablist"]:not(.grid) > *,
+.arena-filter-chips > * {
+  flex: 0 0 auto !important;
+  max-width: none;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+[data-app-scroll-root] [role="tablist"]:not(.grid)::-webkit-scrollbar,
+[data-native-mobile-shell] [role="tablist"]:not(.grid)::-webkit-scrollbar,
+.arena-filter-chips::-webkit-scrollbar {
+  display: none;
+}
