@@ -43,6 +43,7 @@ function toNumber(value: unknown, fallback = 0) { const n = Number(value); retur
 function asObject(value: unknown): Record<string, any> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {}; }
 
 export class ScoreUpdateService {
+  private liveAlertSchemaPromise: Promise<void> | null = null;
   private storage: any;
   private updateInterval: NodeJS.Timeout | null = null;
   private scheduledUpdateInFlight = false;
@@ -236,8 +237,11 @@ export class ScoreUpdateService {
   private async sendLiveLeaderboardImpactAlerts(competition:any){
     const competitionId=Number(competition?.id||0);
     if(!competitionId||String(competition?.status||"")!=="active")return;
-    await db.execute(sql`create table if not exists app.competition_live_alert_state(competition_id integer not null references app.competitions(id),entry_id integer not null references app.competition_entries(id),user_id varchar(255) not null references app.users(id),rank integer not null,total_score numeric not null default 0,metrics jsonb not null default '{}'::jsonb,sequence integer not null default 0,updated_at timestamptz not null default now(),primary key(competition_id,entry_id))`);
-    const standings=rowsOf(await db.execute(sql`select ce.id as "entryId",ce.user_id as "userId",coalesce(ce.total_score,0)::float as "totalScore",coalesce(ce.tiebreak_meta->'scoring','{}'::jsonb) as scoring,row_number() over(order by coalesce(ce.total_score,0) desc,ce.joined_at asc,ce.id asc)::int as rank from app.competition_entries ce where ce.competition_id=${competitionId} order by rank asc`));
+    if(!this.liveAlertSchemaPromise){
+      this.liveAlertSchemaPromise=db.execute(sql`create table if not exists app.competition_live_alert_state(competition_id integer not null references app.competitions(id),entry_id integer not null references app.competition_entries(id),user_id varchar(255) not null references app.users(id),rank integer not null,total_score numeric not null default 0,metrics jsonb not null default '{}'::jsonb,sequence integer not null default 0,updated_at timestamptz not null default now(),primary key(competition_id,entry_id))`).then(()=>undefined).catch((error)=>{this.liveAlertSchemaPromise=null;throw error;});
+    }
+    await this.liveAlertSchemaPromise;
+    const standings=rowsOf(await db.execute(sql`select ce.id as "entryId",ce.user_id as "userId",coalesce(ce.total_score,0)::float as "totalScore",coalesce(ce.tiebreak_meta->'scoring','{}'::jsonb) as scoring,row_number() over(order by coalesce(ce.total_score,0) desc,ce.joined_at asc,ce.id asc)::int as rank from app.competition_entries ce where ce.competition_id=${competitionId} order by rank asc limit 5`));
     for(const row of standings){
       const entryId=Number(row.entryId),rank=Number(row.rank),score=Number(row.totalScore||0),scoring=asObject(row.scoring);
       const metrics={goals:toNumber(scoring.goalsScored),assists:toNumber(scoring.assists),saves:toNumber(scoring.goalkeeperSaves)};
@@ -250,6 +254,12 @@ export class ScoreUpdateService {
       await db.execute(sql`insert into app.competition_live_alert_state(competition_id,entry_id,user_id,rank,total_score,metrics,sequence,updated_at) values(${competitionId},${entryId},${String(row.userId)},${rank},${score},${JSON.stringify(metrics)}::jsonb,${sequence},now()) on conflict(competition_id,entry_id) do update set rank=excluded.rank,total_score=excluded.total_score,metrics=excluded.metrics,sequence=excluded.sequence,updated_at=now()`);
       if(title)await createNotificationOnce(db,{userId:String(row.userId),type:rank<=3?"runner_up":"system",title,message,dedupeKey:`competition:${competitionId}:entry:${entryId}:live-impact:${sequence}`});
     }
+  }
+
+  private async sendPostScoreAlerts(competition:any,bootstrap:any,fixtures:any[]){
+    const competitionId=Number(competition?.id||0);
+    try{await this.sendLiveLeaderboardImpactAlerts(competition);}catch(error){console.error(`Live leaderboard alerts failed for competition ${competitionId}; scoring and settlement will continue:`,error);}
+    try{await this.sendDeciderAlerts(competition,bootstrap,fixtures);}catch(error){console.error(`Decider alerts failed for competition ${competitionId}; scoring and settlement will continue:`,error);}
   }
 
   private entryDeadline(competition: any, event: any, fixtures: any[]) {
@@ -551,7 +561,7 @@ export class ScoreUpdateService {
         const persistCards = item.final || gameWeek === currentGameweek;
         const result = await this.scoreCompetitionEntries(item.competition, bootstrap, await liveFor(gameWeek), item.final, persistCards);
         updatedEntries += result.updatedCount;
-        if(!item.final){await this.sendLiveLeaderboardImpactAlerts(item.competition);await this.sendDeciderAlerts(item.competition,bootstrap,fixtures);}
+        if(!item.final)await this.sendPostScoreAlerts(item.competition,bootstrap,fixtures);
         if (item.final && result.complete) await this.setCompetitionStatus(Number(item.competition.id), "closed");
       }
       console.log(`✅ Updated ${updatedEntries} tournament entries; Tuesday-finalized snapshots remain immutable.`);
@@ -587,7 +597,7 @@ export class ScoreUpdateService {
     const final = this.isSettlementFinal(comp);
     const currentGameweek = this.currentOrNextGameweek(bootstrap);
     const result = await this.scoreCompetitionEntries(comp, bootstrap, await fplApi.getLiveGameweek(gameWeek), final, final || gameWeek === currentGameweek);
-    if(!final){await this.sendLiveLeaderboardImpactAlerts(comp);await this.sendDeciderAlerts(comp,bootstrap,fixtures);}
+    if(!final)await this.sendPostScoreAlerts(comp,bootstrap,fixtures);
     if (final && result.complete) await this.setCompetitionStatus(Number(comp.id), "closed");
     return result;
   }
