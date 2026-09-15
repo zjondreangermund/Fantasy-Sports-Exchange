@@ -88,6 +88,40 @@ function nativeReturnUrl(params: Record<string, string>) {
   return `fantasyarena://auth/callback${query ? `?${query}` : ""}`;
 }
 
+async function endAuthenticatedSession(req: any): Promise<void> {
+  // Passport 0.6 regenerates the session during logout. Destroying the same
+  // session concurrently can race that regeneration and surface an unhandled
+  // session-store error. Always complete Passport logout first, then destroy
+  // only this request's session.
+  if (typeof req.logout === "function") {
+    await new Promise<void>((resolve) => {
+      try {
+        req.logout((error: any) => {
+          if (error) console.warn("Passport logout failed; continuing local session cleanup:", error?.message || error);
+          resolve();
+        });
+      } catch (error: any) {
+        console.warn("Passport logout threw; continuing local session cleanup:", error?.message || error);
+        resolve();
+      }
+    });
+  }
+
+  if (typeof req.session?.destroy === "function") {
+    await new Promise<void>((resolve) => {
+      try {
+        req.session.destroy((error: any) => {
+          if (error) console.warn("Session destroy failed during logout:", error?.message || error);
+          resolve();
+        });
+      } catch (error: any) {
+        console.warn("Session destroy threw during logout:", error?.message || error);
+        resolve();
+      }
+    });
+  }
+}
+
 export async function registerAuthModeRoutes(app: Express, deps: RegisterAuthRoutesDeps) {
   const {
     isReplit,
@@ -199,16 +233,14 @@ export async function registerAuthModeRoutes(app: Express, deps: RegisterAuthRou
     return res.json(req.user);
   });
 
-  app.get("/api/logout", (req: any, res) => {
-    req.logout?.(() => {});
-    req.session?.destroy(() => {});
+  app.get("/api/logout", async (req: any, res) => {
+    await endAuthenticatedSession(req);
     res.clearCookie("fantasyarena.sid");
     return res.redirect("/");
   });
 
-  app.post("/api/auth/logout", (req: any, res) => {
-    req.logout?.(() => {});
-    req.session?.destroy(() => {});
+  app.post("/api/auth/logout", async (req: any, res) => {
+    await endAuthenticatedSession(req);
     res.clearCookie("fantasyarena.sid");
     return res.json({ success: true });
   });
