@@ -47,10 +47,6 @@ if (!landing.includes('data-auth-copy="login-signup"')) {
   console.log("[play-gameweek-navigation] landing auth CTA changed to Login / Sign Up without removing funnel tracking");
 }
 
-// Tournament rollover must run before older tournament UI patchers so its source
-// anchors still refer to the clean checkout. Later patchers detect the new markers
-// and leave the current-gameweek selector intact.
-await import("./apply-current-tournament-gameweek-policy.mjs");
 await import("./apply-play-gameweek-navigation.mjs");
 await import("./apply-native-play-leaderboard-25.mjs");
 await import("./apply-common-open-entry-ui.mjs");
@@ -78,3 +74,6 @@ await import("./enforce-starter-draft-team-label.mjs");
 // Final confirmation guard: one valid tap gives immediate feedback, prevents
 // duplicate mint submissions, and recovers if the response is interrupted.
 await import("./apply-starter-confirm-single-tap.mjs");
+// Run after every existing Play/UI patcher. This avoids depending on the source
+// shape left behind by npm precheck and always makes the newest live GW default.
+await import("./apply-current-tournament-ui-policy.mjs");
