@@ -17,28 +17,8 @@ function replaceRequired(source, from, to, label) {
   return source.replace(from, to);
 }
 
-// Tournament UI: always open on the newest gameweek that is actually open/active.
-// This intentionally prefers the tournament lifecycle over a stale previous FPL
-// "is_current" flag during the Tuesday rollover window.
-{
-  const file = "client/src/pages/competitions-vault.tsx";
-  let source = read(file);
-
-  if (!source.includes(POLICY_MARKER)) {
-    source = source.replace(
-      'type VaultPayload = { summary?: Record<string, VaultSummary> };',
-      'type VaultPayload = { currentGameWeek?: number; summary?: Record<string, VaultSummary> };',
-    );
-
-    const oldBlock = `  const currentGw = useMemo(() => {\n    const live = official.filter((c) => ["open", "active"].includes(String(c.status))).map((c) => Number(c.gameWeek || c.game_week || 0)).filter(Boolean).sort((a, b) => a - b);\n    if (live.length) return live[0];\n    const upcoming = official.filter((c) => c.status === "upcoming").map((c) => Number(c.gameWeek || c.game_week || 0)).filter(Boolean).sort((a, b) => a - b);\n    return upcoming[0] || 1;\n  }, [official]);`;
-
-    const newBlock = `  const currentGw = useMemo(() => {\n    // ${POLICY_MARKER}: when a new tournament week opens, it becomes the default immediately.\n    // Using the highest open/active GW prevents a lingering previous-week status from pinning Play backwards.\n    const live = official\n      .filter((c) => ["open", "active"].includes(String(c.status || "").toLowerCase()))\n      .map((c) => Number(c.gameWeek || c.game_week || 0))\n      .filter(Boolean)\n      .sort((a, b) => b - a);\n    if (live.length) return live[0];\n\n    const vaultGameWeek = Number(prizeVault?.currentGameWeek || 0);\n    if (vaultGameWeek > 0) return vaultGameWeek;\n\n    const vaultWeeks = (Object.values(prizeVault?.summary || {}) as VaultSummary[])\n      .map((summary) => Number(summary?.currentGameWeek || 0))\n      .filter((gw) => Number.isInteger(gw) && gw > 0);\n    if (vaultWeeks.length) return Math.max(...vaultWeeks);\n\n    const upcoming = official\n      .filter((c) => String(c.status || "").toLowerCase() === "upcoming")\n      .map((c) => Number(c.gameWeek || c.game_week || 0))\n      .filter(Boolean)\n      .sort((a, b) => a - b);\n    return upcoming[0] || 1;\n  }, [official, prizeVault?.currentGameWeek, prizeVault?.summary]);`;
-
-    source = replaceRequired(source, oldBlock, newBlock, "competitions current gameweek selector");
-    write(file, source);
-    console.log("[current-gameweek-policy] Tournament UI now defaults to the newest open/active gameweek.");
-  }
-}
+// Runtime policy only. Client/UI rollover is applied separately after the repo's
+// existing build-time tournament patchers have finished rewriting the Play page.
 
 // Paid official tournaments: retain existing history, but never recreate a deleted
 // past gameweek. The current tournament week rolls forward on its Tuesday opening
@@ -65,7 +45,7 @@ function replaceRequired(source, from, to, label) {
     source = replaceRequired(
       source,
       `    let fallbackWindows = 0;\n\n    for (const window of windows) {`,
-      `    let fallbackWindows = 0;\n\n    // Retire any stale previous-week official tournaments without deleting history.\n    // If an admin has already deleted a past tournament, this sync deliberately leaves it deleted.\n    const retiredPast = await client.query(\n      \`update app.competitions\n          set status = 'closed'::text::\${competitionStatusType}\n        where created_by_user_id is null\n          and season = $1\n          and game_week < $2\n          and status::text not in ('completed', 'cancelled', 'closed')\n        returning id\`,\n      [SEASON, currentGw],\n    );\n\n    for (const window of windows) {\n      if (window.gw < currentGw) continue;`,
+      `    let fallbackWindows = 0;\n\n    // Retire any stale previous-week official tournaments without deleting history.\n    // If an admin already deleted a past tournament, this sync deliberately leaves it deleted.\n    const retiredPast = await client.query(\n      \`update app.competitions\n          set status = 'closed'::text::\${competitionStatusType}\n        where created_by_user_id is null\n          and season = $1\n          and game_week < $2\n          and status::text not in ('completed', 'cancelled', 'closed')\n        returning id\`,\n      [SEASON, currentGw],\n    );\n\n    for (const window of windows) {\n      if (window.gw < currentGw) continue;`,
       "paid sync past-week retirement",
     );
 
@@ -76,6 +56,8 @@ function replaceRequired(source, from, to, label) {
     source = replaceRequired(source, oldCoverage, newCoverage, "paid sync current/future coverage");
     write(file, source);
     console.log("[current-gameweek-policy] Paid tournament sync now preserves history without recreating deleted past weeks.");
+  } else {
+    console.log("[current-gameweek-policy] Paid tournament rollover already applied.");
   }
 }
 
@@ -105,5 +87,7 @@ function replaceRequired(source, from, to, label) {
     source = replaceRequired(source, oldCoverage, newCoverage, "free sync current/future coverage");
     write(file, source);
     console.log("[current-gameweek-policy] FREE Card Cup sync now starts at the current entry gameweek.");
+  } else {
+    console.log("[current-gameweek-policy] FREE Card Cup rollover already applied.");
   }
 }
