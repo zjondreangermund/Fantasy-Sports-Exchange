@@ -7,8 +7,11 @@ const expect = (condition, message) => { if (!condition) failures.push(message);
 
 expect(competitions.includes("PLAY_CURRENT_GAMEWEEK_TABS_V1"), "Play current-gameweek patch marker is missing");
 expect(competitions.includes('const [tournamentView, setTournamentView] = useState<"live" | "completed">("live")'), "Play must default to Live & Upcoming rather than completed tournaments");
-expect(competitions.includes("futureSettlementWeeks"), "Current gameweek must advance from tournament settlement cutoffs");
-expect(competitions.includes("row.settlementMs > now"), "Past-settlement gameweeks must not remain current");
+expect(competitions.includes("CURRENT_TOURNAMENT_UI_GAMEWEEK_V1"), "Current tournament gameweek policy marker is missing");
+expect(competitions.includes('.filter((c) => ["open", "active"].includes(String(c.status || "").toLowerCase()))'), "Current tournament gameweek must prefer open/active tournaments");
+expect(competitions.includes('.sort((a, b) => b - a);'), "Current tournament gameweek must choose the newest open/active gameweek");
+expect(competitions.includes("if (live.length) return live[0];"), "Newest live tournament gameweek must take priority when entering Play");
+expect(competitions.includes("const vaultGameWeek = Number(prizeVault?.currentGameWeek || 0);"), "Prize Vault/FPL current gameweek must remain a fallback");
 expect(competitions.includes('tournamentView === "completed" ? completedOfficial : official'), "Completed tournaments must live in their own tab");
 expect(competitions.includes("Latest completed"), "Completed tab needs a latest-completed gameweek selector");
 expect(competitions.includes("Live & Upcoming"), "Play needs a Live & Upcoming tab");
@@ -24,4 +27,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Play navigation verified: current GW follows settlement, completed tournaments are tabbed, and login copy is explicit.");
+console.log("Play navigation verified: newest open/active GW is the entry default, completed tournaments are tabbed, and login copy is explicit.");
