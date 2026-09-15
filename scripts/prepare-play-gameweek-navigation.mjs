@@ -74,3 +74,6 @@ await import("./enforce-starter-draft-team-label.mjs");
 // Final confirmation guard: one valid tap gives immediate feedback, prevents
 // duplicate mint submissions, and recovers if the response is interrupted.
 await import("./apply-starter-confirm-single-tap.mjs");
+// Tournament rollover guard: the newest open/active gameweek is the default,
+// stale previous weeks are retired, and deleted past weeks are never recreated.
+await import("./apply-current-tournament-gameweek-policy.mjs");
