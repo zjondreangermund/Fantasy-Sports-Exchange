@@ -15,7 +15,7 @@ function replaceOnce(source, from, to, label) {
   return source.replace(from, to);
 }
 
-// Start this rollout with a clean local room and keep only the current 24-hour room
+// Start this reset rollout with a clean local room and keep only the current 24-hour room
 // in browser storage. The server-supplied reset timestamp below prevents stale
 // messages from being restored after future automatic resets.
 patchFile("client/src/lib/community-chat.ts", (original) => {
