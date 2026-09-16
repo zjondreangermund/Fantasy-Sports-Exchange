@@ -8,6 +8,7 @@ import "./prepare-card-acquisition-notification-anchor.mjs";
 import "./apply-card-acquisition-notifications.mjs";
 import "./verify-card-acquisition-notifications.mjs";
 import "./apply-weekly-common-mint-popup.mjs";
+import "./verify-weekly-common-mint-popup.mjs";
 
 function patchFile(file, transform) {
   const source = fs.readFileSync(file, "utf8");
