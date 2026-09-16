@@ -65,6 +65,11 @@ async function main() {
   // Runtime source files are copied back over build-time patches by Railway/Nixpacks.
   // Re-apply the current-gameweek policy immediately before the paid/free syncs run.
   await import("./apply-current-tournament-gameweek-policy.mjs");
+
+  // Install a database-level guard before any tournament sync or entry route runs.
+  // This makes the rarity requirement universal: paid, FREE, public, private,
+  // user-created and administrative/test entry paths cannot bypass the tournament tier.
+  await import("./enforce-tournament-rarity-requirements.mjs");
 }
 
 main().catch((error) => {
