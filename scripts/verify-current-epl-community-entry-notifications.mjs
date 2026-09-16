@@ -19,6 +19,7 @@ function need(source, text, label) {
 
 const communityServer = read("server/routes/communityChatV2.routes.ts");
 const communityClient = read("client/src/lib/community-chat.ts");
+const communityWidget = read("client/src/components/FloatingSupportWidget.tsx");
 const economy = read("server/routes/economyIntegrity.routes.ts");
 const notifications = read("server/services/notifications.ts");
 const nativePush = read("server/services/nativePush.ts");
@@ -34,10 +35,15 @@ const collectionProfileCard = read("client/src/components/cards/CollectionProfil
 const cardProfileModal = read("client/src/components/cards/CardProfileModal.tsx");
 
 need(communityClient, "MAX_SAVED_AGE_MS = 24 * 60 * 60 * 1000", "24-hour browser chat cache");
-need(communityServer, "COMMUNITY_24H_RETENTION_V2", "24-hour server retention marker");
-need(communityServer, "DELETE FROM app.community_chat_messages", "expired chat deletion");
-need(communityServer, "m.created_at >= now() - interval '24 hours'", "24-hour chat query window");
-need(communityServer, "Community Live scheduled 24-hour cleanup failed", "scheduled retention cleanup");
+need(communityClient, "fantasy_arena_community_messages_v4:", "fresh browser cache namespace for reset rollout");
+need(communityServer, "COMMUNITY_24H_RESET_V3", "24-hour server reset marker");
+need(communityServer, "app.community_chat_maintenance", "persistent chat reset state");
+need(communityServer, "DELETE FROM app.community_chat_messages", "full chat reset deletion");
+need(communityServer, "FOR UPDATE", "serialized reset state guard");
+need(communityServer, "historyResetAt: historyResetAt.toISOString()", "reset timestamp API response");
+need(communityServer, "Community Live scheduled 24-hour reset failed", "scheduled 24-hour reset");
+need(communityWidget, "COMMUNITY_CLIENT_RESET_V3", "client reset timestamp handling");
+need(communityWidget, "createdAt >= historyResetAt", "stale cached message rejection");
 need(communityServer, "community-mention:", "mention notification dedupe");
 need(communityServer, "await createNotificationOnce(db", "mention notifications remain push-enabled");
 
@@ -101,4 +107,4 @@ need(rewardRepair, "fplId > 0", "reward-repair FPL identity requirement");
 need(freeCupAwards, "coalesce(p.fpl_id, 0) > 0", "Free Cup fallback FPL identity requirement");
 need(freeCupAwards, "not in ('departed','superseded','unlinked','archived')", "Free Cup fallback departed-player exclusion");
 
-console.log("Current EPL reward safeguards, rolling 24-hour Community Live retention, mention pushes, stable player portraits, atomic/self-healing tournament entry confirmations plus delivery-job recovery, every-25-entry momentum alerts, settlement winner broadcasts, and admin-only signup/entry push notifications verified.");
+console.log("Current EPL reward safeguards, hard 24-hour Community Live resets with cache invalidation, mention pushes, stable player portraits, atomic/self-healing tournament entry confirmations plus delivery-job recovery, every-25-entry momentum alerts, settlement winner broadcasts, and admin-only signup/entry push notifications verified.");
