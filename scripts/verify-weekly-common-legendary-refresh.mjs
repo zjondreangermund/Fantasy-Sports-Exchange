@@ -17,11 +17,19 @@ const engine = read("server/services/prizeEngine.ts");
 const catalog = read("client/src/components/prize-vault/prizeArtworkCatalogLegacy.ts");
 
 expect(reward.includes("WEEKLY_COMMON_REWARD_INTERVAL_DAYS = 7"), "Weekly Common reward interval must be 7 days");
-expect(reward.includes("account.signup_day + 1"), "First free Common reward must remain eligible from signup Day 2");
-expect(reward.includes("last_reward_day + ${WEEKLY_COMMON_REWARD_INTERVAL_DAYS}"), "Subsequent Common rewards must wait 7 days after the last reward");
-expect(reward.includes("last_reward_day + ${WEEKLY_COMMON_REWARD_INTERVAL_DAYS}::integer"), "Weekly reward date arithmetic must bind an explicitly typed PostgreSQL integer");
+expect(reward.includes("WEEKLY_COMMON_REWARD_WINDOW_DAYS = 7"), "Weekly Common reward claim window must be 7 days");
+expect(reward.includes("(signup_day + 1)::date AS first_eligible_day"), "First free Common reward must remain eligible from signup Day 2");
+expect(reward.includes("window_start") && reward.includes("window_end"), "Weekly Common rewards must use fixed claim windows");
+expect(reward.includes("WEEKLY_COMMON_REWARD_INTERVAL_DAYS}::integer"), "Weekly reward date arithmetic must bind an explicitly typed PostgreSQL integer");
+expect(reward.includes("WEEKLY_COMMON_REWARD_WINDOW_DAYS}::integer"), "Weekly reward expiry arithmetic must bind an explicitly typed PostgreSQL integer");
+expect(reward.includes("claimed_this_window"), "Weekly rewards must prevent more than one mint inside the same claim window");
 expect(reward.includes("reward.weekly_common.claimed"), "Weekly Common reward audit action is missing");
-expect(reward.includes("Weekly common card collected"), "Weekly Common notification is missing");
+expect(reward.includes("Weekly Common card minted"), "Weekly Common mint notification is missing");
+expect(reward.includes("notifyWeeklyCommonRewardWindows"), "Weekly Common ready-to-mint notification scanner is missing");
+expect(reward.includes("card:weekly-ready:"), "Weekly Common ready-to-mint notification must be deduplicated");
+expect(reward.includes("card:weekly-expiring:"), "Weekly Common expiry warning must be deduplicated");
+expect(reward.includes("Unclaimed weekly cards expire and do not carry over"), "Missed weekly Common cards must expire instead of carrying over");
+expect(!reward.includes("last_reward_day + ${WEEKLY_COMMON_REWARD_INTERVAL_DAYS}"), "Weekly eligibility must not create a backlog from the last claimed reward");
 expect(!reward.includes("interval '1 day'"), "Old next-day reward interval must not remain active");
 expect(panel.includes("Weekly Common reward"), "Dashboard must label the reward as weekly");
 expect(panel.includes("Your first weekly card unlocks on Day 2"), "Dashboard must explain the Day 2 first reward");
@@ -110,4 +118,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Common rewards verified: weekly and referral cards balance tournament positions while player identity remains random; referral rewards are atomic/idempotent; signed-in web users retain Install App access; installed app sessions default to Desktop view and support two-axis panning while zoomed.");
+console.log("Common rewards verified: weekly cards use expiring fixed claim windows with ready/expiry notifications and no backlog; weekly and referral cards balance tournament positions while player identity remains random; referral rewards are atomic/idempotent; signed-in web users retain Install App access; installed app sessions default to Desktop view and support two-axis panning while zoomed.");

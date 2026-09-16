@@ -63,12 +63,12 @@ patchFile(APP, (original) => {
 
 patchFile(REFERRALS, (original) => {
   let source = original;
-  source = replaceRequired(
-    source,
-    'import { db } from "../db.js";\n',
-    'import { db } from "../db.js";\nimport { reconcileReferralHistory } from "../services/referralHistoryReconciliation.js";\n',
-    "referral history reconciliation import",
-  );
+  const reconciliationImport = 'import { reconcileReferralHistory } from "../services/referralHistoryReconciliation.js";';
+  if (!source.includes(reconciliationImport)) {
+    const dbImport = 'import { db } from "../db.js";\n';
+    if (!source.includes(dbImport)) throw new Error("Common reward position-balance anchor not found: referral history reconciliation import");
+    source = source.replace(dbImport, `${dbImport}${reconciliationImport}\n`);
+  }
   source = replaceRequired(
     source,
     'export function registerReferralRoutes(app: Express, deps: { requireAuth: any; storage: any }) {\n  const { requireAuth, storage } = deps;\n',

@@ -29,7 +29,9 @@ need(community, "HAVING count(*) = 1", "ambiguous-handle suppression");
 
 need(daily, "NOTIFICATION_TRUTH_GUARDS_V1:weekly-reward", "weekly reward truth marker");
 need(daily, "await createNotificationOnce(tx", "weekly reward exactly-once notification");
-need(daily, "weekly-common:${rewardDay}:card:${Number(card.id)}", "weekly reward dedupe identity");
+if (!daily.includes("weekly-common:${rewardDay}:card:${Number(card.id)}") && !daily.includes("card:weekly-minted:${rewardDay}:${Number(card.id)}")) {
+  throw new Error("[notification-truth] missing weekly reward dedupe identity");
+}
 reject(daily, "INSERT INTO app.notifications (user_id, type, title, message)", "raw weekly notification insert");
 
 need(pack, "NOTIFICATION_TRUTH_GUARDS_V1:pack-auction", "pack auction truth marker");

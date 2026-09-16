@@ -36,7 +36,8 @@ function includes(source, text, message) {
   assert.ok(source.includes(text), message);
 }
 
-includes(reward, "last_reward_day + ${WEEKLY_COMMON_REWARD_INTERVAL_DAYS}::integer", "Weekly rewards must bind a typed PostgreSQL integer.");
+includes(reward, "WEEKLY_COMMON_REWARD_INTERVAL_DAYS}::integer", "Weekly rewards must bind a typed PostgreSQL interval integer.");
+includes(reward, "WEEKLY_COMMON_REWARD_WINDOW_DAYS}::integer", "Weekly reward expiry windows must bind a typed PostgreSQL integer.");
 includes(forge, "const cardIdArray = `{${normalizeForgeCardIds(cardIds).join(\",\")}}`;", "Forge checks must bind one PostgreSQL integer-array literal.");
 includes(forge, "ANY(${cardIdArray}::int[])", "Forge card lookups must use the safe typed array parameter.");
 assert.ok(!forge.includes("ANY(${cardIds}::int[])") && !forge.includes("ANY(${normalizeForgeCardIds(cardIds)}::int[])") , "Forge must never cast expanded Drizzle arrays to integer[].");
