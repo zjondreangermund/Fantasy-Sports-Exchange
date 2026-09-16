@@ -4,6 +4,7 @@ import "./verify-referral-history-integrity.mjs";
 import "./apply-admin-referral-monitoring.mjs";
 import "./apply-current-epl-referral-postguard.mjs";
 import "./verify-admin-referral-monitoring.mjs";
+import "./prepare-card-acquisition-notification-anchor.mjs";
 import "./apply-card-acquisition-notifications.mjs";
 import "./verify-card-acquisition-notifications.mjs";
 
