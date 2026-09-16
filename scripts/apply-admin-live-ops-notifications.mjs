@@ -111,3 +111,5 @@ patch(NOTIFICATION_ROUTES, (original) => {
 });
 
 console.log("Production signup, tournament-entry and 24h/2h lineup-lock notifications are ready; existing live, result, refund, mention and player-change notifications stay unchanged.");
+
+await import("./apply-signup-welcome-notifications.mjs");
