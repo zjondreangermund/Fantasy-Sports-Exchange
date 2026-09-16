@@ -1,8 +1,5 @@
-import { useEffect, useRef } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, CheckCircle2, Gift, Sparkles } from "lucide-react";
-import { apiRequest, queryClient } from "../../lib/queryClient";
-import { useToast } from "../../hooks/use-toast";
 import { Badge } from "../ui/badge";
 import { PremiumPanel } from "../premium";
 import CardPlayerImage from "../CardPlayerImage";
@@ -24,8 +21,6 @@ type DailyRewardCard = {
 };
 
 type DailyRewardStatus = {
-  claimed?: boolean;
-  alreadyClaimed?: boolean;
   cap: number;
   cadenceDays?: number;
   commonCount: number;
@@ -42,6 +37,7 @@ type DailyRewardStatus = {
   eligibleForWeeklyReward?: boolean;
   lastRewardDay?: string | null;
   nextEligibleAt?: string | null;
+  expiresAt?: string | null;
   card?: DailyRewardCard | null;
 };
 
@@ -63,8 +59,6 @@ function nextRewardLabel(value?: string | null) {
 }
 
 export default function DailyLoginRewardPanel() {
-  const { toast } = useToast();
-  const attemptedDay = useRef<string | null>(null);
   const rewardQuery = useQuery<DailyRewardStatus>({
     queryKey: DAILY_REWARD_KEY,
     staleTime: 0,
@@ -72,42 +66,6 @@ export default function DailyLoginRewardPanel() {
     refetchOnWindowFocus: true,
     refetchInterval: 60_000,
   });
-
-  const claimMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/rewards/daily-login/claim", {});
-      return response.json() as Promise<DailyRewardStatus>;
-    },
-    onSuccess: async (result) => {
-      queryClient.setQueryData(DAILY_REWARD_KEY, result);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
-      ]);
-      if (result.claimed && result.card?.player) {
-        toast({
-          title: "Weekly common card collected",
-          description: `${result.card.player.name} has been added to your collection.`,
-        });
-      }
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Weekly reward unavailable",
-        description: error?.message || "The reward could not be collected.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  useEffect(() => {
-    const status = rewardQuery.data;
-    if (!status?.canClaim || claimMutation.isPending) return;
-    const day = String(status.rewardDay || "today");
-    if (attemptedDay.current === day) return;
-    attemptedDay.current = day;
-    claimMutation.mutate();
-  }, [rewardQuery.data?.canClaim, rewardQuery.data?.rewardDay, claimMutation.isPending]);
 
   if (rewardQuery.isLoading || !rewardQuery.data) return null;
 
@@ -139,17 +97,19 @@ export default function DailyLoginRewardPanel() {
                   ? "Your first weekly card unlocks on Day 2"
                   : player
                     ? `${player.name} joined your club`
-                    : claimMutation.isPending
-                      ? "Opening this week’s common card…"
+                    : status.canClaim
+                      ? "Your weekly Common card is ready to mint"
                       : waitingForNextWeekly
                         ? "This week’s card has been collected"
-                        : "A weekly common card is waiting"}
+                        : "A weekly Common card is waiting"}
             </h2>
             <p className="mt-1 text-sm text-white/50">
               {player ? `${player.position} • ${player.team}. ` : ""}
               {waitingForFirstWeekly
                 ? `Your Starter 5 covers signup day. Your first free Common card unlocks on Day 2, then one card becomes available every ${cadenceDays} days.`
-                : `Starter cards and weekly rewards count toward a maximum of ${cap} common cards.`}
+                : status.canClaim
+                  ? "The mint popup opens automatically when you enter Fantasy Arena. Press Mint Random Common Card to collect it."
+                  : `Starter cards and weekly rewards count toward a maximum of ${cap} Common cards.`}
             </p>
           </div>
         </div>
@@ -169,9 +129,11 @@ export default function DailyLoginRewardPanel() {
                 ? "Reward journey completed"
                 : waitingForFirstWeekly
                   ? `First weekly card: ${nextRewardLabel(status.nextEligibleAt)}`
-                  : waitingForNextWeekly
-                    ? `Next weekly card: ${nextRewardLabel(status.nextEligibleAt)}`
-                    : "Collecting this week’s card"}
+                  : status.canClaim
+                    ? `Mint before: ${nextRewardLabel(status.expiresAt)}`
+                    : waitingForNextWeekly
+                      ? `Next weekly card: ${nextRewardLabel(status.nextEligibleAt)}`
+                      : "Weekly reward window closed"}
             </span>
           </div>
         </div>
