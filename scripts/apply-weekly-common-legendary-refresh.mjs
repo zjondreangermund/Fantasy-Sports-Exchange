@@ -4,6 +4,8 @@ import "./verify-referral-history-integrity.mjs";
 import "./apply-admin-referral-monitoring.mjs";
 import "./apply-current-epl-referral-postguard.mjs";
 import "./verify-admin-referral-monitoring.mjs";
+import "./apply-card-acquisition-notifications.mjs";
+import "./verify-card-acquisition-notifications.mjs";
 
 function patchFile(file, transform) {
   const source = fs.readFileSync(file, "utf8");
