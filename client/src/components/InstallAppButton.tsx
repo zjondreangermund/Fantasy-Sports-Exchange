@@ -101,10 +101,8 @@ export default function InstallAppButton() {
     if (installing) return;
 
     if (isAndroidBrowser) {
-      setInstalling(true);
       setPromptOpen(false);
       window.location.assign(freshAndroidApkUrl());
-      window.setTimeout(() => setInstalling(false), 2_000);
       return;
     }
 
