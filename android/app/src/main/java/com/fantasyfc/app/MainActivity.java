@@ -59,9 +59,10 @@ public class MainActivity extends BridgeActivity {
         if (!userAgent.contains("FantasyArenaNative/")) {
             settings.setUserAgentString((userAgent + " " + NATIVE_APP_UA).trim());
         }
-        // Do not force a dedicated hardware layer. Android WebView already uses
-        // hardware acceleration when appropriate, while forcing a layer can make
-        // renderer/GPU memory pressure worse on some Samsung and low-memory phones.
+
+        // Keep the explicit accelerated layer for sharp scaled text/cards while the
+        // renderer-loss listener above handles WebView process termination safely.
+        webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null);
 
         handleAuthIntent(getIntent());
     }
