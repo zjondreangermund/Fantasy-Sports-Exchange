@@ -91,15 +91,17 @@ export default function NativeAppUpdatePrompt() {
   const [updateState, setUpdateState] = React.useState<UpdateState>({ state: "idle", message: "" });
 
   React.useEffect(() => {
-    // 1.1.9/1.1.10 do not contain the native updater bridge. Do not expose the
-    // old browser/GitHub download path while the migration build is being tested.
+    // Keep the cache-check shape compatible with the scroll/update patcher. The
+    // updater bridge is still mandatory before either cached or fresh releases
+    // can be shown, so 1.1.9/1.1.10 never fall back to a browser/GitHub flow.
     if (!currentVersion) return;
-    if (!updaterAvailable) return;
     const cached = readCache(currentVersion);
     if (cached) {
+      if (!updaterAvailable) return;
       setRelease(cached.release);
       return;
     }
+    if (!updaterAvailable) return;
 
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
