@@ -1,14 +1,7 @@
 import fs from "node:fs";
 
-// Compact xs cards must be patched before Vite builds the client bundle. Running
-// this here keeps Android/PWA/native collection cards off the 3D glow compositor
-// path instead of applying the stabilization only after the client was built.
 await import("./apply-starter-draft-mobile-rendering.mjs");
-// Keep the working verified portrait selected when equivalent image candidate
-// arrays are recreated by React Query/profile enrichment during collection renders.
 await import("./apply-stable-collection-portrait-state.mjs");
-// Signup choices must show the player's current Premier League club and canonical
-// GK/DEF/MID/FWD position clearly below the card without bringing back stat overlap.
 await import("./apply-starter-draft-player-details.mjs");
 
 const landingPath = "client/src/pages/landing.tsx";
@@ -16,24 +9,11 @@ let landing = fs.readFileSync(landingPath, "utf8");
 
 if (!landing.includes('data-auth-copy="login-signup"')) {
   const variants = [
-    [
-      '<a href={loginHref} onClick={trackStartFree}><Button data-testid="button-login">Start Free</Button></a>',
-      '<a href={loginHref} onClick={trackStartFree}><Button data-testid="button-login" data-auth-copy="login-signup">Login / Sign Up</Button></a>',
-    ],
-    [
-      '<a href={loginHref} onClick={trackStartFree}><Button data-testid="button-login">Enter Free</Button></a>',
-      '<a href={loginHref} onClick={trackStartFree}><Button data-testid="button-login" data-auth-copy="login-signup">Login / Sign Up</Button></a>',
-    ],
-    [
-      '<a href={loginHref}><Button data-testid="button-login">Start Free</Button></a>',
-      '<a href={loginHref}><Button data-testid="button-login" data-auth-copy="login-signup">Login / Sign Up</Button></a>',
-    ],
-    [
-      '<a href={loginHref}><Button data-testid="button-login">Enter Free</Button></a>',
-      '<a href={loginHref}><Button data-testid="button-login" data-auth-copy="login-signup">Login / Sign Up</Button></a>',
-    ],
+    ['<a href={loginHref} onClick={trackStartFree}><Button data-testid="button-login">Start Free</Button></a>', '<a href={loginHref} onClick={trackStartFree}><Button data-testid="button-login" data-auth-copy="login-signup">Login / Sign Up</Button></a>'],
+    ['<a href={loginHref} onClick={trackStartFree}><Button data-testid="button-login">Enter Free</Button></a>', '<a href={loginHref} onClick={trackStartFree}><Button data-testid="button-login" data-auth-copy="login-signup">Login / Sign Up</Button></a>'],
+    ['<a href={loginHref}><Button data-testid="button-login">Start Free</Button></a>', '<a href={loginHref}><Button data-testid="button-login" data-auth-copy="login-signup">Login / Sign Up</Button></a>'],
+    ['<a href={loginHref}><Button data-testid="button-login">Enter Free</Button></a>', '<a href={loginHref}><Button data-testid="button-login" data-auth-copy="login-signup">Login / Sign Up</Button></a>'],
   ];
-
   let changed = false;
   for (const [from, to] of variants) {
     if (!landing.includes(from)) continue;
@@ -41,7 +21,6 @@ if (!landing.includes('data-auth-copy="login-signup"')) {
     changed = true;
     break;
   }
-
   if (!changed) throw new Error("[play-gameweek-navigation] landing auth CTA could not be located");
   fs.writeFileSync(landingPath, landing);
   console.log("[play-gameweek-navigation] landing auth CTA changed to Login / Sign Up without removing funnel tracking");
@@ -54,8 +33,6 @@ await import("./apply-native-prize-vault-button.mjs");
 await import("./apply-lineup-rarity-glows-v2.mjs");
 await import("./repair-common-reward-desktop-only-anchor.mjs");
 await import("./apply-squad-hub-premier-desktop-web.mjs");
-// Final website presentation guard: undo the old forced 1280px desktop canvas
-// and let ordinary browsers use their real device width automatically.
 await import("./apply-responsive-web-default.mjs");
 await import("./repair-squad-hub-jsx.mjs");
 await import("./apply-match-centre-popup.mjs");
@@ -65,15 +42,14 @@ await import("./apply-marketplace-club-identities.mjs");
 await import("./apply-featured-cup-entry-details.mjs");
 await import("./apply-native-logout-signup-polish.mjs");
 await import("./apply-native-admin-safe-logout.mjs");
-// Tournament team scoring must cycle through verified provider/FPL portrait
-// candidates instead of leaving a broken image when one provider misses.
 await import("./apply-native-tournament-player-image-fallback.mjs");
-// Final signup guard: the card artwork keeps the player name; the line below
-// is reserved for the current club and canonical position only.
 await import("./enforce-starter-draft-team-label.mjs");
-// Final confirmation guard: one valid tap gives immediate feedback, prevents
-// duplicate mint submissions, and recovers if the response is interrupted.
 await import("./apply-starter-confirm-single-tap.mjs");
-// Run after every existing Play/UI patcher. This avoids depending on the source
-// shape left behind by npm precheck and always makes the newest live GW default.
 await import("./apply-current-tournament-ui-policy.mjs");
+
+// Apply the #355 scroll/version-registration patch first, then immediately layer
+// the 1.1.11 updater safety gate over it. Both patchers are required to be
+// idempotent because the production build invokes this preparation repeatedly.
+await import("./apply-native-full-scroll-app-updates.mjs");
+await import("./apply-native-in-app-updater.mjs");
+await import("./verify-native-full-scroll-app-updates.mjs");

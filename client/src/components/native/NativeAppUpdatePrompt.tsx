@@ -1,18 +1,16 @@
 import * as React from "react";
-import { Download, RefreshCw, ShieldCheck, Sparkles, X } from "lucide-react";
+import { Loader2, RefreshCw, ShieldCheck, Sparkles, X } from "lucide-react";
 import PushNotificationControl from "../PushNotificationControl";
 import { useNativeFullRouteBridge } from "./NativeFullRouteBridge";
 
-const RELEASES_API = "https://api.github.com/repos/zjondreangermund/Fantasy-Sports-Exchange/releases?per_page=20";
-const CACHE_KEY = "fantasy-arena-native-update-v1";
-const CACHE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const RELEASES_API = "/api/android/releases/latest";
+const CACHE_KEY = "fantasy-arena-native-update-v2";
+const CACHE_MAX_AGE_MS = 30 * 60 * 1000;
 
 type AndroidRelease = {
   version: string;
-  title: string;
+  name: string;
   notes: string;
-  downloadUrl: string;
-  required: boolean;
 };
 
 type CachedUpdate = {
@@ -21,10 +19,14 @@ type CachedUpdate = {
   release: AndroidRelease | null;
 };
 
+type UpdateState = {
+  state: "idle" | "downloading" | "permission_required" | "ready" | "error";
+  message: string;
+};
+
 function parseVersion(value: unknown): number[] | null {
   const match = String(value || "").match(/^(\d+)\.(\d+)\.(\d+)$/);
-  if (!match) return null;
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
 }
 
 function compareVersions(left: string, right: string) {
@@ -42,36 +44,10 @@ function installedVersion() {
   return String(navigator.userAgent || "").match(/FantasyArenaNative\/(\d+\.\d+\.\d+)/i)?.[1] || null;
 }
 
-function minimumSupportedVersion(body: string) {
-  const marker = String(body || "").match(/(?:fantasy-arena:min-version=|minimum-supported:\s*)(\d+\.\d+\.\d+)/i);
-  return marker?.[1] || null;
-}
-
-function releaseFromApi(releases: any[], currentVersion: string): AndroidRelease | null {
-  const candidates = (Array.isArray(releases) ? releases : [])
-    .filter((release) => !release?.draft && !release?.prerelease)
-    .map((release) => {
-      const version = String(release?.tag_name || "").match(/^android-(\d+\.\d+\.\d+)$/i)?.[1];
-      if (!version || !parseVersion(version)) return null;
-      const asset = Array.isArray(release?.assets)
-        ? release.assets.find((item: any) => String(item?.name || "").toLowerCase() === "fantasy-arena-android.apk")
-        : null;
-      if (!asset?.browser_download_url) return null;
-      const minVersion = minimumSupportedVersion(String(release?.body || ""));
-      return {
-        version,
-        title: String(release?.name || `Fantasy Arena Android ${version}`),
-        notes: String(release?.body || "").replace(/<!--.*?-->/gs, "").trim(),
-        downloadUrl: String(asset.browser_download_url),
-        required: Boolean(minVersion && compareVersions(currentVersion, minVersion) < 0),
-      } satisfies AndroidRelease;
-    })
-    .filter(Boolean) as AndroidRelease[];
-
-  candidates.sort((a, b) => compareVersions(b.version, a.version));
-  const newest = candidates[0];
-  if (!newest || compareVersions(newest.version, currentVersion) <= 0) return null;
-  return newest;
+function nativeUpdater() {
+  if (typeof window === "undefined") return null;
+  const updater = (window as any).FantasyArenaUpdater;
+  return updater && typeof updater.installLatestUpdate === "function" ? updater : null;
 }
 
 function readCache(currentVersion: string): CachedUpdate | null {
@@ -91,61 +67,94 @@ function writeCache(value: CachedUpdate) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(value));
   } catch {
-    // Update checks are best-effort and must never block the app.
+    // Update checks are best-effort and must never block gameplay.
+  }
+}
+
+function clearForcedUpdateFlag() {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("appUpdate")) return;
+    url.searchParams.delete("appUpdate");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    // Query cleanup must never affect app startup.
   }
 }
 
 export default function NativeAppUpdatePrompt() {
   useNativeFullRouteBridge();
   const currentVersion = React.useMemo(installedVersion, []);
+  const updaterAvailable = React.useMemo(() => Boolean(nativeUpdater()), []);
   const [release, setRelease] = React.useState<AndroidRelease | null>(null);
   const [dismissed, setDismissed] = React.useState(false);
+  const [updateState, setUpdateState] = React.useState<UpdateState>({ state: "idle", message: "" });
 
   React.useEffect(() => {
+    // Keep the cache-check shape compatible with the scroll/update patcher. The
+    // updater bridge is still mandatory before either cached or fresh releases
+    // can be shown, so 1.1.9/1.1.10 never fall back to a browser/GitHub flow.
     if (!currentVersion) return;
     const cached = readCache(currentVersion);
     if (cached) {
+      if (!updaterAvailable) return;
       setRelease(cached.release);
       return;
     }
+    if (!updaterAvailable) return;
 
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch(RELEASES_API, {
-          headers: { Accept: "application/vnd.github+json" },
-          signal: controller.signal,
-        });
+        const response = await fetch(RELEASES_API, { signal: controller.signal, credentials: "include" });
         if (!response.ok) return;
-        const data = await response.json();
-        const nextRelease = releaseFromApi(data, currentVersion);
+        const body = await response.json();
+        const candidate = parseVersion(body?.version)
+          ? { version: String(body.version), name: String(body?.name || `Fantasy Arena Android ${body.version}`), notes: String(body?.notes || "") }
+          : null;
+        const nextRelease = candidate && compareVersions(candidate.version, currentVersion) > 0 ? candidate : null;
         writeCache({ checkedAt: Date.now(), currentVersion, release: nextRelease });
         setRelease(nextRelease);
       } catch {
-        // A network or GitHub API failure should leave gameplay unaffected.
+        // Network/update service failure leaves gameplay unaffected.
       }
-    }, 1200);
+    }, 1000);
 
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [currentVersion]);
+  }, [currentVersion, updaterAvailable]);
 
-  const showUpdate = Boolean(currentVersion && release && !(dismissed && !release.required));
+  React.useEffect(() => {
+    if (!updaterAvailable) return;
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent<any>).detail || {};
+      const state = String(detail.state || "idle") as UpdateState["state"];
+      const message = String(detail.message || "");
+      if (["downloading", "permission_required", "ready", "error", "idle"].includes(state)) {
+        setUpdateState({ state, message });
+      }
+    };
+    window.addEventListener("fantasy-arena:update-state", listener as EventListener);
+    return () => window.removeEventListener("fantasy-arena:update-state", listener as EventListener);
+  }, [updaterAvailable]);
+
+  React.useEffect(() => {
+    if (!release) clearForcedUpdateFlag();
+  }, [release]);
+
+  const showUpdate = Boolean(currentVersion && updaterAvailable && release && !dismissed);
+  const busy = updateState.state === "downloading" || updateState.state === "ready";
   const notes = release
-    ? release.notes
-      .split(/\r?\n/)
-      .map((line) => line.replace(/^[-*#\s]+/, "").trim())
-      .filter(Boolean)
-      .slice(0, 2)
-      .join(" ")
+    ? release.notes.split(/\r?\n/).map((line) => line.replace(/^[-*#\s]+/, "").trim()).filter(Boolean).slice(0, 2).join(" ")
     : "";
 
   const updateNow = () => {
-    if (!release) return;
-    const opened = window.open(release.downloadUrl, "_blank", "noopener,noreferrer");
-    if (!opened) window.location.assign(release.downloadUrl);
+    const updater = nativeUpdater();
+    if (!updater || busy) return;
+    setUpdateState({ state: "downloading", message: "Preparing the verified Fantasy Arena update…" });
+    updater.installLatestUpdate();
   };
 
   return (
@@ -158,7 +167,7 @@ export default function NativeAppUpdatePrompt() {
         <div className="absolute inset-0 z-[120] flex items-end bg-black/75 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Fantasy Arena app update">
           <section className="relative w-full overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-[#0a0d1c] p-5 shadow-[0_2rem_6rem_rgba(0,0,0,.7)]">
             <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_25%_0%,rgba(34,211,238,.18),transparent_48%),radial-gradient(circle_at_85%_0%,rgba(139,92,246,.2),transparent_50%)]" />
-            {!release.required ? (
+            {!busy ? (
               <button type="button" onClick={() => setDismissed(true)} className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-black/25 text-slate-400" aria-label="Update later">
                 <X className="h-4 w-4" />
               </button>
@@ -167,11 +176,11 @@ export default function NativeAppUpdatePrompt() {
             <div className="relative">
               <div className="mb-4 flex items-center gap-3">
                 <div className="grid h-12 w-12 place-items-center rounded-2xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
-                  {release.required ? <RefreshCw className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
+                  {busy ? <Loader2 className="h-6 w-6 animate-spin" /> : <Sparkles className="h-6 w-6" />}
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200/70">Fantasy Arena Android</p>
-                  <h2 className="mt-0.5 text-xl font-black text-white">{release.required ? "Update required" : "Update available"}</h2>
+                  <h2 className="mt-0.5 text-xl font-black text-white">{busy ? "Preparing update" : "Update available"}</h2>
                 </div>
               </div>
 
@@ -180,24 +189,26 @@ export default function NativeAppUpdatePrompt() {
                   <span className="text-sm font-bold text-white">Version {release.version}</span>
                   <span className="rounded-full bg-cyan-300/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-cyan-200">Installed {currentVersion}</span>
                 </div>
-                <p className="mt-2 text-sm leading-6 text-slate-400">
-                  {notes || "A newer Fantasy Arena Android build is ready with app improvements and fixes."}
-                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-400">{notes || "A newer Fantasy Arena Android build is ready."}</p>
               </div>
 
               <div className="mt-4 flex items-start gap-2 rounded-2xl border border-emerald-300/10 bg-emerald-300/[.04] p-3 text-xs leading-5 text-slate-400">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
-                <span>The download opens the verified Fantasy Arena Android release. Android will ask you to confirm the app update.</span>
+                <span>Fantasy Arena downloads and verifies the update inside the app. Your browser and GitHub will not open. Android only asks you to confirm the final app update.</span>
               </div>
 
-              <button type="button" onClick={updateNow} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-300 to-violet-400 px-4 text-sm font-black text-slate-950 shadow-[0_0_30px_rgba(34,211,238,.16)] active:scale-[.99]">
-                <Download className="h-5 w-5" />
-                Update Fantasy Arena
+              {updateState.message ? (
+                <p className={`mt-3 rounded-xl px-3 py-2 text-xs leading-5 ${updateState.state === "error" ? "bg-rose-400/10 text-rose-200" : updateState.state === "permission_required" ? "bg-amber-300/10 text-amber-100" : "bg-cyan-300/[.06] text-cyan-100"}`}>
+                  {updateState.message}
+                </p>
+              ) : null}
+
+              <button type="button" onClick={updateNow} disabled={busy} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-300 to-violet-400 px-4 text-sm font-black text-slate-950 shadow-[0_0_30px_rgba(34,211,238,.16)] disabled:opacity-60 active:scale-[.99]">
+                {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
+                {busy ? "Preparing Update…" : "Update Fantasy Arena"}
               </button>
-              {!release.required ? (
-                <button type="button" onClick={() => setDismissed(true)} className="mt-2 min-h-11 w-full rounded-2xl text-sm font-bold text-slate-500 active:text-slate-300">
-                  Later
-                </button>
+              {!busy ? (
+                <button type="button" onClick={() => setDismissed(true)} className="mt-2 min-h-11 w-full rounded-2xl text-sm font-bold text-slate-500 active:text-slate-300">Later</button>
               ) : null}
             </div>
           </section>

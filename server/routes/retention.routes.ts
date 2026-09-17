@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { db } from "../db.js";
 import type { IStorage } from "../storage.js";
+import { registerAndroidUpdateRoutes } from "./androidUpdate.routes.js";
 import { registerEplRoutes } from "./epl.routes.js";
 import { registerNotificationRoutes } from "./notifications.routes.js";
 import { registerPrizeVaultRoutes } from "./prizeVault.routes.js";
@@ -33,6 +34,7 @@ export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; 
 
   // Each public API path has one owner. Retention only composes the canonical
   // route modules and owns retention/forge endpoints below.
+  registerAndroidUpdateRoutes(app);
   registerEplRoutes(app, { requireAuth });
   registerNotificationRoutes(app, { requireAuth });
   registerPrizeVaultRoutes(app);

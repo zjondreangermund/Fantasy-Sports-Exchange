@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   android:
-    name: Build Fantasy Arena Android 1.1.10
+    name: Build Fantasy Arena Android 1.1.11
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -63,7 +63,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64" ]; then
-            echo "FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64 is required for Android 1.1.10 native push." >&2
+            echo "FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64 is required for Android 1.1.11 native push." >&2
             exit 1
           fi
           printf '%s' "$FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > android/app/google-services.json
@@ -104,12 +104,12 @@ jobs:
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
-      - name: Verify Android identity, crash recovery, Firebase and native auth configuration
+      - name: Verify Android identity, updater, crash recovery, Firebase and native auth configuration
         run: |
           grep -q 'applicationId "com.fantasyfc.app"' android/app/build.gradle
           grep -q 'appId: "com.fantasyfc.app"' capacitor.config.ts
-          grep -q 'versionCode 12' android/app/build.gradle
-          grep -q 'versionName "1.1.10"' android/app/build.gradle
+          grep -q 'versionCode 13' android/app/build.gradle
+          grep -q 'versionName "1.1.11"' android/app/build.gradle
           grep -q "setUseWideViewPort(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "setLoadWithOverviewMode(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "setTextZoom(100)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
@@ -118,7 +118,13 @@ jobs:
           grep -q "recoverFromRendererLoss" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "webView.destroy()" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "recreate()" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
-          grep -q "FantasyArenaNative/1.1.10" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "FantasyArenaNative/1.1.11" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "addJavascriptInterface" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "installLatestUpdate" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "getPackageArchiveInfo" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "FileProvider.getUriForFile" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "ACTION_MANAGE_UNKNOWN_APP_SOURCES" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q 'android.permission.REQUEST_INSTALL_PACKAGES' android/app/src/main/AndroidManifest.xml
           grep -q "showBrandLaunchOverlay" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "R.mipmap.fantasy_arena_logo" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "ImageView.ScaleType.FIT_CENTER" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
@@ -175,9 +181,7 @@ jobs:
             cp "$DEBUG_APK" "$PUBLIC_APK"
             echo "kind=debug-ci-only" >> "$GITHUB_OUTPUT"
           else
-            echo "Stable Android publishing requires the persistent release-signing secrets:" >&2
-            echo "ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD" >&2
-            echo "Refusing to publish another ephemeral debug-signed APK because Android would reject future updates." >&2
+            echo "Stable Android publishing requires the persistent release-signing secrets." >&2
             exit 1
           fi
 
@@ -192,8 +196,8 @@ jobs:
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" | tee android-artifacts/APK-SIGNING.txt
           "$BUILD_TOOLS/aapt" dump badging "$APK" | tee android-artifacts/APK-BADGING.txt
           grep -q "package: name='com.fantasyfc.app'" android-artifacts/APK-BADGING.txt
-          grep -q "versionCode='12'" android-artifacts/APK-BADGING.txt
-          grep -q "versionName='1.1.10'" android-artifacts/APK-BADGING.txt
+          grep -q "versionCode='13'" android-artifacts/APK-BADGING.txt
+          grep -q "versionName='1.1.11'" android-artifacts/APK-BADGING.txt
 
           SIZE_BYTES="$(stat -c%s "$APK")"
           MAX_BYTES=$((50 * 1024 * 1024))
@@ -209,7 +213,7 @@ jobs:
 
       - name: Prepare build information
         run: |
-          printf 'Fantasy Arena Android 1.1.10\nCommit: %s\nBuilt: %s\nPackage: com.fantasyfc.app\nFirebase native push: enabled\nKind: %s\nSize bytes: %s\nSHA-256: %s\n\nAndroid WebView renderer loss is handled and recovers by rebuilding the native shell. Forced WebView hardware-layer allocation was removed so Android can choose the safest rendering path for each device. Android 12 system splash remains black-only with the full unmasked Fantasy Arena overlay.\n' \
+          printf 'Fantasy Arena Android 1.1.11\nCommit: %s\nBuilt: %s\nPackage: com.fantasyfc.app\nFirebase native push: enabled\nIn-app signed updater: enabled\nKind: %s\nSize bytes: %s\nSHA-256: %s\n\nVersion 1.1.11 adds a native Fantasy Arena updater that downloads only through the Fantasy Arena server, validates the APK/package/version, and opens Androids normal update confirmation without exposing GitHub or a browser. WebView renderer crash recovery remains enabled.\n' \
             "$GITHUB_SHA" \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             "${{ steps.select_apk.outputs.kind }}" \
@@ -220,26 +224,26 @@ jobs:
       - name: Upload verified Android build
         uses: actions/upload-artifact@v4
         with:
-          name: fantasy-arena-android-1.1.10
+          name: fantasy-arena-android-1.1.11
           path: android-artifacts/*
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish direct Android 1.1.10 download
+      - name: Publish direct Android 1.1.11 download
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test "${{ steps.select_apk.outputs.kind }}" = "release-signed"
-          if gh release view android-1.1.10 >/dev/null 2>&1; then
-            echo "Stable android-1.1.10 release already exists; leaving its signed APK unchanged."
+          if gh release view android-1.1.11 >/dev/null 2>&1; then
+            echo "Stable android-1.1.11 release already exists; leaving its signed APK unchanged."
           else
-            gh release create android-1.1.10 \
+            gh release create android-1.1.11 \
               android-artifacts/Fantasy-Arena-Android.apk \
               android-artifacts/SHA256SUMS.txt \
               android-artifacts/APK-SIGNING.txt \
               android-artifacts/BUILD-INFO.txt \
-              --title "Fantasy Arena Android 1.1.10" \
-              --notes "Fantasy Arena Android 1.1.10: Android WebView renderer crash recovery, safer device-managed rendering, Firebase native notifications, unmasked Fantasy Arena launch screen, and stable release signing for reliable in-place updates."
+              --title "Fantasy Arena Android 1.1.11" \
+              --notes "Fantasy Arena Android 1.1.11: native in-app signed updater through Fantasy Arena (no GitHub/browser handoff), APK/package/version validation, Android update confirmation, full-page scrolling improvements, WebView crash recovery, and Firebase native notifications."
           fi

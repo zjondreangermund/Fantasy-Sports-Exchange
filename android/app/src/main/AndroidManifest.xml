@@ -47,6 +47,8 @@
     </application>
 
     <!-- Permissions -->
-
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Required only for signed APK-to-APK upgrades outside Google Play. Android
+         still shows its normal user confirmation and source-permission screen. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 </manifest>
