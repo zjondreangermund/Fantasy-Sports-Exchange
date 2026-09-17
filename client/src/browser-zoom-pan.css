@@ -58,6 +58,54 @@ html[data-site-view="desktop"] [data-scroll-region="true"] {
   touch-action: auto !important;
 }
 
+/* DESKTOP_TOUCH_DOCUMENT_SCROLL_V1
+ * A phone using the website in Desktop view must not depend on a nested 100dvh
+ * scroller. Some Android browsers stop that inner scroller before the final
+ * tournament controls are reachable. On coarse-pointer/touch devices only,
+ * let the document own vertical scrolling while preserving the wide desktop
+ * layout and horizontal/pinch gestures. Normal desktop computers are unchanged. */
+@media (hover: none) and (pointer: coarse) {
+  html[data-site-view="desktop"].app-scroll-locked,
+  html[data-site-view="desktop"].app-scroll-locked body,
+  html[data-site-view="desktop"].app-scroll-locked #root {
+    height: auto !important;
+    min-height: 100% !important;
+    max-height: none !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    overscroll-behavior: auto !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+
+  html[data-site-view="desktop"] [data-slot="sidebar-wrapper"],
+  html[data-site-view="desktop"] .app-shell,
+  html[data-site-view="desktop"] .app-content {
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+
+  html[data-site-view="desktop"] [data-app-scroll-root],
+  html[data-site-view="desktop"] .app-scroll-root {
+    flex: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html[data-site-view="desktop"] [data-page-scroll-content] {
+    min-height: 0 !important;
+  }
+}
+
 /* Radix dialogs are portalled directly under body. They previously hid x
  * overflow, so a zoomed leaderboard could have its points column outside the
  * reachable area. Keep normal vertical scrolling, but permit horizontal scroll
