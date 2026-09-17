@@ -113,7 +113,7 @@ jobs:
           grep -q "setUseWideViewPort(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "setLoadWithOverviewMode(true)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "setTextZoom(100)" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
-          ! grep -q "LAYER_TYPE_HARDWARE" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -q "LAYER_TYPE_HARDWARE" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "onRenderProcessGone" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "recoverFromRendererLoss" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "webView.destroy()" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
@@ -209,7 +209,7 @@ jobs:
 
       - name: Prepare build information
         run: |
-          printf 'Fantasy Arena Android 1.1.10\nCommit: %s\nBuilt: %s\nPackage: com.fantasyfc.app\nFirebase native push: enabled\nKind: %s\nSize bytes: %s\nSHA-256: %s\n\nAndroid WebView renderer loss is handled and recovers by rebuilding the native shell. Forced WebView hardware-layer allocation was removed so Android can choose the safest rendering path for each device. Android 12 system splash remains black-only with the full unmasked Fantasy Arena overlay.\n' \
+          printf 'Fantasy Arena Android 1.1.10\nCommit: %s\nBuilt: %s\nPackage: com.fantasyfc.app\nFirebase native push: enabled\nKind: %s\nSize bytes: %s\nSHA-256: %s\n\nAndroid WebView renderer loss is handled and recovers by rebuilding the native shell. Explicit hardware acceleration remains enabled for sharp scaled text and cards. Android 12 system splash remains black-only with the full unmasked Fantasy Arena overlay.\n' \
             "$GITHUB_SHA" \
             "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             "${{ steps.select_apk.outputs.kind }}" \
@@ -241,5 +241,5 @@ jobs:
               android-artifacts/APK-SIGNING.txt \
               android-artifacts/BUILD-INFO.txt \
               --title "Fantasy Arena Android 1.1.10" \
-              --notes "Fantasy Arena Android 1.1.10: Android WebView renderer crash recovery, safer device-managed rendering, Firebase native notifications, unmasked Fantasy Arena launch screen, and stable release signing for reliable in-place updates."
+              --notes "Fantasy Arena Android 1.1.10: Android WebView renderer crash recovery, explicit hardware-accelerated rendering for sharp cards and text, Firebase native notifications, unmasked Fantasy Arena launch screen, and stable release signing for reliable in-place updates."
           fi
