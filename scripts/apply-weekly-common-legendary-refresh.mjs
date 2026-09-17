@@ -30,6 +30,26 @@ patchFile("scripts/verify-weekly-common-legendary-refresh.mjs", (original) => {
   return replaceOnce(original, oldCheck, newCheck, "APK-only browser install verifier");
 });
 
+// The site-wide verifier still carried two pre-APK assumptions. Keep it aligned
+// with the current component: APK-only delivery and an `installed` boolean that
+// hides the install control inside the native app.
+patchFile("scripts/verify-site-value-image-admin-integrity.mjs", (original) => {
+  let source = original;
+  source = replaceOnce(
+    source,
+    `includes(installApp, "beforeinstallprompt", "Install App must use the browser installation flow when available.");`,
+    `assert.ok(!/addEventListener\\s*\\(\\s*["']beforeinstallprompt["']/.test(installApp) && !/onbeforeinstallprompt\\s*=/.test(installApp), "Install App must stay APK-only and must not register a browser install prompt handler.");`,
+    "site integrity APK-only browser install verifier",
+  );
+  source = replaceOnce(
+    source,
+    `includes(installApp, "if (isInstalledMobileApp()) return null", "Install App option must disappear inside an installed app.");`,
+    `includes(installApp, "const installed = isInstalledMobileApp();", "Install App must detect installed-app sessions.");\nincludes(installApp, "if (installed) return null", "Install App option must disappear inside an installed app.");`,
+    "site integrity installed-app hide verifier",
+  );
+  return source;
+});
+
 patchFile("server/services/prizeEngine.ts", (original) => {
   let source = original;
   source = replaceOnce(
