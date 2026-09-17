@@ -77,3 +77,7 @@ await import("./apply-starter-confirm-single-tap.mjs");
 // Run after every existing Play/UI patcher. This avoids depending on the source
 // shape left behind by npm precheck and always makes the newest live GW default.
 await import("./apply-current-tournament-ui-policy.mjs");
+// Installed Android scrolling/update delivery is intentionally last: later UI
+// patchers must not reintroduce clipped viewport or stale native registrations.
+await import("./apply-native-full-scroll-app-updates.mjs");
+await import("./verify-native-full-scroll-app-updates.mjs");
