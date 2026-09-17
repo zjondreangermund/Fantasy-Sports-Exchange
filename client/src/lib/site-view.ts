@@ -95,6 +95,7 @@ export function getSiteViewMode(): SiteViewMode {
 export function applySiteView(mode: SiteViewMode): SiteViewMode {
   if (typeof document === "undefined") return mode;
   const effectiveMode: SiteViewMode = isNativeMobileApp() ? "mobile" : mode;
+  document.documentElement.dataset.appRuntime = isNativeMobileApp() ? "native" : "web";
   const previousMode = document.documentElement.dataset.siteView as SiteViewMode | undefined;
   const isInteractiveSwitch = Boolean(previousMode && previousMode !== effectiveMode);
   const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');

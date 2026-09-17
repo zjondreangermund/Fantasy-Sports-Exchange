@@ -12,6 +12,7 @@ const panel = read("client/src/components/admin/AdminPlayerTransfersPanel.tsx");
 const backoffice = read("client/src/components/admin/AdminBackofficePanel.tsx");
 const scroll = read("client/src/unified-scroll.css");
 const browserPan = read("client/src/browser-zoom-pan.css");
+const siteView = read("client/src/lib/site-view.ts");
 const security = read("server/services/securityControl.ts");
 const serverIndex = read("server/index.ts");
 const fplApi = read("server/services/fplApi.ts");
@@ -71,4 +72,13 @@ need(browserPan, "overflow-y: visible !important", "Desktop-on-phone fallback mu
 need(browserPan, "min-height: 100dvh !important", "Desktop-on-phone document scroll must keep full viewport coverage");
 need(browserPan, "touch-action: pan-x pan-y pinch-zoom !important", "Desktop-on-phone fallback must preserve pan and pinch gestures");
 
-console.log("Player transfer/runtime repairs verified: canonical club identities suppress provider-name noise, departed source cards wait for tournament locks before archive, notification/replacement reads stay safe, Google Fonts match CSP, current Premier League portrait fallbacks are ordered, and desktop-on-phone pages can use document scrolling.");
+need(siteView, 'document.documentElement.dataset.appRuntime = isNativeMobileApp() ? "native" : "web";', "site-view bootstrap does not distinguish web browser from native APK");
+need(browserPan, "BROWSER_REQUESTED_DESKTOP_SCROLL_V2", "browser-requested Desktop site scroll fallback is missing");
+need(browserPan, "@media (hover: none) and (pointer: coarse) and (min-width: 768px)", "browser Desktop-site fallback must be scoped to wide touch viewports");
+need(browserPan, 'html[data-app-runtime="web"].app-scroll-locked', "browser Desktop-site fallback is not web-runtime scoped");
+need(browserPan, 'html[data-app-runtime="web"] [data-app-scroll-root]', "browser Desktop-site fallback does not release the authenticated page root");
+need(browserPan, 'data-app-runtime="native"', "browser Desktop-site fallback must document native APK exclusion");
+need(browserPan, "height: auto !important", "browser Desktop-site fallback must release fixed heights");
+need(browserPan, "max-height: none !important", "browser Desktop-site fallback must release max-height caps");
+
+console.log("Player transfer/runtime repairs verified: canonical club identities suppress provider-name noise, departed source cards wait for tournament locks before archive, notification/replacement reads stay safe, Google Fonts match CSP, current Premier League portrait fallbacks are ordered, and both Fantasy Arena Desktop view and browser-requested Desktop site can scroll the full document without changing the native APK.");
