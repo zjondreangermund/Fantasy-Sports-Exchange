@@ -11,6 +11,7 @@ const route = read("server/routes/adminPlayerTransfers.routes.ts");
 const panel = read("client/src/components/admin/AdminPlayerTransfersPanel.tsx");
 const backoffice = read("client/src/components/admin/AdminBackofficePanel.tsx");
 const scroll = read("client/src/unified-scroll.css");
+const browserPan = read("client/src/browser-zoom-pan.css");
 const security = read("server/services/securityControl.ts");
 const serverIndex = read("server/index.ts");
 const fplApi = read("server/services/fplApi.ts");
@@ -63,4 +64,11 @@ need(scroll, "overflow: visible !important", "Desktop view does not release shel
 need(scroll, "overflow-x: auto !important", "Desktop app scroll root does not permit horizontal movement");
 need(scroll, "touch-action: auto !important", "Desktop view still restricts native pinch/pan gestures");
 
-console.log("Player transfer/runtime repairs verified: canonical club identities suppress provider-name noise, departed source cards wait for tournament locks before archive, notification/replacement reads stay safe, Google Fonts match CSP, and current Premier League portrait fallbacks are ordered for reliable collection images.");
+need(browserPan, "DESKTOP_TOUCH_DOCUMENT_SCROLL_V1", "Desktop-on-phone document scroll fallback is missing");
+need(browserPan, "@media (hover: none) and (pointer: coarse)", "Desktop-on-phone scroll fallback must stay touch-device scoped");
+need(browserPan, 'html[data-site-view="desktop"] [data-app-scroll-root]', "Desktop-on-phone fallback does not target the authenticated page scroll root");
+need(browserPan, "overflow-y: visible !important", "Desktop-on-phone fallback must release the nested vertical scroller");
+need(browserPan, "min-height: 100dvh !important", "Desktop-on-phone document scroll must keep full viewport coverage");
+need(browserPan, "touch-action: pan-x pan-y pinch-zoom !important", "Desktop-on-phone fallback must preserve pan and pinch gestures");
+
+console.log("Player transfer/runtime repairs verified: canonical club identities suppress provider-name noise, departed source cards wait for tournament locks before archive, notification/replacement reads stay safe, Google Fonts match CSP, current Premier League portrait fallbacks are ordered, and desktop-on-phone pages can use document scrolling.");
