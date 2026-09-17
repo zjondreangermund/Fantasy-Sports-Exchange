@@ -8,6 +8,7 @@ const ANDROID_SIZE_LABEL = "about 6 MB";
 const INSTALL_PROMPT_SNOOZE_KEY = "fantasy_arena_install_prompt_snoozed_until";
 const INSTALL_PROMPT_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
+// APK-only policy: the browser beforeinstallprompt flow is intentionally not used.
 function freshAndroidApkUrl() {
   const nonce = Date.now();
   return `${ANDROID_APK_BASE_URL}?version=${encodeURIComponent(ANDROID_VERSION)}&nocache=${nonce}`;
