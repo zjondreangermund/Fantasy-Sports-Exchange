@@ -76,14 +76,18 @@ for (const rarity of ["rare", "unique", "epic", "legendary"]) {
 }
 
 // Signed-in web users who have not installed Fantasy Arena must always retain
-// a visible install affordance. Installed native/PWA sessions hide it.
+// a visible APK install affordance. Installed native sessions hide it.
 expect(app.includes('import InstallAppButton from "./components/InstallAppButton";'), "Authenticated app must import the Install App control");
 expect(app.includes("<InstallAppButton />"), "Authenticated header must show the Install App option to eligible web users");
-expect(installApp.includes("beforeinstallprompt"), "Install App control must capture the browser install prompt");
-expect(installApp.includes("appinstalled"), "Install App control must react when installation completes");
-expect(installApp.includes("if (isInstalledMobileApp()) return null"), "Install App option must be hidden once the app is installed");
-expect(installApp.includes("Install App"), "Install App control must have an explicit user-facing label");
-expect(installApp.includes("Add to Home Screen"), "iOS install fallback instructions must be available");
+expect(installApp.includes("ANDROID_APK_BASE_URL"), "Install App control must use the branded APK endpoint");
+expect(installApp.includes("/api/android/update/apk"), "Install App control must download through the Android APK endpoint");
+expect(installApp.includes('ANDROID_VERSION = "1.1.11"'), "Install App control must advertise the current Android version");
+expect(installApp.includes("window.location.assign(freshAndroidApkUrl())"), "Install App control must start an APK download");
+expect(installApp.includes('data-install-method="apk"'), "Install App control must identify the APK install method");
+expect(!installApp.includes("beforeinstallprompt"), "APK-only install flow must not capture the browser install prompt");
+expect(!installApp.includes("Add to Home Screen"), "APK-only install flow must not offer Add to Home Screen instructions");
+expect(installApp.includes("if (installed) return null"), "Install App option must be hidden once the app is installed");
+expect(installApp.includes("Install APK"), "Install App control must have an explicit APK label");
 
 // Every fresh installed-app session is desktop-first, while a temporary Mobile
 // view switch remains possible for that session. Pinch zoom must allow panning
@@ -118,4 +122,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Common rewards verified: weekly cards use expiring fixed claim windows with ready/expiry notifications and no backlog; weekly and referral cards balance tournament positions while player identity remains random; referral rewards are atomic/idempotent; signed-in web users retain Install App access; installed app sessions default to Desktop view and support two-axis panning while zoomed.");
+console.log("Common rewards verified: weekly cards use expiring fixed claim windows with ready/expiry notifications and no backlog; weekly and referral cards balance tournament positions while player identity remains random; referral rewards are atomic/idempotent; signed-in web users retain APK Install access; installed app sessions default to Desktop view and support two-axis panning while zoomed.");
