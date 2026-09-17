@@ -22,6 +22,14 @@ function replaceOnce(source, from, to, label) {
   return source.replace(from, to);
 }
 
+// Keep APK-only verification semantic: comments may document the retired browser
+// install event, but the app must not register a real handler for it.
+patchFile("scripts/verify-weekly-common-legendary-refresh.mjs", (original) => {
+  const oldCheck = `expect(!installApp.includes("beforeinstallprompt"), "APK-only install flow must not capture the browser install prompt");`;
+  const newCheck = `expect(!/addEventListener\\s*\\(\\s*["']beforeinstallprompt["']/.test(installApp) && !/onbeforeinstallprompt\\s*=/.test(installApp), "APK-only install flow must not capture the browser install prompt");`;
+  return replaceOnce(original, oldCheck, newCheck, "APK-only browser install verifier");
+});
+
 patchFile("server/services/prizeEngine.ts", (original) => {
   let source = original;
   source = replaceOnce(
