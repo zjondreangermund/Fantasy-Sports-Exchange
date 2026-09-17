@@ -93,7 +93,8 @@ export default function NativeAppUpdatePrompt() {
   React.useEffect(() => {
     // 1.1.9/1.1.10 do not contain the native updater bridge. Do not expose the
     // old browser/GitHub download path while the migration build is being tested.
-    if (!currentVersion || !updaterAvailable) return;
+    if (!currentVersion) return;
+    if (!updaterAvailable) return;
     const cached = readCache(currentVersion);
     if (cached) {
       setRelease(cached.release);
