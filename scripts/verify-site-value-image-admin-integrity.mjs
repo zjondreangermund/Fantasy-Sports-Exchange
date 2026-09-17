@@ -28,6 +28,7 @@ const main = read("client/src/main.tsx");
 const scroll = read("client/src/unified-scroll.css");
 const installApp = read("client/src/components/InstallAppButton.tsx");
 const androidMain = read("android/app/src/main/java/com/fantasyfc/app/MainActivity.java");
+const androidManifest = read("android/app/src/main/AndroidManifest.xml");
 const rules = read("server/services/tournamentRules.ts");
 const economy = read("server/routes/economyIntegrity.routes.ts");
 const routes = read("server/routes.ts");
@@ -112,6 +113,10 @@ includes(scroll, "touch-action: pan-x pan-y pinch-zoom !important;", "Zoomed Des
 includes(androidMain, "settings.setUseWideViewPort(true);", "Android app WebView must use a wide desktop-style layout viewport.");
 includes(androidMain, "settings.setLoadWithOverviewMode(true);", "Android app WebView must fit the desktop layout to the phone without CSS transforms.");
 includes(androidMain, "settings.setSupportZoom(true);", "Android app WebView must keep pinch zoom enabled.");
-includes(androidMain, "webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null);", "Android app rendering must stay hardware accelerated for sharp scaled text and cards.");
+includes(androidManifest, 'android:hardwareAccelerated="true"', "Android app rendering must stay hardware accelerated for sharp text and cards.");
+includes(androidMain, "onRenderProcessGone", "Android must recover a terminated WebView renderer instead of surfacing an unhandled app crash.");
+includes(androidMain, "recoverFromRendererLoss", "Renderer recovery must rebuild the native shell after WebView renderer loss.");
+includes(androidMain, "recreate();", "Renderer recovery must recreate the Capacitor Activity with a fresh WebView.");
+assert.ok(!androidMain.includes("setLayerType(WebView.LAYER_TYPE_HARDWARE"), "Android hardware acceleration must be app-level; forcing a dedicated WebView hardware layer can increase renderer memory pressure.");
 
-console.log("Fantasy Arena image fallbacks, exact scores and values, SQL safety, private entries, install access, desktop-first app sessions, zoom panning, and admin tournament reconciliation verified.");
+console.log("Fantasy Arena image fallbacks, exact scores and values, SQL safety, private entries, install access, desktop-first app sessions, zoom panning, safe Android hardware acceleration + renderer recovery, and admin tournament reconciliation verified.");
