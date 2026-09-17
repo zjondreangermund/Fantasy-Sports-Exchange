@@ -3,7 +3,6 @@ import { db } from "../db.js";
 import type { IStorage } from "../storage.js";
 import { registerEplRoutes } from "./epl.routes.js";
 import { registerNotificationRoutes } from "./notifications.routes.js";
-import { registerAndroidInstallRoutes } from "./androidInstall.routes.js";
 import { registerPrizeVaultRoutes } from "./prizeVault.routes.js";
 import { registerReferralRoutes } from "./referrals.routes.js";
 import { registerWalletRoutes } from "./wallet.routes.js";
@@ -36,7 +35,6 @@ export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; 
   // route modules and owns retention/forge endpoints below.
   registerEplRoutes(app, { requireAuth });
   registerNotificationRoutes(app, { requireAuth });
-  registerAndroidInstallRoutes(app);
   registerPrizeVaultRoutes(app);
   registerReferralRoutes(app, { requireAuth, storage });
   registerWalletRoutes(app, { requireAuth, isAdmin: walletAdmin });
@@ -96,7 +94,7 @@ export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; 
     try {
       return res.json(await getForgeOperationIntegrityReport());
     } catch (error: any) {
-      console.error("Failed to load forge integrity", error);
+      console.error("Failed to load forge integrity report", error);
       return res.status(500).json({ message: error?.message || "Failed to inspect forge integrity" });
     }
   });
