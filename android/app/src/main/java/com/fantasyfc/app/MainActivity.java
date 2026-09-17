@@ -6,6 +6,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
@@ -14,14 +16,27 @@ import android.widget.ImageView;
 import androidx.core.splashscreen.SplashScreen;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.WebViewListener;
 
 public class MainActivity extends BridgeActivity {
-    private static final String NATIVE_APP_UA = "FantasyArenaNative/1.1.9";
+    private static final String NATIVE_APP_UA = "FantasyArenaNative/1.1.10";
     private static final String APP_BASE_URL = "https://fantasy-sports-exchange-production-d05c.up.railway.app";
     private FrameLayout launchOverlay;
+    private boolean rendererRecoveryScheduled = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Android can terminate a WebView renderer while the app is backgrounded or
+        // under memory pressure. Capacitor treats an unhandled renderer loss as a
+        // host-app crash, so handle it here and recreate the native shell cleanly.
+        bridgeBuilder.addWebViewListener(new WebViewListener() {
+            @Override
+            public boolean onRenderProcessGone(WebView webView, RenderProcessGoneDetail detail) {
+                recoverFromRendererLoss(webView);
+                return true;
+            }
+        });
+
         // Android 12+ always masks the system splash icon. Keep that system phase
         // plain black, then render the complete Fantasy Arena artwork ourselves so
         // Samsung/Android cannot crop the crown or wordmark into a circle.
@@ -44,9 +59,34 @@ public class MainActivity extends BridgeActivity {
         if (!userAgent.contains("FantasyArenaNative/")) {
             settings.setUserAgentString((userAgent + " " + NATIVE_APP_UA).trim());
         }
-        webView.setLayerType(WebView.LAYER_TYPE_HARDWARE, null);
+        // Do not force a dedicated hardware layer. Android WebView already uses
+        // hardware acceleration when appropriate, while forcing a layer can make
+        // renderer/GPU memory pressure worse on some Samsung and low-memory phones.
 
         handleAuthIntent(getIntent());
+    }
+
+    private void recoverFromRendererLoss(WebView webView) {
+        if (rendererRecoveryScheduled) return;
+        rendererRecoveryScheduled = true;
+
+        runOnUiThread(() -> {
+            try {
+                ViewParent parent = webView.getParent();
+                if (parent instanceof ViewGroup) {
+                    ((ViewGroup) parent).removeView(webView);
+                }
+                webView.destroy();
+            } catch (Exception ignored) {
+                // The renderer is already gone; cleanup is best-effort before restart.
+            }
+
+            if (!isFinishing() && !isDestroyed()) {
+                // Recreate the Activity to build a fresh Capacitor bridge/WebView.
+                // A dead renderer cannot safely be reused or simply reloaded.
+                recreate();
+            }
+        });
     }
 
     private void showBrandLaunchOverlay() {
