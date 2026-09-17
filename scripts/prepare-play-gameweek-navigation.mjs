@@ -80,4 +80,8 @@ await import("./apply-current-tournament-ui-policy.mjs");
 // Installed Android scrolling/update delivery is intentionally last: later UI
 // patchers must not reintroduce clipped viewport or stale native registrations.
 await import("./apply-native-full-scroll-app-updates.mjs");
+// The first-party updater runs after the older rollout patch so it can register
+// branded update endpoints and hold all update notifications until verification.
+await import("./apply-native-in-app-updater.mjs");
 await import("./verify-native-full-scroll-app-updates.mjs");
+await import("./verify-native-in-app-updater.mjs");
