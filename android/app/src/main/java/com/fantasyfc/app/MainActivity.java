@@ -19,18 +19,13 @@ import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.WebViewListener;
 
 public class MainActivity extends BridgeActivity {
-    private static final String NATIVE_APP_UA = "FantasyArenaNative/1.1.11";
+    private static final String NATIVE_APP_UA = "FantasyArenaNative/1.1.10";
     private static final String APP_BASE_URL = "https://fantasy-sports-exchange-production-d05c.up.railway.app";
     private FrameLayout launchOverlay;
     private boolean rendererRecoveryScheduled = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Register the first-party updater before Capacitor creates the bridge so
-        // future signed Fantasy Arena releases can download and invoke Android's
-        // in-place package installer without opening GitHub or a browser page.
-        registerPlugin(FantasyArenaUpdaterPlugin.class);
-
         // Android can terminate a WebView renderer while the app is backgrounded or
         // under memory pressure. Capacitor treats an unhandled renderer loss as a
         // host-app crash, so handle it here and recreate the native shell cleanly.

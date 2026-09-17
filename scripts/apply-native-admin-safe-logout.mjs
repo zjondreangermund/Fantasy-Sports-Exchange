@@ -73,17 +73,12 @@ if (!source.includes(MARKER)) {
     "logout arm state",
   );
 
-  const adminAccessReplacement = `  const currentRoute = routeKey(location);\n  const { data: adminAccess } = useQuery<{ isAdmin: boolean }>({\n    queryKey: ["/api/admin/check"],\n    retry: false,\n    staleTime: 60_000,\n  });\n  const menuItems = adminAccess?.isAdmin ? [...moreItems, nativeAdminItem] : moreItems;\n`;
-  if (!source.includes('const { data: adminAccess }')) {
-    const exactAdminAccessAnchor = '  const currentRoute = routeKey(location);\n\n  React.useEffect(() => {';
-    if (source.includes(exactAdminAccessAnchor)) {
-      source = source.replace(exactAdminAccessAnchor, adminAccessReplacement + `\n  React.useEffect(() => {`);
-    } else {
-      const routeLine = '  const currentRoute = routeKey(location);\n';
-      if (!source.includes(routeLine)) throw new Error('[native-admin-safe-logout] anchor not found: admin route declaration');
-      source = source.replace(routeLine, adminAccessReplacement);
-    }
-  }
+  source = replaceRequired(
+    source,
+    '  const currentRoute = routeKey(location);\n\n  React.useEffect(() => {',
+    `  const currentRoute = routeKey(location);\n  const { data: adminAccess } = useQuery<{ isAdmin: boolean }>({\n    queryKey: ["/api/admin/check"],\n    retry: false,\n    staleTime: 60_000,\n  });\n  const menuItems = adminAccess?.isAdmin ? [...moreItems, nativeAdminItem] : moreItems;\n\n  React.useEffect(() => {`,
+    "admin access query",
+  );
 
   source = replaceRequired(
     source,

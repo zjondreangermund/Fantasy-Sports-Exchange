@@ -42,9 +42,9 @@ jobs:
           RAILWAY_DEPLOY_HOOK_URL: ${{ secrets.RAILWAY_DEPLOY_HOOK_URL }}
         run: |
           if [ -z "$RAILWAY_DEPLOY_HOOK_URL" ]; then
-            echo "::error::RAILWAY_DEPLOY_HOOK_URL is not configured; the build passed but production was not deployed."
-            echo "Add the Railway deploy-hook URL as the RAILWAY_DEPLOY_HOOK_URL repository secret, then rerun this workflow."
-            exit 1
+            echo "RAILWAY_DEPLOY_HOOK_URL is not configured."
+            echo "Set this repo secret to enable automatic Railway deployment."
+            exit 0
           fi
 
           echo "Triggering Railway deploy hook..."

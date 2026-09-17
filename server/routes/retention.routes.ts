@@ -3,7 +3,6 @@ import { db } from "../db.js";
 import type { IStorage } from "../storage.js";
 import { registerEplRoutes } from "./epl.routes.js";
 import { registerNotificationRoutes } from "./notifications.routes.js";
-import { registerAndroidUpdateRoutes } from "./androidUpdate.routes.js";
 import { registerPrizeVaultRoutes } from "./prizeVault.routes.js";
 import { registerReferralRoutes } from "./referrals.routes.js";
 import { registerWalletRoutes } from "./wallet.routes.js";
@@ -36,7 +35,6 @@ export function registerRetentionRoutes(app: Express, deps: { requireAuth: any; 
   // route modules and owns retention/forge endpoints below.
   registerEplRoutes(app, { requireAuth });
   registerNotificationRoutes(app, { requireAuth });
-  registerAndroidUpdateRoutes(app);
   registerPrizeVaultRoutes(app);
   registerReferralRoutes(app, { requireAuth, storage });
   registerWalletRoutes(app, { requireAuth, isAdmin: walletAdmin });
