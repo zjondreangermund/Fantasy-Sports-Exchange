@@ -8,8 +8,8 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 const ANDROID_APK_BASE_URL =
-  "https://github.com/zjondreangermund/Fantasy-Sports-Exchange/releases/download/android-1.1.10/Fantasy-Arena-Android.apk";
-const ANDROID_VERSION = "1.1.10";
+  "https://playfantasyarena.com/api/android/update/apk";
+const ANDROID_VERSION = "1.1.11";
 const ANDROID_SIZE_LABEL = "about 6 MB";
 const INSTALL_PROMPT_SNOOZE_KEY = "fantasy_arena_install_prompt_snoozed_until";
 const INSTALL_PROMPT_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -117,7 +117,7 @@ export default function InstallAppButton() {
   };
 
   const accessibleLabel = isAndroidBrowser
-    ? `Install Fantasy Arena Android ${ANDROID_VERSION}, ${ANDROID_SIZE_LABEL}`
+    ? `Download Fantasy Arena Android ${ANDROID_VERSION}, ${ANDROID_SIZE_LABEL}`
     : "Install Fantasy Arena app";
 
   return (
