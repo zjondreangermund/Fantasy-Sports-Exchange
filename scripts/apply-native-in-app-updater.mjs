@@ -22,18 +22,46 @@ function replaceRequired(source, from, to, label) {
 
 patchFile(RETENTION, (original) => {
   let source = original;
-  source = replaceRequired(
-    source,
-    `import { registerNotificationRoutes } from "./notifications.routes.js";`,
-    `import { registerNotificationRoutes } from "./notifications.routes.js";\nimport { registerAndroidUpdateRoutes } from "./androidUpdate.routes.js";`,
-    "Android update route import",
-  );
-  source = replaceRequired(
-    source,
-    `  registerNotificationRoutes(app, { requireAuth });`,
-    `  registerNotificationRoutes(app, { requireAuth });\n  registerAndroidUpdateRoutes(app);`,
-    "Android update route registration",
-  );
+  const notificationImport = `import { registerNotificationRoutes } from "./notifications.routes.js";`;
+  const transferImport = `import { registerAdminPlayerTransferRoutes } from "./adminPlayerTransfers.routes.js";`;
+  const updaterImport = `import { registerAndroidUpdateRoutes } from "./androidUpdate.routes.js";`;
+
+  if (!source.includes(updaterImport)) {
+    const transferPair = `${notificationImport}\n${transferImport}`;
+    if (source.includes(transferPair)) {
+      // Keep the transfer patcher's exact notification+transfer pair intact so a
+      // later server prebuild cannot mistake the file for unpatched source and
+      // insert registerAdminPlayerTransferRoutes a second time.
+      source = source.replace(transferPair, `${transferPair}\n${updaterImport}`);
+    } else {
+      source = replaceRequired(
+        source,
+        notificationImport,
+        `${notificationImport}\n${updaterImport}`,
+        "Android update route import",
+      );
+    }
+  }
+
+  const notificationRegistration = `  registerNotificationRoutes(app, { requireAuth });`;
+  const transferRegistration = `  registerAdminPlayerTransferRoutes(app, { requireAuth, isAdmin: walletAdmin });`;
+  const updaterRegistration = `  registerAndroidUpdateRoutes(app);`;
+
+  if (!source.includes(updaterRegistration)) {
+    const transferPair = `${notificationRegistration}\n${transferRegistration}`;
+    if (source.includes(transferPair)) {
+      // Same ordering rule as imports: preserve the transfer patcher's exact pair
+      // across check -> client build -> server build patch cycles.
+      source = source.replace(transferPair, `${transferPair}\n${updaterRegistration}`);
+    } else {
+      source = replaceRequired(
+        source,
+        notificationRegistration,
+        `${notificationRegistration}\n${updaterRegistration}`,
+        "Android update route registration",
+      );
+    }
+  }
   return source;
 });
 
