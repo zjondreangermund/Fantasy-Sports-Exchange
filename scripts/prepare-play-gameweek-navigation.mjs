@@ -84,3 +84,4 @@ await import("./apply-native-full-scroll-app-updates.mjs");
 // branded update endpoints and hold all update notifications until verification.
 await import("./apply-native-in-app-updater.mjs");
 await import("./verify-native-full-scroll-app-updates.mjs");
+await import("./verify-native-in-app-updater.mjs");
