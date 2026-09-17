@@ -47,7 +47,9 @@ await import("./enforce-starter-draft-team-label.mjs");
 await import("./apply-starter-confirm-single-tap.mjs");
 await import("./apply-current-tournament-ui-policy.mjs");
 
-// The full-page scroll source from #355 is already committed. Do not re-run its
-// legacy GitHub/browser updater patch over the new native 1.1.11 updater.
+// Apply the #355 scroll/version-registration patch first, then immediately layer
+// the 1.1.11 updater safety gate over it. Both patchers are required to be
+// idempotent because the production build invokes this preparation repeatedly.
+await import("./apply-native-full-scroll-app-updates.mjs");
 await import("./apply-native-in-app-updater.mjs");
 await import("./verify-native-full-scroll-app-updates.mjs");
