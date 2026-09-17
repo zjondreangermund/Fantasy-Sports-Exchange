@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Download, Smartphone, X } from "lucide-react";
-import { isInstalledMobileApp, isNativeMobileApp } from "../lib/site-view";
+import { isInstalledMobileApp } from "../lib/site-view";
+import { isNativeMobileApp } from "../lib/site-view";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
