@@ -198,3 +198,63 @@
     overflow-wrap: anywhere;
   }
 }
+
+/* NATIVE_DOCUMENT_SCROLL_V1
+   Some Android 13-15 WebView/Samsung combinations stop propagating touch
+   gestures through a 100dvh shell when both the document and an inner flex
+   child participate in overflow locking. Native Fantasy Arena therefore uses
+   the document as the one vertical scroll owner. Browser/PWA/desktop behavior
+   remains governed by unified-scroll.css. */
+html.native-document-scroll,
+html.native-document-scroll body,
+html.native-document-scroll #root {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 100% !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: auto !important;
+  touch-action: pan-y pinch-zoom !important;
+}
+
+html.native-document-scroll body {
+  position: static !important;
+  padding: 0 !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+html.native-document-scroll [data-native-mobile-shell] {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 100dvh !important;
+  max-height: none !important;
+  overflow: visible !important;
+  overscroll-behavior-y: auto !important;
+}
+
+html.native-document-scroll [data-native-mobile-shell] main[data-app-scroll-root] {
+  display: block !important;
+  flex: none !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  overscroll-behavior-y: auto !important;
+  touch-action: pan-y pinch-zoom !important;
+  padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+html.native-document-scroll [data-native-mobile-shell] [data-page-scroll-content] {
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+html.native-document-scroll [data-native-mobile-shell] .arena-bottom-dock {
+  position: fixed !important;
+  inset: auto 0 0 0 !important;
+  z-index: 80 !important;
+}
