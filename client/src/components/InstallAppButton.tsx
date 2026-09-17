@@ -25,6 +25,7 @@ export default function InstallAppButton() {
   const [installing, setInstalling] = React.useState(false);
   const [promptOpen, setPromptOpen] = React.useState(false);
   const installed = isInstalledMobileApp();
+  const isAndroidBrowser = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
 
   React.useEffect(() => {
     if (installed || installPromptIsSnoozed()) return;
@@ -49,6 +50,11 @@ export default function InstallAppButton() {
   const downloadApk = () => {
     if (installing) return;
     setInstalling(true);
+    if (isAndroidBrowser) {
+      setPromptOpen(false);
+      window.location.assign(freshAndroidApkUrl());
+      return;
+    }
     setPromptOpen(false);
     window.location.assign(freshAndroidApkUrl());
   };
