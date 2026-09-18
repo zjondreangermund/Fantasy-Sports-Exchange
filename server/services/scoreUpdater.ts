@@ -17,6 +17,8 @@ import { fplApi } from "./fplApi.js";
 import { buildFplPlayerIndex } from "./fplPlayerIdentity.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats, calculateLineupScore, mergePlayerStatsWithDetailedStats } from "./scoring.js";
 import { loadDetailedScoringContext, resolveDetailedStatsForPlayer, type DetailedScoringContext } from "./apiFootballScoringBridge.js";
+import { loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "./apiFootballPlayerDirectory.js";
+import { currentPremierLeagueIdentityVerified } from "./currentPremierLeagueEligibility.js";
 import { createNotificationOnce } from "./notifications.js";
 
 const RARITY_PRESTIGE: Record<string, number> = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };
@@ -110,16 +112,26 @@ export class ScoreUpdateService {
     }));
   }
 
-  private buildCardScores(cards: any[], identityMap: IdentityMap, playerStatsMap: Map<any, any>, detailedContext: DetailedScoringContext) {
+  private buildCardScores(cards: any[], identityMap: IdentityMap, playerStatsMap: Map<any, any>, detailedContext: DetailedScoringContext, currentDirectory: any[]) {
     return cards.map((card) => {
       if (!card?.player) return this.zeroScore(card);
       const elementId = this.resolveFplElementId(card.player, identityMap);
       const officialElement = elementId ? identityMap.byId.get(elementId) : null;
       if (!officialElement) return this.zeroScore(card, 0, `${String(card.player.name || "This player")} could not be matched securely to an official Premier League player.`);
+      const canonical = identityMap.canonical(officialElement);
+      const currentApiPlayer = resolveApiFootballPlayer({ ...card.player, ...canonical }, currentDirectory);
+      const currentEplEligible = currentPremierLeagueIdentityVerified({
+        player: card.player,
+        apiFootballPlayer: currentApiPlayer,
+        matchedFplElement: officialElement,
+        directory: currentDirectory,
+      });
+      if (!currentEplEligible) {
+        return this.zeroScore(card, elementId, `${String(card.player.name || "This player")} is not in the verified current Premier League squad directory, so non-EPL activity cannot score.`);
+      }
       const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
       if (!fplStats) return this.zeroScore(card, elementId, "Official gameweek statistics have not been published for this verified player yet.");
-      const canonical = identityMap.canonical(officialElement);
-      const verifiedPlayer = { ...card.player, ...canonical };
+      const verifiedPlayer = { ...card.player, ...canonical, ...(currentApiPlayer || {}) };
       const detailedStats = resolveDetailedStatsForPlayer(verifiedPlayer, detailedContext);
       const combinedStats = mergePlayerStatsWithDetailedStats(fplStats, detailedStats);
       const verifiedPosition = String(canonical.position || (detailedStats as any)?.api_position || card.player.position || "MID");
@@ -416,6 +428,7 @@ export class ScoreUpdateService {
     const identityMap = this.buildFplIdentityMap(bootstrap);
     const settlementAt = this.settlementDeadline(competition);
     const detailedContext = await loadDetailedScoringContext(bootstrap, gameWeek);
+    const currentDirectory = await loadApiFootballPlayerDirectory().catch(() => []);
     for (const element of bootstrap?.elements || []) bootstrapElementById.set(Number(element.id), element);
     for (const element of liveData.elements || []) playerStatsMap.set(Number(element.id), mapFplStatsToPlayerStats(element));
 
@@ -442,7 +455,7 @@ export class ScoreUpdateService {
         const resolvedCardIds = new Set(cards.map((card: any) => Number(card?.id || 0)));
         const missingCardIds = lineupCardIds.filter((cardId: number) => !resolvedCardIds.has(cardId));
         missingCardIds.forEach((cardId: number) => unresolved.add(cardId));
-        const cardScores = this.buildCardScores(cards, identityMap, playerStatsMap, detailedContext);
+        const cardScores = this.buildCardScores(cards, identityMap, playerStatsMap, detailedContext, currentDirectory);
         const previousScoresByCard = new Map<number, any>(
           (Array.isArray(previousSnapshot.cardScores) ? previousSnapshot.cardScores : [])
             .map((score: any) => [Number(score?.cardId || 0), score]),
