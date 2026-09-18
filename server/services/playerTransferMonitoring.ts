@@ -387,6 +387,23 @@ export async function claimReplacementCard(userId: string, claimId: number) {
     if (!["GK", "DEF", "MID", "FWD"].includes(sourcePosition)) throw new Error("Replacement position could not be verified; your claim remains open.");
     if (!supplyLimit) throw new Error("Unsupported replacement rarity");
 
+    // LOCK_SAFE_REPLACEMENT_TRANSACTION_V1
+    // Release old playable ownership in the same transaction before minting.
+    // This avoids a temporary 21st Common card. Any later failure rolls back
+    // this ownership change together with the attempted replacement.
+    const detachedSource = rowsOf(await tx.execute(sql`
+      update app.player_cards pc
+      set owner_id=null, for_sale=false, price=0
+      where pc.id=${Number(claim.sourceCardId)}
+        and pc.owner_id=${userId}
+        and not exists (
+          select 1 from app.card_locks cl
+          where cl.card_id=pc.id and (cl.expires_at is null or cl.expires_at > now())
+        )
+      returning pc.id
+    `))[0];
+    if (!detachedSource?.id) throw new Error("The source card is still locked or no longer belongs to this account.");
+
     const candidates = rowsOf(await tx.execute(sql`
       select p.id, p.name, p.team, p.position::text as position
       from app.players p
@@ -425,17 +442,6 @@ export async function claimReplacementCard(userId: string, claimId: number) {
       update app.player_replacement_claims
       set replacement_card_id=${Number(card.id)}, claimed_at=now(), owner_decision='replace', decision_at=coalesce(decision_at, now())
       where id=${claimId} and user_id=${userId}
-    `);
-
-    await tx.execute(sql`
-      update app.player_cards pc
-      set owner_id=null, for_sale=false, price=0
-      where pc.id=${Number(claim.sourceCardId)}
-        and pc.owner_id=${userId}
-        and not exists (
-          select 1 from app.card_locks cl
-          where cl.card_id=pc.id and (cl.expires_at is null or cl.expires_at > now())
-        )
     `);
 
     return {
