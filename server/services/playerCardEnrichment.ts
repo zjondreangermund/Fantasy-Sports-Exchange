@@ -2,6 +2,7 @@ import { fplApi } from "./fplApi.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "./fplPlayerIdentity.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats, mergePlayerStatsWithDetailedStats } from "./scoring.js";
 import { loadDetailedScoringContext, resolveDetailedStatsForPlayer } from "./apiFootballScoringBridge.js";
+import { currentPremierLeagueIdentityVerified } from "./currentPremierLeagueEligibility.js";
 import {
   apiFootballPhotoUrl,
   loadApiFootballPlayerDirectory,
@@ -39,12 +40,17 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
       { ...player, ...(canonical || {}) },
       apiFootballDirectory,
     );
-    const identityVerified = Boolean(apiFootballPlayer || matchedElement);
+    const identityVerified = currentPremierLeagueIdentityVerified({
+      player,
+      apiFootballPlayer,
+      matchedFplElement: matchedElement,
+      directory: apiFootballDirectory,
+    });
     const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
     const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
     const detailedStats = liveElement ? resolveDetailedStatsForPlayer({ ...player, ...(canonical || {}) }, detailedScoringContext) : null;
     const verifiedPosition = String(canonical?.position || currentPosition || (detailedStats as any)?.api_position || "MID");
-    const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), verifiedPosition)?.total_score || 0) : 0;
+    const currentGameweekPoints = identityVerified && liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), verifiedPosition)?.total_score || 0) : 0;
     const officialFplSeasonPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
     const totalPoints = identityVerified ? currentGameweekPoints : null;
     const form = identityVerified ? currentGameweekPoints : null;
