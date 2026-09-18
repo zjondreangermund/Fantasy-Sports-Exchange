@@ -246,13 +246,49 @@ export class ScoreUpdateService {
       const entryId=Number(row.entryId),rank=Number(row.rank),score=Number(row.totalScore||0),scoring=asObject(row.scoring);
       const metrics={goals:toNumber(scoring.goalsScored),assists:toNumber(scoring.assists),saves:toNumber(scoring.goalkeeperSaves)};
       const previous=rowsOf(await db.execute(sql`select rank,total_score::float as "totalScore",metrics,sequence from app.competition_live_alert_state where competition_id=${competitionId} and entry_id=${entryId}`))[0];
-      const old=asObject(previous?.metrics);let title="",message="";
-      if(previous&&Number(previous.rank)!==rank){const improved=rank<Number(previous.rank);title=improved?`🚀 You moved up to #${rank}`:`⚠️ You dropped to #${rank}`;message=`Your team moved from #${Number(previous.rank)} to #${rank} in ${String(competition.name||"your tournament")}. Live points are still changing.`;}
-      else if(previous&&(metrics.goals>toNumber(old.goals)||metrics.assists>toNumber(old.assists)||Math.floor(metrics.saves/3)>Math.floor(toNumber(old.saves)/3))){title=metrics.goals>toNumber(old.goals)?"⚽ Goal — vital points added":metrics.assists>toNumber(old.assists)?"🎯 Assist — your score changed":"🧤 Save points added";message=`Your lineup gained a vital live contribution in ${String(competition.name||"your tournament")}. You are #${rank} on ${score.toFixed(2)} pts.`;}
-      else if(previous&&rank<=4&&Number(previous.totalScore)!==score){const next=standings[rank]||null;const gap=next?score-Number(next.totalScore||0):999;const hasGk=(Array.isArray(scoring.cardScores)?scoring.cardScores:[]).some((card:any)=>String(card?.officialPosition||"").toUpperCase()==="GK"&&Number(card?.minutesPlayed||0)>0);if(hasGk&&gap>=0&&gap<=4){title="🧤 Your position is still at risk";message=`You are #${rank}, only ${gap.toFixed(2)} pts ahead in ${String(competition.name||"your tournament")}. Goalkeeper concession and clean-sheet points can still change the table.`;}}
-      const sequence=Number(previous?.sequence||0)+(title?1:0);
+      const old=asObject(previous?.metrics);
+      let title="",message="",dedupeKey="";
+
+      if(previous&&Number(previous.rank)!==rank){
+        const previousRank=Number(previous.rank);
+        const improved=rank<previousRank;
+        title=improved?`🚀 You moved up to #${rank}`:`⚠️ You dropped to #${rank}`;
+        message=`Your team moved from #${previousRank} to #${rank} in ${String(competition.name||"your tournament")}. Live points are still changing.`;
+        // A rank transition is one event. If provider refreshes later replay the
+        // same transition, createNotificationOnce suppresses the duplicate.
+        dedupeKey=`competition:${competitionId}:entry:${entryId}:rank:${previousRank}->${rank}`;
+      } else if(previous&&(metrics.goals>toNumber(old.goals)||metrics.assists>toNumber(old.assists)||Math.floor(metrics.saves/3)>Math.floor(toNumber(old.saves)/3))){
+        if(metrics.goals>toNumber(old.goals)){
+          title="⚽ Goal — vital points added";
+          dedupeKey=`competition:${competitionId}:entry:${entryId}:goal:${metrics.goals}`;
+        } else if(metrics.assists>toNumber(old.assists)){
+          title="🎯 Assist — your score changed";
+          dedupeKey=`competition:${competitionId}:entry:${entryId}:assist:${metrics.assists}`;
+        } else {
+          title="🧤 Save points added";
+          dedupeKey=`competition:${competitionId}:entry:${entryId}:save-tier:${Math.floor(metrics.saves/3)}`;
+        }
+        message=`Your lineup gained a vital live contribution in ${String(competition.name||"your tournament")}. You are #${rank} on ${score.toFixed(2)} pts.`;
+      } else if(previous&&rank<=4&&Number(previous.totalScore)!==score){
+        const next=standings[rank]||null;
+        const gap=next?score-Number(next.totalScore||0):999;
+        const hasGk=(Array.isArray(scoring.cardScores)?scoring.cardScores:[]).some((card:any)=>String(card?.officialPosition||"").toUpperCase()==="GK"&&Number(card?.minutesPlayed||0)>0);
+        if(hasGk&&gap>=0&&gap<=4){
+          title="🧤 Your position is still at risk";
+          message=`You are #${rank}, only ${gap.toFixed(2)} pts ahead in ${String(competition.name||"your tournament")}. Goalkeeper concession and clean-sheet points can still change the table.`;
+          // Risk is a state, not a new event on every score-provider refresh.
+          // Send it at most once per entry/rank in this competition.
+          dedupeKey=`competition:${competitionId}:entry:${entryId}:gk-risk:rank:${rank}`;
+        }
+      }
+
+      let notificationCreated=false;
+      if(title&&dedupeKey){
+        const notification=await createNotificationOnce(db,{userId:String(row.userId),type:rank<=3?"runner_up":"system",title,message,dedupeKey});
+        notificationCreated=Boolean(notification?.id);
+      }
+      const sequence=Number(previous?.sequence||0)+(notificationCreated?1:0);
       await db.execute(sql`insert into app.competition_live_alert_state(competition_id,entry_id,user_id,rank,total_score,metrics,sequence,updated_at) values(${competitionId},${entryId},${String(row.userId)},${rank},${score},${JSON.stringify(metrics)}::jsonb,${sequence},now()) on conflict(competition_id,entry_id) do update set rank=excluded.rank,total_score=excluded.total_score,metrics=excluded.metrics,sequence=excluded.sequence,updated_at=now()`);
-      if(title)await createNotificationOnce(db,{userId:String(row.userId),type:rank<=3?"runner_up":"system",title,message,dedupeKey:`competition:${competitionId}:entry:${entryId}:live-impact:${sequence}`});
     }
   }
 
