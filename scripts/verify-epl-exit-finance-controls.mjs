@@ -26,7 +26,7 @@ need(transfer, "EPL_REPLACEMENT_SAME_POSITION_V1", "same-position replacement ma
 need(transfer, 'source.position::text as "sourcePosition"', "replacement claims do not expose the departed player position");
 need(transfer, 'and p.position::text=${sourcePosition}', "replacement candidates are not restricted to the same position");
 need(transfer, "same ${prettyRarity} rarity", "departure notification does not explain same-rarity protection");
-need(transfer, "is archived from your playable collection as soon as any active tournament lock clears", "departure notification does not explain lock-safe source-card archive timing");
+need(transfer, "is archived only after a replacement is finalized", "departure notification does not explain replacement-finalization archive timing");
 need(transfer, "cl.card_id=pc.id", "departed source-card archive does not protect active tournament locks");
 need(transfer, "cl.expires_at is null or cl.expires_at > now()", "departed source-card archive does not wait for active tournament locks to clear");
 need(app, "<MandatoryReplacementClaimDialog />", "mandatory EPL replacement dialog is not mounted globally");
