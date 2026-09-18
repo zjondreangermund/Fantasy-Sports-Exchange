@@ -103,6 +103,16 @@ function TinyPlayer({ row, onClick, suffix }: { row: any; onClick?: () => void; 
   );
 }
 
+function DataFilter({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
+  return <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="pl-9" /></div>;
+}
+
+function rowMatchesFilter(row: any, filter: string) {
+  const needle = normalizeSearchText(filter);
+  if (!needle) return true;
+  return normalizeSearchText(JSON.stringify(row || {})).includes(needle);
+}
+
 function CoverageStrip({ data }: { data: any }) {
   const fixture = data?.coverage?.fixtures || {};
   const flags = [
@@ -133,6 +143,8 @@ export default function FootballDataCentre() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [selectedCoachId, setSelectedCoachId] = useState<number | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
+  const [clubFilter, setClubFilter] = useState("");
+  const [playerPosition, setPlayerPosition] = useState("");
 
   const selectedCompetition = COMPETITIONS.find((item) => item.key === leagueKey) || COMPETITIONS[0];
 
@@ -245,6 +257,8 @@ export default function FootballDataCentre() {
     setSelectedPlayerId(null);
     setSelectedCoachId(null);
     setPlayerSearch("");
+    setClubFilter("");
+    setPlayerPosition("");
   };
 
   return (
@@ -346,8 +360,9 @@ export default function FootballDataCentre() {
         </TabsContent>
 
         <TabsContent value="clubs" className="space-y-4">
+          <Card className="p-3"><DataFilter value={clubFilter} onChange={setClubFilter} placeholder="Filter clubs" /></Card>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {(Array.isArray(teams.data?.teams) ? teams.data.teams : []).map((row: any) => {
+            {(Array.isArray(teams.data?.teams) ? teams.data.teams : []).filter((row: any) => rowMatchesFilter(row?.team || row, clubFilter)).map((row: any) => {
               const team = row?.team || row;
               return <button type="button" key={team?.id} onClick={() => { setSelectedTeamId(Number(team?.id)); setSelectedCoachId(null); }} className={`rounded-xl border p-3 text-center transition ${Number(team?.id) === selectedTeamId ? "border-violet-400 bg-violet-500/10" : "border-white/10 bg-black/20 hover:bg-white/5"}`}>{team?.logo ? <img src={team.logo} alt="" className="mx-auto h-12 w-12 object-contain" /> : null}<div className="mt-2 truncate text-sm font-bold">{team?.name}</div></button>;
             })}
@@ -359,10 +374,10 @@ export default function FootballDataCentre() {
 
         <TabsContent value="players" className="space-y-4">
           <Card className="p-4">
-            <div className="flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input value={playerSearch} onChange={(event) => setPlayerSearch(event.target.value)} placeholder={`Search ${selectedCompetition.name} player — at least 3 characters`} /></div>
+            <div className="flex flex-col gap-2 sm:flex-row"><div className="flex min-w-0 flex-1 items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input value={playerSearch} onChange={(event) => setPlayerSearch(event.target.value)} placeholder={`Search ${selectedCompetition.name} player — at least 3 characters`} /></div><select className="rounded-md border border-white/10 bg-background px-3 py-2 text-sm" value={playerPosition} onChange={(event) => setPlayerPosition(event.target.value)}><option value="">All positions</option><option value="GK">Goalkeepers</option><option value="DEF">Defenders</option><option value="MID">Midfielders</option><option value="FWD">Forwards</option></select></div>
           </Card>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {(Array.isArray(playerResults.data?.players) ? playerResults.data.players : []).map((row: any) => <TinyPlayer key={row?.player?.id} row={row} onClick={() => setSelectedPlayerId(Number(row?.player?.id || 0))} suffix={row?.statistics?.[0]?.games?.position || ""} />)}
+            {(Array.isArray(playerResults.data?.players) ? playerResults.data.players : []).filter((row: any) => !playerPosition || String(row?.statistics?.[0]?.games?.position || "").toUpperCase() === playerPosition).map((row: any) => <TinyPlayer key={row?.player?.id} row={row} onClick={() => setSelectedPlayerId(Number(row?.player?.id || 0))} suffix={row?.statistics?.[0]?.games?.position || ""} />)}
           </div>
           {playerSearch.trim() && searchQuery.length < 3 ? <p className="text-sm text-muted-foreground">Enter at least three letters to search official players.</p> : null}
           {searchQuery.length >= 3 && !playerResults.isFetching && playerResults.isError ? <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3 text-sm text-amber-100"><span>Official player search is temporarily unavailable.</span><Button size="sm" variant="outline" onClick={() => { void playerResults.refetch(); }}>Retry search</Button></div> : null}
@@ -452,16 +467,18 @@ function FormationPitch({ lineup, onPlayer }: { lineup: any; onPlayer: (id: numb
 }
 
 function StandingsTable({ data, loading }: { data: any; loading: boolean }) {
+  const [filter, setFilter] = useState("");
   if (loading) return <Skeleton className="h-96 w-full" />;
   const groups = Array.isArray(data?.groups) ? data.groups : [];
   if (!groups.length) return <Card className="p-8 text-center text-muted-foreground">No standings are available for this competition/season yet.</Card>;
-  return <div className="space-y-4">{groups.map((rows: any[], groupIndex: number) => <Card key={groupIndex} className="overflow-hidden"><div className="border-b border-white/10 p-3 font-black">{rows?.[0]?.group || (groups.length > 1 ? `Group ${groupIndex + 1}` : "Standings")}</div><div className="overflow-x-auto"><table className="min-w-[720px] w-full text-sm"><thead className="bg-white/5 text-xs text-muted-foreground"><tr><th className="p-3 text-left">#</th><th className="p-3 text-left">Club</th><th className="p-3">P</th><th className="p-3">W</th><th className="p-3">D</th><th className="p-3">L</th><th className="p-3">GF</th><th className="p-3">GA</th><th className="p-3">GD</th><th className="p-3">Pts</th><th className="p-3">Form</th></tr></thead><tbody className="divide-y divide-white/10">{rows.map((row: any) => <tr key={`${groupIndex}-${row?.rank}-${row?.team?.id}`}><td className="p-3 font-black">{row?.rank}</td><td className="p-3"><div className="flex items-center gap-2">{row?.team?.logo ? <img src={row.team.logo} alt="" className="h-6 w-6 object-contain" /> : null}<span className="font-bold">{row?.team?.name}</span></div></td><td className="p-3 text-center">{row?.all?.played ?? 0}</td><td className="p-3 text-center">{row?.all?.win ?? 0}</td><td className="p-3 text-center">{row?.all?.draw ?? 0}</td><td className="p-3 text-center">{row?.all?.lose ?? 0}</td><td className="p-3 text-center">{row?.all?.goals?.for ?? 0}</td><td className="p-3 text-center">{row?.all?.goals?.against ?? 0}</td><td className="p-3 text-center">{row?.goalsDiff ?? 0}</td><td className="p-3 text-center font-black">{row?.points ?? 0}</td><td className="p-3 text-center text-xs">{row?.form || "-"}</td></tr>)}</tbody></table></div></Card>)}</div>;
+  return <div className="space-y-4"><Card className="p-3"><DataFilter value={filter} onChange={setFilter} placeholder="Filter table clubs" /></Card>{groups.map((rows: any[], groupIndex: number) => { const filteredRows = rows.filter((row: any) => rowMatchesFilter(row?.team || row, filter)); return <Card key={groupIndex} className="overflow-hidden"><div className="border-b border-white/10 p-3 font-black">{rows?.[0]?.group || (groups.length > 1 ? `Group ${groupIndex + 1}` : "Standings")}</div><div className="overflow-x-auto"><table className="min-w-[720px] w-full text-sm"><thead className="bg-white/5 text-xs text-muted-foreground"><tr><th className="p-3 text-left">#</th><th className="p-3 text-left">Club</th><th className="p-3">P</th><th className="p-3">W</th><th className="p-3">D</th><th className="p-3">L</th><th className="p-3">GF</th><th className="p-3">GA</th><th className="p-3">GD</th><th className="p-3">Pts</th><th className="p-3">Form</th></tr></thead><tbody className="divide-y divide-white/10">{filteredRows.map((row: any) => <tr key={`${groupIndex}-${row?.rank}-${row?.team?.id}`}><td className="p-3 font-black">{row?.rank}</td><td className="p-3"><div className="flex items-center gap-2">{row?.team?.logo ? <img src={row.team.logo} alt="" className="h-6 w-6 object-contain" /> : null}<span className="font-bold">{row?.team?.name}</span></div></td><td className="p-3 text-center">{row?.all?.played ?? 0}</td><td className="p-3 text-center">{row?.all?.win ?? 0}</td><td className="p-3 text-center">{row?.all?.draw ?? 0}</td><td className="p-3 text-center">{row?.all?.lose ?? 0}</td><td className="p-3 text-center">{row?.all?.goals?.for ?? 0}</td><td className="p-3 text-center">{row?.all?.goals?.against ?? 0}</td><td className="p-3 text-center">{row?.goalsDiff ?? 0}</td><td className="p-3 text-center font-black">{row?.points ?? 0}</td><td className="p-3 text-center text-xs">{row?.form || "-"}</td></tr>)}</tbody></table></div>{filter && !filteredRows.length ? <div className="p-4 text-sm text-muted-foreground">No clubs match this filter.</div> : null}</Card>; })}</div>;
 }
 
 function AvailabilityCentre({ data, loading, disabled }: { data: any; loading: boolean; disabled: boolean }) {
+  const [filter, setFilter] = useState("");
   if (disabled) return <Card className="p-8 text-center text-muted-foreground">API-Football marks injury coverage as unavailable for this competition/season.</Card>;
   if (loading) return <Skeleton className="h-80 w-full" />;
-  const rows = Array.isArray(data?.injuries) ? data.injuries : [];
+  const rows = (Array.isArray(data?.injuries) ? data.injuries : []).filter((row: any) => rowMatchesFilter(row, filter));
   if (!rows.length) return <Card className="p-8 text-center text-muted-foreground">No current injuries or suspensions were returned.</Card>;
   const byTeam = new Map<string, any[]>();
   for (const row of rows) {
@@ -469,10 +486,11 @@ function AvailabilityCentre({ data, loading, disabled }: { data: any; loading: b
     if (!byTeam.has(team)) byTeam.set(team, []);
     byTeam.get(team)!.push(row);
   }
-  return <div className="space-y-4"><Card className="border-amber-500/20 bg-amber-500/5 p-4"><div className="flex items-center gap-2 font-black"><AlertTriangle className="h-5 w-5 text-amber-400" /> League-wide injuries & suspensions</div><p className="mt-1 text-sm text-muted-foreground">Use this before selecting a tournament team. Data is factual provider availability information, not a prediction of fantasy performance.</p></Card><div className="grid gap-4 lg:grid-cols-2">{[...byTeam.entries()].map(([team, teamRows]) => <Card key={team} className="p-4"><h3 className="mb-3 font-black">{team}</h3><div className="space-y-2">{teamRows.map((row: any, index: number) => <div key={`${row?.player?.id}-${index}`} className="flex items-start gap-3 rounded-lg border border-white/10 bg-black/20 p-3">{row?.player?.photo ? <img src={row.player.photo} alt="" className="h-10 w-10 rounded-full object-cover" /> : <AlertTriangle className="mt-1 h-4 w-4 text-amber-400" />}<div><div className="font-bold">{row?.player?.name}</div><div className="text-xs text-amber-200">{row?.player?.type || "Unavailable"}</div><div className="text-xs text-muted-foreground">{row?.player?.reason || "Reason not provided"}</div></div></div>)}</div></Card>)}</div></div>;
+  return <div className="space-y-4"><Card className="p-3"><DataFilter value={filter} onChange={setFilter} placeholder="Filter players, clubs or reasons" /></Card><Card className="border-amber-500/20 bg-amber-500/5 p-4"><div className="flex items-center gap-2 font-black"><AlertTriangle className="h-5 w-5 text-amber-400" /> League-wide injuries & suspensions</div><p className="mt-1 text-sm text-muted-foreground">Use this before selecting a tournament team. Data is factual provider availability information, not a prediction of fantasy performance.</p></Card><div className="grid gap-4 lg:grid-cols-2">{[...byTeam.entries()].map(([team, teamRows]) => <Card key={team} className="p-4"><h3 className="mb-3 font-black">{team}</h3><div className="space-y-2">{teamRows.map((row: any, index: number) => <div key={`${row?.player?.id}-${index}`} className="flex items-start gap-3 rounded-lg border border-white/10 bg-black/20 p-3">{row?.player?.photo ? <img src={row.player.photo} alt="" className="h-10 w-10 rounded-full object-cover" /> : <AlertTriangle className="mt-1 h-4 w-4 text-amber-400" />}<div><div className="font-bold">{row?.player?.name}</div><div className="text-xs text-amber-200">{row?.player?.type || "Unavailable"}</div><div className="text-xs text-muted-foreground">{row?.player?.reason || "Reason not provided"}</div></div></div>)}</div></Card>)}</div></div>;
 }
 
 function LeaderBoard({ data, loading, onPlayer }: { data: any; loading: boolean; onPlayer: (id: number) => void }) {
+  const [filter, setFilter] = useState("");
   if (loading) return <Skeleton className="h-72 w-full" />;
   const groups = [
     ["Top scorers", data?.topScorers || [], (row: any) => `${row?.statistics?.[0]?.goals?.total ?? 0} goals`],
@@ -480,7 +498,7 @@ function LeaderBoard({ data, loading, onPlayer }: { data: any; loading: boolean;
     ["Yellow cards", data?.topYellowCards || [], (row: any) => `${row?.statistics?.[0]?.cards?.yellow ?? 0} cards`],
     ["Red cards", data?.topRedCards || [], (row: any) => `${row?.statistics?.[0]?.cards?.red ?? 0} cards`],
   ] as const;
-  return <div className="grid gap-4 lg:grid-cols-2">{groups.map(([title, rows, suffix]) => <Card key={title} className="p-4"><h3 className="mb-3 font-black">{title}</h3><div className="space-y-2">{(Array.isArray(rows) ? rows.slice(0, 10) : []).map((row: any) => <TinyPlayer key={row?.player?.id} row={row} onClick={() => onPlayer(Number(row?.player?.id || 0))} suffix={suffix(row)} />)}{!rows?.length ? <EmptyText text="No leaderboard data returned yet." /> : null}</div></Card>)}</div>;
+  return <div className="space-y-4"><Card className="p-3"><DataFilter value={filter} onChange={setFilter} placeholder="Filter leaderboards by player or club" /></Card><div className="grid gap-4 lg:grid-cols-2">{groups.map(([title, rows, suffix]) => <Card key={title} className="p-4"><h3 className="mb-3 font-black">{title}</h3><div className="space-y-2">{(Array.isArray(rows) ? rows.filter((row: any) => rowMatchesFilter(row, filter)).slice(0, 10) : []).map((row: any) => <TinyPlayer key={row?.player?.id} row={row} onClick={() => onPlayer(Number(row?.player?.id || 0))} suffix={suffix(row)} />)}{!rows?.length ? <EmptyText text="No leaderboard data returned yet." /> : null}</div></Card>)}</div></div>;
 }
 
 function TeamProfile({ data, squad, transfers, venue, loading, onCoach }: { data: any; squad: any; transfers: any; venue: any; loading: boolean; onCoach: (id: number) => void }) {
