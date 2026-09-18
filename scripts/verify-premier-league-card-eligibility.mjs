@@ -98,13 +98,17 @@ requireText(reconciliation, "p.position=$2::public.position", "Replacement playe
 requireText(reconciliation, "$3::public.rarity", "Replacement players must have the same rarity as the original card.");
 requireText(reconciliation, "preservedOriginalCard: true", "Original signup cards must remain owned and auditable.");
 requireText(reconciliation, "PREMIER_LEAGUE_REPLACEMENT_GUARD", "Incomplete roster sources or suspicious bulk departures must block replacement minting.");
+requireText(reconciliation, "POST_GW_DEPARTURE_POLICY_V1", "Departed-card handling must defer while a current tournament lock is active.");
+requireText(reconciliation, "deferredLocked", "Startup reconciliation must report locked player deferrals.");
+requireText(reconciliation, "deferredToRuntimePolicy", "Startup reconciliation must hand departed cards to the post-gameweek runtime policy.");
+rejectText(reconciliation, "const result = await replaceDepartedCard(client, item.card", "Startup must not auto-mint departed-card replacements before the runtime lock/ownership policy runs.");
 rejectText(reconciliation, "set owner_id=null", "Departure replacement must not remove anyone's original player cards.");
 rejectText(reconciliation, "delete from app.player_cards", "Departure replacement must not delete anyone's original player cards.");
 
 const serialPreparation = startup.indexOf("node scripts/prepare-runtime-startup.mjs");
 const replacementStartup = startup.indexOf("node scripts/reconcile-owned-premier-league-cards.mjs");
 if (serialPreparation < 0 || replacementStartup <= serialPreparation) {
-  throw new Error("Departure replacements must be minted only after immutable serial/supply triggers have been installed.");
+  throw new Error("Departed-card reconciliation must run only after immutable serial/supply triggers have been installed.");
 }
 
-console.log("Verified Premier League card identity, tournament eligibility and safe same-position departure replacements.");
+console.log("Verified Premier League card identity, tournament eligibility, gameweek-lock deferral and safe post-gameweek departure handling.");
