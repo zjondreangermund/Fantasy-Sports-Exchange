@@ -303,7 +303,8 @@ async function main() {
     }
 
     let marked = 0;
-    let minted = 0;
+    let deferredLocked = 0;
+    let deferredToRuntimePolicy = 0;
     let replacementErrors = 0;
     if (!dualSourceHealthy || suspiciousDepartureCount) {
       console.warn(
@@ -312,10 +313,31 @@ async function main() {
         + ` unmatched=${departed.length} owned=${owned.length}; original cards preserved and no replacements minted`,
       );
     } else {
+      const handledPlayers = new Set();
       for (const item of departed) {
-        if (!item.card.position) continue;
-        await client.query("savepoint departed_card_replacement");
+        if (!item.card.position || handledPlayers.has(item.card.playerId)) continue;
+        handledPlayers.add(item.card.playerId);
+        await client.query("savepoint departed_card_policy");
         try {
+          // POST_GW_DEPARTURE_POLICY_V1
+          // Never alter player/card eligibility while any owned card for this player
+          // is still locked into a current tournament. The runtime policy revisits
+          // the player after settlement and handles Common remints / buyer choice.
+          const lock = rows(await client.query(`
+            select cl.id
+            from app.card_locks cl
+            join app.player_cards locked_card on locked_card.id=cl.card_id
+            where locked_card.player_id=$1
+              and locked_card.owner_id is not null
+              and (cl.expires_at is null or cl.expires_at > now())
+            limit 1
+          `, [item.card.playerId]))[0];
+          if (lock?.id) {
+            deferredLocked += 1;
+            await client.query("release savepoint departed_card_policy");
+            continue;
+          }
+
           const departureMessage = `${item.card.name} is no longer listed in a current Premier League squad.`;
           const changed = await client.query(`
             update app.players
@@ -324,15 +346,18 @@ async function main() {
               and (league is distinct from 'Outside Premier League'
                    or status is distinct from 'departed' or news is distinct from $2)
           `, [item.card.playerId, departureMessage]);
-          const result = await replaceDepartedCard(client, item.card, fplIndex, directory);
           marked += Number(changed.rowCount || 0);
-          if (result.minted) minted += 1;
-          await client.query("release savepoint departed_card_replacement");
+          deferredToRuntimePolicy += 1;
+          console.log(
+            `PREMIER_LEAGUE_DEPARTURE_DEFERRED player=${item.card.playerId} name="${item.card.name}"`
+            + ` policy=post-gameweek-runtime-remint-or-owner-choice`,
+          );
+          await client.query("release savepoint departed_card_policy");
         } catch (error) {
-          await client.query("rollback to savepoint departed_card_replacement");
-          await client.query("release savepoint departed_card_replacement");
+          await client.query("rollback to savepoint departed_card_policy");
+          await client.query("release savepoint departed_card_policy");
           replacementErrors += 1;
-          console.warn(`PREMIER_LEAGUE_CARD_REPLACEMENT_SKIPPED email=${item.card.email} card=${item.card.cardId} reason=${String(error?.message || error)}`);
+          console.warn(`PREMIER_LEAGUE_DEPARTURE_POLICY_SKIPPED player=${item.card.playerId} reason=${String(error?.message || error)}`);
         }
       }
     }
@@ -344,7 +369,8 @@ async function main() {
       + ` linkedPlayers=${repaired} departedCards=${departed.length}`
       + ` apiLinked=${classified.filter((item) => item.apiPlayer).length}`
       + ` fplFallback=${classified.filter((item) => !item.apiPlayer && item.element).length}`
-      + ` markedDeparted=${marked} replacementsMinted=${minted} replacementErrors=${replacementErrors}`,
+      + ` markedDeparted=${marked} replacementsMinted=0 deferredLocked=${deferredLocked}`
+      + ` deferredToRuntimePolicy=${deferredToRuntimePolicy} replacementErrors=${replacementErrors}`,
     );
   } catch (error) {
     await client.query("rollback").catch(() => undefined);
