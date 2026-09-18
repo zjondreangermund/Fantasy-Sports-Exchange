@@ -126,9 +126,10 @@ node scripts/prepare-runtime-startup.mjs
 
 # Refresh only official identity/league metadata on currently owned cards.
 # A departure requires independent current FPL and API-Football confirmation;
-# the immutable original card remains owned and exactly one audited replacement
-# of the same position/rarity is minted under the normal serial-supply trigger.
-echo "Linking owned Premier League cards and replacing confirmed departures..."
+# confirmed departures are queued for the lock-safe replacement policy. Locked
+# GW cards are never changed here. Runtime maintenance auto-remints Common cards
+# only after locks clear; bought cards wait for their owner's decision.
+echo "Linking owned Premier League cards and queuing confirmed departures..."
 if ! node scripts/reconcile-owned-premier-league-cards.mjs; then
   echo "Warning: Premier League card eligibility reconciliation could not complete; original cards remain unchanged."
 fi
