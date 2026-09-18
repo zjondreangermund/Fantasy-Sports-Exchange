@@ -14,6 +14,7 @@ const directory = read("server/services/apiFootballPlayerDirectory.ts");
 const sync = read("server/services/apiFootballSync.ts");
 const syncRoutes = read("server/routes/apiFootballSync.routes.ts");
 const cards = read("server/routes/cards.routes.ts");
+const eligibility = read("server/services/currentPremierLeagueEligibility.ts");
 const modal = read("client/src/components/cards/CardProfileModal.tsx");
 const images = read("client/src/lib/card-image.ts");
 const adapter = read("client/src/lib/fantasy-card-adapter.ts");
@@ -51,7 +52,8 @@ includesAll(cards, [
   'apiFootballPlayer && matchedElement ? "fpl+api-football"',
   'apiFootballPlayer ? "api-football-current-squad"',
   "verifiedImageUrl",
-  "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
+  "currentPremierLeagueIdentityVerified({",
+  "identityVerified,",
   'source: "card-fallback"',
   "last10: []",
   'verifiedIdentity ? "API-Football current squads"',
@@ -63,6 +65,7 @@ includesAll(cards, [
 expect(!cards.includes("opponent: `GW${index + 1}`"), "Card profiles must not fabricate ten placeholder gameweeks");
 expect(!cards.includes("last10: last10.length ? last10 : lastScoresFallback(card)"), "Official profile history must not be replaced by fake zero rows");
 expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl"), "Unverified cards must never inherit stale portraits");
+includesAll(eligibility, ["apiFootballCurrentSquadDirectoryHealthy", "storedPlayerExplicitlyOutsidePremierLeague"], "Current EPL profile eligibility");
 
 includesAll(modal, [
   'import { createPortal } from "react-dom"',
