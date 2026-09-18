@@ -4,6 +4,7 @@ import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
 import { apiFootballPhotoUrl, getApiFootballPlayerProfileSnapshot, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 import { loadDetailedScoringContext, resolveDetailedStatsForPlayer } from "../services/apiFootballScoringBridge.js";
+import { currentPremierLeagueIdentityVerified } from "../services/currentPremierLeagueEligibility.js";
 import {
   calculatePlayerScore,
   mapFplStatsToPlayerStats,
@@ -82,7 +83,12 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         const canonical = matchedElement ? fplIndex.canonical(matchedElement) : null;
         const apiFootballPlayer = resolveApiFootballPlayer({ ...player, ...(canonical || {}) }, apiFootballDirectory);
         const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
-        const identityVerified = Boolean(apiFootballPlayer || matchedElement);
+        const identityVerified = currentPremierLeagueIdentityVerified({
+          player,
+          apiFootballPlayer,
+          matchedFplElement: matchedElement,
+          directory: apiFootballDirectory,
+        });
         const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
         const outsidePremierLeague = !identityVerified
           && (String(player.league || "").toLowerCase() === "outside premier league"
@@ -94,7 +100,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
             : null;
         let currentGameweekPoints = 0;
         let last5Scores = Array.isArray(card.last5Scores) ? card.last5Scores.map((value: any) => Number(value || 0)).slice(0, 5) : [];
-        if (liveElement) {
+        if (identityVerified && liveElement) {
           const verifiedPlayer = { ...player, ...(canonical || {}) };
           const detailedStats = resolveDetailedStatsForPlayer(verifiedPlayer, detailedScoringContext);
           const combinedStats = mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats);
@@ -134,7 +140,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
             imageCandidates: Array.from(new Set([apiFootballImage, fplImage].filter(Boolean))),
             imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
             verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
-            identityVerified: Boolean(apiFootballPlayer || matchedElement),
+            identityVerified,
             premierLeagueEligible: identityVerified,
             premierLeagueStatus: identityVerified
               ? "active"
