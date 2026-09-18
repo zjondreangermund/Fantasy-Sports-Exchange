@@ -25,6 +25,7 @@ import GuidedHoverHelp from "./components/GuidedHoverHelp";
 import GlobalActionToasts from "./components/GlobalActionToasts";
 import CommonCardRewardChoiceDialog from "./components/CommonCardRewardChoiceDialog";
 import PendingPrizeClaimPopup from "./components/PendingPrizeClaimPopup";
+import SignupWelcomePopup from "./components/SignupWelcomePopup";
 import { useAuth } from "./hooks/use-auth";
 import { useScrollRepair } from "./hooks/use-scroll-repair";
 import { applySiteView, getSiteViewMode, isNativeMobileApp, type SiteViewMode } from "./lib/site-view";
@@ -242,6 +243,7 @@ export default function App() {
           <SecurityModeBanner />
           {!nativeApp ? <GuidedHoverHelp /> : null}
           <AppContent />
+          <SignupWelcomePopup />
           <PendingPrizeClaimPopup />
           <CommonCardRewardChoiceDialog />
           <GlobalActionToasts />
