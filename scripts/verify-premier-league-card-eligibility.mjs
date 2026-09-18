@@ -9,6 +9,9 @@ const client = fs.readFileSync("client/src/pages/competitions-vault.tsx", "utf8"
 const server = fs.readFileSync("server/routes/economyIntegrity.routes.ts", "utf8");
 const profile = fs.readFileSync("client/src/components/cards/CardProfileModal.tsx", "utf8");
 const reconciliation = fs.readFileSync("scripts/reconcile-owned-premier-league-cards.mjs", "utf8");
+const departurePolicy = fs.readFileSync("server/services/departedCardPolicy.ts", "utf8");
+const notificationRoutes = fs.readFileSync("server/routes/notifications.routes.ts", "utf8");
+const replacementDialog = fs.readFileSync("client/src/components/MandatoryReplacementClaimDialog.tsx", "utf8");
 const startup = fs.readFileSync("start.sh", "utf8");
 
 function requireText(source, expected, message) {
