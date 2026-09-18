@@ -5,7 +5,9 @@ import { createNotificationOnce, ensureNotificationsSchema } from "../services/n
 import {
   claimReplacementCard,
   ensurePlayerTransferMonitoringSchema,
+  keepReplacementSourceCard,
   listUserReplacementClaims,
+  processUnlockedCommonReplacementClaims,
 } from "../services/playerTransferMonitoring.js";
 import {
   disableWebPushSubscription,
@@ -126,6 +128,8 @@ async function syncSubscribedUserNotifications() {
   subscribedNotificationSyncRunning = true;
   try {
     await ensureNotificationsSchema();
+    // AUTO_COMMON_DEPARTURE_MAINTENANCE_V1
+    await processUnlockedCommonReplacementClaims(undefined, 100);
     const users = rowsOf(await db.execute(sql`
       select user_id as "userId"
       from (
@@ -290,11 +294,26 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
   app.get("/api/player-replacements", requireAuth, async (req: any, res) => {
     try {
       const userId = String(req.authUserId || "");
+      await processUnlockedCommonReplacementClaims(userId, 30);
       const claims = await listUserReplacementClaims(userId);
-      return res.json({ claims, openClaims: claims.filter((claim: any) => !claim.replacementCardId).length });
+      return res.json({ claims, openClaims: claims.filter((claim: any) => !claim.replacementCardId && claim.ownerDecision !== "keep").length });
     } catch (error: any) {
       console.error("Failed to load replacement claims:", error);
       return res.status(500).json({ message: error?.message || "Failed to load replacement claims" });
+    }
+  });
+
+  app.post("/api/player-replacements/:id/keep", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const claimId = Number(req.params.id);
+      if (!Number.isInteger(claimId) || claimId <= 0) return res.status(400).json({ message: "Valid replacement claim required" });
+      const claim = await keepReplacementSourceCard(userId, claimId);
+      return res.json({ success: true, claim });
+    } catch (error: any) {
+      const message = String(error?.message || "Could not save replacement choice");
+      const status = /not found/i.test(message) ? 404 : /locked|only marketplace|already/i.test(message) ? 409 : 500;
+      return res.status(status).json({ message });
     }
   });
 
