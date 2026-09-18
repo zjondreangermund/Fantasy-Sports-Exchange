@@ -404,7 +404,7 @@ export default function FootballDataCentre() {
           </div>
           {playerSearch.trim() && searchQuery.length < 2 ? <p className="text-sm text-muted-foreground">Enter at least two letters to search current Premier League players.</p> : null}
           {searchQuery.length >= 2 && !playerResults.isFetching && playerResults.isError ? <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3 text-sm text-amber-100"><span>Official player search is temporarily unavailable.</span><Button size="sm" variant="outline" onClick={() => { void playerResults.refetch(); }}>Retry search</Button></div> : null}
-          {searchQuery.length >= 3 && !playerResults.isFetching && !playerResults.isError && playerResults.data && !(Array.isArray(playerResults.data?.players) && playerResults.data.players.length) ? <p className="text-sm text-muted-foreground">No official players match that search.</p> : null}
+          {searchQuery.length >= 2 && !playerResults.isFetching && !playerResults.isError && playerResults.data && !(Array.isArray(playerResults.data?.players) && playerResults.data.players.length) ? <p className="text-sm text-muted-foreground">No official players match that search.</p> : null}
           {playerResults.isFetching ? <Skeleton className="h-24 w-full" /> : null}
           {selectedPlayerId ? <PlayerProfile data={playerProfile.data} loading={playerProfile.isLoading} /> : null}
         </TabsContent>
