@@ -25,16 +25,23 @@ const androidWorkflow = read(".github/workflows/android-app-build.yml");
 need(transfer, "EPL_REPLACEMENT_SAME_POSITION_V1", "same-position replacement marker is missing");
 need(transfer, 'source.position::text as "sourcePosition"', "replacement claims do not expose the departed player position");
 need(transfer, 'and p.position::text=${sourcePosition}', "replacement candidates are not restricted to the same position");
-need(transfer, "same ${prettyRarity} rarity", "departure notification does not explain same-rarity protection");
-need(transfer, "is archived from your playable collection as soon as any active tournament lock clears", "departure notification does not explain lock-safe source-card archive timing");
+need(transfer, "OWNER_CONTROLLED_DEPARTURE_POLICY_V1", "owner-controlled departure policy is missing");
+need(transfer, "processUnlockedCommonReplacementClaims", "automatic Common remint maintenance is missing");
+need(transfer, "LOCK_SAFE_REPLACEMENT_TRANSACTION_V1", "replacement transaction does not protect the Common cap");
+need(transfer, "owner_decision='keep'", "Marketplace owner keep choice is not persisted");
+need(transfer, "marketplace.purchase.completed", "Marketplace acquisition evidence is not checked for owner choice");
 need(transfer, "cl.card_id=pc.id", "departed source-card archive does not protect active tournament locks");
 need(transfer, "cl.expires_at is null or cl.expires_at > now()", "departed source-card archive does not wait for active tournament locks to clear");
-need(app, "<MandatoryReplacementClaimDialog />", "mandatory EPL replacement dialog is not mounted globally");
+need(app, "<MandatoryReplacementClaimDialog />", "EPL replacement dialog is not mounted globally");
 need(app, "<PushNotificationControl />", "installed-app push notification control is not mounted globally");
-need(dialog, "onEscapeKeyDown={(event) => event.preventDefault()}", "replacement dialog can still be dismissed with Escape");
-need(dialog, "onPointerDownOutside={(event) => event.preventDefault()}", "replacement dialog can still be dismissed by tapping outside");
+need(dialog, 'String(claim.rarity || "").toLowerCase() !== "common"', "Common departures must bypass the manual dialog for automatic remint");
+need(dialog, "!claim.locked", "locked current-gameweek cards must not show a replacement action");
+need(dialog, "Keep my original card", "Marketplace owners cannot choose to keep the original collectible");
+need(dialog, "Decide later", "Marketplace owners cannot defer their choice");
 need(dialog, "same <b>{rarity}</b> rarity", "replacement dialog does not clearly explain rarity protection");
 need(dialog, "<b>{position}</b> card", "replacement dialog does not clearly explain position protection");
+need(notificationRoutes, "AUTO_COMMON_DEPARTURE_MAINTENANCE_V1", "automatic Common remint worker is not scheduled");
+need(notificationRoutes, 'app.post("/api/player-replacements/:id/keep"', "Marketplace owner keep endpoint is missing");
 
 need(economy, "PRIZE_LADDER_UNDER_MINIMUM_CASH_FALLBACK_V1", "under-minimum Prize Ladder settlement fallback is missing");
 need(economy, "const underMinimumCashFallback = prizeVault && !prizeAward && grossPool > 0", "fallback is not restricted to an official Prize Ladder with no unlocked reward");
@@ -93,7 +100,7 @@ need(serviceWorker, 'self.addEventListener("notificationclick"', "service worker
 need(capacitorConfig, "PushNotifications", "Capacitor foreground notification presentation is not configured");
 need(androidWorkflow, "FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64", "Android build cannot receive its Firebase client configuration securely");
 
-console.log("EPL departure replacements verified: same rarity + same position, departed source cards archive after active tournament locks clear, mandatory claim popup, installed PWA and native Android push, under-minimum Prize Ladder 80/20 winner fallback, and bank/reserve tournament finance reconciliation are protected.");
+console.log("EPL departure replacements verified: same position/rarity, active-lock protection, automatic Common remints, Marketplace owner choice, protected reward claims, installed push, Prize Ladder fallback, and bank/reserve reconciliation are protected.");
 
 // This verifier is the final shared mutating/checkpoint pass in every production
 // build target after the large generated tournament/notification patch stack. Keep
