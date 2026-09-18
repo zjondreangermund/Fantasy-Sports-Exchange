@@ -13,6 +13,7 @@ const includesAll = (source, values, label) => {
 const fplIdentity = read("server/services/fplPlayerIdentity.ts");
 const directory = read("server/services/apiFootballPlayerDirectory.ts");
 const cards = read("server/routes/cards.routes.ts");
+const eligibility = read("server/services/currentPremierLeagueEligibility.ts");
 const marketplace = read("server/routes/marketplace.routes.ts");
 const server = read("server/index.ts");
 const images = read("client/src/lib/card-image.ts");
@@ -46,7 +47,8 @@ includesAll(cards, [
   "const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl",
   "imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
   "verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
-  "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
+  "currentPremierLeagueIdentityVerified({",
+  "identityVerified,",
   'identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football"',
   "imageUrl: null",
   "verifiedImageUrl: null",
@@ -62,10 +64,16 @@ includesAll(marketplace, [
   "apiFootballPhotoUrl",
   "fplIndex.resolve(storedPlayer)",
   "verifiedImageUrl",
-  "const identityVerified = Boolean(apiFootballPlayer || matchedElement)",
+  "const identityVerified = currentPremierLeagueIdentityVerified({",
   'apiFootballPlayer ? "api-football-current-squad"',
 ], "Marketplace card enrichment");
 expect(!marketplace.includes("imageUrl: row.player_image_url }"), "Marketplace cards must not expose raw stored portraits without verification");
+includesAll(eligibility, [
+  "apiFootballCurrentSquadDirectoryHealthy",
+  "storedPlayerExplicitlyOutsidePremierLeague",
+  "return Boolean(input.apiFootballPlayer)",
+], "Current Premier League eligibility guard");
+expect(eligibility.includes("if (apiFootballCurrentSquadDirectoryHealthy(input.directory))"), "Healthy current EPL squads must override stale FPL-only identity");
 
 includesAll(images, [
   "isVerifiedPlayerIdentity",
