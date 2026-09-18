@@ -4,6 +4,7 @@ import { db } from "../db.js";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
 import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
+import { currentPremierLeagueIdentityVerified } from "../services/currentPremierLeagueEligibility.js";
 import {
   getLoanFeeBreakdown,
   getLoanFloorPerGameweek,
@@ -148,7 +149,12 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
           : matchedElement
             ? fplApi.playerPhotoUrl(matchedElement, 250)
             : null;
-        const identityVerified = Boolean(apiFootballPlayer || matchedElement);
+        const identityVerified = currentPremierLeagueIdentityVerified({
+          player: storedPlayer,
+          apiFootballPlayer,
+          matchedFplElement: matchedElement,
+          directory: apiFootballDirectory,
+        });
         const identitySource = apiFootballPlayer && matchedElement
           ? "fpl+api-football"
           : apiFootballPlayer
