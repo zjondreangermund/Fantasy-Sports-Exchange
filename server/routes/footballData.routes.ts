@@ -3,6 +3,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { fetchApiFootballProvider } from "../services/apiFootballSync.js";
 import { fplApi } from "../services/fplApi.js";
+import { loadApiFootballPlayerDirectory } from "../services/apiFootballPlayerDirectory.js";
+import { normalizePlayerText } from "../services/fplPlayerIdentity.js";
 
 // API_FOOTBALL_FULL_INTELLIGENCE_V2
 export type FootballLeagueKey =
@@ -944,12 +946,112 @@ export function registerFootballDataRoutes(app: Express) {
     const league = leagueFor(req.params.leagueKey);
     if (!league) return res.status(404).json({ message: "Unsupported league" });
     const search = String(req.query.search || "").trim();
-    if (search.length < 3) return res.json({ league: league.config, players: [], message: "Enter at least 3 characters" });
+    if (search.length < 2) return res.json({ league: league.config, players: [], message: "Enter at least 2 characters" });
     try {
       const season = requestedSeason(req.query.season);
       const page = Math.max(1, Math.min(20, Number(req.query.page || 1)));
-      const result = await cachedProvider("players", { league: league.config.id, season, search, page }, 60 * 60);
-      return res.json({ league: league.config, season, players: responseRows(result.payload), paging: result.payload?.paging || null, cached: result.cached });
+      const normalizedSearch = normalizePlayerText(search);
+      const searchTokens = normalizedSearch.split(" ").filter(Boolean);
+      const currentDirectory = league.config.id === 39
+        ? await loadApiFootballPlayerDirectory(season).catch(() => [])
+        : [];
+
+      let providerRows: any[] = [];
+      let paging: any = null;
+      let cached = false;
+      let providerWarning: string | null = null;
+      try {
+        const result = await cachedProvider("players", { league: league.config.id, season, search, page }, 60 * 60);
+        providerRows = responseRows(result.payload);
+        paging = result.payload?.paging || null;
+        cached = Boolean(result.cached);
+      } catch (error: any) {
+        providerWarning = String(error?.message || "Official provider search unavailable");
+      }
+
+      // PREMIER_LEAGUE_CURRENT_SQUAD_SEARCH_V1
+      // Provider text search can omit a player even when the synchronized current
+      // Premier League squad directory contains him. Merge the current-squad
+      // directory into search results so club/GK searches stay complete.
+      const currentSquadRows = currentDirectory
+        .filter((player) => {
+          const haystack = normalizePlayerText([
+            player.name, player.firstName, player.lastName, player.team, player.position,
+          ].filter(Boolean).join(" "));
+          return searchTokens.length > 0 && searchTokens.every((token) => haystack.includes(token));
+        })
+        .map((player) => ({
+          player: {
+            id: player.apiPlayerId,
+            name: player.name,
+            firstname: player.firstName,
+            lastname: player.lastName,
+            photo: player.photo,
+            nationality: player.nationality,
+            age: player.age,
+          },
+          statistics: [{
+            team: { id: player.apiTeamId, name: player.team },
+            games: { position: player.position },
+            league: { id: 39, name: "Premier League" },
+          }],
+          currentSquad: true,
+        }));
+
+      const merged = new Map<number, any>();
+      for (const row of providerRows) {
+        const id = Number(row?.player?.id || 0);
+        if (id) merged.set(id, row);
+      }
+      for (const row of currentSquadRows) {
+        const id = Number(row?.player?.id || 0);
+        if (id && !merged.has(id)) merged.set(id, row);
+      }
+
+      // Official FPL is the final identity fallback for a current Premier League
+      // player if API-Football text search and the synchronized directory both miss.
+      if (league.config.id === 39) {
+        const bootstrap = await fplApi.bootstrap().catch(() => null);
+        const teams = new Map<number, string>((Array.isArray(bootstrap?.teams) ? bootstrap.teams : [])
+          .map((team: any) => [Number(team?.id || 0), String(team?.name || team?.short_name || "")]));
+        const positionByType: Record<number, string> = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
+        for (const element of Array.isArray(bootstrap?.elements) ? bootstrap.elements : []) {
+          const id = Number(element?.id || 0);
+          const playerName = String(element?.first_name || "") + " " + String(element?.second_name || "");
+          const webName = String(element?.web_name || "");
+          const teamName = teams.get(Number(element?.team || 0)) || "";
+          const position = positionByType[Number(element?.element_type || 0)] || "";
+          const haystack = normalizePlayerText([playerName, webName, teamName, position].join(" "));
+          if (!id || !searchTokens.every((token) => haystack.includes(token))) continue;
+          if (!merged.has(id)) {
+            merged.set(id, {
+              player: {
+                id,
+                name: playerName.trim() || webName,
+                firstname: String(element?.first_name || ""),
+                lastname: String(element?.second_name || ""),
+                photo: fplApi.playerPhotoUrl(element, 110),
+              },
+              statistics: [{
+                team: { id: Number(element?.team || 0), name: teamName },
+                games: { position },
+                league: { id: 39, name: "Premier League" },
+              }],
+              currentSquad: true,
+              fplFallback: true,
+            });
+          }
+        }
+      }
+
+      return res.json({
+        league: league.config,
+        season,
+        players: [...merged.values()],
+        paging,
+        cached,
+        warning: providerWarning && merged.size > 0 ? providerWarning : null,
+      });
     } catch (error: any) {
       return publicError(res, error, "Could not search players");
     }
