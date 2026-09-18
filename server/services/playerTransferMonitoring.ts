@@ -69,7 +69,26 @@ export async function ensurePlayerTransferMonitoringSchema() {
         )
       `);
       await db.execute(sql`create index if not exists player_transfer_events_player_idx on app.player_transfer_events (player_id, detected_at desc)`);
+      await db.execute(sql`alter table app.player_replacement_claims add column if not exists owner_decision text`);
+      await db.execute(sql`alter table app.player_replacement_claims add column if not exists decision_at timestamp`);
       await db.execute(sql`create index if not exists player_replacement_claims_user_idx on app.player_replacement_claims (user_id, claimed_at, created_at desc)`);
+      // TRANSFER_SOURCE_CARD_ARCHIVE_V2
+      // Only automatic Commons or owner-approved replacements are archived, and
+      // never while the source card is locked in an active tournament.
+      await db.execute(sql`
+        update app.player_cards pc
+        set owner_id=null, for_sale=false, price=0
+        from app.player_replacement_claims pr
+        where pr.source_card_id=pc.id
+          and pc.owner_id=pr.user_id
+          and coalesce(pr.owner_decision,'') <> 'keep'
+          and (lower(pr.rarity)='common' or pr.replacement_card_id is not null or coalesce(pr.owner_decision,'')='replace')
+          and not exists (
+            select 1 from app.card_locks cl
+            where cl.card_id=pc.id
+              and (cl.expires_at is null or cl.expires_at > now())
+          )
+      `);
     })().catch((error) => {
       schemaPromise = null;
       throw error;
@@ -136,9 +155,11 @@ async function createDepartureClaims(input: {
   playerName: string;
   fromTeam: string;
 }) {
+  // EPL_REPLACEMENT_SAME_POSITION_V1
   const cards = rowsOf(await db.execute(sql`
-    select pc.id, pc.owner_id as "ownerId", pc.rarity::text as rarity
+    select pc.id, pc.owner_id as "ownerId", pc.rarity::text as rarity, source.position::text as "sourcePosition"
     from app.player_cards pc
+    join app.players source on source.id=pc.player_id
     where pc.player_id=${input.playerId} and pc.owner_id is not null
     order by pc.id asc
   `));
@@ -148,7 +169,8 @@ async function createDepartureClaims(input: {
     const sourceCardId = Number(card.id || 0);
     const userId = String(card.ownerId || "");
     const rarity = String(card.rarity || "common").toLowerCase();
-    if (!sourceCardId || !userId || !SUPPLY_BY_RARITY[rarity]) continue;
+    const sourcePosition = String(card.sourcePosition || "").trim().toUpperCase();
+    if (!sourceCardId || !userId || !SUPPLY_BY_RARITY[rarity] || !["GK", "DEF", "MID", "FWD"].includes(sourcePosition)) continue;
 
     const inserted = rowsOf(await db.execute(sql`
       insert into app.player_replacement_claims (
@@ -169,11 +191,29 @@ async function createDepartureClaims(input: {
     `))[0];
     if (!claim?.id) continue;
 
+    // Detach the departed card as soon as it is safe. A card that is still locked
+    // into an active competition stays owned until that lock clears, so settlement
+    // integrity is never broken and notification/replacement reads cannot fail.
+    if (rarity === "common") {
+      await db.execute(sql`
+        update app.player_cards pc
+        set owner_id=null, for_sale=false, price=0
+        where pc.id=${sourceCardId}
+          and pc.owner_id=${userId}
+          and not exists (
+            select 1
+            from app.card_locks cl
+            where cl.card_id=pc.id
+              and (cl.expires_at is null or cl.expires_at > now())
+          )
+      `);
+    }
+
     const prettyRarity = rarity.charAt(0).toUpperCase() + rarity.slice(1);
     await createNotificationOnce(db, {
       userId,
       title: `${input.playerName} left the Premier League`,
-      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} card stays in your collection as a record, but it is no longer eligible for Premier League tournaments. Mint one free ${prettyRarity} replacement from the current Premier League player pool for future entries.`,
+      message: rarity === "common" ? `${input.playerName} is no longer in the Premier League. Your Common ${sourcePosition} card stays unchanged while it is locked in the current gameweek. After that lock clears, Fantasy Arena will automatically remint one random current Premier League ${sourcePosition} Common card.` : `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card cannot score in new Premier League play. Any active gameweek lock is preserved first; after it clears, the protected replacement choice becomes available.`,
       dedupeKey: `replacement-claim:${Number(claim.id)}`,
     });
   }
@@ -280,11 +320,22 @@ export async function listUserReplacementClaims(userId: string) {
            pr.source_card_id as "sourceCardId",
            pr.source_player_id as "sourcePlayerId",
            pr.source_player_name as "sourcePlayerName",
+           source.position::text as "sourcePosition",
            pr.rarity,
            pr.replacement_card_id as "replacementCardId",
            pr.claimed_at as "claimedAt",
+           pr.owner_decision as "ownerDecision",
+           pr.decision_at as "decisionAt",
+           exists (select 1 from app.card_locks cl where cl.card_id=pr.source_card_id and (cl.expires_at is null or cl.expires_at > now())) as locked,
+           exists (
+             select 1 from app.audit_logs al
+             where al.action='marketplace.purchase.completed'
+               and coalesce(al.meta->>'cardId','')=pr.source_card_id::text
+               and (al.user_id=pr.user_id or coalesce(al.meta->>'buyerId','')=pr.user_id)
+           ) as purchased,
            pr.created_at as "createdAt"
     from app.player_replacement_claims pr
+    join app.players source on source.id=pr.source_player_id
     where pr.user_id=${userId}
     order by pr.created_at desc, pr.id desc
   `));
@@ -299,8 +350,11 @@ export async function claimReplacementCard(userId: string, claimId: number) {
     const claim = rowsOf(await tx.execute(sql`
       select pr.id, pr.user_id as "userId", pr.source_card_id as "sourceCardId",
              pr.source_player_id as "sourcePlayerId", pr.source_player_name as "sourcePlayerName",
-             pr.rarity, pr.replacement_card_id as "replacementCardId", pr.claimed_at as "claimedAt"
+             source.position::text as "sourcePosition", pr.rarity,
+             pr.replacement_card_id as "replacementCardId", pr.claimed_at as "claimedAt",
+             pr.owner_decision as "ownerDecision", pr.decision_at as "decisionAt"
       from app.player_replacement_claims pr
+      join app.players source on source.id=pr.source_player_id
       where pr.id=${claimId} and pr.user_id=${userId}
       for update
     `))[0];
@@ -309,7 +363,7 @@ export async function claimReplacementCard(userId: string, claimId: number) {
     if (claim.replacementCardId) {
       const existing = rowsOf(await tx.execute(sql`
         select pc.id, pc.rarity::text as rarity, pc.serial_id as "serialId", pc.serial_number as "serialNumber",
-               p.id as "playerId", p.name as "playerName", p.team
+               p.id as "playerId", p.name as "playerName", p.team, p.position::text as position
         from app.player_cards pc
         join app.players p on p.id=pc.player_id
         where pc.id=${Number(claim.replacementCardId)} and pc.owner_id=${userId}
@@ -318,15 +372,27 @@ export async function claimReplacementCard(userId: string, claimId: number) {
       return { alreadyClaimed: true, claim, card: existing || null };
     }
 
+    if (String(claim.ownerDecision || "") === "keep") throw new Error("This purchased card is being kept by its owner.");
+    const activeSourceLock = rowsOf(await tx.execute(sql`
+      select 1 from app.card_locks
+      where card_id=${Number(claim.sourceCardId)}
+        and (expires_at is null or expires_at > now())
+      limit 1
+    `))[0];
+    if (activeSourceLock) throw new Error("This card is locked in the current gameweek. Replacement becomes available after the tournament lock clears.");
+
     const rarity = String(claim.rarity || "common").toLowerCase();
     const supplyLimit = SUPPLY_BY_RARITY[rarity];
+    const sourcePosition = String(claim.sourcePosition || "").trim().toUpperCase();
+    if (!["GK", "DEF", "MID", "FWD"].includes(sourcePosition)) throw new Error("Replacement position could not be verified; your claim remains open.");
     if (!supplyLimit) throw new Error("Unsupported replacement rarity");
 
     const candidates = rowsOf(await tx.execute(sql`
-      select p.id, p.name, p.team
+      select p.id, p.name, p.team, p.position::text as position
       from app.players p
       where lower(p.league)='premier league'
         and p.fpl_id is not null
+        and p.position::text=${sourcePosition}
         and p.id <> ${Number(claim.sourcePlayerId)}
         and coalesce(p.status,'a') <> 'departed'
         and not exists (
@@ -343,7 +409,7 @@ export async function claimReplacementCard(userId: string, claimId: number) {
       limit 50
     `));
     const chosen = candidates[0];
-    if (!chosen?.id) throw new Error(`No ${rarity} replacement supply is currently available. Your claim remains open.`);
+    if (!chosen?.id) throw new Error(`No ${rarity} ${sourcePosition} replacement supply is currently available. Your claim remains open.`);
 
     const card = rowsOf(await tx.execute(sql`
       insert into app.player_cards (
@@ -357,8 +423,19 @@ export async function claimReplacementCard(userId: string, claimId: number) {
 
     await tx.execute(sql`
       update app.player_replacement_claims
-      set replacement_card_id=${Number(card.id)}, claimed_at=now()
+      set replacement_card_id=${Number(card.id)}, claimed_at=now(), owner_decision='replace', decision_at=coalesce(decision_at, now())
       where id=${claimId} and user_id=${userId}
+    `);
+
+    await tx.execute(sql`
+      update app.player_cards pc
+      set owner_id=null, for_sale=false, price=0
+      where pc.id=${Number(claim.sourceCardId)}
+        and pc.owner_id=${userId}
+        and not exists (
+          select 1 from app.card_locks cl
+          where cl.card_id=pc.id and (cl.expires_at is null or cl.expires_at > now())
+        )
     `);
 
     return {
@@ -369,7 +446,93 @@ export async function claimReplacementCard(userId: string, claimId: number) {
         playerId: Number(chosen.id),
         playerName: String(chosen.name || "Premier League Player"),
         team: String(chosen.team || "Premier League"),
+        position: String(chosen.position || sourcePosition),
       },
     };
   });
+}
+
+
+// OWNER_CONTROLLED_DEPARTURE_POLICY_V1
+export async function keepReplacementSourceCard(userId: string, claimId: number) {
+  await ensurePlayerTransferMonitoringSchema();
+  if (!userId || !Number.isInteger(claimId) || claimId <= 0) throw new Error("Valid replacement claim required");
+
+  return db.transaction(async (tx: any) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`player-replacement:${claimId}`}))`);
+    const claim = rowsOf(await tx.execute(sql`
+      select pr.id, pr.user_id as "userId", pr.source_card_id as "sourceCardId",
+             pr.source_player_name as "sourcePlayerName", pr.rarity,
+             pr.replacement_card_id as "replacementCardId",
+             exists (
+               select 1 from app.audit_logs al
+               where al.action='marketplace.purchase.completed'
+                 and coalesce(al.meta->>'cardId','')=pr.source_card_id::text
+                 and (al.user_id=pr.user_id or coalesce(al.meta->>'buyerId','')=pr.user_id)
+             ) as purchased,
+             exists (
+               select 1 from app.card_locks cl
+               where cl.card_id=pr.source_card_id and (cl.expires_at is null or cl.expires_at > now())
+             ) as locked
+      from app.player_replacement_claims pr
+      where pr.id=${claimId} and pr.user_id=${userId}
+      for update
+    `))[0];
+    if (!claim) throw new Error("Replacement claim not found");
+    if (claim.replacementCardId) throw new Error("This card has already been replaced");
+    if (claim.locked) throw new Error("This card is locked in the current gameweek. Decide after the tournament lock clears.");
+    if (!claim.purchased) throw new Error("Only Marketplace-bought cards have a keep-or-replace choice.");
+
+    await tx.execute(sql`
+      update app.player_replacement_claims
+      set owner_decision='keep', decision_at=now()
+      where id=${claimId} and user_id=${userId} and replacement_card_id is null
+    `);
+    await tx.execute(sql`
+      update app.notifications
+      set read=true
+      where user_id=${userId} and dedupe_key=${`replacement-claim:${claimId}`}
+    `);
+    return { ...claim, ownerDecision: "keep", decisionAt: new Date().toISOString() };
+  });
+}
+
+export async function processUnlockedCommonReplacementClaims(userId?: string, limit = 100) {
+  await ensurePlayerTransferMonitoringSchema();
+  const safeLimit = Math.max(1, Math.min(250, Number(limit) || 100));
+  const pending = rowsOf(await db.execute(sql`
+    select pr.id, pr.user_id as "userId", pr.source_player_name as "sourcePlayerName"
+    from app.player_replacement_claims pr
+    where lower(pr.rarity)='common'
+      and pr.replacement_card_id is null
+      and coalesce(pr.owner_decision,'') <> 'keep'
+      and (${userId || ""}='' or pr.user_id=${userId || ""})
+      and not exists (
+        select 1 from app.card_locks cl
+        where cl.card_id=pr.source_card_id and (cl.expires_at is null or cl.expires_at > now())
+      )
+    order by pr.created_at asc, pr.id asc
+    limit ${safeLimit}
+  `));
+
+  let reminted = 0;
+  for (const row of pending) {
+    const claimUserId = String(row.userId || "");
+    const pendingClaimId = Number(row.id || 0);
+    if (!claimUserId || !pendingClaimId) continue;
+    try {
+      const result = await claimReplacementCard(claimUserId, pendingClaimId);
+      const replacementName = String(result?.card?.playerName || "current Premier League player");
+      await createNotificationOnce(db, {
+        userId: claimUserId,
+        title: "Common card automatically reminted",
+        message: `${String(row.sourcePlayerName || "Your player")} is outside the Premier League. After the gameweek lock cleared, Fantasy Arena automatically replaced the Common card with ${replacementName}, preserving the same position and Common rarity.`,
+        dedupeKey: `auto-common-replacement:${pendingClaimId}`,
+      });
+      reminted += 1;
+    } catch (error) {
+      console.warn(`Automatic Common replacement deferred for claim ${pendingClaimId}:`, error);
+    }
+  }
+  return { checked: pending.length, reminted };
 }
