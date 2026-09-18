@@ -13,6 +13,7 @@ const includesAll = (source, values, label) => {
 const identity = read("server/services/fplPlayerIdentity.ts");
 const sync = read("server/services/fplPlayerSync.ts");
 const cards = read("server/routes/cards.routes.ts");
+const eligibility = read("server/services/currentPremierLeagueEligibility.ts");
 const adapter = read("client/src/lib/fantasy-card-adapter.ts");
 const stableCard = read("client/src/components/cards/CollectionStableCard.tsx");
 const main = read("client/src/main.tsx");
@@ -59,7 +60,8 @@ includesAll(cards, [
   "loadApiFootballPlayerDirectory",
   "resolveApiFootballPlayer",
   "verifiedImageUrl",
-  "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
+  "currentPremierLeagueIdentityVerified({",
+  "identityVerified,",
   'stats: "API-Football match actions with official FPL fallback"',
   "cleanSheets: Number(row.clean_sheets || 0)",
   "yellowCards: Number(row.yellow_cards || 0)",
@@ -73,6 +75,7 @@ expect(!cards.includes("last10: last10.length ? last10 : lastScoresFallback(card
 expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl"), "Unverified cards must not reuse stale stored portraits");
 expect(!cards.includes("player.form ?? card.decisiveScore"), "Card responses must not present decisive score as official form");
 expect(!cards.includes("player.overall || card.decisiveScore"), "Card responses must not present decisive score as official overall");
+includesAll(eligibility, ["apiFootballCurrentSquadDirectoryHealthy", "return Boolean(input.apiFootballPlayer)"], "Current EPL eligibility gate");
 
 includesAll(adapter, [
   "player?.totalPoints",
