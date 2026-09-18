@@ -241,6 +241,29 @@ async function replaceDepartedCard(client, card, fplIndex, directory) {
   return { minted: true, cardId: Number(minted.id) };
 }
 
+async function queueDepartureClaim(client, card) {
+  await client.query(`
+    insert into app.player_replacement_claims
+      (user_id,source_card_id,source_player_id,source_player_name,rarity,transfer_event_id,created_at)
+    values ($1,$2,$3,$4,$5,null,now())
+    on conflict (source_card_id) do nothing
+  `, [card.ownerId, card.cardId, card.playerId, card.name, card.rarity]);
+}
+
+async function cardHasActiveLock(client, cardId) {
+  return Boolean(rows(await client.query(`
+    select 1
+    from app.card_locks
+    where card_id=$1 and (expires_at is null or expires_at > now())
+    limit 1
+  `, [cardId]))[0]);
+}
+
+// DEFER_DEPARTED_REPLACEMENTS_TO_LOCK_SAFE_POLICY_V1
+// Startup reconciliation verifies current EPL eligibility and queues replacement
+// claims, but never mutates a locked lineup or mints a replacement itself.
+// Common claims are auto-reminted by runtime maintenance after locks clear;
+// purchased non-Common cards wait for their owner's decision.
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
   const bootstrap = await currentFplBootstrap();
@@ -278,7 +301,7 @@ async function main() {
       const element = fplIndex.resolve(card);
       const canonical = element ? fplIndex.canonical(element) : null;
       const apiPlayer = directoryMatch({ ...card, ...(canonical || {}) }, directory);
-      return { card, element, canonical, apiPlayer, active: Boolean(element || apiPlayer) };
+      return { card, element, canonical, apiPlayer, active: dualSourceHealthy ? Boolean(apiPlayer) : Boolean(element || apiPlayer) };
     });
     const departed = classified.filter((item) => !item.active);
     const suspiciousDepartureCount = departed.length > 60
@@ -324,9 +347,14 @@ async function main() {
               and (league is distinct from 'Outside Premier League'
                    or status is distinct from 'departed' or news is distinct from $2)
           `, [item.card.playerId, departureMessage]);
-          const result = await replaceDepartedCard(client, item.card, fplIndex, directory);
+          await queueDepartureClaim(client, item.card);
+          const locked = await cardHasActiveLock(client, item.card.cardId);
           marked += Number(changed.rowCount || 0);
-          if (result.minted) minted += 1;
+          if (locked) {
+            console.log(`PREMIER_LEAGUE_REPLACEMENT_DEFERRED card=${item.card.cardId} rarity=${item.card.rarity} reason=active-tournament-lock`);
+          } else {
+            console.log(`PREMIER_LEAGUE_REPLACEMENT_QUEUED card=${item.card.cardId} rarity=${item.card.rarity} policy=${String(item.card.rarity).toLowerCase() === "common" ? "auto-common" : "owner-or-protected-claim"}`);
+          }
           await client.query("release savepoint departed_card_replacement");
         } catch (error) {
           await client.query("rollback to savepoint departed_card_replacement");
