@@ -329,7 +329,7 @@ export async function listUserReplacementClaims(userId: string) {
            exists (select 1 from app.card_locks cl where cl.card_id=pr.source_card_id and (cl.expires_at is null or cl.expires_at > now())) as locked,
            exists (
              select 1 from app.audit_logs al
-             where al.action='marketplace.purchase.completed'
+             where al.action in ('marketplace.purchase.completed','auction.purchase.completed','auction.win.completed')
                and coalesce(al.meta->>'cardId','')=pr.source_card_id::text
                and (al.user_id=pr.user_id or coalesce(al.meta->>'buyerId','')=pr.user_id)
            ) as purchased,
