@@ -16,6 +16,9 @@ type ReplacementClaim = {
   replacementCardId?: number | null;
   claimedAt?: string | null;
   createdAt?: string | null;
+  ownerChoice?: boolean;
+  locked?: boolean;
+  decision?: "pending" | "replace" | "keep" | string;
 };
 
 type ReplacementPayload = {
@@ -38,8 +41,36 @@ export default function MandatoryReplacementClaimDialog() {
   });
 
   const claims = Array.isArray(data?.claims) ? data.claims : [];
-  const openClaims = claims.filter((claim) => !claim.replacementCardId && !claim.claimedAt);
+  const openClaims = claims.filter((claim) =>
+    !claim.replacementCardId
+    && !claim.claimedAt
+    && claim.decision !== "keep"
+    && !claim.locked
+  );
   const claim = openClaims[0] || null;
+
+  const keepMutation = useMutation({
+    mutationFn: async (claimId: number) => {
+      const response = await apiRequest("POST", `/api/player-replacements/${claimId}/keep`, {});
+      return response.json();
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/player-replacements"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] }),
+      ]);
+      toast({
+        title: "Purchased card kept",
+        description: "Your original card stays in your Collection as a non-Premier-League record. It will not be used for new Premier League tournament entries.",
+      });
+    },
+    onError: (error: any) => toast({
+      title: "Choice could not be saved",
+      description: error?.message || "Try again after the current gameweek settles.",
+      variant: "destructive",
+    }),
+  });
 
   const claimMutation = useMutation({
     mutationFn: async (claimId: number) => {
@@ -81,7 +112,8 @@ export default function MandatoryReplacementClaimDialog() {
 
   const rarity = cap(claim.rarity);
   const position = String(claim.sourcePosition || "same position").toUpperCase();
-  const claimNumber = Math.max(1, claims.filter((row) => !row.replacementCardId && !row.claimedAt).findIndex((row) => row.id === claim.id) + 1);
+  const claimNumber = Math.max(1, openClaims.findIndex((row) => row.id === claim.id) + 1);
+  const ownerChoice = Boolean(claim.ownerChoice);
 
   return (
     <Dialog open={Boolean(claim)} onOpenChange={() => {}}>
@@ -102,7 +134,9 @@ export default function MandatoryReplacementClaimDialog() {
             Claim your replacement card
           </DialogTitle>
           <DialogDescription className="text-sm leading-6 text-white/60">
-            {claim.sourcePlayerName} has left the Premier League. The original card stays in your Collection as a record, but it can no longer be used in Premier League tournaments.
+            {claim.sourcePlayerName} has left the Premier League. {ownerChoice
+              ? "Because you bought this card, you choose whether to keep the original as a record or replace it with a current Premier League player."
+              : "The original card can no longer be used in new Premier League tournaments and will be replaced with an eligible current Premier League player."}
           </DialogDescription>
         </DialogHeader>
 
@@ -116,24 +150,43 @@ export default function MandatoryReplacementClaimDialog() {
 
         <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4 text-sm leading-6 text-emerald-50">
           <div className="flex items-center gap-2 font-black"><Sparkles className="h-4 w-4" />What you receive</div>
-          <p className="mt-1 text-emerald-50/80">One free random current Premier League <b>{position}</b> card with the same <b>{rarity}</b> rarity. The replacement is chosen from available supply and is added directly to your Collection.</p>
+          <p className="mt-1 text-emerald-50/80">{ownerChoice
+            ? <>If you choose Replace, you receive one random current Premier League <b>{position}</b> card with the same <b>{rarity}</b> rarity. If you choose Keep, the bought card remains yours as a non-EPL record.</>
+            : <>One free random current Premier League <b>{position}</b> card with the same <b>{rarity}</b> rarity. The replacement is chosen from available supply and is added directly to your Collection.</>}</p>
         </div>
 
         <div className="rounded-xl border border-cyan-300/15 bg-cyan-400/[.07] px-3 py-2 text-xs leading-5 text-cyan-50/80">
-          <Trophy className="mr-1 inline h-3.5 w-3.5" />You must complete this claim before continuing normally in Fantasy Arena. If more than one player has left the EPL, the next replacement will appear immediately after this one.
+          <Trophy className="mr-1 inline h-3.5 w-3.5" />{ownerChoice
+            ? "This bought card is yours to decide. The choice appears only after any active gameweek lock has cleared."
+            : "Fantasy Arena automatically remints unlocked Common departure cards. Higher-rarity replacement claims remain protected one-for-one."}
         </div>
 
         <div className="sticky bottom-0 z-10 -mx-1 rounded-2xl border border-amber-300/15 bg-[#080c18]/95 p-1.5 pb-[calc(.375rem+env(safe-area-inset-bottom,0px))] shadow-[0_-12px_28px_rgba(8,12,24,.92)] backdrop-blur-xl">
-          <Button
-            type="button"
-            onClick={() => claimMutation.mutate(Number(claim.id))}
-            disabled={claimMutation.isPending || isFetching}
-            className="h-12 w-full bg-amber-300 text-base font-black text-slate-950 hover:bg-amber-200"
-          >
-            <Sparkles className="mr-2 h-5 w-5" />
-            {claimMutation.isPending ? "Claiming random replacement…" : `Claim ${rarity} ${position} replacement`}
-          </Button>
-          <div className="mt-1.5 text-center text-[10px] font-bold uppercase tracking-[.13em] text-white/35">Required replacement claim {claimNumber} · no fee</div>
+          <div className={ownerChoice ? "grid gap-2 sm:grid-cols-2" : ""}>
+            {ownerChoice ? (
+              <Button
+                type="button"
+                variant="outline"
+                data-departed-card-keep
+                onClick={() => keepMutation.mutate(Number(claim.id))}
+                disabled={keepMutation.isPending || claimMutation.isPending || isFetching}
+                className="h-12 border-white/15 bg-white/[.04] font-black text-white hover:bg-white/10"
+              >
+                Keep bought card
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              data-departed-card-replace
+              onClick={() => claimMutation.mutate(Number(claim.id))}
+              disabled={claimMutation.isPending || keepMutation.isPending || isFetching}
+              className="h-12 w-full bg-amber-300 text-base font-black text-slate-950 hover:bg-amber-200"
+            >
+              <Sparkles className="mr-2 h-5 w-5" />
+              {claimMutation.isPending ? "Minting replacement…" : ownerChoice ? "Replace bought card" : `Claim ${rarity} ${position} replacement`}
+            </Button>
+          </div>
+          <div className="mt-1.5 text-center text-[10px] font-bold uppercase tracking-[.13em] text-white/35">{ownerChoice ? "Owner choice" : `Protected replacement ${claimNumber}`} · no fee</div>
         </div>
       </DialogContent>
     </Dialog>
