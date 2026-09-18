@@ -30,13 +30,13 @@ source = replaceRequired(source, claimAnchor, claimReplacement, "archive source 
 // rewrite the final same-position copy once that patch is present.
 if (source.includes("EPL_REPLACEMENT_SAME_POSITION_V1")) {
   const oldMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card stays in your collection as a record, but it is no longer eligible for Premier League tournaments. Claim one free random current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity. Fantasy Arena will keep reminding you until the replacement is claimed.`,'.replace(/\\`/g, "`");
-  const newMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries and is archived from your playable collection as soon as any active tournament lock clears. Claim one free random current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity. Fantasy Arena will keep reminding you until the replacement is claimed.`,'.replace(/\\`/g, "`");
+  const newMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. It stays owned while any gameweek lock or replacement decision is pending, and is archived only after a replacement is finalized. Claim one free random current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity. Fantasy Arena will keep reminding you until the replacement is claimed.`,'.replace(/\\`/g, "`");
   source = replaceRequired(source, oldMessage, newMessage, "final same-position departure notification copy");
 }
 
 if (source !== original) {
   fs.writeFileSync(FILE, source);
-  console.log("[departed-card-archive] departed source cards are archived only after active tournament locks clear; card and claim history remains preserved.");
+  console.log("[departed-card-archive] departed source cards remain owned until replacement is finalized; active tournament locks and owner decisions are preserved.");
 } else {
   console.log("[departed-card-archive] lock-safe source-card archive behavior already applied.");
 }
