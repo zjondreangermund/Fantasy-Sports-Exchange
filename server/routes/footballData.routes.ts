@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { fetchApiFootballProvider } from "../services/apiFootballSync.js";
 import { fplApi } from "../services/fplApi.js";
+import { loadApiFootballPlayerDirectory } from "../services/apiFootballPlayerDirectory.js";
 
 // API_FOOTBALL_FULL_INTELLIGENCE_V2
 export type FootballLeagueKey =
@@ -136,6 +137,49 @@ async function cachedProvider(
 
 function responseRows(payload: any) {
   return Array.isArray(payload?.response) ? payload.response : [];
+}
+
+function normalizePlayerSearch(value: unknown) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function currentDirectorySearchRows(directory: any[], search: string, league: LeagueConfig) {
+  const needle = normalizePlayerSearch(search);
+  if (!needle) return [];
+  return (Array.isArray(directory) ? directory : [])
+    .filter((player) => {
+      const haystack = normalizePlayerSearch([
+        player?.name,
+        player?.firstName,
+        player?.lastName,
+        player?.team,
+        player?.position,
+      ].filter(Boolean).join(" "));
+      return haystack.includes(needle);
+    })
+    .slice(0, 60)
+    .map((player) => ({
+      player: {
+        id: Number(player?.apiPlayerId || 0),
+        name: String(player?.name || "").trim(),
+        firstname: String(player?.firstName || "").trim() || null,
+        lastname: String(player?.lastName || "").trim() || null,
+        photo: player?.photo || null,
+        nationality: player?.nationality || null,
+      },
+      statistics: [{
+        team: { id: Number(player?.apiTeamId || 0), name: String(player?.team || "") },
+        league: { id: league.id, name: league.name, country: league.country },
+        games: { position: String(player?.position || "") },
+      }],
+      source: "current-epl-squad-directory",
+    }))
+    .filter((row) => row.player.id > 0 && row.player.name);
 }
 
 function normalizeFixture(item: any) {
@@ -948,8 +992,36 @@ export function registerFootballDataRoutes(app: Express) {
     try {
       const season = requestedSeason(req.query.season);
       const page = Math.max(1, Math.min(20, Number(req.query.page || 1)));
-      const result = await cachedProvider("players", { league: league.config.id, season, search, page }, 60 * 60);
-      return res.json({ league: league.config, season, players: responseRows(result.payload), paging: result.payload?.paging || null, cached: result.cached });
+      const result = await cachedProvider("players", { league: league.config.id, season, search, page }, 60 * 60).catch(() => null);
+
+      let players = result ? responseRows(result.payload) : [];
+      if (league.key === "premier-league") {
+        // EPL_PLAYER_SEARCH_CURRENT_SQUAD_FALLBACK_V1
+        // Provider league+search can omit valid current squad members. Merge the
+        // synchronized current EPL squad directory so names such as Alex Palmer
+        // remain searchable even when the provider search index lags.
+        const directory = await loadApiFootballPlayerDirectory(season).catch(() => []);
+        const directoryRows = currentDirectorySearchRows(directory, search, league.config);
+        const merged = new Map<number, any>();
+        for (const row of players) {
+          const id = Number(row?.player?.id || 0);
+          if (id) merged.set(id, row);
+        }
+        for (const row of directoryRows) {
+          const id = Number(row?.player?.id || 0);
+          if (id && !merged.has(id)) merged.set(id, row);
+        }
+        players = [...merged.values()].slice(0, 60);
+      }
+
+      return res.json({
+        league: league.config,
+        season,
+        players,
+        paging: result?.payload?.paging || null,
+        cached: result?.cached ?? false,
+        searchSources: league.key === "premier-league" ? ["api-football-search", "current-epl-squad-directory"] : ["api-football-search"],
+      });
     } catch (error: any) {
       return publicError(res, error, "Could not search players");
     }
