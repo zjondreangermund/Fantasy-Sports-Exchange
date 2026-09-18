@@ -12,6 +12,7 @@ import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlaye
 import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats, mergePlayerStatsWithDetailedStats } from "../services/scoring.js";
 import { loadDetailedScoringContext, resolveDetailedStatsForPlayer } from "../services/apiFootballScoringBridge.js";
+import { currentPremierLeagueIdentityVerified } from "../services/currentPremierLeagueEligibility.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
@@ -406,11 +407,16 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         const apiFootballPlayer = resolveApiFootballPlayer({ ...storedPlayer, ...(canonical || {}) }, apiFootballDirectory);
         const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl(apiFootballPlayer.apiPlayerId, apiFootballPlayer.photo) : "";
         const verifiedImageUrl = apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null);
-        const identityVerified = Boolean(apiFootballPlayer || matchedElement);
+        const identityVerified = currentPremierLeagueIdentityVerified({
+          player: storedPlayer,
+          apiFootballPlayer,
+          matchedFplElement: matchedElement,
+          directory: apiFootballDirectory,
+        });
         const position = canonical?.position || String(storedPlayer.position || "") || apiFootballPlayer?.position || "MID";
         const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
         const detailedStats = liveElement && detailedScoringContext ? resolveDetailedStatsForPlayer({ ...storedPlayer, ...(canonical || {}) }, detailedScoringContext) : null;
-        const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), position).total_score || 0) : 0;
+        const currentGameweekPoints = identityVerified && liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), position).total_score || 0) : 0;
         const officialFplSeasonPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
         const totalPoints = identityVerified ? currentGameweekPoints : null;
         const officialOverall = matchedElement ? overallFromFplElement(matchedElement) : null;
