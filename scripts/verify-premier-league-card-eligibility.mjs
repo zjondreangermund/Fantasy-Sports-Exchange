@@ -98,6 +98,10 @@ requireText(reconciliation, "p.position=$2::public.position", "Replacement playe
 requireText(reconciliation, "$3::public.rarity", "Replacement players must have the same rarity as the original card.");
 requireText(reconciliation, "preservedOriginalCard: true", "Original signup cards must remain owned and auditable.");
 requireText(reconciliation, "PREMIER_LEAGUE_REPLACEMENT_GUARD", "Incomplete roster sources or suspicious bulk departures must block replacement minting.");
+requireText(reconciliation, "DEFER_DEPARTED_REPLACEMENTS_TO_LOCK_SAFE_POLICY_V1", "Startup must defer departed-card replacement to the lock-safe runtime policy.");
+requireText(reconciliation, "queueDepartureClaim", "Confirmed departures must queue a durable replacement claim.");
+requireText(reconciliation, "cardHasActiveLock", "Startup departure maintenance must detect active tournament locks.");
+rejectText(reconciliation, "const result = await replaceDepartedCard(client, item.card", "Startup must not directly remint departed cards before the runtime lock-safe policy.");
 rejectText(reconciliation, "set owner_id=null", "Departure replacement must not remove anyone's original player cards.");
 rejectText(reconciliation, "delete from app.player_cards", "Departure replacement must not delete anyone's original player cards.");
 
