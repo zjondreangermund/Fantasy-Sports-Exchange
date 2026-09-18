@@ -4,6 +4,9 @@ import vm from "node:vm";
 
 const read = (file) => fs.readFileSync(file, "utf8");
 const account = read("client/src/pages/account.tsx");
+const app = read("client/src/App.tsx");
+const welcomePopup = read("client/src/components/SignupWelcomePopup.tsx");
+const footballRoutes = read("server/routes/footballData.routes.ts");
 const nativeClub = read("client/src/components/native/NativeClubPage.tsx");
 const dashboard = read("client/src/pages/dashboard.tsx");
 const chat = read("client/src/components/FloatingSupportWidget.tsx");
@@ -24,6 +27,10 @@ function includes(source, expected, message) {
   assert.ok(source.includes(expected), message);
 }
 
+includes(app, "<SignupWelcomePopup />", "New signups must receive the welcome modal in addition to the permanent Inbox message.");
+includes(welcomePopup, "data-signup-welcome-popup", "Signup welcome popup marker is missing.");
+includes(welcomePopup, 'startsWith("welcome:new-user:")', "Welcome popup must be tied to the durable signup welcome notification.");
+includes(welcomePopup, "/api/notifications/", "Closing the welcome popup must mark the same Inbox notification read.");
 includes(account, "const markOneMutation = useMutation", "The notification inbox must preserve individual Read actions.");
 includes(account, "const markAllMutation = useMutation", "The notification inbox must preserve Mark all read.");
 includes(nativeClub, "setSelectedNotification(note)", "Native inbox alerts must open their full Inbox message.");
@@ -52,6 +59,13 @@ for (const [name, source] of [["Collection", collection], ["Marketplace", market
   includes(source, "refetchInterval: 15_000", `${name} must refresh official Arena card scores promptly.`);
 }
 includes(football, "normalizeSearchText(playerSearch)", "Official player searches must normalize accents and whitespace.");
+includes(football, "LongListFilter", "Long Premier League data lists must expose filter controls.");
+for (const label of ["Filter fixtures by club, round or status", "Filter standings by club", "Filter injuries, players or clubs", "Filter leaderboards by player or club", "Filter clubs", "Filter squad", "Filter transfer history"]) {
+  includes(football, label, `Premier League long-list filter missing: ${label}`);
+}
+includes(footballRoutes, "PREMIER_LEAGUE_CURRENT_SQUAD_SEARCH_V1", "Current Premier League squad directory must backstop provider player search.");
+includes(footballRoutes, "loadApiFootballPlayerDirectory", "Player search must include the synchronized current squad directory.");
+includes(footballRoutes, "fplApi.bootstrap()", "Official FPL must remain the final current-player search fallback.");
 
 const strippedSearch = search
   .replace(/\bexport\s+/g, "")

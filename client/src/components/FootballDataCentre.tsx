@@ -90,6 +90,20 @@ function formatEventMinute(event: any) {
   return extra > 0 ? `${elapsed}+${extra}'` : `${elapsed}'`;
 }
 
+function LongListFilter({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
+  return (
+    <div className="flex min-w-[14rem] flex-1 items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3">
+      <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+      />
+    </div>
+  );
+}
+
 function TinyPlayer({ row, onClick, suffix }: { row: any; onClick?: () => void; suffix?: string }) {
   return (
     <button type="button" onClick={onClick} disabled={!onClick} className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-3 text-left transition hover:bg-white/5 disabled:cursor-default">
@@ -133,6 +147,8 @@ export default function FootballDataCentre() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [selectedCoachId, setSelectedCoachId] = useState<number | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
+  const [fixtureFilter, setFixtureFilter] = useState("");
+  const [clubFilter, setClubFilter] = useState("");
 
   const selectedCompetition = COMPETITIONS.find((item) => item.key === leagueKey) || COMPETITIONS[0];
 
@@ -223,7 +239,7 @@ export default function FootballDataCentre() {
   const playerResults = useQuery<any>({
     queryKey: ["api-football-player-search", leagueKey, searchQuery],
     queryFn: () => getJson(`/api/football/players/${leagueKey}?search=${encodeURIComponent(searchQuery)}`),
-    enabled: searchQuery.length >= 3,
+    enabled: searchQuery.length >= 2,
     staleTime: 30 * 60 * 1000,
   });
 
@@ -233,7 +249,26 @@ export default function FootballDataCentre() {
     enabled: Boolean(selectedPlayerId),
   });
 
-  const fixtureRows = Array.isArray(fixtures.data?.fixtures) ? fixtures.data.fixtures : [];
+  const rawFixtureRows = Array.isArray(fixtures.data?.fixtures) ? fixtures.data.fixtures : [];
+  const fixtureFilterQuery = normalizeSearchText(fixtureFilter);
+  const fixtureRows = rawFixtureRows.filter((fixture: any) => {
+    if (!fixtureFilterQuery) return true;
+    return normalizeSearchText([
+      fixture?.homeTeam?.name,
+      fixture?.awayTeam?.name,
+      fixture?.round,
+      fixture?.status,
+      fixture?.statusLong,
+      fixture?.venue?.name,
+    ].filter(Boolean).join(" ")).includes(fixtureFilterQuery);
+  });
+  const rawTeamRows = Array.isArray(teams.data?.teams) ? teams.data.teams : [];
+  const clubFilterQuery = normalizeSearchText(clubFilter);
+  const visibleTeamRows = rawTeamRows.filter((row: any) => {
+    if (!clubFilterQuery) return true;
+    const team = row?.team || row;
+    return normalizeSearchText([team?.name, team?.country, team?.code].filter(Boolean).join(" ")).includes(clubFilterQuery);
+  });
   const roundRows = Array.isArray(rounds.data?.rounds) ? rounds.data.rounds : [];
   const fixtureError = fixtures.error instanceof Error ? fixtures.error.message : "The live match provider could not be reached.";
 
@@ -304,6 +339,8 @@ export default function FootballDataCentre() {
             </Card>
           ) : null}
 
+          <LongListFilter value={fixtureFilter} onChange={setFixtureFilter} placeholder="Filter fixtures by club, round or status" />
+
           <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)]">
             <div className="space-y-2">
               {fixtures.isLoading ? [1,2,3,4].map((item) => <Skeleton key={item} className="h-24 w-full" />) : fixtureRows.length ? fixtureRows.map((fixture: any) => (
@@ -346,8 +383,9 @@ export default function FootballDataCentre() {
         </TabsContent>
 
         <TabsContent value="clubs" className="space-y-4">
+          <LongListFilter value={clubFilter} onChange={setClubFilter} placeholder="Filter clubs" />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {(Array.isArray(teams.data?.teams) ? teams.data.teams : []).map((row: any) => {
+            {visibleTeamRows.map((row: any) => {
               const team = row?.team || row;
               return <button type="button" key={team?.id} onClick={() => { setSelectedTeamId(Number(team?.id)); setSelectedCoachId(null); }} className={`rounded-xl border p-3 text-center transition ${Number(team?.id) === selectedTeamId ? "border-violet-400 bg-violet-500/10" : "border-white/10 bg-black/20 hover:bg-white/5"}`}>{team?.logo ? <img src={team.logo} alt="" className="mx-auto h-12 w-12 object-contain" /> : null}<div className="mt-2 truncate text-sm font-bold">{team?.name}</div></button>;
             })}
@@ -359,14 +397,14 @@ export default function FootballDataCentre() {
 
         <TabsContent value="players" className="space-y-4">
           <Card className="p-4">
-            <div className="flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input value={playerSearch} onChange={(event) => setPlayerSearch(event.target.value)} placeholder={`Search ${selectedCompetition.name} player — at least 3 characters`} /></div>
+            <div className="flex items-center gap-2"><Search className="h-4 w-4 text-muted-foreground" /><Input value={playerSearch} onChange={(event) => setPlayerSearch(event.target.value)} placeholder={`Search ${selectedCompetition.name} player, club or position`} /></div>
           </Card>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {(Array.isArray(playerResults.data?.players) ? playerResults.data.players : []).map((row: any) => <TinyPlayer key={row?.player?.id} row={row} onClick={() => setSelectedPlayerId(Number(row?.player?.id || 0))} suffix={row?.statistics?.[0]?.games?.position || ""} />)}
           </div>
-          {playerSearch.trim() && searchQuery.length < 3 ? <p className="text-sm text-muted-foreground">Enter at least three letters to search official players.</p> : null}
-          {searchQuery.length >= 3 && !playerResults.isFetching && playerResults.isError ? <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3 text-sm text-amber-100"><span>Official player search is temporarily unavailable.</span><Button size="sm" variant="outline" onClick={() => { void playerResults.refetch(); }}>Retry search</Button></div> : null}
-          {searchQuery.length >= 3 && !playerResults.isFetching && !playerResults.isError && playerResults.data && !(Array.isArray(playerResults.data?.players) && playerResults.data.players.length) ? <p className="text-sm text-muted-foreground">No official players match that search.</p> : null}
+          {playerSearch.trim() && searchQuery.length < 2 ? <p className="text-sm text-muted-foreground">Enter at least two letters to search current Premier League players.</p> : null}
+          {searchQuery.length >= 2 && !playerResults.isFetching && playerResults.isError ? <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3 text-sm text-amber-100"><span>Official player search is temporarily unavailable.</span><Button size="sm" variant="outline" onClick={() => { void playerResults.refetch(); }}>Retry search</Button></div> : null}
+          {searchQuery.length >= 2 && !playerResults.isFetching && !playerResults.isError && playerResults.data && !(Array.isArray(playerResults.data?.players) && playerResults.data.players.length) ? <p className="text-sm text-muted-foreground">No official players match that search.</p> : null}
           {playerResults.isFetching ? <Skeleton className="h-24 w-full" /> : null}
           {selectedPlayerId ? <PlayerProfile data={playerProfile.data} loading={playerProfile.isLoading} /> : null}
         </TabsContent>
@@ -452,38 +490,48 @@ function FormationPitch({ lineup, onPlayer }: { lineup: any; onPlayer: (id: numb
 }
 
 function StandingsTable({ data, loading }: { data: any; loading: boolean }) {
+  const [filter, setFilter] = useState("");
   if (loading) return <Skeleton className="h-96 w-full" />;
   const groups = Array.isArray(data?.groups) ? data.groups : [];
+  const query = normalizeSearchText(filter);
   if (!groups.length) return <Card className="p-8 text-center text-muted-foreground">No standings are available for this competition/season yet.</Card>;
-  return <div className="space-y-4">{groups.map((rows: any[], groupIndex: number) => <Card key={groupIndex} className="overflow-hidden"><div className="border-b border-white/10 p-3 font-black">{rows?.[0]?.group || (groups.length > 1 ? `Group ${groupIndex + 1}` : "Standings")}</div><div className="overflow-x-auto"><table className="min-w-[720px] w-full text-sm"><thead className="bg-white/5 text-xs text-muted-foreground"><tr><th className="p-3 text-left">#</th><th className="p-3 text-left">Club</th><th className="p-3">P</th><th className="p-3">W</th><th className="p-3">D</th><th className="p-3">L</th><th className="p-3">GF</th><th className="p-3">GA</th><th className="p-3">GD</th><th className="p-3">Pts</th><th className="p-3">Form</th></tr></thead><tbody className="divide-y divide-white/10">{rows.map((row: any) => <tr key={`${groupIndex}-${row?.rank}-${row?.team?.id}`}><td className="p-3 font-black">{row?.rank}</td><td className="p-3"><div className="flex items-center gap-2">{row?.team?.logo ? <img src={row.team.logo} alt="" className="h-6 w-6 object-contain" /> : null}<span className="font-bold">{row?.team?.name}</span></div></td><td className="p-3 text-center">{row?.all?.played ?? 0}</td><td className="p-3 text-center">{row?.all?.win ?? 0}</td><td className="p-3 text-center">{row?.all?.draw ?? 0}</td><td className="p-3 text-center">{row?.all?.lose ?? 0}</td><td className="p-3 text-center">{row?.all?.goals?.for ?? 0}</td><td className="p-3 text-center">{row?.all?.goals?.against ?? 0}</td><td className="p-3 text-center">{row?.goalsDiff ?? 0}</td><td className="p-3 text-center font-black">{row?.points ?? 0}</td><td className="p-3 text-center text-xs">{row?.form || "-"}</td></tr>)}</tbody></table></div></Card>)}</div>;
+  return <div className="space-y-4"><LongListFilter value={filter} onChange={setFilter} placeholder="Filter standings by club" />{groups.map((rows: any[], groupIndex: number) => { const visibleRows = rows.filter((row: any) => !query || normalizeSearchText(row?.team?.name || "").includes(query)); return <Card key={groupIndex} className="overflow-hidden"><div className="border-b border-white/10 p-3 font-black">{rows?.[0]?.group || (groups.length > 1 ? `Group ${groupIndex + 1}` : "Standings")}</div><div className="overflow-x-auto"><table className="min-w-[720px] w-full text-sm"><thead className="bg-white/5 text-xs text-muted-foreground"><tr><th className="p-3 text-left">#</th><th className="p-3 text-left">Club</th><th className="p-3">P</th><th className="p-3">W</th><th className="p-3">D</th><th className="p-3">L</th><th className="p-3">GF</th><th className="p-3">GA</th><th className="p-3">GD</th><th className="p-3">Pts</th><th className="p-3">Form</th></tr></thead><tbody className="divide-y divide-white/10">{visibleRows.map((row: any) => <tr key={`${groupIndex}-${row?.rank}-${row?.team?.id}`}><td className="p-3 font-black">{row?.rank}</td><td className="p-3"><div className="flex items-center gap-2">{row?.team?.logo ? <img src={row.team.logo} alt="" className="h-6 w-6 object-contain" /> : null}<span className="font-bold">{row?.team?.name}</span></div></td><td className="p-3 text-center">{row?.all?.played ?? 0}</td><td className="p-3 text-center">{row?.all?.win ?? 0}</td><td className="p-3 text-center">{row?.all?.draw ?? 0}</td><td className="p-3 text-center">{row?.all?.lose ?? 0}</td><td className="p-3 text-center">{row?.all?.goals?.for ?? 0}</td><td className="p-3 text-center">{row?.all?.goals?.against ?? 0}</td><td className="p-3 text-center">{row?.goalsDiff ?? 0}</td><td className="p-3 text-center font-black">{row?.points ?? 0}</td><td className="p-3 text-center text-xs">{row?.form || "-"}</td></tr>)}</tbody></table></div></Card>; })}</div>;
 }
 
 function AvailabilityCentre({ data, loading, disabled }: { data: any; loading: boolean; disabled: boolean }) {
+  const [filter, setFilter] = useState("");
   if (disabled) return <Card className="p-8 text-center text-muted-foreground">API-Football marks injury coverage as unavailable for this competition/season.</Card>;
   if (loading) return <Skeleton className="h-80 w-full" />;
   const rows = Array.isArray(data?.injuries) ? data.injuries : [];
   if (!rows.length) return <Card className="p-8 text-center text-muted-foreground">No current injuries or suspensions were returned.</Card>;
+  const query = normalizeSearchText(filter);
+  const visibleRows = rows.filter((row: any) => !query || normalizeSearchText([
+    row?.player?.name, row?.team?.name, row?.player?.type, row?.player?.reason,
+  ].filter(Boolean).join(" ")).includes(query));
   const byTeam = new Map<string, any[]>();
-  for (const row of rows) {
+  for (const row of visibleRows) {
     const team = String(row?.team?.name || "Other");
     if (!byTeam.has(team)) byTeam.set(team, []);
     byTeam.get(team)!.push(row);
   }
-  return <div className="space-y-4"><Card className="border-amber-500/20 bg-amber-500/5 p-4"><div className="flex items-center gap-2 font-black"><AlertTriangle className="h-5 w-5 text-amber-400" /> League-wide injuries & suspensions</div><p className="mt-1 text-sm text-muted-foreground">Use this before selecting a tournament team. Data is factual provider availability information, not a prediction of fantasy performance.</p></Card><div className="grid gap-4 lg:grid-cols-2">{[...byTeam.entries()].map(([team, teamRows]) => <Card key={team} className="p-4"><h3 className="mb-3 font-black">{team}</h3><div className="space-y-2">{teamRows.map((row: any, index: number) => <div key={`${row?.player?.id}-${index}`} className="flex items-start gap-3 rounded-lg border border-white/10 bg-black/20 p-3">{row?.player?.photo ? <img src={row.player.photo} alt="" className="h-10 w-10 rounded-full object-cover" /> : <AlertTriangle className="mt-1 h-4 w-4 text-amber-400" />}<div><div className="font-bold">{row?.player?.name}</div><div className="text-xs text-amber-200">{row?.player?.type || "Unavailable"}</div><div className="text-xs text-muted-foreground">{row?.player?.reason || "Reason not provided"}</div></div></div>)}</div></Card>)}</div></div>;
+  return <div className="space-y-4"><LongListFilter value={filter} onChange={setFilter} placeholder="Filter injuries, players or clubs" /><Card className="border-amber-500/20 bg-amber-500/5 p-4"><div className="flex items-center gap-2 font-black"><AlertTriangle className="h-5 w-5 text-amber-400" /> League-wide injuries & suspensions</div><p className="mt-1 text-sm text-muted-foreground">Use this before selecting a tournament team. Data is factual provider availability information, not a prediction of fantasy performance.</p></Card><div className="grid gap-4 lg:grid-cols-2">{[...byTeam.entries()].map(([team, teamRows]) => <Card key={team} className="p-4"><h3 className="mb-3 font-black">{team}</h3><div className="space-y-2">{teamRows.map((row: any, index: number) => <div key={`${row?.player?.id}-${index}`} className="flex items-start gap-3 rounded-lg border border-white/10 bg-black/20 p-3">{row?.player?.photo ? <img src={row.player.photo} alt="" className="h-10 w-10 rounded-full object-cover" /> : <AlertTriangle className="mt-1 h-4 w-4 text-amber-400" />}<div><div className="font-bold">{row?.player?.name}</div><div className="text-xs text-amber-200">{row?.player?.type || "Unavailable"}</div><div className="text-xs text-muted-foreground">{row?.player?.reason || "Reason not provided"}</div></div></div>)}</div></Card>)}</div></div>;
 }
 
 function LeaderBoard({ data, loading, onPlayer }: { data: any; loading: boolean; onPlayer: (id: number) => void }) {
+  const [filter, setFilter] = useState("");
   if (loading) return <Skeleton className="h-72 w-full" />;
+  const query = normalizeSearchText(filter);
   const groups = [
     ["Top scorers", data?.topScorers || [], (row: any) => `${row?.statistics?.[0]?.goals?.total ?? 0} goals`],
     ["Top assists", data?.topAssists || [], (row: any) => `${row?.statistics?.[0]?.goals?.assists ?? 0} assists`],
     ["Yellow cards", data?.topYellowCards || [], (row: any) => `${row?.statistics?.[0]?.cards?.yellow ?? 0} cards`],
     ["Red cards", data?.topRedCards || [], (row: any) => `${row?.statistics?.[0]?.cards?.red ?? 0} cards`],
   ] as const;
-  return <div className="grid gap-4 lg:grid-cols-2">{groups.map(([title, rows, suffix]) => <Card key={title} className="p-4"><h3 className="mb-3 font-black">{title}</h3><div className="space-y-2">{(Array.isArray(rows) ? rows.slice(0, 10) : []).map((row: any) => <TinyPlayer key={row?.player?.id} row={row} onClick={() => onPlayer(Number(row?.player?.id || 0))} suffix={suffix(row)} />)}{!rows?.length ? <EmptyText text="No leaderboard data returned yet." /> : null}</div></Card>)}</div>;
+  return <div className="space-y-4"><LongListFilter value={filter} onChange={setFilter} placeholder="Filter leaderboards by player or club" /><div className="grid gap-4 lg:grid-cols-2">{groups.map(([title, rows, suffix]) => <Card key={title} className="p-4"><h3 className="mb-3 font-black">{title}</h3><div className="space-y-2">{(Array.isArray(rows) ? rows.filter((row: any) => !query || normalizeSearchText([playerName(row), row?.statistics?.[0]?.team?.name].filter(Boolean).join(" ")).includes(query)).slice(0, 10) : []).map((row: any) => <TinyPlayer key={row?.player?.id} row={row} onClick={() => onPlayer(Number(row?.player?.id || 0))} suffix={suffix(row)} />)}{!rows?.length ? <EmptyText text="No leaderboard data returned yet." /> : null}</div></Card>)}</div></div>;
 }
 
 function TeamProfile({ data, squad, transfers, venue, loading, onCoach }: { data: any; squad: any; transfers: any; venue: any; loading: boolean; onCoach: (id: number) => void }) {
+  const [squadFilter, setSquadFilter] = useState("");
   if (loading) return <Skeleton className="h-96 w-full" />;
   if (!data?.team) return null;
   const team = data.team?.team || data.team;
@@ -493,26 +541,38 @@ function TeamProfile({ data, squad, transfers, venue, loading, onCoach }: { data
   const goals = stats?.goals || {};
   const clean = stats?.clean_sheet || {};
   const squadPlayers = Array.isArray(squad?.players) ? squad.players : [];
+  const squadQuery = normalizeSearchText(squadFilter);
+  const visibleSquadPlayers = squadPlayers.filter((player: any) => !squadQuery || normalizeSearchText([
+    player?.name, player?.position, player?.number, player?.nationality,
+  ].filter(Boolean).join(" ")).includes(squadQuery));
   const transferRows = Array.isArray(transfers?.transfers) ? transfers.transfers : [];
   return <Card className="space-y-5 p-4 sm:p-5"><div className="flex flex-wrap items-center gap-4">{team?.logo ? <img src={team.logo} alt="" className="h-16 w-16 object-contain" /> : null}<div><h3 className="text-xl font-black">{team?.name}</h3><p className="text-sm text-muted-foreground">{baseVenue?.name || "Venue TBD"}{baseVenue?.city ? ` · ${baseVenue.city}` : ""}</p></div></div><div className="grid grid-cols-2 gap-2 md:grid-cols-4"><Metric label="Played" value={fixtures?.played?.total ?? 0} /><Metric label="Wins" value={fixtures?.wins?.total ?? 0} /><Metric label="Goals" value={goals?.for?.total?.total ?? 0} /><Metric label="Clean sheets" value={clean?.total ?? 0} /></div>
     <section><h4 className="mb-2 flex items-center gap-2 font-black"><MapPin className="h-4 w-4" /> Stadium</h4><div className="grid gap-2 md:grid-cols-4"><Metric label="Venue" value={baseVenue?.name || "TBD"} /><Metric label="City" value={baseVenue?.city || "—"} /><Metric label="Capacity" value={baseVenue?.capacity?.toLocaleString?.() || baseVenue?.capacity || "—"} /><Metric label="Surface" value={baseVenue?.surface || "—"} /></div>{baseVenue?.image ? <img src={baseVenue.image} alt="" className="mt-3 max-h-56 w-full rounded-xl object-cover" /> : null}</section>
     <section><h4 className="mb-2 font-black">Coaches</h4><div className="flex flex-wrap gap-2">{(Array.isArray(data.coaches) ? data.coaches : []).slice(0, 5).map((coach: any) => <Button key={coach?.id} size="sm" variant="outline" onClick={() => onCoach(Number(coach?.id || 0))}>{coach?.name}</Button>)}{!data.coaches?.length ? <span className="text-sm text-muted-foreground">Coach data not returned.</span> : null}</div></section>
-    <section><h4 className="mb-2 flex items-center gap-2 font-black"><Users className="h-4 w-4" /> Current squad</h4>{squadPlayers.length ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{squadPlayers.map((player: any) => <div key={player?.id} className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 p-2">{player?.photo ? <img src={player.photo} alt="" className="h-10 w-10 rounded-full object-cover" /> : null}<div className="min-w-0"><div className="truncate text-sm font-bold">{player?.name}</div><div className="text-xs text-muted-foreground">#{player?.number || "-"} · {player?.position || ""} · {player?.age || "?"}y</div></div></div>)}</div> : <EmptyText text="Current squad not returned." />}</section>
+    <section><div className="mb-2 flex flex-wrap items-center gap-2"><h4 className="flex items-center gap-2 font-black"><Users className="h-4 w-4" /> Current squad</h4><LongListFilter value={squadFilter} onChange={setSquadFilter} placeholder="Filter squad" /></div>{squadPlayers.length ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{visibleSquadPlayers.map((player: any) => <div key={player?.id} className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 p-2">{player?.photo ? <img src={player.photo} alt="" className="h-10 w-10 rounded-full object-cover" /> : null}<div className="min-w-0"><div className="truncate text-sm font-bold">{player?.name}</div><div className="text-xs text-muted-foreground">#{player?.number || "-"} · {player?.position || ""} · {player?.age || "?"}y</div></div></div>)}</div> : <EmptyText text="Current squad not returned." />}</section>
     <section><h4 className="mb-2 flex items-center gap-2 font-black"><ArrowRightLeft className="h-4 w-4" /> Club transfers</h4><TeamTransfers rows={transferRows} teamId={Number(team?.id || 0)} /></section>
     <FixtureMini title="Recent results" rows={data.recent} /><FixtureMini title="Next fixtures" rows={data.upcoming} />
   </Card>;
 }
 
 function TeamTransfers({ rows, teamId }: { rows: any[]; teamId: number }) {
+  const [filter, setFilter] = useState("");
+  const query = normalizeSearchText(filter);
   const items = rows.flatMap((row: any) => {
     const player = row?.player || {};
     return (Array.isArray(row?.transfers) ? row.transfers : []).map((transfer: any) => ({ player, transfer }));
-  }).slice(0, 30);
-  if (!items.length) return <EmptyText text="No transfer records returned." />;
-  return <div className="grid gap-2 md:grid-cols-2">{items.map((item: any, index: number) => {
+  }).filter((item: any) => !query || normalizeSearchText([
+    item?.player?.name,
+    item?.transfer?.teams?.out?.name,
+    item?.transfer?.teams?.in?.name,
+    item?.transfer?.type,
+    item?.transfer?.date,
+  ].filter(Boolean).join(" ")).includes(query)).slice(0, 30);
+  if (!rows.length) return <EmptyText text="No transfer records returned." />;
+  return <div className="space-y-3"><LongListFilter value={filter} onChange={setFilter} placeholder="Filter transfer history" /><div className="grid gap-2 md:grid-cols-2">{items.map((item: any, index: number) => {
     const incoming = Number(item.transfer?.teams?.in?.id || 0) === teamId;
     return <div key={`${item.player?.id}-${item.transfer?.date}-${index}`} className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm"><div className="font-bold">{item.player?.name || "Player"}</div><div className={incoming ? "text-emerald-300" : "text-amber-300"}>{incoming ? "IN" : "OUT"} · {item.transfer?.type || "Transfer"}</div><div className="text-xs text-muted-foreground">{item.transfer?.teams?.out?.name || "?"} → {item.transfer?.teams?.in?.name || "?"} · {item.transfer?.date || ""}</div></div>;
-  })}</div>;
+  })}</div></div>;
 }
 
 function CoachProfile({ data, loading }: { data: any; loading: boolean }) {
@@ -570,6 +630,9 @@ function FixtureMini({ title, rows }: { title: string; rows: any[] }) {
 }
 
 function HistoryList({ title, rows, render }: { title: string; rows: any[]; render: (row: any) => string }) {
+  const [filter, setFilter] = useState("");
   const list = Array.isArray(rows) ? rows : [];
-  return <div><h4 className="mb-2 font-black">{title}</h4>{list.length ? <div className="space-y-2">{list.slice(0, 20).map((row: any, index: number) => <div key={index} className="rounded-lg border border-white/10 bg-black/20 p-2 text-sm text-muted-foreground">{render(row)}</div>)}</div> : <EmptyText text={`No ${title.toLowerCase()} returned.`} />}</div>;
+  const query = normalizeSearchText(filter);
+  const visible = list.filter((row: any) => !query || normalizeSearchText(render(row)).includes(query)).slice(0, 20);
+  return <div><div className="mb-2 flex flex-wrap items-center gap-2"><h4 className="font-black">{title}</h4>{list.length > 6 ? <LongListFilter value={filter} onChange={setFilter} placeholder={`Filter ${title.toLowerCase()}`} /> : null}</div>{list.length ? <div className="space-y-2">{visible.map((row: any, index: number) => <div key={index} className="rounded-lg border border-white/10 bg-black/20 p-2 text-sm text-muted-foreground">{render(row)}</div>)}{query && !visible.length ? <EmptyText text="No matching records." /> : null}</div> : <EmptyText text={`No ${title.toLowerCase()} returned.`} />}</div>;
 }

@@ -8,6 +8,12 @@ import {
   listUserReplacementClaims,
 } from "../services/playerTransferMonitoring.js";
 import {
+  autoReplaceUnlockedCommonDepartures,
+  decorateReplacementClaims,
+  finalizeReplacementChoice,
+  keepPurchasedDepartedCard,
+} from "../services/departedCardPolicy.js";
+import {
   disableWebPushSubscription,
   getWebPushStatus,
   processPendingWebPushDeliveries,
@@ -126,6 +132,11 @@ async function syncSubscribedUserNotifications() {
   subscribedNotificationSyncRunning = true;
   try {
     await ensureNotificationsSchema();
+    // Automatic departed Common remint sweep: only unlocked, non-purchased
+    // cards are replaced. Purchased cards remain for owner choice.
+    await autoReplaceUnlockedCommonDepartures().catch((error) => {
+      console.error("Automatic departed Common remint sweep failed:", error);
+    });
     const users = rowsOf(await db.execute(sql`
       select user_id as "userId"
       from (
@@ -290,8 +301,18 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
   app.get("/api/player-replacements", requireAuth, async (req: any, res) => {
     try {
       const userId = String(req.authUserId || "");
-      const claims = await listUserReplacementClaims(userId);
-      return res.json({ claims, openClaims: claims.filter((claim: any) => !claim.replacementCardId).length });
+      await autoReplaceUnlockedCommonDepartures(userId).catch((error) => {
+        console.error("User Common departure remint sweep failed:", error);
+      });
+      const rawClaims = await listUserReplacementClaims(userId);
+      const claims = await decorateReplacementClaims(userId, rawClaims);
+      const openClaims = claims.filter((claim: any) =>
+        !claim.replacementCardId
+        && !claim.claimedAt
+        && claim.decision !== "keep"
+        && !claim.locked
+      ).length;
+      return res.json({ claims, openClaims });
     } catch (error: any) {
       console.error("Failed to load replacement claims:", error);
       return res.status(500).json({ message: error?.message || "Failed to load replacement claims" });
@@ -303,13 +324,33 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
       const userId = String(req.authUserId || "");
       const claimId = Number(req.params.id);
       if (!Number.isInteger(claimId) || claimId <= 0) return res.status(400).json({ message: "Valid replacement claim required" });
+      const rawClaims = await listUserReplacementClaims(userId);
+      const decorated = await decorateReplacementClaims(userId, rawClaims);
+      const selected = decorated.find((claim: any) => Number(claim.id) === claimId);
+      if (selected?.locked) return res.status(409).json({ message: "This card is locked in the current gameweek. Choose after settlement." });
+      if (selected?.decision === "keep") return res.status(409).json({ message: "You already chose to keep this purchased card." });
       const result = await claimReplacementCard(userId, claimId);
+      await finalizeReplacementChoice(userId, claimId);
       return res.json({ success: true, ...result });
     } catch (error: any) {
       console.error("Replacement card claim failed:", error);
       const message = String(error?.message || "Failed to mint replacement card");
       const status = message.includes("not found") ? 404 : message.includes("No ") ? 409 : 500;
       return res.status(status).json({ message });
+    }
+  });
+
+  app.post("/api/player-replacements/:id/keep", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const claimId = Number(req.params.id);
+      if (!Number.isInteger(claimId) || claimId <= 0) return res.status(400).json({ message: "Valid replacement choice required" });
+      const result = await keepPurchasedDepartedCard(userId, claimId);
+      return res.json({ success: true, ...result });
+    } catch (error: any) {
+      console.error("Purchased departed-card keep choice failed:", error);
+      const message = String(error?.message || "Failed to save replacement choice");
+      return res.status(/not found/i.test(message) ? 404 : /locked|already|only a purchased/i.test(message) ? 409 : 500).json({ message });
     }
   });
 

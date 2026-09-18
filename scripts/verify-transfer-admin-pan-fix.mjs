@@ -39,7 +39,7 @@ need(transfer, "TRANSFER_SOURCE_CARD_ARCHIVE_V2", "departed replacement source c
 need(transfer, "set owner_id=null, for_sale=false, price=0", "departed cards are not detached from user ownership");
 need(transfer, "pr.source_card_id=pc.id", "archived card row is no longer linked to its replacement claim");
 need(transfer, "pc.owner_id=pr.user_id", "historical source-card cleanup is not scoped to the original claimant");
-need(transfer, "where pc.id=${sourceCardId}", "new departure claims do not target the correct source card");
+need(transfer, "pr.replacement_card_id is not null", "departed source cards must remain owned until a replacement is actually finalized");
 need(transfer, "cl.card_id=pc.id", "departed-card archive is not checking the source card's tournament lock");
 need(transfer, "cl.expires_at is null or cl.expires_at > now()", "active tournament locks are not protected during departed-card archive");
 
