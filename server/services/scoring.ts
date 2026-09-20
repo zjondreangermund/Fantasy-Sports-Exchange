@@ -73,7 +73,6 @@ export interface ScoringResult {
   };
   reasons: ScoringReason[];
   football_metrics: {
-    match_rating: number;
     goals: number;
     assists: number;
     key_passes: number;
@@ -108,7 +107,6 @@ export const SCORE_RULES = {
     { event: "Key / crucial pass", points: `+${d.keyPass} each` },
     { event: "Completed passes", points: `+1 / ${d.completedPassesPerPoint} for every pass, max +${d.completedPassesMax}` },
     { event: "Passing accuracy", points: `+${d.passingAccuracyPercent} per percentage point` },
-    { event: "API-Football match rating", points: `rating × ${d.matchRating}` },
     { event: "Successful tackle", points: `+${d.tackle} each` },
     { event: "Interception", points: `+${d.interception} each` },
     { event: "Duel won", points: `+${d.duelWon} each` },
@@ -170,8 +168,6 @@ export function calculatePlayerScore(stats: PlayerStats, position: string): Scor
   let bonus = 0;
   const reasons: ScoringReason[] = [];
   const normalizedPosition = String(position || "").toUpperCase();
-  const ratingSamples = Math.max(numberOf(stats.rating_samples), numberOf(stats.match_rating) > 0 ? 1 : 0);
-  const matchRating = ratingSamples > 0 ? numberOf(stats.match_rating) / ratingSamples : 0;
 
   const goalPoints = numberOf(stats.goals_scored) * p.goal;
   const assistPoints = numberOf(stats.assists) * p.assist;
@@ -227,7 +223,6 @@ export function calculatePlayerScore(stats: PlayerStats, position: string): Scor
     const detailedParts = [
       ["Completed passes", Math.min(d.completedPassesMax, completedPasses / d.completedPassesPerPoint)],
       ["Passing accuracy", accuracy * d.passingAccuracyPercent],
-      ["API-Football match rating", matchRating * d.matchRating],
       ["Key / crucial passes", numberOf(stats.key_passes) * d.keyPass],
       ["Successful tackles", numberOf(stats.tackles) * d.tackle],
       ["Interceptions", numberOf(stats.interceptions) * d.interception],
@@ -281,7 +276,6 @@ export function calculatePlayerScore(stats: PlayerStats, position: string): Scor
     breakdown: { decisive, performance, penalties, bonus },
     reasons,
     football_metrics: {
-      match_rating: round(matchRating),
       goals: numberOf(stats.goals_scored),
       assists: numberOf(stats.assists),
       key_passes: numberOf(stats.key_passes),
