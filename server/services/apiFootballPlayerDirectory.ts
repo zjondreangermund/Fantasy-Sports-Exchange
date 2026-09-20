@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
-import { normalizePlayerText } from "./fplPlayerIdentity.js";
+import { normalizePlayerText, strongPlayerNameMatch } from "./fplPlayerIdentity.js";
 
 export type CanonicalPlayerPosition = "GK" | "DEF" | "MID" | "FWD";
 
@@ -277,6 +277,12 @@ function nameCompatibility(rawName: unknown, candidate: ApiFootballDirectoryPlay
     if (shorter.split(" ").length >= 2 && longer.includes(shorter)) return 105;
   }
 
+  // API_FOOTBALL_INITIAL_NAME_MATCH_V1
+  // API-Football often returns abbreviated fixture names such as "E. Haaland"
+  // while FPL stores "Erling Haaland". Reuse the stricter verified FPL matcher
+  // so first-initial + surname identities can still receive their detailed stats.
+  if (aliases.some((alias) => strongPlayerNameMatch(name, alias))) return 100;
+
   const sourceTokens = tokenSet(name);
   const candidateTokens = tokenSet(candidate.name);
   const source = [...sourceTokens];
@@ -291,8 +297,15 @@ function nameCompatibility(rawName: unknown, candidate: ApiFootballDirectoryPlay
 }
 
 function teamCompatibility(rawTeam: unknown, candidateTeam: string) {
-  const team = normalizePlayerText(rawTeam);
-  const candidate = normalizePlayerText(candidateTeam);
+  const canonicalTeam = (value: unknown) => normalizePlayerText(value)
+    .replace(/\bfootball club\b|\bfc\b|\bafc\b/g, "")
+    .replace(/\bmanchester\b/g, "man")
+    .replace(/\bunited\b/g, "utd")
+    .replace(/\bhotspur\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const team = canonicalTeam(rawTeam);
+  const candidate = canonicalTeam(candidateTeam);
   if (!team || !candidate) return 0;
   if (team === candidate) return 28;
   if (team.includes(candidate) || candidate.includes(team)) return 20;
