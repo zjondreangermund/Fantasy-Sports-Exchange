@@ -406,20 +406,45 @@ async function syncLive(): Promise<{ calls: number; records: number; details: an
 
 async function syncCompletedStats(): Promise<{ calls: number; records: number; details: any }> {
   const budget = await getApiFootballBudget();
-  const maxFixtures = Math.max(0, Math.min(8, budget.remaining - 10));
+  const maxFixtures = Math.max(0, Math.min(20, budget.remaining - 10));
   if (!maxFixtures) return { calls: 0, records: 0, details: { reason: "Emergency buffer protected" } };
+  // SCORE_DETAIL_COVERAGE_V1
+  // Current/recent Premier League fixtures always win over historical backfill.
+  // A completed fixture with fewer than 22 stored player rows is treated as
+  // incomplete and retried so one player's detailed actions cannot silently
+  // disappear while other players in the same gameweek have full statistics.
   const fixtures = rowsOf(await db.execute(sql`
-    select api_fixture_id from app.api_football_fixtures
-    where status_short in ('FT','AET','PEN') and stats_synced_at is null
-    order by kickoff_at asc limit ${maxFixtures}
+    select f.api_fixture_id
+    from app.api_football_fixtures f
+    left join (
+      select api_fixture_id, count(distinct api_player_id)::int as player_count
+      from app.api_football_player_match_stats
+      group by api_fixture_id
+    ) stored on stored.api_fixture_id=f.api_fixture_id
+    where f.league_id=${LEAGUE_ID}
+      and f.season=${seasonNow()}
+      and f.status_short in ('FT','AET','PEN')
+      and (
+        f.stats_synced_at is null
+        or (
+          f.kickoff_at >= now()-interval '3 days'
+          and coalesce(stored.player_count,0) < 22
+        )
+      )
+    order by
+      case when f.kickoff_at >= now()-interval '3 days' then 0 else 1 end,
+      f.kickoff_at desc
+    limit ${maxFixtures}
   `));
   let calls = 0;
   let records = 0;
+  let incompleteFixtures = 0;
   for (const fixture of fixtures) {
     const fixtureId = Number(fixture.api_fixture_id);
     const payload = await providerGet("fixtures/players", { fixture: fixtureId });
     calls += 1;
     const teams = Array.isArray(payload?.response) ? payload.response : [];
+    const fixturePlayerIds = new Set<number>();
     for (const teamRow of teams) {
       const teamId = Number(teamRow?.team?.id || 0);
       await upsertTeam(teamRow?.team);
@@ -427,6 +452,7 @@ async function syncCompletedStats(): Promise<{ calls: number; records: number; d
         const player = playerRow?.player || {};
         const statistic = Array.isArray(playerRow?.statistics) ? playerRow.statistics[0] || {} : {};
         if (!player.id) continue;
+        fixturePlayerIds.add(Number(player.id));
         const score = scorePreview(statistic);
         await db.execute(sql`
           insert into app.api_football_player_match_stats (
@@ -439,9 +465,15 @@ async function syncCompletedStats(): Promise<{ calls: number; records: number; d
         records += 1;
       }
     }
-    await db.execute(sql`update app.api_football_fixtures set stats_synced_at=now(),updated_at=now() where api_fixture_id=${fixtureId}`);
+    if (teams.length >= 2 && fixturePlayerIds.size >= 22) {
+      await db.execute(sql`update app.api_football_fixtures set stats_synced_at=now(),updated_at=now() where api_fixture_id=${fixtureId}`);
+    } else {
+      incompleteFixtures += 1;
+      await db.execute(sql`update app.api_football_fixtures set stats_synced_at=null,updated_at=now() where api_fixture_id=${fixtureId}`);
+      console.warn(`[api-football-sync] fixture ${fixtureId} detailed stats incomplete: teams=${teams.length}, players=${fixturePlayerIds.size}; retrying on next completed-stats cycle`);
+    }
   }
-  return { calls, records, details: { fixtures: fixtures.length } };
+  return { calls, records, details: { fixtures: fixtures.length, incompleteFixtures } };
 }
 
 // API_FOOTBALL_INCREMENTAL_SQUAD_SYNC_V1
