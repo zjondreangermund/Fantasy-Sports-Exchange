@@ -8,8 +8,8 @@ import { PLAYER_SCORE_RULES, SCORE_PRECISION_DECIMALS } from "../../shared/game-
  * - Card rarity does NOT change football points.
  * - Duplicate cards for the same footballer receive the same base player score.
  * - Captain bonus is applied only to the competition lineup total.
- * - Detailed API-Football actions replace the FPL ICT/BPS proxy when available;
- *   the two methods are never added together.
+ * - Detailed API-Football actions are used when available.
+ * - No ICT/BPS proxy, FPL bonus-derived points, or other fallback points are awarded.
  */
 
 export interface PlayerStats {
@@ -84,14 +84,13 @@ export interface ScoringResult {
     minutes: number;
   };
   is_all_around: boolean;
-  data_source: "official-fpl-fallback" | "official-fpl-plus-api-football";
+  data_source: "verified-core-stats" | "verified-player-stats";
 }
 
 const p = PLAYER_SCORE_RULES.positive;
 const n = PLAYER_SCORE_RULES.negative;
 const c = PLAYER_SCORE_RULES.caps;
 const d = PLAYER_SCORE_RULES.detailedPerformance;
-const f = PLAYER_SCORE_RULES.fallbackPerformance;
 
 export const SCORE_RULES = {
   positive: [
@@ -121,10 +120,6 @@ export const SCORE_RULES = {
     { event: "Individual goalkeeper save", points: `+${d.goalkeeperSave} each` },
     { event: "Penalty won", points: `+${d.penaltyWon} each` },
     { event: "Penalty scored", points: `+${d.penaltyScored} each` },
-    { event: "FPL fallback ICT", points: `up to +${f.ictMax}` },
-    { event: "FPL fallback BPS", points: `up to +${f.bpsMax}` },
-    { event: "FPL bonus", points: `+${p.fplBonusMultiplier} per bonus point` },
-    { event: "Multi-category contribution", points: `+${p.multiCategoryContribution}` },
   ],
   negative: [
     { event: "Foul committed", points: `${d.foulCommitted}` },
@@ -254,14 +249,6 @@ export function calculatePlayerScore(stats: PlayerStats, position: string): Scor
       performance += points;
       addReason(reasons, label, points, "performance");
     }
-  } else {
-    const ictIndex = Number.parseFloat(String(stats.ict_index || "0")) || 0;
-    const ictPoints = Math.min(f.ictMax, ictIndex / f.ictPerPoint);
-    const bps = numberOf(stats.bps);
-    const bpsPoints = Math.min(f.bpsMax, bps / f.bpsPerPoint);
-    performance += ictPoints + bpsPoints;
-    addReason(reasons, `FPL ICT fallback ${ictIndex}`, ictPoints, "performance");
-    addReason(reasons, `FPL BPS fallback ${bps}`, bpsPoints, "performance");
   }
   performance = clamp(round(performance), c.performanceMin, c.performanceMax);
 
@@ -283,20 +270,9 @@ export function calculatePlayerScore(stats: PlayerStats, position: string): Scor
   }
   penalties = clamp(round(penalties), c.penaltiesMin, c.penaltiesMax);
 
-  const fplBonusPoints = numberOf(stats.bonus) * p.fplBonusMultiplier;
-  bonus += fplBonusPoints;
-  addReason(reasons, `${numberOf(stats.bonus)} official FPL bonus point(s)`, fplBonusPoints, "bonus");
-
-  const contributionCount = [
-    numberOf(stats.goals_scored) > 0,
-    numberOf(stats.assists) > 0,
-    numberOf(stats.clean_sheets) > 0,
-  ].filter(Boolean).length;
-  if (contributionCount >= 2) {
-    bonus += p.multiCategoryContribution;
-    addReason(reasons, "Multi-category contribution", p.multiCategoryContribution, "bonus");
-  }
-  bonus = clamp(round(bonus), c.bonusMin, c.bonusMax);
+  // Bonus stays at zero: Fantasy Arena points come from the player's recorded
+  // match actions only. Provider fantasy bonus/proxy systems do not add points.
+  bonus = 0;
 
   const total_score = clamp(round(decisive + performance + penalties + bonus), c.finalMin, c.finalMax);
   return {
@@ -316,7 +292,7 @@ export function calculatePlayerScore(stats: PlayerStats, position: string): Scor
       minutes,
     },
     is_all_around: total_score >= 60,
-    data_source: stats.detailed_stats_available ? "official-fpl-plus-api-football" : "official-fpl-fallback",
+    data_source: stats.detailed_stats_available ? "verified-player-stats" : "verified-core-stats",
   };
 }
 
