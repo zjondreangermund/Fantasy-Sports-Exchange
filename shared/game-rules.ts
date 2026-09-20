@@ -139,7 +139,6 @@ export const RARITY_FOOTBALL_POINT_MULTIPLIERS = {
 export const TOURNAMENT_TIEBREAK_ORDER = [
   "total_score",
   "captain_points",
-  "combined_match_rating",
   "goals_scored",
   "assists",
   "key_passes",
@@ -177,7 +176,6 @@ export const PLAYER_SCORE_RULES = {
     completedPassesPerPoint: 12,
     completedPassesMax: 8,
     passingAccuracyPercent: 0.011,
-    matchRating: 0.37,
     keyPass: 2.2,
     tackle: 1.4,
     interception: 1.6,
