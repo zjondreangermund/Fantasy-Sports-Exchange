@@ -40,6 +40,8 @@ includesAll(scoring, [
 expect(!scoring.includes("FPL ICT fallback"), "ICT proxy scoring must be removed");
 expect(!scoring.includes("FPL BPS fallback"), "BPS proxy scoring must be removed");
 expect(!scoring.includes("official FPL bonus point(s)"), "Provider fantasy bonus scoring must be removed");
+expect(!scoring.includes("matchRating * d.matchRating"), "API-Football match-rating scoring must be removed");
+expect(!updater.includes("providerRatingTotal"), "API-Football match-rating tiebreak metadata must be removed");
 
 includesAll(bridge, [
   "app.api_football_player_match_stats",
