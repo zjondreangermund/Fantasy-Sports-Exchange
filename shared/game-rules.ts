@@ -168,8 +168,10 @@ export const PLAYER_SCORE_RULES = {
     minutes30To59: 15,
     minutes1To29: 10,
     minutePlayed: 0.013,
-    fplBonusMultiplier: 3,
-    multiCategoryContribution: 5,
+    // Deprecated provider-fantasy bonuses. Kept at zero so they can never
+    // contribute to Fantasy Arena player points.
+    fplBonusMultiplier: 0,
+    multiCategoryContribution: 0,
   },
   detailedPerformance: {
     completedPassesPerPoint: 12,
@@ -194,11 +196,13 @@ export const PLAYER_SCORE_RULES = {
     penaltyScored: 0.75,
     offside: -0.09,
   },
+  // Legacy proxy settings are intentionally disabled. The scoring engine
+  // awards no ICT/BPS fallback points when detailed actions are unavailable.
   fallbackPerformance: {
     ictPerPoint: 10,
-    ictMax: 10,
+    ictMax: 0,
     bpsPerPoint: 10,
-    bpsMax: 5,
+    bpsMax: 0,
   },
   negative: {
     yellowCard: -3,
@@ -215,7 +219,7 @@ export const PLAYER_SCORE_RULES = {
     penaltiesMin: -20,
     penaltiesMax: 0,
     bonusMin: 0,
-    bonusMax: 20,
+    bonusMax: 0,
     finalMin: 0,
     finalMax: 100,
   },
