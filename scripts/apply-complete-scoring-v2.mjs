@@ -28,8 +28,10 @@ const checks = [
   [!scoring.includes('addReason(reasons, `FPL ICT fallback'), "Legacy ICT fallback scoring is still active"],
   [!scoring.includes('addReason(reasons, `FPL BPS fallback'), "Legacy BPS fallback scoring is still active"],
   [!scoring.includes("official FPL bonus point(s)"), "Legacy provider fantasy bonus scoring is still active"],
-  [updater.includes("version: 5"), "Tournament scoring snapshot v5 is missing"],
-  [updater.includes("coreStatsOnlyCards"), "Tournament v5 core-stat metadata is missing"],
+  [!scoring.includes("matchRating * d.matchRating"), "API-Football match ratings must be excluded from scoring"],
+  [!updater.includes("providerRatingTotal"), "API-Football match ratings must be excluded from tournament tiebreaks"],
+  [updater.includes("version: 6"), "Tournament scoring snapshot v6 is missing"],
+  [updater.includes("coreStatsOnlyCards"), "Tournament v6 core-stat metadata is missing"],
   [updater.includes("no ICT/BPS proxy"), "Tournament scoring policy does not prohibit proxy points"],
   [bridge.includes("only verified core player stats will score"), "Detailed-stat outage policy is not fail-safe"],
   [rules.includes("ictMax: 0"), "ICT fallback is not disabled in shared rules"],
@@ -42,8 +44,8 @@ const checks = [
 const failures = checks.filter(([ok]) => !ok).map(([, message]) => message);
 if (failures.length) {
   throw new Error(
-    "Player-stat-only scoring v5 guard failed:\n- " + failures.join("\n- "),
+    "Player-stat-only scoring v6 guard failed:\n- " + failures.join("\n- "),
   );
 }
 
-console.log("[scoring] Player-stat-only scoring v5 already applied; legacy complete-scoring rewrite skipped.");
+console.log("[scoring] Player-stat-only scoring v6 already applied; legacy complete-scoring rewrite skipped.");
