@@ -58,7 +58,7 @@ includesAll(updater, [
   "verifiedPlayer",
   "verifiedPosition",
   "identity_status: \"verified\"",
-  "version: 5",
+  "version: 6",
   "detailedStatsCards",
   "coreStatsOnlyCards",
   "apiFootballPlayerId",
@@ -87,7 +87,7 @@ for (const [source, label] of [[sync, "API-Football sync"], [admin, "API-Footbal
   ], label);
 }
 
-includesAll(integrity, ["version: 5", "verified-player-stats", "detailedStatsCards", "coreStatsOnlyCards"], "Tournament integrity verifier");
+includesAll(integrity, ["version: 6", "verified-player-stats", "detailedStatsCards", "coreStatsOnlyCards"], "Tournament integrity verifier");
 
 if (failures.length) {
   console.error("Complete scoring verification failed:");
