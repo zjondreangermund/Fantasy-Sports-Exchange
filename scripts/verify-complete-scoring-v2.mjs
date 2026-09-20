@@ -25,19 +25,21 @@ includesAll(rules, [
   "duelWon: 0.65",
   "shotOnTarget: 1.5",
   "fallbackPerformance",
+  "ictMax: 0",
+  "bpsMax: 0",
 ], "Shared scoring rules");
 
 includesAll(scoring, [
   'import { PLAYER_SCORE_RULES, SCORE_PRECISION_DECIMALS } from "../../shared/game-rules.js"',
   "Key / crucial passes",
   "stats.detailed_stats_available",
-  "FPL ICT fallback",
-  "FPL BPS fallback",
   "mapApiFootballStatisticsToDetailedStats",
   "mergePlayerStatsWithDetailedStats",
-  'data_source: stats.detailed_stats_available ? "official-fpl-plus-api-football" : "official-fpl-fallback"',
+  'data_source: stats.detailed_stats_available ? "verified-player-stats" : "verified-core-stats"',
 ], "Canonical scoring engine");
-expect(scoring.indexOf("if (stats.detailed_stats_available)") < scoring.indexOf("FPL ICT fallback"), "Detailed actions must replace, not follow, the FPL proxy");
+expect(!scoring.includes("FPL ICT fallback"), "ICT proxy scoring must be removed");
+expect(!scoring.includes("FPL BPS fallback"), "BPS proxy scoring must be removed");
+expect(!scoring.includes("official FPL bonus point(s)"), "Provider fantasy bonus scoring must be removed");
 
 includesAll(bridge, [
   "app.api_football_player_match_stats",
@@ -56,9 +58,9 @@ includesAll(updater, [
   "verifiedPlayer",
   "verifiedPosition",
   "identity_status: \"verified\"",
-  "version: 4",
+  "version: 5",
   "detailedStatsCards",
-  "fallbackStatsCards",
+  "coreStatsOnlyCards",
   "apiFootballPlayerId",
   "dataSource",
 ], "Tournament score updater");
@@ -72,8 +74,8 @@ includesAll(scoringPage, [
   "Shot on target",
   "Successful dribble",
   "Defensive block",
-  "FPL ICT fallback",
-  "No double counting",
+  "No proxy points",
+  "Player-stat-only scoring",
 ], "Published scoring page");
 
 for (const [source, label] of [[sync, "API-Football sync"], [admin, "API-Football admin preview"]]) {
@@ -85,7 +87,7 @@ for (const [source, label] of [[sync, "API-Football sync"], [admin, "API-Footbal
   ], label);
 }
 
-includesAll(integrity, ["version: 4", "official-fpl-plus-api-football", "detailedStatsCards", "fallbackStatsCards"], "Tournament integrity verifier");
+includesAll(integrity, ["version: 5", "verified-player-stats", "detailedStatsCards", "coreStatsOnlyCards"], "Tournament integrity verifier");
 
 if (failures.length) {
   console.error("Complete scoring verification failed:");
@@ -93,4 +95,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("[scoring] Verified crucial passes, all-around actions, provider fallback and published rules use one canonical engine");
+console.log("[scoring] Verified crucial passes, all-around actions, proxy-free player-stat scoring and published rules use one canonical engine");
