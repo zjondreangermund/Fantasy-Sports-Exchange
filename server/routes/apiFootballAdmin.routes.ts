@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { calculatePlayerScore, mapApiFootballStatsToPlayerStats } from "../services/scoring.js";
 
 const DEFAULT_BASE_URL = "https://v3.football.api-sports.io";
 const DAILY_SAFETY_CAP = Math.max(10, Math.min(90, Number(process.env.API_FOOTBALL_DAILY_CAP || 90)));
@@ -205,44 +206,17 @@ async function apiFootballGet(path: string, params: Record<string, string | numb
 }
 
 function scorePreview(stat: any) {
-  const games = stat?.games || {};
-  const goals = stat?.goals || {};
-  const shots = stat?.shots || {};
-  const passes = stat?.passes || {};
-  const tackles = stat?.tackles || {};
-  const duels = stat?.duels || {};
-  const cards = stat?.cards || {};
-  const penalty = stat?.penalty || {};
-  const position = String(games.position || "M").toUpperCase();
-  const minutes = Number(games.minutes || 0);
-  const played = minutes > 0;
-  const goalValue = position === "G" || position === "D" ? 15 : position === "M" ? 12 : 10;
-  const appearanceBase = played ? 35 : 0;
-  const decisiveParts = {
-    appearance: appearanceBase,
-    goals: Number(goals.total || 0) * goalValue,
-    assists: Number(goals.assists || 0) * 9,
-    penaltySaves: Number(penalty.saved || 0) * 15,
-    penaltyMisses: Number(penalty.missed || 0) * -8,
-    redCards: Number(cards.red || 0) * -15,
-  };
-  const decisive = Math.max(0, Math.min(80, Object.values(decisiveParts).reduce((sum, value) => sum + value, 0)));
-  const allAroundParts = {
-    passes: Math.min(8, Number(passes.total || 0) / 12),
-    keyPasses: Number(passes.key || 0) * 2.2,
-    tackles: Number(tackles.total || 0) * 1.4,
-    interceptions: Number(tackles.interceptions || 0) * 1.6,
-    duelsWon: Number(duels.won || 0) * 0.65,
-    shotsOnTarget: Number(shots.on || 0) * 1.5,
-    saves: Number(goals.saves || 0) * 1.2,
-    yellowCards: Number(cards.yellow || 0) * -2,
-  };
-  const allAround = Math.max(-15, Math.min(45, Object.values(allAroundParts).reduce((sum, value) => sum + value, 0)));
+  const rawPosition = String(stat?.games?.position || "M").toUpperCase();
+  const position = rawPosition === "G" ? "GK" : rawPosition === "D" ? "DEF" : rawPosition === "F" ? "FWD" : "MID";
+  const result = calculatePlayerScore(mapApiFootballStatsToPlayerStats(stat), position);
+  const allAround = Math.round((result.breakdown.performance + result.breakdown.penalties + result.breakdown.bonus) * 10) / 10;
   return {
-    score: Math.max(0, Math.min(100, Math.round((decisive + allAround) * 10) / 10)),
-    decisiveScore: Math.round(decisive * 10) / 10,
-    allAroundScore: Math.round(allAround * 10) / 10,
-    breakdown: { decisive: decisiveParts, allAround: allAroundParts, goalValue },
+    score: result.total_score,
+    decisive: result.breakdown.decisive,
+    allAround,
+    decisiveScore: result.breakdown.decisive,
+    allAroundScore: allAround,
+    breakdown: { ...result.breakdown, reasons: result.reasons, dataSource: result.data_source },
   };
 }
 
