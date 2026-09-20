@@ -126,7 +126,7 @@ export async function loadDetailedScoringContext(bootstrap: any, gameWeek: numbe
       windowEnd: window.end.toISOString(),
     };
   } catch (error) {
-    console.warn(`Detailed API-Football scoring unavailable for GW${gameWeek}; using official FPL fallback:`, error);
+    console.warn(`Detailed API-Football scoring unavailable for GW${gameWeek}; only verified core player stats will score until detailed actions are available:`, error);
     return empty;
   }
 }
