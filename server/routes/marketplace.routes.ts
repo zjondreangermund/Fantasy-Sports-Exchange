@@ -161,7 +161,6 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
               order by
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'totalScore', '')::float, ce.total_score, 0) desc,
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'captainBasePoints', '')::float, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'providerRatingTotal', '')::float, 0) desc,
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'goalsScored', '')::float, 0) desc,
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'assists', '')::float, 0) desc,
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'keyPasses', '')::float, 0) desc,
