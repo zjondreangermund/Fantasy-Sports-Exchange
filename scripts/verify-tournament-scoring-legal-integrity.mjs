@@ -58,6 +58,7 @@ includesAll(scoreUpdater, [
   "tiebreakMeta: { ...asObject(entry?.tiebreakMeta), scoring: snapshot }",
   "version: 5",
   '"verified-player-stats"',
+  "detailedStatsCards",
   '"coreStatsOnlyCards"',
   'competition: "premier-league-only"',
   "fixturePolicy",
