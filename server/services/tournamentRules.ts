@@ -42,7 +42,6 @@ type RankedEntry = any & {
   tiebreak?: {
     totalScore: number;
     captainPoints: number;
-    providerRatingTotal: number;
     goalsScored: number;
     assists: number;
     keyPasses: number;
@@ -97,7 +96,6 @@ export async function buildEntryTiebreak(storage: any, entry: any) {
     return {
       totalScore: toNumber(entry?.totalScore, toNumber(snapshot.totalScore)),
       captainPoints: toNumber(snapshot.captainBasePoints),
-      providerRatingTotal: toNumber(snapshot.providerRatingTotal),
       goalsScored: toNumber(snapshot.goalsScored),
       assists: toNumber(snapshot.assists),
       keyPasses: toNumber(snapshot.keyPasses),
@@ -125,7 +123,6 @@ export async function buildEntryTiebreak(storage: any, entry: any) {
   return {
     totalScore: toNumber(entry?.totalScore),
     captainPoints: captain ? cardPoints(captain) : 0,
-    providerRatingTotal: 0,
     goalsScored: 0,
     assists: 0,
     keyPasses: 0,
@@ -149,7 +146,6 @@ export function compareTiebreak(a: RankedEntry, b: RankedEntry) {
   const bt = b.tiebreak || {};
   if (toNumber(bt.totalScore) !== toNumber(at.totalScore)) return toNumber(bt.totalScore) - toNumber(at.totalScore);
   if (toNumber(bt.captainPoints) !== toNumber(at.captainPoints)) return toNumber(bt.captainPoints) - toNumber(at.captainPoints);
-  if (toNumber(bt.providerRatingTotal) !== toNumber(at.providerRatingTotal)) return toNumber(bt.providerRatingTotal) - toNumber(at.providerRatingTotal);
   if (toNumber(bt.goalsScored) !== toNumber(at.goalsScored)) return toNumber(bt.goalsScored) - toNumber(at.goalsScored);
   if (toNumber(bt.assists) !== toNumber(at.assists)) return toNumber(bt.assists) - toNumber(at.assists);
   if (toNumber(bt.keyPasses) !== toNumber(at.keyPasses)) return toNumber(bt.keyPasses) - toNumber(at.keyPasses);
@@ -173,7 +169,6 @@ export function tiebreakReason(winner: RankedEntry, runnerUp?: RankedEntry) {
   const r = runnerUp.tiebreak || {};
   if (toNumber(w.totalScore) !== toNumber(r.totalScore)) return "Highest fantasy points";
   if (toNumber(w.captainPoints) !== toNumber(r.captainPoints)) return "Captain points tiebreak";
-  if (toNumber(w.providerRatingTotal) !== toNumber(r.providerRatingTotal)) return "Combined match ratings tiebreak";
   if (toNumber(w.goalsScored) !== toNumber(r.goalsScored)) return "Goals scored tiebreak";
   if (toNumber(w.assists) !== toNumber(r.assists)) return "Assists tiebreak";
   if (toNumber(w.keyPasses) !== toNumber(r.keyPasses)) return "Key passes tiebreak";
@@ -215,7 +210,6 @@ export function economyConfigPayload() {
     tiebreakRules: [
       "Fantasy points",
       "Captain points",
-      "Combined official match ratings",
       "Goals scored",
       "Assists",
       "Key passes",
