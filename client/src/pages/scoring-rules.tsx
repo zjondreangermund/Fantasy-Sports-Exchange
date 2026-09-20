@@ -36,7 +36,6 @@ const rows: ScoreRow[] = [
   { group: "Detailed performance", event: "Key / crucial pass", applies: "All positions", points: `+${d.keyPass} each`, note: "A pass recorded by the detailed match provider as creating a direct shooting opportunity." },
   { group: "Detailed performance", event: "Every completed pass", applies: "All positions", points: `+${(1 / d.completedPassesPerPoint).toFixed(4)} each`, note: `Every pass counts fractionally; capped at +${d.completedPassesMax} per player per gameweek.` },
   { group: "Detailed performance", event: "Passing accuracy", applies: "All positions", points: `+${d.passingAccuracyPercent} per %`, note: "A player completing 80% of passes receives +0.88 points." },
-  { group: "Detailed performance", event: "Official API-Football match rating", applies: "All positions", points: `rating × ${d.matchRating}`, note: "Uses the official 0–10 match rating; multiple matches use their average." },
   { group: "Detailed performance", event: "Successful tackle", applies: "Outfield players", points: `+${d.tackle} each` },
   { group: "Detailed performance", event: "Interception", applies: "Outfield players", points: `+${d.interception} each` },
   { group: "Detailed performance", event: "Duel won", applies: "Outfield players", points: `+${d.duelWon} each` },
@@ -80,14 +79,14 @@ export default function ScoringRulesPage() {
             <div>
               <div className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200/70">Fantasy Arena Trust Centre</div>
               <h1 className="mt-2 text-3xl font-black sm:text-5xl">Scoring Rules</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">Fantasy Arena scores five-card lineups from official Premier League data. Every minute, completed pass, match rating and verified match action contributes to a precise four-decimal score.</p>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">Fantasy Arena scores five-card lineups from official Premier League data. Every minute, completed pass and verified match action contributes to a precise four-decimal score.</p>
               <div className="mt-3 text-xs text-white/35">Last updated: 20 September 2026</div>
             </div>
           </div>
         </section>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
-          <RuleCard title="Every action counts" text="Exact minutes, official ratings, every pass, passing accuracy, tackles, duels, shots, dribbles and penalty involvement all shape your score." />
+          <RuleCard title="Every action counts" text="Exact minutes, every pass, passing accuracy, tackles, duels, shots, dribbles and penalty involvement all shape your score." />
           <RuleCard title="No proxy points" text="ICT, BPS and provider fantasy bonus systems do not add Fantasy Arena points. Only recorded player match statistics count." />
           <RuleCard title={`Captain bonus +${CAPTAIN_BONUS_PERCENT}%`} text="The captain adds a 10% bonus to the lineup total. The card's own score remains unchanged." />
         </div>
@@ -118,7 +117,7 @@ export default function ScoringRulesPage() {
         </section>
 
         <section className="mt-5 rounded-2xl border border-cyan-300/15 bg-cyan-400/[.06] p-5 sm:p-6">
-          <div className="flex gap-3"><Info className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200" /><div><h2 className="font-black">Player-stat-only scoring</h2><p className="mt-2 text-sm leading-6 text-white/55">Fantasy Arena scores recorded player match actions only. Core events such as minutes, goals, assists, cards, clean sheets and saves are combined with verified detailed actions such as passes, ratings, tackles, duels, shots and dribbles. If detailed actions are temporarily unavailable, no ICT, BPS, FPL bonus or other proxy points are added.</p></div></div>
+          <div className="flex gap-3"><Info className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200" /><div><h2 className="font-black">Player-stat-only scoring</h2><p className="mt-2 text-sm leading-6 text-white/55">Fantasy Arena scores recorded player match actions only. Core events such as minutes, goals, assists, cards, clean sheets and saves are combined with verified detailed actions such as passes, tackles, duels, shots and dribbles. If detailed actions are temporarily unavailable, no ICT, BPS, FPL bonus or other proxy points are added.</p></div></div>
         </section>
 
         <section className="mt-5 rounded-2xl border border-violet-300/15 bg-violet-400/[.06] p-5 sm:p-6">
@@ -126,7 +125,7 @@ export default function ScoringRulesPage() {
         </section>
 
         <section className="mt-5 rounded-2xl border border-emerald-300/15 bg-emerald-400/[.06] p-5 sm:p-6">
-          <div className="flex gap-3"><Info className="mt-0.5 h-5 w-5 shrink-0 text-emerald-200" /><div><h2 className="font-black">Precise scoring and fair tie-breakers</h2><p className="mt-2 text-sm leading-6 text-white/55">Player scores, captain bonuses and lineup totals are kept to {SCORE_PRECISION_DECIMALS} decimal places. If teams still finish level, the winner is decided by captain score, combined official match ratings, goals, assists, key passes, shots on target, defensive actions, goalkeeper saves, completed passes, minutes played, lower squad value, card XP, rarity prestige and finally the earlier lineup submission.</p></div></div>
+          <div className="flex gap-3"><Info className="mt-0.5 h-5 w-5 shrink-0 text-emerald-200" /><div><h2 className="font-black">Precise scoring and fair tie-breakers</h2><p className="mt-2 text-sm leading-6 text-white/55">Player scores, captain bonuses and lineup totals are kept to {SCORE_PRECISION_DECIMALS} decimal places. If teams still finish level, the winner is decided by captain score, goals, assists, key passes, shots on target, defensive actions, goalkeeper saves, completed passes, minutes played, lower squad value, card XP, rarity prestige and finally the earlier lineup submission.</p></div></div>
         </section>
 
         <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-5 text-sm text-white/48">
