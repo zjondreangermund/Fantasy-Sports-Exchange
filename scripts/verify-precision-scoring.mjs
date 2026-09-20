@@ -20,7 +20,6 @@ for (const [source, required, label] of [
   [shared, "export const SCORE_PRECISION_DECIMALS = 4", "Shared score precision"],
   [shared, "minutePlayed: 0.013", "Exact playing-minute scoring"],
   [scoring, "completedPasses / d.completedPassesPerPoint", "Every completed pass scoring"],
-  [scoring, "matchRating * d.matchRating", "Official match-rating scoring"],
   [scoring, "accuracy * d.passingAccuracyPercent", "Passing-accuracy scoring"],
   [scoring, '"verified-player-stats"', "Detailed player-stat score source"],
   [scoring, '"verified-core-stats"', "Core player-stat score source"],
@@ -28,14 +27,12 @@ for (const [source, required, label] of [
   [bridge, '"match_rating"', "Stored API-Football match-rating ingestion"],
   [bridge, '"total_passes"', "Stored API-Football pass-total ingestion"],
   [updater, "scoringPrecision: 4", "Precise tournament scoring snapshots"],
-  [updater, "providerRatingTotal", "Official match-rating tiebreak metadata"],
   [updater, 'import { buildFplPlayerIndex } from "./fplPlayerIdentity.js"', "Shared verified tournament player identity"],
   [updater, "identityMap.resolve(player)", "Verified official player matching"],
   [updater, "identityMap.canonical(officialElement)", "Canonical player position and identity"],
   [updater, "identityStatus: String(score?.identity_status", "Player identity status in official scoring snapshots"],
   [updater, "Recovered verified player points", "Automatic recovered-points diagnostics"],
   [bridge, "api_position: match.position", "Verified API-Football player position"],
-  [leaderboard, "->>'providerRatingTotal'", "Leaderboard match-rating tie-breaker"],
   [leaderboard, "->>'completedPasses'", "Leaderboard completed-passes tie-breaker"],
   [leaderboard, "snapshotMatchesVerifiedPlayer", "Verified snapshot player identity safeguard"],
   [standingsPage, "maximumFractionDigits: 4", "Visible precise tournament scores"],
@@ -47,6 +44,9 @@ check(!scoring.includes("return Math.round(totalScore);"), "Tournament lineups m
 check(!scoring.includes("FPL ICT fallback"), "FPL ICT fallback points must not exist.");
 check(!scoring.includes("FPL BPS fallback"), "FPL BPS fallback points must not exist.");
 check(!scoring.includes("official FPL bonus point(s)"), "Provider fantasy bonus points must not affect Fantasy Arena scoring.");
+check(!scoring.includes("matchRating * d.matchRating"), "API-Football match ratings must not affect Fantasy Arena scoring.");
+check(!updater.includes("providerRatingTotal"), "API-Football match ratings must not affect tournament tie-breaks.");
+check(!leaderboard.includes("providerRatingTotal"), "Leaderboard ordering must not use API-Football match ratings.");
 check(!updater.includes("const explicit = Number(player?.externalId || player?.fplId || 0);"), "Stale player IDs must not bypass official identity verification.");
 
 const rulesMarker = "export const PLAYER_SCORE_RULES = ";
@@ -113,7 +113,7 @@ const goalkeeperTwoSaves = context.scorePlayer({ ...player, saves: 2 }, "GK");
 
 check(oneMorePass.total_score > base.total_score, "One additional completed pass must improve the score.");
 check(oneMoreMinute.total_score > base.total_score, "One additional playing minute must improve the score.");
-check(strongerRating.total_score > base.total_score, "A stronger official match rating must improve the score.");
+check(strongerRating.total_score === base.total_score, "API-Football match rating must not change the Fantasy Arena score.");
 check(coreOnlyWithHigherProxy.total_score === coreOnly.total_score, "ICT, BPS and provider fantasy bonus values must never change the Fantasy Arena score.");
 check(goalkeeperTwoSaves.total_score > goalkeeperOneSave.total_score, "Every individual goalkeeper save must affect scoring.");
 check(base.football_metrics.completed_passes === 18, "Player scoring must retain verified completed passes for tie-breakers.");
@@ -130,8 +130,8 @@ const executableComparison = tournament.slice(comparisonStart, comparisonEnd)
   .replace("export function compareTiebreak(a: RankedEntry, b: RankedEntry)", "function compareTiebreak(a, b)");
 const rankingContext = { toNumber: (value) => Number(value || 0) };
 vm.runInNewContext(`${executableComparison}\nglobalThis.compare = compareTiebreak;`, rankingContext);
-const betterFootball = { id: 2, tiebreak: { totalScore: 80.1234, captainPoints: 20.5, providerRatingTotal: 35.7, squadValue: 900 } };
-const cheaperSquad = { id: 1, tiebreak: { totalScore: 80.1234, captainPoints: 20.5, providerRatingTotal: 35.6, squadValue: 100 } };
+const betterFootball = { id: 2, tiebreak: { totalScore: 80.1234, captainPoints: 20.5, goalsScored: 1, squadValue: 900 } };
+const cheaperSquad = { id: 1, tiebreak: { totalScore: 80.1234, captainPoints: 20.5, goalsScored: 0, squadValue: 100 } };
 check(rankingContext.compare(betterFootball, cheaperSquad) < 0,
   "Actual football performance must resolve exact-score ties before card value or ownership attributes.");
 
