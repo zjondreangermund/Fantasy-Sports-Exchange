@@ -394,7 +394,7 @@ export class ScoreUpdateService {
       detailedStatsCards,
       coreStatsOnlyCards,
       competition: "premier-league-only",
-      fixturePolicy: "Only Premier League FPL points recorded before the configured Tuesday settlement cutoff count. Cup matches and later fixtures are excluded.",
+      fixturePolicy: "Only verified Premier League player match statistics recorded inside the eligible gameweek window count. Cup matches and later fixtures are excluded.",
       gameWeek,
       updatedAt,
       finalizedAt: final ? updatedAt : null,
