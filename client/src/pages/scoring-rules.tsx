@@ -7,7 +7,7 @@ import {
 } from "../../../shared/game-rules";
 
 type ScoreRow = {
-  group: "Core" | "Detailed performance" | "Fallback" | "Penalties";
+  group: "Core" | "Detailed performance" | "Penalties";
   event: string;
   applies: string;
   points: string;
@@ -16,7 +16,6 @@ type ScoreRow = {
 
 const p = PLAYER_SCORE_RULES.positive;
 const d = PLAYER_SCORE_RULES.detailedPerformance;
-const f = PLAYER_SCORE_RULES.fallbackPerformance;
 const n = PLAYER_SCORE_RULES.negative;
 const c = PLAYER_SCORE_RULES.caps;
 
@@ -54,11 +53,6 @@ const rows: ScoreRow[] = [
   { group: "Detailed performance", event: "Penalty conceded", applies: "All positions", points: String(d.penaltyConceded) },
   { group: "Detailed performance", event: "Offside", applies: "Outfield players", points: String(d.offside) },
 
-  { group: "Fallback", event: "FPL ICT fallback", applies: "Only when detailed stats are unavailable", points: `ICT ÷ ${f.ictPerPoint}`, note: `Fractions are preserved. Maximum +${f.ictMax}; never added together with detailed action points.` },
-  { group: "Fallback", event: "FPL BPS fallback", applies: "Only when detailed stats are unavailable", points: `BPS ÷ ${f.bpsPerPoint}`, note: `Fractions are preserved. Maximum +${f.bpsMax}; never added together with detailed action points.` },
-  { group: "Core", event: "Official FPL bonus point", applies: "All positions", points: `×${p.fplBonusMultiplier}`, note: "Each official FPL bonus point is multiplied by this value." },
-  { group: "Core", event: "Multi-category contribution", applies: "All positions", points: `+${p.multiCategoryContribution}`, note: "Awarded when a player records at least two of: goal, assist or clean sheet." },
-
   { group: "Penalties", event: "Yellow card", applies: "All positions", points: String(n.yellowCard) },
   { group: "Penalties", event: "Red card", applies: "All positions", points: String(n.redCard) },
   { group: "Penalties", event: "Own goal", applies: "All positions", points: String(n.ownGoal) },
@@ -87,14 +81,14 @@ export default function ScoringRulesPage() {
               <div className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200/70">Fantasy Arena Trust Centre</div>
               <h1 className="mt-2 text-3xl font-black sm:text-5xl">Scoring Rules</h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">Fantasy Arena scores five-card lineups from official Premier League data. Every minute, completed pass, match rating and verified match action contributes to a precise four-decimal score.</p>
-              <div className="mt-3 text-xs text-white/35">Last updated: 23 August 2026</div>
+              <div className="mt-3 text-xs text-white/35">Last updated: 20 September 2026</div>
             </div>
           </div>
         </section>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
           <RuleCard title="Every action counts" text="Exact minutes, official ratings, every pass, passing accuracy, tackles, duels, shots, dribbles and penalty involvement all shape your score." />
-          <RuleCard title="No double counting" text="When detailed match actions are present, they replace the ICT/BPS fallback. Both methods are never added together." />
+          <RuleCard title="No proxy points" text="ICT, BPS and provider fantasy bonus systems do not add Fantasy Arena points. Only recorded player match statistics count." />
           <RuleCard title={`Captain bonus +${CAPTAIN_BONUS_PERCENT}%`} text="The captain adds a 10% bonus to the lineup total. The card's own score remains unchanged." />
         </div>
 
@@ -124,7 +118,7 @@ export default function ScoringRulesPage() {
         </section>
 
         <section className="mt-5 rounded-2xl border border-cyan-300/15 bg-cyan-400/[.06] p-5 sm:p-6">
-          <div className="flex gap-3"><Info className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200" /><div><h2 className="font-black">How provider fallback works</h2><p className="mt-2 text-sm leading-6 text-white/55">Core events such as minutes, goals, assists, cards, clean sheets and FPL bonus come from official FPL gameweek data. API-Football supplies the detailed all-around actions. When those detailed statistics are unavailable for a player, Fantasy Arena uses official FPL ICT and BPS as a limited performance proxy instead of awarding zero for all-around play.</p></div></div>
+          <div className="flex gap-3"><Info className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200" /><div><h2 className="font-black">Player-stat-only scoring</h2><p className="mt-2 text-sm leading-6 text-white/55">Fantasy Arena scores recorded player match actions only. Core events such as minutes, goals, assists, cards, clean sheets and saves are combined with verified detailed actions such as passes, ratings, tackles, duels, shots and dribbles. If detailed actions are temporarily unavailable, no ICT, BPS, FPL bonus or other proxy points are added.</p></div></div>
         </section>
 
         <section className="mt-5 rounded-2xl border border-violet-300/15 bg-violet-400/[.06] p-5 sm:p-6">
