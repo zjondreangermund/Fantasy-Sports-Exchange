@@ -3,7 +3,7 @@
  *
  * Integrity rules:
  * - Entry windows close at the FPL deadline / first Premier League kickoff.
- * - Official FPL supplies core events; API-Football supplies detailed all-around actions when available.
+ * - Verified core match events plus API-Football detailed player actions drive scoring; no ICT/BPS proxy points are used.
  * - Scores freeze at the configured Tuesday settlement cutoff and never change afterwards.
  * - FA Cup matches and Premier League fixtures played after the settlement cutoff do not count.
  * - Historical competition scores are never reset when the current gameweek changes.
@@ -132,7 +132,7 @@ export class ScoreUpdateService {
         api_player_id: Number((detailedStats as any)?.api_player_id || 0),
         identity_status: "verified",
         identity_message: `Verified official Premier League player: ${canonical.name}.`,
-        identity_provider: detailedStats ? "api-football+fpl" : "fpl-fallback",
+        identity_provider: detailedStats ? "verified-player-stats" : "verified-core-stats",
         official_player_name: canonical.name,
         official_team: canonical.team,
         official_position: verifiedPosition,
@@ -385,14 +385,14 @@ export class ScoreUpdateService {
       .filter(Boolean);
     const complete = cards.length === 5 && cardScores.length === 5 && unresolvedCardIds.length === 0;
     const updatedAt = new Date().toISOString();
-    const detailedStatsCards = cardScores.filter((score: any) => score?.data_source === "official-fpl-plus-api-football").length;
-    const fallbackStatsCards = cardScores.length - detailedStatsCards;
+    const detailedStatsCards = cardScores.filter((score: any) => score?.data_source === "verified-player-stats").length;
+    const coreStatsOnlyCards = cardScores.length - detailedStatsCards;
     return {
-      version: 4,
-      source: detailedStatsCards > 0 ? "official-fpl-plus-api-football" : "official-fpl-fallback",
-      scoringMethod: "FPL core events plus API-Football detailed actions; ICT/BPS fallback is used only when detailed actions are unavailable",
+      version: 5,
+      source: detailedStatsCards > 0 ? "verified-player-stats" : "verified-core-stats",
+      scoringMethod: "Verified player match statistics only; no ICT/BPS proxy, FPL bonus-derived, or other fallback points are awarded",
       detailedStatsCards,
-      fallbackStatsCards,
+      coreStatsOnlyCards,
       competition: "premier-league-only",
       fixturePolicy: "Only Premier League FPL points recorded before the configured Tuesday settlement cutoff count. Cup matches and later fixtures are excluded.",
       gameWeek,
@@ -426,7 +426,7 @@ export class ScoreUpdateService {
         playerId: Number(score?.player_id || 0),
         elementId: Number(score?.element_id || 0),
         apiFootballPlayerId: Number(score?.api_player_id || 0),
-        dataSource: score?.data_source || "official-fpl-fallback",
+        dataSource: score?.data_source || "verified-core-stats",
         score: toNumber(score?.total_score),
         breakdown: score?.breakdown || null,
         footballMetrics: score?.football_metrics || null,
