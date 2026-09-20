@@ -16,7 +16,6 @@ function requireText(source, expected, message) {
 requireText(routes, 'app.get("/api/competitions/:id/leaderboard"', "The tournament leaderboard endpoint is missing.");
 requireText(routes, "Math.min(requestedPageSize, 100)", "Tournament leaderboard pages must be capped at 100 teams.");
 requireText(routes, "row_number() over", "Leaderboard positions must be ranked deterministically.");
-requireText(routes, "->>'providerRatingTotal'", "Exact-score ties must prioritize official match ratings.");
 requireText(routes, "->>'completedPasses'", "Exact-score ties must include verified football actions.");
 requireText(routes, 'limit ${pageSize} offset ${offset}', "Tournament leaderboard pages must use a real database offset.");
 requireText(routes, "totalPages: Math.max(1, Math.ceil(totalEntries / pageSize))", "Tournament leaderboard pagination totals are missing.");
@@ -73,3 +72,5 @@ requireText(freeCupSync, '["completed", "cancelled"]', "Completed or cancelled t
 requireText(freeCupSync, "GW2 FREE Common Card Cup forced OPEN until 13:30 CAT on 29 Aug 2026, today's first Premier League kickoff.", "The FREE Cup sync must report when the GW2 Common first-kickoff override is applied.");
 
 console.log("Play tournament leaderboard launcher, 25-team pagination, official player scoring details and the GW2 FREE Common first-kickoff entry window verified.");
+
+if (routes.includes("providerRatingTotal")) throw new Error("Tournament leaderboard must not use API-Football match ratings.");
