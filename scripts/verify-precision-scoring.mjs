@@ -22,7 +22,8 @@ for (const [source, required, label] of [
   [scoring, "completedPasses / d.completedPassesPerPoint", "Every completed pass scoring"],
   [scoring, "matchRating * d.matchRating", "Official match-rating scoring"],
   [scoring, "accuracy * d.passingAccuracyPercent", "Passing-accuracy scoring"],
-  [scoring, "ictIndex / f.ictPerPoint", "Fractional FPL ICT fallback"],
+  [scoring, '"verified-player-stats"', "Detailed player-stat score source"],
+  [scoring, '"verified-core-stats"', "Core player-stat score source"],
   [scoring, "return round(totalScore);", "Four-decimal lineup scoring"],
   [bridge, '"match_rating"', "Stored API-Football match-rating ingestion"],
   [bridge, '"total_passes"', "Stored API-Football pass-total ingestion"],
@@ -43,7 +44,9 @@ for (const [source, required, label] of [
 ]) check(source.includes(required), `${label} is missing.`);
 
 check(!scoring.includes("return Math.round(totalScore);"), "Tournament lineups must never be rounded to whole points.");
-check(!scoring.includes("Math.floor(ictIndex / f.ictPerPoint)"), "FPL ICT fallback must retain fractional points.");
+check(!scoring.includes("FPL ICT fallback"), "FPL ICT fallback points must not exist.");
+check(!scoring.includes("FPL BPS fallback"), "FPL BPS fallback points must not exist.");
+check(!scoring.includes("official FPL bonus point(s)"), "Provider fantasy bonus points must not affect Fantasy Arena scoring.");
 check(!updater.includes("const explicit = Number(player?.externalId || player?.fplId || 0);"), "Stale player IDs must not bypass official identity verification.");
 
 const rulesMarker = "export const PLAYER_SCORE_RULES = ";
@@ -103,15 +106,15 @@ const base = context.scorePlayer(player, "MID");
 const oneMorePass = context.scorePlayer({ ...player, completed_passes: 19 }, "MID");
 const oneMoreMinute = context.scorePlayer({ ...player, minutes: 73 }, "MID");
 const strongerRating = context.scorePlayer({ ...player, match_rating: 6.9 }, "MID");
-const fallback = context.scorePlayer({ ...player, detailed_stats_available: false }, "MID");
-const improvedFallback = context.scorePlayer({ ...player, detailed_stats_available: false, bps: 18 }, "MID");
+const coreOnly = context.scorePlayer({ ...player, detailed_stats_available: false }, "MID");
+const coreOnlyWithHigherProxy = context.scorePlayer({ ...player, detailed_stats_available: false, bps: 99, ict_index: "99.9", bonus: 3 }, "MID");
 const goalkeeperOneSave = context.scorePlayer({ ...player, saves: 1 }, "GK");
 const goalkeeperTwoSaves = context.scorePlayer({ ...player, saves: 2 }, "GK");
 
 check(oneMorePass.total_score > base.total_score, "One additional completed pass must improve the score.");
 check(oneMoreMinute.total_score > base.total_score, "One additional playing minute must improve the score.");
 check(strongerRating.total_score > base.total_score, "A stronger official match rating must improve the score.");
-check(improvedFallback.total_score > fallback.total_score, "A one-point FPL BPS increase must affect fallback scoring.");
+check(coreOnlyWithHigherProxy.total_score === coreOnly.total_score, "ICT, BPS and provider fantasy bonus values must never change the Fantasy Arena score.");
 check(goalkeeperTwoSaves.total_score > goalkeeperOneSave.total_score, "Every individual goalkeeper save must affect scoring.");
 check(base.football_metrics.completed_passes === 18, "Player scoring must retain verified completed passes for tie-breakers.");
 
