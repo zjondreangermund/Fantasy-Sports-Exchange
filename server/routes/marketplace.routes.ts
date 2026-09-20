@@ -153,13 +153,13 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
             ce.id as "entryId",
             ce.user_id as "userId",
             coalesce(u.manager_team_name, u.name, u.email, 'Manager') as "teamName",
-            coalesce(ce.total_score, 0)::float as "totalScore",
+            coalesce(nullif(ce.tiebreak_meta->'scoring'->>'totalScore', '')::float, ce.total_score, 0)::float as "totalScore",
             ce.lineup_card_ids as "lineupCardIds",
             ce.captain_id as "captainId",
             ce.joined_at as "joinedAt",
             row_number() over (
               order by
-                coalesce(ce.total_score, 0) desc,
+                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'totalScore', '')::float, ce.total_score, 0) desc,
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'captainBasePoints', '')::float, 0) desc,
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'providerRatingTotal', '')::float, 0) desc,
                 coalesce(nullif(ce.tiebreak_meta->'scoring'->>'goalsScored', '')::float, 0) desc,
@@ -306,7 +306,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           snapshot?.final === true
           || (elementId > 0 && storedElementId === elementId && storedIdentityStatus === "verified")
         ));
-        const saved = snapshotMatchesVerifiedPlayer ? storedScore : null;
+        const saved = storedScore && snapshot ? storedScore : null;
         const identityStatus = !matchedElement
           ? "identity-unlinked"
           : !liveElement
@@ -342,7 +342,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           elementId: elementId || null,
           identityStatus,
           identityMessage,
-          identityProvider: saved?.identityProvider || (apiPlayer ? "api-football+fpl" : matchedElement ? "fpl-fallback" : null),
+          identityProvider: saved?.identityProvider || (apiPlayer ? "verified-player-stats" : matchedElement ? "verified-core-stats" : null),
           captain,
           points,
           captainBonus,
@@ -356,15 +356,22 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
               ? calculated.reasons
               : [],
           minutes: Number(saved?.minutesPlayed ?? liveElement?.stats?.minutes ?? 0),
-          source: saved ? "official-gameweek-snapshot" : calculated && detailedStats ? "live-api-football" : calculated ? "live-fpl-fallback" : "awaiting-match-data",
+          source: saved ? "official-gameweek-snapshot" : calculated && detailedStats ? "live-player-stats" : calculated ? "live-core-stats" : "awaiting-match-data",
         };
       });
       const calculatedTotalScore = Math.round(
         players.reduce((total: number, player: any) => total + Number(player.contribution || 0), 0) * 10000,
       ) / 10000;
       const storedTotalScore = Number(entry.totalScore || 0);
+      const snapshotTotalScore = Number(snapshot?.totalScore);
+      const canonicalTotalScore = snapshot && Number.isFinite(snapshotTotalScore)
+        ? snapshotTotalScore
+        : calculatedTotalScore;
       const scoreReconciliationRequired = snapshot?.final !== true
-        && Math.abs(storedTotalScore - calculatedTotalScore) > 0.00005;
+        && (
+          Math.abs(storedTotalScore - canonicalTotalScore) > 0.00005
+          || Math.abs(calculatedTotalScore - canonicalTotalScore) > 0.00005
+        );
 
       return res.json({
         entryId: Number(entry.entryId),
@@ -372,7 +379,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         competitionName: String(entry.competitionName || "Tournament"),
         gameWeek: Number(entry.gameWeek || 0),
         teamName: String(entry.teamName || "Manager"),
-        totalScore: snapshot?.final === true ? storedTotalScore : calculatedTotalScore,
+        totalScore: canonicalTotalScore,
         storedTotalScore,
         scoreReconciliationRequired,
         captainId,
