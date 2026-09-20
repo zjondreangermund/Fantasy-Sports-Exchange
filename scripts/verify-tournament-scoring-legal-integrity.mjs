@@ -56,7 +56,7 @@ includesAll(scoreUpdater, [
   "isSettlementFinal",
   "activateCompetitionAtDeadline",
   "tiebreakMeta: { ...asObject(entry?.tiebreakMeta), scoring: snapshot }",
-  "version: 5",
+  "version: 6",
   '"verified-player-stats"',
   "detailedStatsCards",
   '"coreStatsOnlyCards"',
@@ -72,6 +72,8 @@ expect(!scoreUpdater.includes("isGameweekFinal"), "Tournament finalization must 
 expect(!scoreUpdater.includes("resetForNewGameweek"), "Score updater must not reset historical gameweek scores");
 expect(!scoreUpdater.includes("totalScore: 0"), "Score updater must not zero other gameweek entries");
 expect(!scoreUpdater.includes("otherActiveComps"), "Score updater must not clear non-current active competitions");
+expect(!scoreUpdater.includes("providerRatingTotal"), "API-Football match ratings must not affect tournament ordering");
+expect(!scoring.includes("matchRating * d.matchRating"), "API-Football match ratings must not affect player points");
 
 includesAll(scoring, ["Captain receives +10%", "baseScore * 1.1", "rarity does NOT change football points"], "Scoring engine");
 includesAll(tournamentRules, [
