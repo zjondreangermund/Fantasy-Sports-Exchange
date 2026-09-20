@@ -201,7 +201,6 @@ export class ScoreUpdateService {
         row_number() over (order by
           coalesce(ce.total_score, 0) desc,
           coalesce(nullif(ce.tiebreak_meta->'scoring'->>'captainBasePoints', '')::float, 0) desc,
-          coalesce(nullif(ce.tiebreak_meta->'scoring'->>'providerRatingTotal', '')::float, 0) desc,
           coalesce(nullif(ce.tiebreak_meta->'scoring'->>'goalsScored', '')::float, 0) desc,
           coalesce(nullif(ce.tiebreak_meta->'scoring'->>'assists', '')::float, 0) desc,
           ce.joined_at asc, ce.id asc
@@ -358,7 +357,6 @@ export class ScoreUpdateService {
     const totalScore = calculateLineupScore(cardScores, captainId);
     const footballMetrics = cardScores.reduce((totals: any, score: any) => {
       const metrics = score?.football_metrics || {};
-      totals.providerRatingTotal += toNumber(metrics.match_rating);
       totals.goalsScored += toNumber(metrics.goals);
       totals.assists += toNumber(metrics.assists);
       totals.keyPasses += toNumber(metrics.key_passes);
@@ -369,7 +367,6 @@ export class ScoreUpdateService {
       totals.minutesPlayed += toNumber(metrics.minutes);
       return totals;
     }, {
-      providerRatingTotal: 0,
       goalsScored: 0,
       assists: 0,
       keyPasses: 0,
@@ -388,9 +385,9 @@ export class ScoreUpdateService {
     const detailedStatsCards = cardScores.filter((score: any) => score?.data_source === "verified-player-stats").length;
     const coreStatsOnlyCards = cardScores.length - detailedStatsCards;
     return {
-      version: 5,
+      version: 6,
       source: detailedStatsCards > 0 ? "verified-player-stats" : "verified-core-stats",
-      scoringMethod: "Verified player match statistics only; no ICT/BPS proxy, FPL bonus-derived, or other fallback points are awarded",
+      scoringMethod: "Verified player match statistics only; API-Football match ratings, ICT/BPS proxy, FPL bonus-derived, and other fallback points are excluded",
       detailedStatsCards,
       coreStatsOnlyCards,
       competition: "premier-league-only",
@@ -406,7 +403,6 @@ export class ScoreUpdateService {
       baseTotal,
       captainBasePoints: toNumber(captainScore?.total_score),
       scoringPrecision: 4,
-      providerRatingTotal: Math.round(footballMetrics.providerRatingTotal * 10000) / 10000,
       goalsScored: footballMetrics.goalsScored,
       assists: footballMetrics.assists,
       keyPasses: footballMetrics.keyPasses,
