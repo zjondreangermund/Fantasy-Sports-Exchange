@@ -94,10 +94,13 @@ export async function loadDetailedScoringContext(bootstrap: any, gameWeek: numbe
 
   try {
     const rows = rowsOf(await db.execute(sql`
-      select s.api_player_id as "apiPlayerId", s.statistics,
+      select s.api_player_id as "apiPlayerId", s.api_team_id as "apiTeamId",
+             coalesce(s.player_name,'') as "playerName", coalesce(s.position,'') as position,
+             coalesce(t.name,'') as "teamName", f.season, s.statistics,
              s.api_fixture_id as "fixtureId", f.kickoff_at as "kickoffAt"
       from app.api_football_player_match_stats s
       join app.api_football_fixtures f on f.api_fixture_id=s.api_fixture_id
+      left join app.api_football_teams t on t.api_team_id=s.api_team_id
       where f.league_id=${LEAGUE_ID}
         and f.kickoff_at >= ${window.start}
         and f.kickoff_at < ${window.end}
@@ -117,6 +120,34 @@ export async function loadDetailedScoringContext(bootstrap: any, gameWeek: numbe
     }
 
     const directory = await loadApiFootballPlayerDirectory();
+    // SCORE_DETAIL_MATCH_ROW_IDENTITY_V1
+    // Match-stat rows are also authoritative provider identities. Add them as
+    // fallback candidates when the periodic squad directory is partial/stale.
+    const knownIds = new Set(directory.map((player) => Number(player.apiPlayerId || 0)));
+    for (const row of rows) {
+      const apiPlayerId = Number(row.apiPlayerId || 0);
+      if (!apiPlayerId || knownIds.has(apiPlayerId) || !String(row.playerName || "").trim()) continue;
+      directory.push({
+        apiPlayerId,
+        season: Number(row.season || 0),
+        apiTeamId: Number(row.apiTeamId || 0),
+        name: String(row.playerName || "").trim(),
+        firstName: "",
+        lastName: "",
+        team: String(row.teamName || "").trim(),
+        position: String(row.position || "").toUpperCase() === "G" ? "GK"
+          : String(row.position || "").toUpperCase() === "D" ? "DEF"
+          : String(row.position || "").toUpperCase() === "F" ? "FWD"
+          : "MID",
+        photo: "",
+        nationality: "",
+        age: null,
+        squadNumber: null,
+        active: true,
+        updatedAt: row.kickoffAt ? new Date(row.kickoffAt).toISOString() : null,
+      });
+      knownIds.add(apiPlayerId);
+    }
     return {
       directory,
       statsByApiPlayerId,
