@@ -538,6 +538,7 @@ patchFile("server/services/apiFootballSync.ts", (original) => {
     '  setTimeout(() => providerGet("status", {}).catch((error: any) => console.warn("[api-football-sync] provider status probe failed:", error?.message || error)), 5_000);',
     '  setTimeout(() => safeRun("fixtures"), 10_000);',
     '  setTimeout(() => safeRun("players"), 30_000);',
+    '  setTimeout(() => safeRun("completed_stats"), 35_000);',
     '  setTimeout(() => safeRun("standings"), 45_000);',
     '  setTimeout(() => safeRun("injuries"), 60_000);',
     '  setTimeout(() => safeRun("transfers"), 90_000);',
