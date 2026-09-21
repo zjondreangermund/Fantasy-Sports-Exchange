@@ -160,8 +160,12 @@ export async function disableWebPushSubscription(userId: string, endpointValue: 
   return rows.length > 0;
 }
 
-function notificationUrl(dedupeKey: unknown): string {
+function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
   const key = String(dedupeKey || "");
+  if (/^competition:\d+:entry:\d+:free-card-claim-ready$/.test(key)) {
+    const id = Number(notificationId || 0);
+    return id > 0 ? `/account?tab=inbox&notification=${id}` : "/account?tab=inbox";
+  }
   const decider = key.match(/^competition:(\d+):decider:/);
   if (decider) return `/competitions?leaderboard=${decider[1]}`;
   if (key.startsWith("replacement-claim:")) return "/collection";
@@ -272,7 +276,7 @@ export async function processPendingWebPushDeliveries(limit = 25) {
         }, JSON.stringify({
           title: String(delivery.title || "Fantasy Arena"),
           body: String(delivery.message || "You have a new Fantasy Arena notification."),
-          url: notificationUrl(delivery.dedupeKey),
+          url: notificationUrl(delivery.dedupeKey, delivery.notificationId),
           tag: `fantasy-arena-${Number(delivery.notificationId)}`,
           notificationId: Number(delivery.notificationId),
         }), { TTL: 24 * 60 * 60, urgency: "high" });
