@@ -647,7 +647,25 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         const scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId);
         if (scoring.skipped && scoring.reason === "Tournament entries are still open") throw new Error("Tournament entries are still open");
         if (!scoring.final) throw new Error("Gameweek scores are still provisional");
-        if (!scoring.complete) throw new Error("Final scoring is incomplete for one or more cards");
+        if (!scoring.complete) {
+          const unresolvedIds = Array.isArray(scoring.unresolvedCardIds)
+            ? scoring.unresolvedCardIds.map((id: any) => Number(id || 0)).filter((id: number) => id > 0)
+            : [];
+          let unresolvedLabel = "";
+          if (unresolvedIds.length) {
+            const unresolvedRows = rowsOf(await db.execute(sql`
+              select pc.id, coalesce(p.name,'Unknown player') as name
+              from app.player_cards pc
+              left join app.players p on p.id=pc.player_id
+              where pc.id in (${sql.join(unresolvedIds.map((id: number) => sql`${id}`), sql`, `)})
+              order by pc.id
+            `));
+            unresolvedLabel = unresolvedRows.length
+              ? `: ${unresolvedRows.map((row: any) => String(row.name || `card ${row.id}`)).join(", ")}`
+              : "";
+          }
+          throw new Error(`Final scoring is incomplete for one or more cards${unresolvedLabel}`);
+        }
       }
 
       const entries = await storage.getCompetitionEntries(competitionId);
