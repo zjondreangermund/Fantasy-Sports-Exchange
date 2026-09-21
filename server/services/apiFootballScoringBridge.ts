@@ -353,8 +353,13 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
       join app.api_football_fixtures f on f.api_fixture_id=s.api_fixture_id
       left join app.api_football_teams t on t.api_team_id=s.api_team_id
       where f.league_id=${LEAGUE_ID}
-        and f.season=${season}
+        and f.season between ${season - 1} and ${season}
         and coalesce(s.player_name,'') <> ''
+        and s.api_team_id in (
+          select home_team_id from app.api_football_fixtures where league_id=${LEAGUE_ID} and season=${season}
+          union
+          select away_team_id from app.api_football_fixtures where league_id=${LEAGUE_ID} and season=${season}
+        )
       order by s.api_player_id, f.kickoff_at desc nulls last, s.api_fixture_id desc
     `));
 
@@ -413,17 +418,20 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
     `));
 
     const statsByApiPlayerId = new Map<number, PlayerStats>();
-    const knownIds = new Set(directory.map((player) => Number(player.apiPlayerId || 0)));
+    const identityKey = (apiPlayerId: unknown, apiTeamId: unknown) => `${Number(apiPlayerId || 0)}:${Number(apiTeamId || 0)}`;
+    const knownIdentityKeys = new Set(directory.map((player) => identityKey(player.apiPlayerId, player.apiTeamId)));
 
     const addIdentityCandidate = (row: any) => {
       const apiPlayerId = Number(row?.apiPlayerId || 0);
+      const apiTeamId = Number(row?.apiTeamId || 0);
       const playerName = String(row?.playerName || "").trim();
-      if (!apiPlayerId || !playerName || knownIds.has(apiPlayerId)) return;
+      const key = identityKey(apiPlayerId, apiTeamId);
+      if (!apiPlayerId || !apiTeamId || !playerName || knownIdentityKeys.has(key)) return;
       const rawPosition = String(row?.position || "").toUpperCase();
       directory.push({
         apiPlayerId,
         season: Number(row?.season || season),
-        apiTeamId: Number(row?.apiTeamId || 0),
+        apiTeamId,
         name: playerName,
         firstName: "",
         lastName: "",
@@ -439,7 +447,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
         active: true,
         updatedAt: row?.kickoffAt ? new Date(row.kickoffAt).toISOString() : null,
       });
-      knownIds.add(apiPlayerId);
+      knownIdentityKeys.add(key);
     };
 
     for (const row of historicalIdentityRows) addIdentityCandidate(row);
