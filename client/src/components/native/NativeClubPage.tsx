@@ -31,6 +31,10 @@ export default function NativeClubPage() {
   }, []);
   const [tab, setTab] = React.useState<Tab>(initialTab);
   const [selectedNotification, setSelectedNotification] = React.useState<any | null>(null);
+  const requestedNotificationId = React.useMemo(() => {
+    if (typeof window === "undefined") return 0;
+    return Number(new URLSearchParams(window.location.search).get("notification") || 0);
+  }, []);
 
   const { data: user } = useQuery<any>({ queryKey: ["/api/user"], staleTime: 30_000 });
   const { data: cardsRaw } = useQuery<any>({
@@ -105,6 +109,15 @@ export default function NativeClubPage() {
   const wins = rows.filter((entry: any) => Number(entry.rank || entry.finalRank || 0) === 1 || String(entry.status || "").toLowerCase() === "winner").length;
   const notifications = Array.isArray(inbox?.notifications) ? inbox.notifications : [];
   const referrals = Array.isArray(history?.referrals) ? history.referrals : [];
+
+  React.useEffect(() => {
+    if (!requestedNotificationId || selectedNotification || !notifications.length) return;
+    const requested = notifications.find((note: any) => Number(note?.id || 0) === requestedNotificationId);
+    if (!requested) return;
+    setTab("inbox");
+    setSelectedNotification(requested);
+    void markNotificationRead(requested.id);
+  }, [notifications, requestedNotificationId, selectedNotification]);
 
   const shareReferral = async () => {
     const url = String(referral?.url || "").trim();
