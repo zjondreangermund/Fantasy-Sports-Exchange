@@ -5,6 +5,7 @@ import { storage } from "../storage.js";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex } from "../services/fplPlayerIdentity.js";
 import { loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
+import { loadApiFootballGameweekScoringContext } from "../services/apiFootballScoringBridge.js";
 import { ScoreUpdateService } from "../services/scoreUpdater.js";
 import { rankCompetitionEntries } from "../services/tournamentRules.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
@@ -374,10 +375,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       `))[0];
       if (!preview) return res.status(404).json({ message: "Tournament not found" });
       const entryDeadline = await resolveEntryDeadline(Number(preview.gameWeek || 0), preview.startDate);
-      const [officialBootstrap, apiFootballDirectory] = await Promise.all([
+      const [officialBootstrap, apiScoringContext] = await Promise.all([
         fplApi.bootstrap(),
-        loadApiFootballPlayerDirectory().catch(() => []),
+        loadApiFootballGameweekScoringContext(Number(preview.gameWeek || 0)).catch(() => null),
       ]);
+      const apiFootballDirectory = apiScoringContext?.directory || await loadApiFootballPlayerDirectory().catch(() => []);
+      const departedApiFootballDirectory = apiScoringContext?.departedDirectory || [];
       const officialPlayerIndex = buildFplPlayerIndex(officialBootstrap);
 
       const entry = await db.transaction(async (tx) => {
@@ -406,7 +409,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         const storedCards = rowsOf(await tx.execute(sql`
           select pc.id, pc.owner_id as "ownerId", pc.rarity::text as rarity,
             pc.for_sale as "forSale", pc.player_id as "playerId",
-            p.position::text as position, p.league as league,
+            p.position::text as position, p.league as league, p.status as status,
             p.name as "playerName", p.team as team, p.fpl_id as "fplId",
             p.code as code, p.web_name as "webName"
           from app.player_cards pc
@@ -418,6 +421,24 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           for update of pc
         `));
         const cards = storedCards.map((card) => {
+          const storedStatus = String(card.status || "").trim().toLowerCase();
+          const storedLeague = String(card.league || "").trim().toLowerCase();
+          const departedApiFootballPlayer = resolveApiFootballPlayer(
+            { ...card, name: card.playerName },
+            departedApiFootballDirectory,
+          );
+          const explicitlyDeparted = Boolean(departedApiFootballPlayer)
+            || ["departed", "superseded", "unlinked", "archived"].includes(storedStatus)
+            || (storedLeague && !["premier league", "english premier league", "epl"].includes(storedLeague));
+          if (explicitlyDeparted) {
+            return {
+              ...card,
+              league: "Outside Premier League",
+              selectionProvider: departedApiFootballPlayer ? "API-Football transfer" : "stored player status",
+              departed: true,
+            };
+          }
+
           const officialPlayer = officialPlayerIndex.resolve({
             name: card.playerName,
             team: card.team,
@@ -434,6 +455,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             league: "Premier League",
             position: canonical?.position || card.position || apiFootballPlayer?.position,
             selectionProvider: apiFootballPlayer ? "API-Football" : "FPL fallback",
+            departed: false,
           };
         });
         const cardById = new Map(cards.map((card) => [Number(card.id), card]));
@@ -448,9 +470,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         if (new Set(cards.map((card) => Number(card.playerId))).size !== 5) {
           throw new Error("Lineup must use 5 different players");
         }
-        const ineligiblePlayer = cards.find((card) => !isPremierLeague(card.league));
+        const ineligiblePlayer = cards.find((card) => Boolean(card.departed) || !isPremierLeague(card.league));
         if (ineligiblePlayer) {
-          throw new Error(`Premier League tournaments only accept Premier League player cards. ${ineligiblePlayer.playerName || "This player"} cannot be selected because no current API-Football or FPL fallback link was found.`);
+          const reason = Boolean(ineligiblePlayer.departed)
+            ? "has left the Premier League and cannot be selected"
+            : "is not linked to a current Premier League player";
+          throw new Error(`Premier League tournaments only accept current Premier League player cards. ${ineligiblePlayer.playerName || "This player"} ${reason}.`);
         }
         for (let index = 0; index < TOURNAMENT_REQUIRED_POSITIONS.length; index += 1) {
           if (String(orderedCards[index]?.position || "").toUpperCase() !== TOURNAMENT_REQUIRED_POSITIONS[index]) {
@@ -564,7 +589,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         "Gameweek entries are closed",
         "One or more selected cards are already locked in a submitted team",
         "Each tournament entry must use five different unused cards.",
-        "Premier League tournaments only accept Premier League player cards.",
+        "Premier League tournaments only accept current Premier League player cards.",
         "Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player.",
         "Lineup must use 5 different players",
         "Cannot use marketplace-listed cards.",
