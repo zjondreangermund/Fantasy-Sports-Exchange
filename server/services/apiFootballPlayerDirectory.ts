@@ -333,6 +333,31 @@ function teamCompatibility(rawTeam: unknown, candidateTeam: string) {
   return 0;
 }
 
+export function diagnoseApiFootballPlayerMatch(player: any, directory: ApiFootballDirectoryPlayer[]) {
+  const rawNames = [player?.name, player?.webName, player?.web_name].filter(Boolean);
+  const rawPosition = String(player?.position || "").toUpperCase();
+  return directory.map((candidate) => {
+    const nameScore = Math.max(0, ...rawNames.map((name) => nameCompatibility(name, candidate)));
+    const teamScore = teamCompatibility(player?.team, candidate.team);
+    const positionMatches = !rawPosition || rawPosition === candidate.position;
+    const positionScore = rawPosition && rawPosition === candidate.position ? 10 : 0;
+    const safePositionMismatch = !positionMatches && nameScore >= 100 && teamScore >= 20;
+    return {
+      apiPlayerId: candidate.apiPlayerId,
+      name: candidate.name,
+      team: candidate.team,
+      position: candidate.position,
+      nameScore,
+      teamScore,
+      positionScore,
+      safePositionMismatch,
+      total: nameScore + teamScore + positionScore,
+    };
+  }).filter((row) => row.nameScore > 0 || row.teamScore > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8);
+}
+
 export function resolveApiFootballPlayer(player: any, directory: ApiFootballDirectoryPlayer[]) {
   const rawNames = [player?.name, player?.webName, player?.web_name].filter(Boolean);
   const rawPosition = String(player?.position || "").toUpperCase();
