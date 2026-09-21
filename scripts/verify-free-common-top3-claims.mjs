@@ -6,6 +6,9 @@ const server = read("server/routes/economyIntegrity.routes.ts");
 const awards = read("scripts/apply-free-card-cup-auto-awards.mjs");
 const entries = read("client/src/pages/my-entries.tsx");
 const nativeClub = read("client/src/components/native/NativeClubPage.tsx");
+const notificationClient = read("client/src/lib/notifications.ts");
+const nativePush = read("server/services/nativePush.ts");
+const webPush = read("server/services/webPush.ts");
 
 const need = (source, token, message) => assert.ok(source.includes(token), message);
 
@@ -31,5 +34,10 @@ assert.ok(!entries.includes("mailto:support@fantasyarena.com?subject="), "Card p
 
 need(nativeClub, "selectedPrizeEntryId", "Inbox must recognize claim-ready prize messages.");
 need(nativeClub, "Claim prize card", "Inbox prize message must include a direct claim button.");
+need(nativeClub, "requestedNotificationId", "Inbox must auto-open an exact notification deep link.");
+need(notificationClient, "free-card-claim-ready", "Claim-ready Inbox alerts must deep-link to their exact message.");
+need(notificationClient, '/account?tab=inbox&notification=', "In-app prize alerts must open the exact Inbox message containing the claim button.");
+need(nativePush, '/account?tab=inbox&notification=', "Native prize pushes must open the exact Inbox claim message.");
+need(webPush, '/account?tab=inbox&notification=', "Web prize pushes must open the exact Inbox claim message.");
 
 console.log("FREE Common Cup top-three prizes verified: 1st Rare, 2nd/3rd Common, atomic one-card claims and Inbox congratulations.");
