@@ -329,10 +329,35 @@ export function resolveApiFootballPlayer(player: any, directory: ApiFootballDire
   }).filter((row) => row.nameScore >= 92 && (row.positionMatches || row.safePositionMismatch)).sort((a, b) => b.score - a.score);
 
   const best = scored[0];
-  if (!best || best.nameScore < 92) return null;
-  const second = scored[1];
-  if (second && best.nameScore < 120 && best.score - second.score < 12) return null;
-  return best.candidate;
+  if (best && best.nameScore >= 92) {
+    const second = scored[1];
+    if (!second || best.nameScore >= 120 || best.score - second.score >= 12) return best.candidate;
+  }
+
+  // SCORE_DETAIL_NICKNAME_SURNAME_V1
+  // Some verified Premier League names use a football nickname while the
+  // provider uses the legal/full name (for example Pep Chavarria vs
+  // Josep Maria Chavarria Perez). If ordinary name matching fails, accept
+  // only a unique same-club, same-position candidate sharing a non-first
+  // name token. This avoids inventing stats or cross-linking players.
+  const surnameTokens = new Set(
+    rawNames.flatMap((value) => normalizePlayerText(value).split(" ").slice(1))
+      .filter((token) => token.length >= 4),
+  );
+  if (surnameTokens.size) {
+    const surnameMatches = directory.filter((candidate) => {
+      if (teamCompatibility(player?.team, candidate.team) < 20) return false;
+      if (rawPosition && rawPosition !== candidate.position) return false;
+      const candidateTokens = new Set(
+        aliasesOf(candidate).flatMap((value) => value.split(" ").slice(1))
+          .filter((token) => token.length >= 4),
+      );
+      return [...surnameTokens].some((token) => candidateTokens.has(token));
+    });
+    const unique = Array.from(new Map(surnameMatches.map((candidate) => [candidate.apiPlayerId, candidate])).values());
+    if (unique.length === 1) return unique[0];
+  }
+  return null;
 }
 
 function numberOf(value: unknown) {
