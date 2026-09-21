@@ -21,11 +21,11 @@ requireText(routes, 'limit ${pageSize} offset ${offset}', "Tournament leaderboar
 requireText(routes, "totalPages: Math.max(1, Math.ceil(totalEntries / pageSize))", "Tournament leaderboard pagination totals are missing.");
 requireText(routes, 'app.get("/api/competitions/:id/entries/:entryId"', "The submitted-team scoring endpoint is missing.");
 requireText(routes, "snapshot.cardScores", "Submitted teams must use official per-card scoring snapshots.");
-requireText(routes, "snapshotMatchesVerifiedPlayer", "Saved player points must belong to the same verified official footballer.");
-requireText(routes, "storedElementId === elementId", "Mismatched saved official player IDs must not override a verified live score.");
+requireText(routes, "loadApiFootballGameweekScoringContext(Number(entry.gameWeek || 0))", "Team scoring must load API-Football statistics for the tournament's actual gameweek.");
+requireText(routes, "resolveApiFootballGameweekPlayer", "Submitted-team scoring must resolve the exact API-Football player and fixture.");
+requireText(routes, 'identityProvider: "api-football"', "Submitted-team scoring must identify API-Football as the scoring provider.");
 requireText(routes, "saved?.breakdown || calculated?.breakdown", "Submitted teams must expose each player's exact scoring categories.");
 requireText(routes, "Array.isArray(saved?.reasons)", "Submitted teams must expose each player's recorded scoring actions.");
-requireText(routes, "fplApi.getLiveGameweek(Number(entry.gameWeek || 1))", "Team scoring must load the tournament's actual gameweek.");
 requireText(routes, "captainBonus", "Submitted-team scoring must include the captain bonus.");
 requireText(routes, "calculatedTotalScore", "A submitted team's visible total must equal its verified player contributions.");
 requireText(routes, "scoreReconciliationRequired", "Stale stored team scores must be detectable instead of silently showing zero.");
@@ -34,9 +34,9 @@ requireText(scoreUpdater, "this.storage.getPlayerCard(cardId)", "Historical subm
 requireText(scoreUpdater, "Preserving the last complete verified score", "Incomplete card lookups must never overwrite a verified team total.");
 requireText(scoreUpdater, "TOURNAMENT_SCORE_REFRESH_SECONDS || 30", "Live tournament scores must refresh every 30 seconds by default.");
 requireText(scoreUpdater, "scheduledUpdateInFlight", "Frequent scoring jobs must not overlap.");
-requireText(fplApi, "FPL_LIVE_REFRESH_SECONDS || 30", "Official live gameweek data must refresh every 30 seconds.");
-requireText(fplApi, "pendingRequests[key]", "Concurrent official live-data requests must share a single provider call.");
-requireText(fplApi, "CACHE_TTL.liveGameweek", "Gameweek scores must use the shortened official live-data cache.");
+requireText(scoreUpdater, "loadApiFootballGameweekScoringContext", "Tournament point calculation must load API-Football player statistics.");
+requireText(scoreUpdater, 'identity_provider: "api-football"', "Tournament point calculation must never label FPL as its player-stat source.");
+if (scoreUpdater.includes("mapFplStatsToPlayerStats")) throw new Error("Tournament points must not use FPL player statistics.");
 requireText(economyRoutes, "Immediate scoring refresh failed for new tournament entry", "New tournament teams must be scored immediately after submission.");
 requireText(scoreUpdater, "const storedCardScore = Math.round(latestScore);", "Integer card columns must not receive fractional official player scores.");
 requireText(scoreUpdater, "decisiveScore: storedCardScore", "Card display scores must be rounded before database persistence.");
