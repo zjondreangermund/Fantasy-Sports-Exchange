@@ -147,16 +147,19 @@ export class ScoreUpdateService {
       const resolved = resolveApiFootballGameweekPlayer(card.player, context);
       if (!resolved?.player) {
         const playerId = Number(card?.player?.id || card?.playerId || 0);
-        if (confirmedDepartedPlayerIds.has(playerId)) {
+        const departedByApi = Boolean((resolved as any)?.departed);
+        const departedApiPlayer = (resolved as any)?.departedPlayer || null;
+        if (departedByApi || confirmedDepartedPlayerIds.has(playerId)) {
           return {
             ...this.zeroScore(card, 0, `${String(card.player.name || "This player")} is confirmed outside the Premier League for this gameweek and has no eligible Premier League appearance.`),
+            api_player_id: Number(departedApiPlayer?.apiPlayerId || 0) || undefined,
             data_source: "api-football-player-stats",
             identity_status: "verified",
             identity_message: `Confirmed Premier League departure; no eligible GW${context.gameWeek} Premier League appearance, so the card correctly scores 0.`,
             identity_provider: "api-football",
-            official_player_name: String(card.player.name || "Player"),
-            official_team: String(card.player.team || ""),
-            official_position: String(card.player.position || ""),
+            official_player_name: String(departedApiPlayer?.name || card.player.name || "Player"),
+            official_team: String(card.player.team || departedApiPlayer?.team || ""),
+            official_position: String(card.player.position || departedApiPlayer?.position || ""),
             minutes_played: 0,
           };
         }
