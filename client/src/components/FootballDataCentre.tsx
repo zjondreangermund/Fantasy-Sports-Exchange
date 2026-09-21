@@ -288,7 +288,7 @@ export default function FootballDataCentre() {
         <div className="flex flex-col gap-4">
           <div>
             <div className="flex items-center gap-2 text-lg font-black"><BarChart3 className="h-5 w-5 text-violet-400" /> API-Football Pro Intelligence Centre</div>
-            <p className="mt-1 text-sm text-muted-foreground">Standings, rounds, live match intelligence, visual lineups, advanced player form, injuries, squads, transfers, coaches and stadium data. Fantasy scoring remains linked to Fantasy Arena/FPL rules.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Standings, rounds, live match intelligence, visual lineups, advanced player form, injuries, squads, transfers, coaches and stadium data. Fantasy Arena tournament scoring uses synchronized API-Football player actions; provider match rating is excluded.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {COMPETITIONS.map((competition) => <Button key={competition.key} size="sm" variant={competition.key === leagueKey ? "default" : "outline"} onClick={() => selectLeague(competition.key)}>{competition.name}</Button>)}
