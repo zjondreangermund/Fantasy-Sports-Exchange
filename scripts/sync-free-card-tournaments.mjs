@@ -85,8 +85,26 @@ async function main() {
       const key = `${Number(row.game_week)}:${String(row.tier)}`;
       if (!officialBySlot.has(key)) officialBySlot.set(key, row);
     }
-    if (officialBySlot.size !== 190) {
-      throw new Error(`Cannot sync FREE Card Cups until paid official coverage is complete; expected 190 slots, found ${officialBySlot.size}`);
+    // CURRENT_TOURNAMENT_GAMEWEEK_POLICY_V1: FREE cups follow the current paid entry week.
+    // Past deleted cups are historical and must not be recreated by startup sync.
+    const livePaidGameweeks = [...new Set(
+      paidRows.rows
+        .filter((row) => ["open", "active"].includes(String(row.status || "").toLowerCase()))
+        .map((row) => Number(row.game_week))
+        .filter(Boolean),
+    )].sort((a, b) => b - a);
+    const upcomingPaidGameweeks = [...new Set(
+      paidRows.rows
+        .filter((row) => String(row.status || "").toLowerCase() === "upcoming")
+        .map((row) => Number(row.game_week))
+        .filter(Boolean),
+    )].sort((a, b) => a - b);
+    const currentGw = livePaidGameweeks[0] || upcomingPaidGameweeks[0] || 1;
+    const expectedPaidCoverage = (39 - currentGw) * FREE_CUP_RARITIES.length;
+    const currentFuturePaidCoverage = [...officialBySlot.keys()]
+      .filter((key) => Number(String(key).split(":")[0]) >= currentGw).length;
+    if (currentFuturePaidCoverage !== expectedPaidCoverage) {
+      throw new Error(`Cannot sync FREE Card Cups until paid current/future coverage is complete from GW${currentGw}; expected ${expectedPaidCoverage} slots, found ${currentFuturePaidCoverage}`);
     }
 
     await client.query("BEGIN");
@@ -95,7 +113,20 @@ async function main() {
     let preservedEntries = 0;
     let gw2CommonForcedOpen = false;
 
-    for (let gw = 1; gw <= 38; gw += 1) {
+    // Hide stale past FREE cups if an earlier deployment recreated them.
+    await client.query(
+      `update app.competitions
+          set status = 'closed'::text::${statusType}
+        where created_by_user_id is null
+          and season = $1
+          and game_week < $2
+          and coalesce(entry_fee, 0) = 0
+          and coalesce(prize_key, '') like 'free-%-card'
+          and status::text not in ('completed','cancelled','closed')`,
+      [SEASON, currentGw],
+    );
+
+    for (let gw = currentGw; gw <= 38; gw += 1) {
       for (const rarity of FREE_CUP_RARITIES) {
         const source = officialBySlot.get(`${gw}:${rarity.tier}`);
         if (!source) throw new Error(`Missing paid source window for GW${gw} ${rarity.tier}`);
@@ -203,6 +234,7 @@ async function main() {
       }
     }
 
+    const expectedCoverage = (39 - currentGw) * FREE_CUP_RARITIES.length;
     const coverage = await client.query(
       `select count(*)::int as coverage_pairs
          from (
@@ -212,19 +244,20 @@ async function main() {
               and c.season = $1
               and coalesce(c.entry_fee, 0) = 0
               and coalesce(c.prize_key, '') like 'free-%-card'
-              and c.game_week between 1 and 38
+              and c.game_week between $2 and 38
               and c.tier::text in ('common','rare','unique','epic','legendary')
             group by c.game_week, c.tier::text
          ) slots`,
-      [SEASON],
+      [SEASON, currentGw],
     );
     const coveragePairs = Number(coverage.rows?.[0]?.coverage_pairs || 0);
-    if (coveragePairs !== 190) {
-      throw new Error(`FREE Card Cup coverage incomplete: expected 190 GW/rarity slots, found ${coveragePairs}`);
+    if (coveragePairs !== expectedCoverage) {
+      throw new Error(`FREE Card Cup coverage incomplete from GW${currentGw}: expected ${expectedCoverage} GW/rarity slots, found ${coveragePairs}`);
     }
 
     await client.query("COMMIT");
-    console.log(`FREE Card Cups synced for ${SEASON}: created ${created}, updated ${updated}, verified ${coveragePairs}/190 slots.`);
+    console.log(`FREE Card Cups synced for ${SEASON}: current entry GW ${currentGw}, created ${created}, updated ${updated}, verified ${coveragePairs}/${expectedCoverage} current/future slots.`);
+    console.log("Deleted past FREE Card Cups are not recreated.");
     console.log("Prize progression: Common→Rare, Rare→Unique, Unique→Epic, Epic→Legendary, Legendary→Legendary.");
     console.log(`Preserved ${preservedEntries} existing FREE Cup entries; no tournament entry rows were deleted or moved.`);
     if (gw2CommonForcedOpen) {
