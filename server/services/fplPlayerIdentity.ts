@@ -10,6 +10,12 @@ export const FPL_POSITION_BY_ELEMENT_TYPE: Record<number, FplPosition> = {
 
 export function normalizePlayerText(value: unknown): string {
   return String(value || "")
+    .replace(/&apos;|&#39;|&#x27;/gi, "'")
+    .replace(/&quot;|&#34;|&#x22;/gi, '"')
+    .replace(/&amp;|&#38;|&#x26;/gi, "&")
+    .replace(/&nbsp;|&#160;|&#xa0;/gi, " ")
+    .replace(/[’‘]/g, "'")
+    .replace(/[–—]/g, "-")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
