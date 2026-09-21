@@ -12,6 +12,7 @@ import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlaye
 import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats, mergePlayerStatsWithDetailedStats } from "../services/scoring.js";
 import { loadDetailedScoringContext, resolveDetailedStatsForPlayer, loadApiFootballGameweekScoringContext, resolveApiFootballGameweekPlayer } from "../services/apiFootballScoringBridge.js";
+import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
