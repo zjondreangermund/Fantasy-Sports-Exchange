@@ -314,6 +314,9 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           ? Number(snapshot?.final === true ? snapshot?.captainBonus ?? calculatedCaptainBonus : calculatedCaptainBonus)
           : 0;
         const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";
+        // API_ONLY_TOURNAMENT_TEAM_IMAGES_V1
+        const storedImage = String(card.imageUrl || "").trim();
+        const imageCandidates = Array.from(new Set([apiImage, storedImage].filter(Boolean)));
 
         return {
           cardId: Number(card.cardId),
@@ -323,7 +326,8 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           position,
           rarity: String(card.rarity || "common"),
           serialId: card.serialId || null,
-          imageUrl: apiImage || null,
+          imageUrl: imageCandidates[0] || null,
+          imageCandidates,
           apiFootballId: apiPlayer?.apiPlayerId || saved?.apiFootballPlayerId || null,
           elementId: null,
           identityStatus,
