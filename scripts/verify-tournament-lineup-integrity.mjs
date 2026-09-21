@@ -17,8 +17,11 @@ function forbidText(source, pattern, message) {
   if (source.includes(pattern)) throw new Error(message);
 }
 
-requireText(client, "isPremierLeague(card.player?.league)", "Tournament card picker must filter player cards to the Premier League.");
-requireText(client, "premierLeagueEligible === true", "Verified current Premier League players must remain selectable when legacy league metadata is stale.");
+requireText(client, "isPremierLeague(player?.league)", "Tournament card picker must filter player cards to the Premier League.");
+requireText(client, "player?.premierLeagueEligible === true", "Verified current Premier League players must remain selectable when legacy league metadata is stale.");
+requireText(client, '["departed", "superseded", "unlinked", "archived"].includes(status)', "Full tournament picker must reject departed or archived players.");
+requireText(client, 'premierLeagueStatus === "outside-premier-league"', "Full tournament picker must reject API-confirmed Premier League departures.");
+requireText(client, "selectionEligible === false", "Full tournament picker must respect server-side selection eligibility.");
 requireText(client, "const slotDefinitions", "Tournament entry must define guided lineup slots.");
 requireText(client, "Goalkeeper", "Guided lineup must begin with a goalkeeper slot.");
 requireText(client, "Defender", "Guided lineup must include a defender slot.");
@@ -41,6 +44,9 @@ forbidText(client, "disabled={entered", "Existing entries must not disable the t
 requireText(native, "validatePartialTournamentRarityLineup", "Native tournament card picker must protect the required rarity mix while selecting cards.");
 requireText(native, "validateTournamentRarityLineup", "Native tournament submit flow must validate the completed rarity mix.");
 requireText(native, "selectedRequirement.shortLabel", "Native tournament UI must display the tournament rarity requirement.");
+requireText(native, '["departed", "superseded", "unlinked", "archived"].includes(status)', "Native tournament picker must reject departed or archived players.");
+requireText(native, 'premierLeagueStatus === "outside-premier-league"', "Native tournament picker must reject API-confirmed Premier League departures.");
+requireText(native, "selectionEligibility?.eligible === false", "Native tournament picker must respect server-side selection eligibility.");
 
 requireText(rules, 'TOURNAMENT_UTILITY_POSITIONS = ["DEF", "MID", "FWD"]', "Shared rules must define Utility as DEF, MID or FWD.");
 requireText(rules, 'shortLabel: "5 Common"', "Common tournaments must require five Common cards.");
@@ -51,7 +57,9 @@ requireText(rules, 'shortLabel: "1 Legendary + any 4"', "Legendary tournaments m
 
 requireText(server, "p.league as league", "Server validation must load each player's league.");
 requireText(server, "officialPlayerIndex.resolve", "Server validation must accept players securely matched to the current official Premier League roster.");
-requireText(server, "Premier League tournaments only accept Premier League player cards.", "Server validation must reject non-Premier-League cards.");
+requireText(server, "Premier League tournaments only accept current Premier League player cards.", "Server validation must reject non-current or departed Premier League cards.");
+requireText(server, "departedApiFootballDirectory", "Server entry validation must use API-Football transfer/departure evidence.");
+requireText(server, "explicitlyDeparted", "Server entry validation must reject confirmed departures before stale roster fallbacks can re-qualify them.");
 requireText(server, "TOURNAMENT_REQUIRED_POSITIONS", "Server validation must enforce the guided formation.");
 requireText(server, "Invalid lineup order: select GK, DEF, MID, FWD, then one Utility player.", "Server must enforce ordered formation slots.");
 requireText(server, "TOURNAMENT_UTILITY_POSITIONS.includes", "Server must restrict Utility to an outfield player.");
@@ -88,4 +96,4 @@ requireText(startup, "ensureCompetitionMultiEntrySchema", "Startup preflight mus
 requireText(startup, "DROP CONSTRAINT IF EXISTS competition_entries_competition_user_uq", "Startup must remove the legacy one-entry-per-user constraint.");
 requireText(startup, "DROP INDEX IF EXISTS app.competition_entries_competition_user_uq", "Startup must remove the legacy one-entry-per-user index.");
 
-console.log("Tournament lineup integrity verification passed: canonical rarity requirements are enforced in full/native UI, main join API, every FREE tier, and the database entry table itself.");
+console.log("Tournament lineup integrity verification passed: current-Premier-League eligibility, departure blocking, canonical rarity requirements and formation rules are enforced in full/native UI and the main join API.");
