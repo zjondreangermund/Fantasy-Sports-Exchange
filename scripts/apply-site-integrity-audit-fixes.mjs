@@ -148,18 +148,20 @@ patchFile("server/routes/marketplace.routes.ts", (original) => {
   const pinStart = source.indexOf('  app.get("/api/user-tournaments/pin/:pin", requireAuth', Math.max(0, createStart));
   if (createStart >= 0 && pinStart > createStart) source = source.slice(0, createStart) + source.slice(pinStart);
 
-  source = replaceOnce(
-    source,
-    '        const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";\n\n        return {',
-    '        const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";\n        const fplImage = matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : "";\n        const storedImage = String(card.imageUrl || "").trim();\n        const imageCandidates = Array.from(new Set([apiImage, storedImage, fplImage].filter(Boolean)));\n\n        return {',
-    "tournament team image candidates",
-  );
-  source = replaceOnce(
-    source,
-    '          imageUrl: apiImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),',
-    '          imageUrl: imageCandidates[0] || null,\n          imageCandidates,',
-    "tournament team image candidate response",
-  );
+  if (!source.includes("API_ONLY_TOURNAMENT_TEAM_IMAGES_V1")) {
+    source = replaceOnce(
+      source,
+      '        const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";\n\n        return {',
+      '        const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";\n        // API_ONLY_TOURNAMENT_TEAM_IMAGES_V1\n        const storedImage = String(card.imageUrl || "").trim();\n        const imageCandidates = Array.from(new Set([apiImage, storedImage].filter(Boolean)));\n\n        return {',
+      "tournament team image candidates",
+    );
+    source = replaceOnce(
+      source,
+      '          imageUrl: apiImage || null,',
+      '          imageUrl: imageCandidates[0] || null,\n          imageCandidates,',
+      "tournament team image candidate response",
+    );
+  }
 
   return source;
 });
