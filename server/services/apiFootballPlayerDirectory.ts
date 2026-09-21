@@ -318,9 +318,15 @@ export function resolveApiFootballPlayer(player: any, directory: ApiFootballDire
   const scored = directory.map((candidate) => {
     const nameScore = Math.max(0, ...rawNames.map((name) => nameCompatibility(name, candidate)));
     const teamScore = teamCompatibility(player?.team, candidate.team);
+    const positionMatches = !rawPosition || rawPosition === candidate.position;
     const positionScore = rawPosition && rawPosition === candidate.position ? 10 : 0;
-    return { candidate, score: nameScore + teamScore + positionScore, nameScore, teamScore };
-  }).filter((row) => row.nameScore >= 92 && (!rawPosition || rawPosition === row.candidate.position)).sort((a, b) => b.score - a.score);
+    // SCORE_DETAIL_POSITION_CLASSIFICATION_V1
+    // FPL fantasy positions and API-Football match positions can legitimately
+    // differ for versatile players. A strong name + same-club match is safer
+    // than discarding that player's real match statistics completely.
+    const safePositionMismatch = !positionMatches && nameScore >= 100 && teamScore >= 20;
+    return { candidate, score: nameScore + teamScore + positionScore, nameScore, teamScore, positionMatches, safePositionMismatch };
+  }).filter((row) => row.nameScore >= 92 && (row.positionMatches || row.safePositionMismatch)).sort((a, b) => b.score - a.score);
 
   const best = scored[0];
   if (!best || best.nameScore < 92) return null;
