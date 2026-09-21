@@ -70,6 +70,9 @@ requireText(freeCupSync, 'Number(gw) === 2', "The temporary FREE Cup override mu
 requireText(freeCupSync, 'String(tier) === "common"', "The temporary FREE Cup override must be limited to the Common tier.");
 requireText(freeCupSync, '["completed", "cancelled"]', "Completed or cancelled tournaments must never be reopened by the GW2 test override.");
 requireText(freeCupSync, "GW2 FREE Common Card Cup forced OPEN until 13:30 CAT on 29 Aug 2026, today's first Premier League kickoff.", "The FREE Cup sync must report when the GW2 Common first-kickoff override is applied.");
+requireText(freeCupSync, "CURRENT_TOURNAMENT_GAMEWEEK_POLICY_V1", "FREE Cup sync must use the current tournament gameweek boundary.");
+requireText(freeCupSync, "for (let gw = currentGw; gw <= 38; gw += 1)", "FREE Cup sync must never recreate deleted past gameweeks.");
+requireText(freeCupSync, "Deleted past FREE Card Cups are not recreated.", "FREE Cup sync must explicitly preserve admin deletion of past gameweeks.");
 
 console.log("Play tournament leaderboard launcher, 25-team pagination, official player scoring details and the GW2 FREE Common first-kickoff entry window verified.");
 
