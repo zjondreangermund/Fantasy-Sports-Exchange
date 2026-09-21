@@ -15,8 +15,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { fplApi } from "./fplApi.js";
 import { buildFplPlayerIndex } from "./fplPlayerIdentity.js";
-import { calculatePlayerScore, mapFplStatsToPlayerStats, calculateLineupScore, mergePlayerStatsWithDetailedStats } from "./scoring.js";
-import { loadDetailedScoringContext, resolveDetailedStatsForPlayer, type DetailedScoringContext } from "./apiFootballScoringBridge.js";
+import { calculatePlayerScore, calculateLineupScore } from "./scoring.js";
+import { loadApiFootballGameweekScoringContext, resolveApiFootballGameweekPlayer, type ApiFootballGameweekScoringContext } from "./apiFootballScoringBridge.js";
 import { createNotificationOnce } from "./notifications.js";
 
 const RARITY_PRESTIGE: Record<string, number> = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };
@@ -110,53 +110,99 @@ export class ScoreUpdateService {
     }));
   }
 
-  private buildCardScores(cards: any[], identityMap: IdentityMap, playerStatsMap: Map<any, any>, detailedContext: DetailedScoringContext) {
+  private buildCardScores(cards: any[], context: ApiFootballGameweekScoringContext) {
+    const finishedStatuses = new Set(["FT", "AET", "PEN"]);
     return cards.map((card) => {
-      if (!card?.player) return this.zeroScore(card);
-      const elementId = this.resolveFplElementId(card.player, identityMap);
-      const officialElement = elementId ? identityMap.byId.get(elementId) : null;
-      if (!officialElement) return this.zeroScore(card, 0, `${String(card.player.name || "This player")} could not be matched securely to an official Premier League player.`);
-      const fplStats = elementId ? playerStatsMap.get(elementId) : undefined;
-      if (!fplStats) return this.zeroScore(card, elementId, "Official gameweek statistics have not been published for this verified player yet.");
-      const canonical = identityMap.canonical(officialElement);
-      const verifiedPlayer = { ...card.player, ...canonical };
-      const detailedStats = resolveDetailedStatsForPlayer(verifiedPlayer, detailedContext);
-      const combinedStats = mergePlayerStatsWithDetailedStats(fplStats, detailedStats);
-      const verifiedPosition = String(canonical.position || (detailedStats as any)?.api_position || card.player.position || "MID");
-      const score = calculatePlayerScore(combinedStats, verifiedPosition);
+      if (!card?.player) return this.zeroScore(card, 0, "Player record is missing.");
+
+      const resolved = resolveApiFootballGameweekPlayer(card.player, context);
+      if (!resolved?.player) {
+        return this.zeroScore(card, 0, `${String(card.player.name || "This player")} could not be matched securely to the current API-Football Premier League squad directory.`);
+      }
+
+      const apiPlayer = resolved.player;
+      const fixture = resolved.fixture;
+      const stats = resolved.stats;
+      const fixtureFinished = Boolean(fixture && finishedStatuses.has(String(fixture.statusShort || "")));
+
+      if (!fixture) {
+        return {
+          ...this.zeroScore(card, 0, `API-Football fixture for ${apiPlayer.team} is not available for this gameweek yet.`),
+          api_player_id: apiPlayer.apiPlayerId,
+          official_player_name: apiPlayer.name,
+          official_team: apiPlayer.team,
+          official_position: apiPlayer.position,
+          identity_provider: "api-football",
+          identity_status: "awaiting-api-football-fixture",
+        };
+      }
+
+      if (!stats) {
+        if (fixtureFinished && !fixture.statsReady) {
+          return {
+            ...this.zeroScore(card, 0, `API-Football player statistics for ${apiPlayer.name} are still being synchronized for this completed fixture.`),
+            api_player_id: apiPlayer.apiPlayerId,
+            official_player_name: apiPlayer.name,
+            official_team: apiPlayer.team,
+            official_position: apiPlayer.position,
+            identity_provider: "api-football",
+            identity_status: "awaiting-api-football-stats",
+          };
+        }
+
+        // If the fixture is complete and its player feed is fully synchronized,
+        // absence from /fixtures/players means the player did not take part.
+        // Upcoming fixtures also correctly remain on zero until the player appears.
+        return {
+          ...this.zeroScore(card, 0, fixtureFinished
+            ? `API-Football verified ${apiPlayer.name} did not appear in this gameweek fixture.`
+            : `API-Football verified ${apiPlayer.name}; awaiting this gameweek appearance.`),
+          api_player_id: apiPlayer.apiPlayerId,
+          data_source: "verified-player-stats",
+          identity_status: "verified",
+          identity_message: fixtureFinished
+            ? `API-Football verified Premier League player; no appearance recorded for GW${context.gameWeek}.`
+            : `API-Football verified Premier League player; fixture has not produced player statistics yet.`,
+          identity_provider: "api-football",
+          official_player_name: apiPlayer.name,
+          official_team: apiPlayer.team,
+          official_position: apiPlayer.position,
+          minutes_played: 0,
+        };
+      }
+
+      const score = calculatePlayerScore(stats, apiPlayer.position);
+      const identityReady = !fixtureFinished || fixture.statsReady;
       return {
         ...score,
         card_id: card.id,
         player_id: card.playerId,
-        element_id: elementId,
-        api_player_id: Number((detailedStats as any)?.api_player_id || 0),
-        identity_status: "verified",
-        identity_message: `Verified official Premier League player: ${canonical.name}.`,
-        identity_provider: detailedStats ? "verified-player-stats" : "verified-core-stats",
-        official_player_name: canonical.name,
-        official_team: canonical.team,
-        official_position: verifiedPosition,
-        minutes_played: Number(combinedStats.minutes || 0),
+        element_id: 0,
+        api_player_id: apiPlayer.apiPlayerId,
+        identity_status: identityReady ? "verified" : "awaiting-api-football-stats",
+        identity_message: identityReady
+          ? `Verified API-Football Premier League player statistics: ${apiPlayer.name}.`
+          : `API-Football has live/partial statistics for ${apiPlayer.name}; waiting for the completed fixture feed before finalization.`,
+        identity_provider: "api-football",
+        official_player_name: apiPlayer.name,
+        official_team: apiPlayer.team,
+        official_position: apiPlayer.position,
+        minutes_played: Number(stats.minutes || 0),
       };
     });
   }
 
-  private async persistCardScores(cards: any[], cardScores: any[], bootstrapElementById: Map<number, any>, final: boolean) {
+  private async persistCardScores(cards: any[], cardScores: any[], final: boolean) {
     await Promise.all(cardScores.map(async (score: any, index: number) => {
       const card = cards[index];
-      if (!card?.id || !score?.element_id) return;
-      const element = bootstrapElementById.get(Number(score.element_id));
-      if (!element) return;
-      const xp = this.calculateXpFromElement(element);
-      const level = this.levelFromXp(xp);
+      if (!card?.id || Number(score?.api_player_id || 0) <= 0) return;
       const latestScore = Math.max(0, Math.min(100, Number(score.total_score || 0)));
       const storedCardScore = Math.round(latestScore);
-      const updates: Record<string, any> = { xp, level, decisiveScore: storedCardScore };
+      // Tournament points are API-Football-only. Do not derive XP from FPL here.
+      const updates: Record<string, any> = { decisiveScore: storedCardScore };
       if (final) updates.last5Scores = this.nextLast5Scores(card.last5Scores, latestScore);
       const currentLast5 = Array.isArray(card.last5Scores) ? card.last5Scores.map((value: any) => Number(value || 0)) : [];
-      const unchanged = Number(card.xp || 0) === xp
-        && Number(card.level || 1) === level
-        && Number(card.decisiveScore || 35) === storedCardScore
+      const unchanged = Number(card.decisiveScore || 35) === storedCardScore
         && (!final || JSON.stringify(currentLast5) === JSON.stringify(updates.last5Scores));
       if (!unchanged) await this.storage.updatePlayerCard(card.id, updates);
     }));
@@ -377,7 +423,7 @@ export class ScoreUpdateService {
       minutesPlayed: 0,
     });
     const unresolvedCardIds = cardScores
-      .filter((score: any) => Number(score?.element_id || 0) <= 0 || String(score?.identity_status || "") !== "verified")
+      .filter((score: any) => Number(score?.api_player_id || 0) <= 0 || String(score?.identity_status || "") !== "verified")
       .map((score: any) => Number(score?.card_id || 0))
       .filter(Boolean);
     const complete = cards.length === 5 && cardScores.length === 5 && unresolvedCardIds.length === 0;
@@ -385,13 +431,13 @@ export class ScoreUpdateService {
     const detailedStatsCards = cardScores.filter((score: any) => score?.data_source === "verified-player-stats").length;
     const coreStatsOnlyCards = cardScores.length - detailedStatsCards;
     return {
-      version: 6,
-      source: detailedStatsCards > 0 ? "verified-player-stats" : "verified-core-stats",
-      scoringMethod: "Verified player match statistics only; API-Football match ratings, ICT/BPS proxy, FPL bonus-derived, and other fallback points are excluded",
+      version: 7,
+      source: "api-football-player-stats",
+      scoringMethod: "API-Football fixture player statistics only; provider match rating and all FPL/ICT/BPS/fallback points are excluded",
       detailedStatsCards,
       coreStatsOnlyCards,
       competition: "premier-league-only",
-      fixturePolicy: "Only verified Premier League player match statistics recorded inside the eligible gameweek window count. Cup matches and later fixtures are excluded.",
+      fixturePolicy: "Premier League gameweek fixtures and player actions come from API-Football only. Players who do not appear score zero; incomplete provider feeds remain pending rather than falling back to another source.",
       gameWeek,
       updatedAt,
       finalizedAt: final ? updatedAt : null,
@@ -438,18 +484,12 @@ export class ScoreUpdateService {
     };
   }
 
-  private async scoreCompetitionEntries(competition: any, bootstrap: any, liveData: any, final: boolean, persistCards: boolean): Promise<CompetitionScoreResult> {
+  private async scoreCompetitionEntries(competition: any, apiContext: ApiFootballGameweekScoringContext, final: boolean, persistCards: boolean): Promise<CompetitionScoreResult> {
     const gameWeek = Number(competition?.gameWeek || competition?.game_week || 0);
     if (!gameWeek) throw new Error("Competition gameweek is missing");
-    if (!Array.isArray(liveData?.elements)) throw new Error(`FPL live data unavailable for GW${gameWeek}`);
+    if (!apiContext?.available) throw new Error(`API-Football Premier League fixtures are unavailable for GW${gameWeek}`);
 
-    const playerStatsMap = new Map();
-    const bootstrapElementById = new Map<number, any>();
-    const identityMap = this.buildFplIdentityMap(bootstrap);
     const settlementAt = this.settlementDeadline(competition);
-    const detailedContext = await loadDetailedScoringContext(bootstrap, gameWeek);
-    for (const element of bootstrap?.elements || []) bootstrapElementById.set(Number(element.id), element);
-    for (const element of liveData.elements || []) playerStatsMap.set(Number(element.id), mapFplStatsToPlayerStats(element));
 
     const entries = await this.storage.getCompetitionEntries(competition.id);
     let updatedCount = 0;
@@ -474,7 +514,7 @@ export class ScoreUpdateService {
         const resolvedCardIds = new Set(cards.map((card: any) => Number(card?.id || 0)));
         const missingCardIds = lineupCardIds.filter((cardId: number) => !resolvedCardIds.has(cardId));
         missingCardIds.forEach((cardId: number) => unresolved.add(cardId));
-        const cardScores = this.buildCardScores(cards, identityMap, playerStatsMap, detailedContext);
+        const cardScores = this.buildCardScores(cards, apiContext);
         const previousScoresByCard = new Map<number, any>(
           (Array.isArray(previousSnapshot.cardScores) ? previousSnapshot.cardScores : [])
             .map((score: any) => [Number(score?.cardId || 0), score]),
@@ -506,7 +546,7 @@ export class ScoreUpdateService {
         }
         snapshot.unresolvedCardIds.forEach((id: number) => unresolved.add(id));
         if (!snapshot.complete) allComplete = false;
-        if (persistCards) await this.persistCardScores(cards, cardScores, bootstrapElementById, final);
+        if (persistCards) await this.persistCardScores(cards, cardScores, final);
         await this.storage.updateCompetitionEntry(entry.id, {
           totalScore: snapshot.totalScore,
           tiebreakMeta: { ...asObject(entry?.tiebreakMeta), scoring: snapshot },
@@ -581,17 +621,17 @@ export class ScoreUpdateService {
       if (!toScore.length) { console.log(`No Premier League competitions require scoring (current/next GW${currentGameweek})`); return; }
       console.log(`📊 Updating ${toScore.length} Premier League competitions without resetting historical scores...`);
 
-      const liveByGameweek = new Map<number, Promise<any>>();
-      const liveFor = (gameWeek: number) => {
-        if (!liveByGameweek.has(gameWeek)) liveByGameweek.set(gameWeek, fplApi.getLiveGameweek(gameWeek));
-        return liveByGameweek.get(gameWeek)!;
+      const apiContextByGameweek = new Map<number, Promise<ApiFootballGameweekScoringContext>>();
+      const apiContextFor = (gameWeek: number) => {
+        if (!apiContextByGameweek.has(gameWeek)) apiContextByGameweek.set(gameWeek, loadApiFootballGameweekScoringContext(gameWeek));
+        return apiContextByGameweek.get(gameWeek)!;
       };
 
       let updatedEntries = 0;
       for (const item of toScore) {
         const gameWeek = Number(item.competition?.gameWeek || item.competition?.game_week || 0);
         const persistCards = item.final || gameWeek === currentGameweek;
-        const result = await this.scoreCompetitionEntries(item.competition, bootstrap, await liveFor(gameWeek), item.final, persistCards);
+        const result = await this.scoreCompetitionEntries(item.competition, await apiContextFor(gameWeek), item.final, persistCards);
         updatedEntries += result.updatedCount;
         if(!item.final)await this.sendPostScoreAlerts(item.competition,bootstrap,fixtures);
         if (item.final && result.complete) await this.setCompetitionStatus(Number(item.competition.id), "closed");
@@ -628,7 +668,7 @@ export class ScoreUpdateService {
 
     const final = this.isSettlementFinal(comp);
     const currentGameweek = this.currentOrNextGameweek(bootstrap);
-    const result = await this.scoreCompetitionEntries(comp, bootstrap, await fplApi.getLiveGameweek(gameWeek), final, final || gameWeek === currentGameweek);
+    const result = await this.scoreCompetitionEntries(comp, await loadApiFootballGameweekScoringContext(gameWeek), final, final || gameWeek === currentGameweek);
     if(!final)await this.sendPostScoreAlerts(comp,bootstrap,fixtures);
     if (final && result.complete) await this.setCompetitionStatus(Number(comp.id), "closed");
     return result;
