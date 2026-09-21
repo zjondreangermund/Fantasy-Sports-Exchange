@@ -117,7 +117,7 @@ export default function ScoringRulesPage() {
         </section>
 
         <section className="mt-5 rounded-2xl border border-cyan-300/15 bg-cyan-400/[.06] p-5 sm:p-6">
-          <div className="flex gap-3"><Info className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200" /><div><h2 className="font-black">Player-stat-only scoring</h2><p className="mt-2 text-sm leading-6 text-white/55">Fantasy Arena scores recorded player match actions only. Core events such as minutes, goals, assists, cards, clean sheets and saves are combined with verified detailed actions such as passes, tackles, duels, shots and dribbles. If detailed actions are temporarily unavailable, no ICT, BPS, FPL bonus or other proxy points are added.</p></div></div>
+          <div className="flex gap-3"><Info className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200" /><div><h2 className="font-black">Player-stat-only scoring</h2><p className="mt-2 text-sm leading-6 text-white/55">Fantasy Arena tournament points use API-Football fixture player statistics only. Every player who appears is scored from the same available categories: minutes, goals, assists, cards, clean sheets, saves, passes, tackles, duels, shots, dribbles and other recorded actions. If API-Football has not finished publishing a player feed, the score stays pending and is retried — FPL, ICT, BPS, fantasy bonus and provider match rating are never substituted.</p></div></div>
         </section>
 
         <section className="mt-5 rounded-2xl border border-violet-300/15 bg-violet-400/[.06] p-5 sm:p-6">
