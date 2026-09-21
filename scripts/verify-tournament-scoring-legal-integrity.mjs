@@ -56,10 +56,9 @@ includesAll(scoreUpdater, [
   "isSettlementFinal",
   "activateCompetitionAtDeadline",
   "tiebreakMeta: { ...asObject(entry?.tiebreakMeta), scoring: snapshot }",
-  "version: 6",
-  '"verified-player-stats"',
+  "version: 7",
+  '"api-football-player-stats"',
   "detailedStatsCards",
-  '"coreStatsOnlyCards"',
   'competition: "premier-league-only"',
   "fixturePolicy",
   "immutableFinal",
@@ -73,6 +72,8 @@ expect(!scoreUpdater.includes("resetForNewGameweek"), "Score updater must not re
 expect(!scoreUpdater.includes("totalScore: 0"), "Score updater must not zero other gameweek entries");
 expect(!scoreUpdater.includes("otherActiveComps"), "Score updater must not clear non-current active competitions");
 expect(!scoreUpdater.includes("providerRatingTotal"), "API-Football match ratings must not affect tournament ordering");
+expect(!scoreUpdater.includes("mapFplStatsToPlayerStats"), "Tournament scoring must not use FPL player statistics");
+expect(scoreUpdater.includes("loadApiFootballGameweekScoringContext"), "Tournament scoring must load API-Football gameweek statistics directly");
 expect(!scoring.includes("matchRating * d.matchRating"), "API-Football match ratings must not affect player points");
 
 includesAll(scoring, ["Captain receives +10%", "baseScore * 1.1", "rarity does NOT change football points"], "Scoring engine");
