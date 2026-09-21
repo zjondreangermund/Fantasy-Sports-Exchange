@@ -30,7 +30,7 @@ const checks = [
   [!scoring.includes("official FPL bonus point(s)"), "Legacy provider fantasy bonus scoring is still active"],
   [!scoring.includes("matchRating * d.matchRating"), "API-Football match ratings must be excluded from scoring"],
   [!updater.includes("providerRatingTotal"), "API-Football match ratings must be excluded from tournament tiebreaks"],
-  [updater.includes("version: 6"), "Tournament scoring snapshot v7 is missing"],
+  [updater.includes("version: 7"), "Tournament scoring snapshot v7 is missing"],
   [updater.includes('source: "api-football-player-stats"'), "Tournament scoring must use API-Football-only player stats"],
   [updater.includes("FPL/ICT/BPS/fallback points are excluded"), "Tournament scoring policy must prohibit FPL and proxy points"],
   [bridge.includes("API_FOOTBALL_ONLY_SCORING_V1"), "API-Football-only gameweek scoring context is missing"],
