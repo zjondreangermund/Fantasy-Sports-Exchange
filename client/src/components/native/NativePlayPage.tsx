@@ -106,8 +106,14 @@ function normalizeLeague(value: unknown) {
 }
 
 function isPremierLeague(card: PlayerCardWithPlayer) {
-  return ["premierleague", "englishpremierleague", "epl"].includes(normalizeLeague(card.player?.league))
-    || (card.player as any)?.premierLeagueEligible === true;
+  const player = card.player as any;
+  const status = String(player?.status || "").trim().toLowerCase();
+  const premierLeagueStatus = String(player?.premierLeagueStatus || "").trim().toLowerCase();
+  if (["departed", "superseded", "unlinked", "archived"].includes(status)) return false;
+  if (premierLeagueStatus === "outside-premier-league") return false;
+  if (player?.selectionEligibility?.eligible === false) return false;
+  return ["premierleague", "englishpremierleague", "epl"].includes(normalizeLeague(player?.league))
+    || player?.premierLeagueEligible === true;
 }
 
 function cardPosition(card: PlayerCardWithPlayer) {
