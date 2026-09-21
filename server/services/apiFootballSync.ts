@@ -401,7 +401,50 @@ async function syncLive(): Promise<{ calls: number; records: number; details: an
   const payload = await providerGet("fixtures", { live: "all" });
   const fixtures = (Array.isArray(payload?.response) ? payload.response : [])
     .filter((row: any) => Number(row?.league?.id || 0) === LEAGUE_ID);
-  return { calls: 1, records: await upsertFixtures(fixtures), details: { possibleLive } };
+  let calls = 1;
+  let records = await upsertFixtures(fixtures);
+
+  // API_FOOTBALL_LIVE_PLAYER_STATS_V1
+  // /fixtures/players is the scoring source. Refresh it while a match is live so
+  // every scoring category is available to every participating player instead
+  // of mixing a thin fallback feed with detailed API-Football data.
+  for (const fixture of fixtures) {
+    const fixtureId = Number(fixture?.fixture?.id || 0);
+    if (!fixtureId) continue;
+    const last = rowsOf(await db.execute(sql`
+      select max(synced_at) as "syncedAt"
+      from app.api_football_player_match_stats
+      where api_fixture_id=${fixtureId}
+    `))[0];
+    const lastAt = last?.syncedAt ? new Date(last.syncedAt).getTime() : 0;
+    if (lastAt && Date.now() - lastAt < 2 * 60 * 1000) continue;
+    const budget = await getApiFootballBudget();
+    if (budget.remaining <= 0) break;
+
+    const playersPayload = await providerGet("fixtures/players", { fixture: fixtureId });
+    calls += 1;
+    const teams = Array.isArray(playersPayload?.response) ? playersPayload.response : [];
+    for (const teamRow of teams) {
+      const teamId = Number(teamRow?.team?.id || 0);
+      await upsertTeam(teamRow?.team);
+      for (const playerRow of Array.isArray(teamRow?.players) ? teamRow.players : []) {
+        const player = playerRow?.player || {};
+        const statistic = Array.isArray(playerRow?.statistics) ? playerRow.statistics[0] || {} : {};
+        if (!player.id) continue;
+        const score = scorePreview(statistic);
+        await db.execute(sql`
+          insert into app.api_football_player_match_stats (
+            api_fixture_id,api_team_id,api_player_id,player_name,position,minutes,rating,fantasy_score,decisive_score,all_around_score,statistics,raw,synced_at
+          ) values (
+            ${fixtureId},${teamId},${Number(player.id)},${player.name || null},${statistic?.games?.position || null},${Number(statistic?.games?.minutes || 0)},${statistic?.games?.rating ? Number(statistic.games.rating) : null},${score.score},${score.decisive},${score.allAround},${JSON.stringify(statistic)}::jsonb,${JSON.stringify(playerRow)}::jsonb,now()
+          ) on conflict (api_fixture_id,api_player_id) do update set
+            api_team_id=excluded.api_team_id,player_name=excluded.player_name,position=excluded.position,minutes=excluded.minutes,rating=excluded.rating,fantasy_score=excluded.fantasy_score,decisive_score=excluded.decisive_score,all_around_score=excluded.all_around_score,statistics=excluded.statistics,raw=excluded.raw,synced_at=now()
+        `);
+        records += 1;
+      }
+    }
+  }
+  return { calls, records, details: { possibleLive, liveFixtures: fixtures.length } };
 }
 
 async function syncCompletedStats(): Promise<{ calls: number; records: number; details: any }> {
