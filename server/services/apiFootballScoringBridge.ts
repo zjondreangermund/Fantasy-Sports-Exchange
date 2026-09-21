@@ -192,6 +192,7 @@ export type ApiFootballGameweekScoringContext = {
   directory: ApiFootballDirectoryPlayer[];
   statsByApiPlayerId: Map<number, PlayerStats>;
   fixtureByTeamId: Map<number, ApiFootballFixtureState>;
+  departedDirectory: ApiFootballDirectoryPlayer[];
   fixtureCount: number;
   statsReadyFixtureCount: number;
   available: boolean;
@@ -274,6 +275,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
     directory,
     statsByApiPlayerId: new Map(),
     fixtureByTeamId: new Map(),
+    departedDirectory: [],
     fixtureCount: 0,
     statsReadyFixtureCount: 0,
     available: false,
@@ -480,10 +482,81 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
       addIdentityCandidate(row);
     }
 
+    // API_FOOTBALL_DEPARTURE_IDENTITY_V1
+    // Confirm players who left a current Premier League club before/during this
+    // season directly from API-Football transfers. They are valid zero-score
+    // cases, not unresolved identities, when they have no eligible PL fixture.
+    let departedDirectory: ApiFootballDirectoryPlayer[] = [];
+    try {
+      const departureRows = rowsOf(await db.execute(sql`
+        with current_pl_teams as (
+          select home_team_id as team_id
+          from app.api_football_fixtures
+          where league_id=${LEAGUE_ID} and season=${season}
+          union
+          select away_team_id as team_id
+          from app.api_football_fixtures
+          where league_id=${LEAGUE_ID} and season=${season}
+        ),
+        latest_transfer as (
+          select distinct on (tr.api_player_id)
+                 tr.api_player_id, tr.transfer_date, tr.from_team_id, tr.to_team_id,
+                 tr.player_name, tr.updated_at
+          from app.api_football_transfers tr
+          where tr.transfer_date >= make_date(${season}, 6, 1)
+          order by tr.api_player_id, tr.transfer_date desc, tr.updated_at desc
+        )
+        select lt.api_player_id as "apiPlayerId",
+               coalesce(lt.player_name, p.name, '') as "playerName",
+               lt.from_team_id as "apiTeamId",
+               coalesce(ft.name, p.team_name, '') as "teamName",
+               coalesce(p.position, 'MID') as position,
+               coalesce(p.photo, '') as photo,
+               coalesce(p.nationality, '') as nationality,
+               p.age, p.squad_number as "squadNumber",
+               lt.transfer_date as "transferDate"
+        from latest_transfer lt
+        join current_pl_teams current_from on current_from.team_id=lt.from_team_id
+        left join current_pl_teams current_to on current_to.team_id=lt.to_team_id
+        left join app.api_football_teams ft on ft.api_team_id=lt.from_team_id
+        left join lateral (
+          select ap.*
+          from app.api_football_players ap
+          where ap.api_player_id=lt.api_player_id
+          order by ap.season desc, ap.updated_at desc
+          limit 1
+        ) p on true
+        where current_to.team_id is null
+          and coalesce(lt.player_name, p.name, '') <> ''
+      `));
+      departedDirectory = departureRows.map((row: any) => ({
+        apiPlayerId: Number(row.apiPlayerId || 0),
+        season,
+        apiTeamId: Number(row.apiTeamId || 0),
+        name: String(row.playerName || "").trim(),
+        firstName: "",
+        lastName: "",
+        team: String(row.teamName || "").trim(),
+        position: String(row.position || "").toUpperCase() === "GK" || String(row.position || "").toUpperCase() === "G" ? "GK"
+          : String(row.position || "").toUpperCase() === "DEF" || String(row.position || "").toUpperCase() === "D" ? "DEF"
+          : String(row.position || "").toUpperCase() === "FWD" || String(row.position || "").toUpperCase() === "F" ? "FWD"
+          : "MID",
+        photo: String(row.photo || ""),
+        nationality: String(row.nationality || ""),
+        age: row.age == null ? null : Number(row.age),
+        squadNumber: row.squadNumber == null ? null : Number(row.squadNumber),
+        active: false,
+        updatedAt: row.transferDate ? new Date(row.transferDate).toISOString() : null,
+      })).filter((player: ApiFootballDirectoryPlayer) => player.apiPlayerId > 0 && player.name && player.team);
+    } catch (error) {
+      console.warn("API-Football departure identity lookup unavailable:", error);
+    }
+
     return {
       directory,
       statsByApiPlayerId,
       fixtureByTeamId,
+      departedDirectory,
       fixtureCount: fixtureRows.length,
       statsReadyFixtureCount,
       available: fixtureRows.length > 0,
@@ -501,10 +574,24 @@ export function resolveApiFootballGameweekPlayer(
   context: ApiFootballGameweekScoringContext,
 ) {
   const match = resolveApiFootballPlayer(player, context.directory);
-  if (!match) return null;
-  return {
-    player: match,
-    stats: context.statsByApiPlayerId.get(match.apiPlayerId) || null,
-    fixture: context.fixtureByTeamId.get(match.apiTeamId) || null,
-  };
+  if (match) {
+    return {
+      player: match,
+      stats: context.statsByApiPlayerId.get(match.apiPlayerId) || null,
+      fixture: context.fixtureByTeamId.get(match.apiTeamId) || null,
+      departed: false,
+      departedPlayer: null,
+    };
+  }
+  const departedPlayer = resolveApiFootballPlayer(player, context.departedDirectory || []);
+  if (departedPlayer) {
+    return {
+      player: null,
+      stats: null,
+      fixture: null,
+      departed: true,
+      departedPlayer,
+    };
+  }
+  return null;
 }
