@@ -3,7 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
 import { apiFootballPhotoUrl, getApiFootballPlayerProfileSnapshot, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
-import { loadDetailedScoringContext, resolveDetailedStatsForPlayer } from "../services/apiFootballScoringBridge.js";
+import { loadDetailedScoringContext, loadApiFootballGameweekScoringContext, resolveDetailedStatsForPlayer } from "../services/apiFootballScoringBridge.js";
 import {
   calculatePlayerScore,
   mapFplStatsToPlayerStats,
@@ -70,7 +70,10 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([fplApi.bootstrap().catch(() => null), fplApi.getLiveGameweek().catch(() => null), loadApiFootballPlayerDirectory().catch(() => [])]);
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const currentGameweek = Number((bootstrap as any)?.events?.find((event: any) => event?.is_current)?.id || await fplApi.getCurrentGameweek().catch(() => 0));
-      const detailedScoringContext = await loadDetailedScoringContext(bootstrap || {}, currentGameweek);
+      const [detailedScoringContext, gameweekScoringContext] = await Promise.all([
+        loadDetailedScoringContext(bootstrap || {}, currentGameweek),
+        loadApiFootballGameweekScoringContext(currentGameweek).catch(() => null),
+      ]);
       const liveElements = Array.isArray((liveData as any)?.elements) ? (liveData as any).elements : [];
       const liveByElementId = new Map<number, any>();
       for (const liveElement of liveElements) liveByElementId.set(Number(liveElement.id), liveElement);
@@ -81,12 +84,17 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         const matchedElement = fplIndex.resolve(player);
         const canonical = matchedElement ? fplIndex.canonical(matchedElement) : null;
         const apiFootballPlayer = resolveApiFootballPlayer({ ...player, ...(canonical || {}) }, apiFootballDirectory);
+        const departedApiFootballPlayer = gameweekScoringContext
+          ? resolveApiFootballPlayer(player, gameweekScoringContext.departedDirectory || [])
+          : null;
+        const storedStatus = String(player.status || "").trim().toLowerCase();
+        const storedLeague = String(player.league || "").trim().toLowerCase();
+        const outsidePremierLeague = Boolean(departedApiFootballPlayer)
+          || ["departed", "superseded", "unlinked", "archived"].includes(storedStatus)
+          || (storedLeague && !["premier league", "english premier league", "epl"].includes(storedLeague));
         const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
-        const identityVerified = Boolean(apiFootballPlayer || matchedElement);
+        const identityVerified = !outsidePremierLeague && Boolean(apiFootballPlayer || matchedElement);
         const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
-        const outsidePremierLeague = !identityVerified
-          && (String(player.league || "").toLowerCase() === "outside premier league"
-            || String(player.status || "").toLowerCase() === "departed");
         const selectionProvider = apiFootballPlayer
           ? "api-football"
           : matchedElement
@@ -125,7 +133,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
             ...(canonical || {}),
             name: apiFootballPlayer?.name || canonical?.name || player.name,
             team: apiFootballPlayer?.team || canonical?.team || player.team,
-            league: identityVerified ? "Premier League" : player.league,
+            league: outsidePremierLeague ? "Outside Premier League" : identityVerified ? "Premier League" : player.league,
             position: canonical?.position || player.position || apiFootballPlayer?.position || "MID",
             nationality: apiFootballPlayer?.nationality || player.nationality,
             apiFootballId: apiFootballPlayer?.apiPlayerId || null,
@@ -134,7 +142,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
             imageCandidates: Array.from(new Set([apiFootballImage, fplImage].filter(Boolean))),
             imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
             verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
-            identityVerified: Boolean(apiFootballPlayer || matchedElement),
+            identityVerified,
             premierLeagueEligible: identityVerified,
             premierLeagueStatus: identityVerified
               ? "active"
@@ -143,13 +151,13 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
                 : "unverified",
             selectionEligibility: {
               eligible: identityVerified,
-              provider: selectionProvider,
+              provider: outsidePremierLeague ? "api-football-transfer" : selectionProvider,
               code: identityVerified ? "eligible" : outsidePremierLeague ? "outside-premier-league" : "identity-unlinked",
               message: identityVerified
                 ? `Eligible: linked by ${selectionProvider === "api-football" ? "API-Football current squads" : "FPL fallback"}.`
                 : outsidePremierLeague
-                  ? `${player.name} is outside the Premier League; use the same-position replacement card in this collection.`
-                  : `${player.name} is not linked to API-Football or the FPL fallback yet.`,
+                  ? `${player.name} has left the Premier League and cannot be selected for a Premier League tournament. Use the same-position replacement card in this collection.`
+                  : `${player.name} is not linked to a current Premier League player yet.`,
             },
             identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
             totalPoints,
