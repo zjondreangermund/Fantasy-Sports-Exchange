@@ -92,6 +92,16 @@ const fantasyDefender = { name: "Pep Chavarria", webName: "Pep Chavarria", team:
 if (resolverSandbox.resolveApiFootballPlayer(fantasyDefender, [sameClubProviderClassification])?.apiPlayerId !== 303) {
   throw new Error("A strong same-club player identity must keep detailed stats when FPL and API-Football classify the position differently.");
 }
+const legalNameCandidate = {
+  name: "Josep Maria Chavarria Perez", firstName: "Josep Maria", lastName: "Chavarria Perez",
+  team: "Chelsea", position: "DEF", apiPlayerId: 404,
+};
+if (resolverSandbox.resolveApiFootballPlayer(
+  { name: "Pep Chavarria", webName: "Pep Chavarria", team: "Chelsea", position: "DEF" },
+  [legalNameCandidate],
+)?.apiPlayerId !== 404) {
+  throw new Error("A unique same-club nickname/legal-name identity must keep its detailed API-Football statistics.");
+}
 
 requireText(identity, 'league: "Premier League"', "Official FPL identities must include their verified Premier League eligibility.");
 requireText(cards, 'league: identityVerified ? "Premier League" : player.league', "Collection must expose the verified current league rather than stale stored league metadata.");
