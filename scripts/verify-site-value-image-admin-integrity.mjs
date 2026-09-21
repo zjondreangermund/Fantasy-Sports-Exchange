@@ -69,8 +69,9 @@ includes(marketplaceServer, 'const position = canonical?.position || String(card
 includes(marketplaceServer, "mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats)", "Tournament leaderboard fallback points must use the same detailed Fantasy Arena scoring as owned cards.");
 includes(marketplaceServer, "const officialFplSeasonPoints = matchedElement ? Number(matchedElement.total_points || 0) : null", "Marketplace listings must label external season points separately from Fantasy Arena points.");
 includes(marketplaceServer, "const totalPoints = identityVerified ? currentGameweekPoints : null", "Marketplace listings must show the same Fantasy Arena gameweek scores as collections and tournament teams.");
-includes(scoring, "mergePlayerStatsWithDetailedStats(fplStats, detailedStats)", "Persisted tournament standings must use the same official detailed Fantasy Arena scoring as owned cards.");
-includes(scoring, "const verifiedPosition = String(canonical.position ||", "Persisted tournament scoring must use the canonical Premier League position before any external position guess.");
+includes(scoring, "loadApiFootballGameweekScoringContext", "Persisted tournament standings must use API-Football gameweek player statistics.");
+includes(scoring, 'identity_provider: "api-football"', "Persisted tournament player identities must come from API-Football.");
+assert.ok(!scoring.includes("mapFplStatsToPlayerStats"), "Persisted tournament scoring must not use FPL player statistics.");
 includes(scoring, "detailedStatsCards", "Tournament scoring snapshots must identify how many cards used verified API-Football match actions.");
 assert.ok(!scoring.includes("card?.player?.nowCost") && !rules.includes("card?.player?.nowCost"), "Tournament squad values must never use another site's player prices.");
 includes(collection, "return card.forSale ? Math.max(0, Number(card.price || 0)) : 0", "Collection values must sum real active listing prices only.");
