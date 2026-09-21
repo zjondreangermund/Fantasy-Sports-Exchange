@@ -111,8 +111,16 @@ const normalizeLeague = (value: unknown) => String(value || "").toLowerCase().re
 const isPremierLeague = (value: unknown) => ["premierleague", "englishpremierleague", "epl"].includes(normalizeLeague(value));
 const playerPosition = (card: PlayerCardWithPlayer | undefined | null) => String(card?.player?.position || "").toUpperCase() as Position;
 const isUtilityPosition = (value: unknown) => TOURNAMENT_UTILITY_POSITIONS.includes(String(value || "").toUpperCase() as typeof TOURNAMENT_UTILITY_POSITIONS[number]);
-const isCurrentPremierLeagueCard = (card: PlayerCardWithPlayer) => isPremierLeague(card.player?.league)
-  || (card.player as any)?.premierLeagueEligible === true;
+const isCurrentPremierLeagueCard = (card: PlayerCardWithPlayer) => {
+  const player = card.player as any;
+  const status = String(player?.status || "").trim().toLowerCase();
+  const premierLeagueStatus = String(player?.premierLeagueStatus || "").trim().toLowerCase();
+  const selectionEligible = player?.selectionEligibility?.eligible;
+  if (["departed", "superseded", "unlinked", "archived"].includes(status)) return false;
+  if (premierLeagueStatus === "outside-premier-league") return false;
+  if (selectionEligible === false) return false;
+  return isPremierLeague(player?.league) || player?.premierLeagueEligible === true;
+};
 const playerEligibilityMessage = (card: PlayerCardWithPlayer) => String((card.player as any)?.selectionEligibility?.message || "").trim();
 const dateLabel = (value: unknown) => {
   const d = new Date(String(value || ""));
