@@ -47,6 +47,7 @@ export class ScoreUpdateService {
   private storage: any;
   private updateInterval: NodeJS.Timeout | null = null;
   private scheduledUpdateInFlight = false;
+  private identityAuditLogged = new Set<string>();
 
   constructor(storage: any) { this.storage = storage; }
   isAutoUpdateEnabled() { return Boolean(this.updateInterval); }
@@ -531,6 +532,13 @@ export class ScoreUpdateService {
           const previous = previousScoresByCard.get(Number(score?.card_id || 0));
           if (String(previous?.identityStatus || "") !== String(score?.identity_status || "")) {
             console.warn(`[scoring] Card ${Number(score?.card_id || 0)} cannot score: ${String(score?.identity_message || "Official player identity unavailable.")}`);
+          }
+          const auditKey = [gameWeek, Number(score?.player_id || 0), String(score?.official_player_name || ""), String(score?.official_team || ""), String(score?.official_position || "")].join(":");
+          if (!this.identityAuditLogged.has(auditKey)) {
+            this.identityAuditLogged.add(auditKey);
+            console.warn(
+              `SCORING_IDENTITY_AUDIT gw=${gameWeek} competition=${Number(competition?.id || 0)} entry=${Number(entry?.id || 0)} card=${Number(score?.card_id || 0)} playerId=${Number(score?.player_id || 0)} name="${String(score?.official_player_name || "")}" team="${String(score?.official_team || "")}" position="${String(score?.official_position || "")}" status=${String(score?.identity_status || "identity-unlinked")} message="${String(score?.identity_message || "").replace(/"/g, "'")}"`,
+            );
           }
         }
         const snapshot = this.scoringSnapshot(entry, cards, cardScores, gameWeek, final, settlementAt);
