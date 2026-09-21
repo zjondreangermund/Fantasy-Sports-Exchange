@@ -11,7 +11,7 @@ import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
 import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats, mergePlayerStatsWithDetailedStats } from "../services/scoring.js";
-import { loadDetailedScoringContext, resolveDetailedStatsForPlayer } from "../services/apiFootballScoringBridge.js";
+import { loadDetailedScoringContext, resolveDetailedStatsForPlayer, loadApiFootballGameweekScoringContext, resolveApiFootballGameweekPlayer } from "../services/apiFootballScoringBridge.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 
@@ -266,17 +266,8 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         join app.players p on p.id = pc.player_id
         order by ordered.ordinality asc
       `);
-      const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([
-        fplApi.bootstrap().catch(() => null),
-        fplApi.getLiveGameweek(Number(entry.gameWeek || 1)).catch(() => null),
-        loadApiFootballPlayerDirectory().catch(() => []),
-      ]);
-      const fplIndex = buildFplPlayerIndex(bootstrap || {});
-      const detailedScoringContext = await loadDetailedScoringContext(bootstrap || {}, Number(entry.gameWeek || 0)).catch(() => null);
-      const liveByElementId = new Map<number, any>(
-        (Array.isArray(liveData?.elements) ? liveData.elements : [])
-          .map((element: any) => [Number(element.id), element]),
-      );
+      const apiScoringContext = await loadApiFootballGameweekScoringContext(Number(entry.gameWeek || 0)).catch(() => null);
+      const apiFootballDirectory = apiScoringContext?.directory || await loadApiFootballPlayerDirectory().catch(() => []);
       const snapshot = entry.tiebreakMeta?.scoring && Number(entry.tiebreakMeta.scoring.gameWeek || 0) === Number(entry.gameWeek || 0)
         ? entry.tiebreakMeta.scoring
         : null;
@@ -286,40 +277,35 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
       );
       const captainId = Number(entry.captainId || 0);
       const players = rowsFromResult(cardsResult).map((card: any) => {
-        const matchedElement = fplIndex.resolve(card);
-        const canonical = matchedElement ? fplIndex.canonical(matchedElement) : null;
-        const apiPlayer = resolveApiFootballPlayer({ ...card, ...(canonical || {}) }, apiFootballDirectory);
-        const position = canonical?.position || String(card.position || "") || apiPlayer?.position || "MID";
-        const elementId = Number(matchedElement?.id || 0);
-        const liveElement = elementId ? liveByElementId.get(elementId) : null;
-        const detailedStats = liveElement && detailedScoringContext
-          ? resolveDetailedStatsForPlayer({ ...card, ...(canonical || {}) }, detailedScoringContext)
+        const resolved = apiScoringContext
+          ? resolveApiFootballGameweekPlayer(card, apiScoringContext)
           : null;
-        const calculated = liveElement
-          ? calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), position)
+        const apiPlayer = resolved?.player || resolveApiFootballPlayer(card, apiFootballDirectory);
+        const position = apiPlayer?.position || String(card.position || "") || "MID";
+        const calculated = resolved?.stats
+          ? calculatePlayerScore(resolved.stats, position)
           : null;
         const storedScore = savedScores.get(Number(card.cardId));
-        const storedElementId = Number(storedScore?.elementId || 0);
-        const storedIdentityStatus = String(storedScore?.identityStatus || "verified");
-        const snapshotMatchesVerifiedPlayer = Boolean(storedScore && (
-          snapshot?.final === true
-          || (elementId > 0 && storedElementId === elementId && storedIdentityStatus === "verified")
-        ));
         const saved = storedScore && snapshot ? storedScore : null;
-        const identityStatus = !matchedElement
-          ? "identity-unlinked"
-          : !liveElement
-            ? "awaiting-gameweek-data"
-            : storedScore && !snapshotMatchesVerifiedPlayer
-              ? "refreshing-score"
-              : "verified";
-        const identityMessage = identityStatus === "identity-unlinked"
-          ? `${String(card.name || "This player")} could not be securely linked to an official Premier League player.`
-          : identityStatus === "awaiting-gameweek-data"
-            ? "Official gameweek statistics are not available for this verified player yet."
-            : identityStatus === "refreshing-score"
-              ? "The saved score was linked to a different player; the verified live score is shown while the tournament refreshes."
-              : String(saved?.identityMessage || `Verified official Premier League player: ${canonical?.name || card.name}.`);
+        const fixtureFinished = ["FT", "AET", "PEN"].includes(String(resolved?.fixture?.statusShort || ""));
+        const identityStatus = saved?.identityStatus
+          ? String(saved.identityStatus)
+          : !apiPlayer
+            ? "identity-unlinked"
+            : resolved?.stats
+              ? (fixtureFinished && !resolved?.fixture?.statsReady ? "awaiting-api-football-stats" : "verified")
+              : fixtureFinished && !resolved?.fixture?.statsReady
+                ? "awaiting-api-football-stats"
+                : "verified";
+        const identityMessage = saved?.identityMessage
+          ? String(saved.identityMessage)
+          : !apiPlayer
+            ? `${String(card.name || "This player")} could not be securely linked to the API-Football Premier League player directory.`
+            : resolved?.stats
+              ? `Verified API-Football Premier League player statistics: ${apiPlayer.name}.`
+              : fixtureFinished
+                ? `API-Football verified ${apiPlayer.name}; no appearance was recorded in this fixture.`
+                : `API-Football verified ${apiPlayer.name}; player statistics will appear when the fixture produces them.`;
         const points = Number(saved?.score ?? calculated?.total_score ?? 0);
         const captain = Number(card.cardId) === captainId;
         const calculatedCaptainBonus = Math.round(points * 0.1 * 10000) / 10000;
@@ -331,17 +317,17 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         return {
           cardId: Number(card.cardId),
           playerId: Number(card.playerId),
-          name: apiPlayer?.name || canonical?.name || String(card.name || "Unknown player"),
-          team: apiPlayer?.team || canonical?.team || String(card.team || "Unknown club"),
+          name: apiPlayer?.name || String(card.name || "Unknown player"),
+          team: apiPlayer?.team || String(card.team || "Unknown club"),
           position,
           rarity: String(card.rarity || "common"),
           serialId: card.serialId || null,
-          imageUrl: apiImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null),
-          apiFootballId: apiPlayer?.apiPlayerId || null,
-          elementId: elementId || null,
+          imageUrl: apiImage || null,
+          apiFootballId: apiPlayer?.apiPlayerId || saved?.apiFootballPlayerId || null,
+          elementId: null,
           identityStatus,
           identityMessage,
-          identityProvider: saved?.identityProvider || (apiPlayer ? "verified-player-stats" : matchedElement ? "verified-core-stats" : null),
+          identityProvider: "api-football",
           captain,
           points,
           captainBonus,
@@ -354,8 +340,8 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
             : Array.isArray(calculated?.reasons)
               ? calculated.reasons
               : [],
-          minutes: Number(saved?.minutesPlayed ?? liveElement?.stats?.minutes ?? 0),
-          source: saved ? "official-gameweek-snapshot" : calculated && detailedStats ? "live-player-stats" : calculated ? "live-core-stats" : "awaiting-match-data",
+          minutes: Number(saved?.minutesPlayed ?? resolved?.stats?.minutes ?? 0),
+          source: saved ? "official-gameweek-snapshot" : calculated ? "api-football-live-stats" : "awaiting-api-football-stats",
         };
       });
       const calculatedTotalScore = Math.round(
