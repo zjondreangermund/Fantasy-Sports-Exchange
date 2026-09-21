@@ -169,8 +169,12 @@ export async function disableNativePushSubscription(userId: string, tokenValue: 
   return rows.length > 0;
 }
 
-function notificationUrl(dedupeKey: unknown): string {
+function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
   const key = String(dedupeKey || "");
+  if (/^competition:\d+:entry:\d+:free-card-claim-ready$/.test(key)) {
+    const id = Number(notificationId || 0);
+    return id > 0 ? `/account?tab=inbox&notification=${id}` : "/account?tab=inbox";
+  }
   const decider = key.match(/^competition:(\d+):decider:/);
   if (decider) return `/competitions?leaderboard=${decider[1]}`;
   if (key.startsWith("replacement-claim:")) return "/collection";
@@ -213,7 +217,7 @@ async function claimDueDeliveries(limit: number): Promise<any[]> {
 async function sendFcmNotification(credentials: FirebaseCredentials, delivery: any) {
   const accessToken = await getFirebaseAccessToken(credentials);
   const notificationId = Number(delivery.notificationId);
-  const url = notificationUrl(delivery.dedupeKey);
+  const url = notificationUrl(delivery.dedupeKey, notificationId);
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(credentials.projectId)}/messages:send`,
     {
