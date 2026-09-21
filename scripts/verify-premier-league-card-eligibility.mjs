@@ -41,8 +41,8 @@ for (const [providerPosition, expectedPosition] of [
     throw new Error(`API-Football position ${providerPosition} must remain ${expectedPosition}; received ${actualPosition}.`);
   }
 }
-requireText(apiDirectory, "rawPosition === row.candidate.position", "API-Football identity matches must respect the verified player position.");
-rejectText(apiDirectory, "rawPosition === row.candidate.position || row.nameScore >= 105", "A similar name must never override a goalkeeper, defender or forward position mismatch.");
+requireText(apiDirectory, "safePositionMismatch", "API-Football identity matching must explicitly guard provider/FPL position differences.");
+requireText(apiDirectory, "nameScore >= 100 && teamScore >= 20", "A position mismatch may only be accepted for a strong same-club identity.");
 const resolverStart = apiDirectory.indexOf("function tokenSet(value: unknown)");
 const resolverEnd = apiDirectory.indexOf("function numberOf(value: unknown)", resolverStart);
 if (resolverStart < 0 || resolverEnd <= resolverStart) {
@@ -52,6 +52,18 @@ const resolverSandbox = {
   normalizePlayerText(value) {
     return String(value || "").toLowerCase().normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+  },
+  strongPlayerNameMatch(left, right) {
+    const normalize = (value) => String(value || "").toLowerCase().normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+    const a = normalize(left), b = normalize(right);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const at = a.split(" ").filter(Boolean), bt = b.split(" ").filter(Boolean);
+    if (at.length < 2 || bt.length < 2) return false;
+    const firstCompatible = at[0] === bt[0] || ((at[0].length === 1 || bt[0].length === 1) && at[0][0] === bt[0][0]);
+    if (!firstCompatible) return false;
+    return bt.slice(1).some((token) => at.slice(1).includes(token));
   },
 };
 const resolverSource = apiDirectory.slice(resolverStart, resolverEnd)
@@ -71,6 +83,14 @@ if (resolverSandbox.resolveApiFootballPlayer(goalkeeper, [unrelatedMidfielder]) 
 }
 if (resolverSandbox.resolveApiFootballPlayer(goalkeeper, [unrelatedMidfielder, correctGoalkeeper])?.apiPlayerId !== 202) {
   throw new Error("The correct API-Football goalkeeper was not selected when a same-name midfielder also existed.");
+}
+const sameClubProviderClassification = {
+  name: "Pep Chavarria", firstName: "Pep", lastName: "Chavarria",
+  team: "Chelsea", position: "MID", apiPlayerId: 303,
+};
+const fantasyDefender = { name: "Pep Chavarria", webName: "Pep Chavarria", team: "Chelsea", position: "DEF" };
+if (resolverSandbox.resolveApiFootballPlayer(fantasyDefender, [sameClubProviderClassification])?.apiPlayerId !== 303) {
+  throw new Error("A strong same-club player identity must keep detailed stats when FPL and API-Football classify the position differently.");
 }
 
 requireText(identity, 'league: "Premier League"', "Official FPL identities must include their verified Premier League eligibility.");
