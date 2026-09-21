@@ -32,7 +32,9 @@ requireToken(freeSync, '{ tier: "rare", prizeCardRarity: "unique" }', "Rare→Un
 requireToken(freeSync, '{ tier: "unique", prizeCardRarity: "epic" }', "Unique→Epic FREE Cup mapping missing");
 requireToken(freeSync, '{ tier: "epic", prizeCardRarity: "legendary" }', "Epic→Legendary FREE Cup mapping missing");
 requireToken(freeSync, '{ tier: "legendary", prizeCardRarity: "legendary" }', "Legendary ceiling FREE Cup mapping missing");
-requireToken(freeSync, "coveragePairs !== 190", "all 38×5 FREE Cup coverage is not verified");
+requireToken(freeSync, "CURRENT_TOURNAMENT_GAMEWEEK_POLICY_V1", "FREE Cup sync must use the current gameweek boundary.");
+requireToken(freeSync, "coveragePairs !== expectedCoverage", "current/future FREE Cup coverage is not verified.");
+requireToken(freeSync, "for (let gw = currentGw; gw <= 38; gw += 1)", "past deleted FREE Cups must not be recreated.");
 requireToken(freeSync, "Preserved ${preservedEntries} existing FREE Cup entries", "FREE Cup sync does not explicitly preserve entries");
 forbidToken(freeSync, "delete from app.competition_entries", "FREE Cup sync must not delete tournament entries");
 
@@ -47,4 +49,4 @@ requireToken(freeAwards, "full current Premier League player pool across all clu
 
 requireToken(start, "node scripts/sync-free-card-tournaments.mjs", "production startup does not sync FREE Card Cups");
 
-console.log("Cancel/refund and FREE Card Cup rules verified: refunds are single-tournament only, entry history is preserved, 38×5 free cups exist, and winner cards draw across the full current Premier League player pool.");
+console.log("Cancel/refund and FREE Card Cup rules verified: refunds are single-tournament only, entry history is preserved, current/future FREE cups remain complete without recreating deleted past weeks, and winner cards draw across the full current Premier League player pool.");
