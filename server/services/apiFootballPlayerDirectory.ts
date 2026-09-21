@@ -297,18 +297,39 @@ function nameCompatibility(rawName: unknown, candidate: ApiFootballDirectoryPlay
 }
 
 function teamCompatibility(rawTeam: unknown, candidateTeam: string) {
-  const canonicalTeam = (value: unknown) => normalizePlayerText(value)
+  const aliases: Record<string, string[]> = {
+    "afc bournemouth": ["bournemouth"],
+    "brighton and hove albion": ["brighton", "brighton hove albion"],
+    "leeds united": ["leeds"],
+    "manchester city": ["man city"],
+    "manchester united": ["man utd"],
+    "newcastle united": ["newcastle"],
+    "nottingham forest": ["nottm forest", "nott m forest", "nott forest"],
+    "tottenham hotspur": ["tottenham", "spurs"],
+    "west ham united": ["west ham"],
+    "wolverhampton wanderers": ["wolverhampton", "wolves"],
+  };
+  const normalize = (value: unknown) => normalizePlayerText(value)
     .replace(/\bfootball club\b|\bfc\b|\bafc\b/g, "")
-    .replace(/\bmanchester\b/g, "man")
-    .replace(/\bunited\b/g, "utd")
-    .replace(/\bhotspur\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  const team = canonicalTeam(rawTeam);
-  const candidate = canonicalTeam(candidateTeam);
-  if (!team || !candidate) return 0;
-  if (team === candidate) return 28;
-  if (team.includes(candidate) || candidate.includes(team)) return 20;
+  const keys = (value: unknown) => {
+    const normalized = normalize(value);
+    const result = new Set<string>(normalized ? [normalized] : []);
+    for (const alias of aliases[normalized] || []) result.add(normalize(alias));
+    for (const [canonical, variants] of Object.entries(aliases)) {
+      if (variants.map(normalize).includes(normalized)) {
+        result.add(normalize(canonical));
+        for (const variant of variants) result.add(normalize(variant));
+      }
+    }
+    return result;
+  };
+  const teamKeys = keys(rawTeam);
+  const candidateKeys = keys(candidateTeam);
+  if (!teamKeys.size || !candidateKeys.size) return 0;
+  if ([...teamKeys].some((key) => candidateKeys.has(key))) return 28;
+  if ([...teamKeys].some((left) => [...candidateKeys].some((right) => left.includes(right) || right.includes(left)))) return 20;
   return 0;
 }
 
