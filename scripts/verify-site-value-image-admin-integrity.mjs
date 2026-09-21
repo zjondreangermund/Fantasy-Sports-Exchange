@@ -65,8 +65,9 @@ includes(stableCard, '<StatChip label="LEVEL" value={level}', "Card value chips 
 includes(cardAdapter, "Card form is calculated only from recorded Fantasy Arena match scores", "Displayed card form must come from Fantasy Arena matches.");
 includes(cardApi, "'marketplace_sale'", "Card sale history must recognize actual Fantasy Arena marketplace sales.");
 includes(cardApi, "ownershipManagerCount", "Player ownership must use Fantasy Arena managers, not FPL ownership.");
-includes(marketplaceServer, 'const position = canonical?.position || String(card.position || "") || apiPlayer?.position || "MID"', "Tournament lineups must respect the canonical Premier League player position before external position guesses.");
-includes(marketplaceServer, "mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats)", "Tournament leaderboard fallback points must use the same detailed Fantasy Arena scoring as owned cards.");
+includes(marketplaceServer, "loadApiFootballGameweekScoringContext", "Tournament team scoring view must load API-Football gameweek statistics.");
+includes(marketplaceServer, "resolveApiFootballGameweekPlayer", "Tournament team scoring view must resolve each player from API-Football.");
+includes(marketplaceServer, 'identityProvider: "api-football"', "Tournament team scoring view must identify API-Football as its scoring provider.");
 includes(marketplaceServer, "const officialFplSeasonPoints = matchedElement ? Number(matchedElement.total_points || 0) : null", "Marketplace listings must label external season points separately from Fantasy Arena points.");
 includes(marketplaceServer, "const totalPoints = identityVerified ? currentGameweekPoints : null", "Marketplace listings must show the same Fantasy Arena gameweek scores as collections and tournament teams.");
 includes(scoring, "loadApiFootballGameweekScoringContext", "Persisted tournament standings must use API-Football gameweek player statistics.");
