@@ -340,36 +340,91 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
       order by f.kickoff_at asc, s.api_fixture_id asc
     `));
 
+    // API_FOOTBALL_IDENTITY_COVERAGE_V2
+    // A paid API-Football scoring path must not fail just because the periodic
+    // squad directory missed one player. Build identity coverage from the same
+    // provider's latest current-season match rows and the current GW lineups.
+    const historicalIdentityRows = rowsOf(await db.execute(sql`
+      select distinct on (s.api_player_id)
+             s.api_player_id as "apiPlayerId", s.api_team_id as "apiTeamId",
+             coalesce(s.player_name,'') as "playerName", coalesce(s.position,'') as position,
+             coalesce(t.name,'') as "teamName", f.season, f.kickoff_at as "kickoffAt"
+      from app.api_football_player_match_stats s
+      join app.api_football_fixtures f on f.api_fixture_id=s.api_fixture_id
+      left join app.api_football_teams t on t.api_team_id=s.api_team_id
+      where f.league_id=${LEAGUE_ID}
+        and f.season=${season}
+        and coalesce(s.player_name,'') <> ''
+      order by s.api_player_id, f.kickoff_at desc nulls last, s.api_fixture_id desc
+    `));
+
+    const lineupRows = rowsOf(await db.execute(sql`
+      select l.api_team_id as "apiTeamId", coalesce(t.name,'') as "teamName",
+             l.start_xi as "startXi", l.substitutes, f.season, f.kickoff_at as "kickoffAt"
+      from app.api_football_lineups l
+      join app.api_football_fixtures f on f.api_fixture_id=l.api_fixture_id
+      left join app.api_football_teams t on t.api_team_id=l.api_team_id
+      where f.league_id=${LEAGUE_ID}
+        and f.season=${season}
+        and coalesce(f.round,'') ~ ${roundPattern}
+    `));
+
     const statsByApiPlayerId = new Map<number, PlayerStats>();
     const knownIds = new Set(directory.map((player) => Number(player.apiPlayerId || 0)));
+
+    const addIdentityCandidate = (row: any) => {
+      const apiPlayerId = Number(row?.apiPlayerId || 0);
+      const playerName = String(row?.playerName || "").trim();
+      if (!apiPlayerId || !playerName || knownIds.has(apiPlayerId)) return;
+      const rawPosition = String(row?.position || "").toUpperCase();
+      directory.push({
+        apiPlayerId,
+        season: Number(row?.season || season),
+        apiTeamId: Number(row?.apiTeamId || 0),
+        name: playerName,
+        firstName: "",
+        lastName: "",
+        team: String(row?.teamName || "").trim(),
+        position: rawPosition === "G" || rawPosition === "GK" ? "GK"
+          : rawPosition === "D" || rawPosition === "DEF" ? "DEF"
+          : rawPosition === "F" || rawPosition === "FWD" ? "FWD"
+          : "MID",
+        photo: "",
+        nationality: "",
+        age: null,
+        squadNumber: null,
+        active: true,
+        updatedAt: row?.kickoffAt ? new Date(row.kickoffAt).toISOString() : null,
+      });
+      knownIds.add(apiPlayerId);
+    };
+
+    for (const row of historicalIdentityRows) addIdentityCandidate(row);
+    for (const lineup of lineupRows) {
+      const rows = [
+        ...(Array.isArray(lineup?.startXi) ? lineup.startXi : []),
+        ...(Array.isArray(lineup?.substitutes) ? lineup.substitutes : []),
+      ];
+      for (const item of rows) {
+        const player = item?.player || item || {};
+        addIdentityCandidate({
+          apiPlayerId: player?.id,
+          apiTeamId: lineup?.apiTeamId,
+          playerName: player?.name,
+          position: player?.pos || player?.position,
+          teamName: lineup?.teamName,
+          season: lineup?.season,
+          kickoffAt: lineup?.kickoffAt,
+        });
+      }
+    }
     for (const row of playerRows) {
       const apiPlayerId = Number(row.apiPlayerId || 0);
       if (!apiPlayerId) continue;
       const mapped = inferredFixtureStats(row);
       statsByApiPlayerId.set(apiPlayerId, mergeApiFootballFullStats(statsByApiPlayerId.get(apiPlayerId), mapped));
 
-      if (!knownIds.has(apiPlayerId) && String(row.playerName || "").trim()) {
-        directory.push({
-          apiPlayerId,
-          season: Number(row.season || season),
-          apiTeamId: Number(row.apiTeamId || 0),
-          name: String(row.playerName || "").trim(),
-          firstName: "",
-          lastName: "",
-          team: String(row.teamName || "").trim(),
-          position: String(row.position || "").toUpperCase() === "G" ? "GK"
-            : String(row.position || "").toUpperCase() === "D" ? "DEF"
-            : String(row.position || "").toUpperCase() === "F" ? "FWD"
-            : "MID",
-          photo: "",
-          nationality: "",
-          age: null,
-          squadNumber: null,
-          active: true,
-          updatedAt: row.kickoffAt ? new Date(row.kickoffAt).toISOString() : null,
-        });
-        knownIds.add(apiPlayerId);
-      }
+      addIdentityCandidate(row);
     }
 
     return {
