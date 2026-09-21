@@ -3,7 +3,7 @@
  *
  * Integrity rules:
  * - Entry windows close at the FPL deadline / first Premier League kickoff.
- * - Verified core match events plus API-Football detailed player actions drive scoring; no ICT/BPS proxy points are used.
+ * - API-Football Premier League player actions drive scoring; departed players with no eligible PL appearance score a verified zero.
  * - Scores freeze at the configured Tuesday settlement cutoff and never change afterwards.
  * - FA Cup matches and Premier League fixtures played after the settlement cutoff do not count.
  * - Historical competition scores are never reset when the current gameweek changes.
@@ -49,6 +49,7 @@ export class ScoreUpdateService {
   private updateInterval: NodeJS.Timeout | null = null;
   private scheduledUpdateInFlight = false;
   private identityAuditLogged = new Set<string>();
+  private confirmedDepartureCache = new Map<number, boolean>();
 
   constructor(storage: any) { this.storage = storage; }
   isAutoUpdateEnabled() { return Boolean(this.updateInterval); }
@@ -112,13 +113,53 @@ export class ScoreUpdateService {
     }));
   }
 
-  private buildCardScores(cards: any[], context: ApiFootballGameweekScoringContext) {
+  private async isConfirmedPremierLeagueDeparture(player: any) {
+    const playerId = Number(player?.id || 0);
+    const status = String(player?.status || "").trim().toLowerCase();
+    const league = String(player?.league || "").trim().toLowerCase();
+    if (["departed", "superseded", "archived"].includes(status)) return true;
+    if (league && !["premier league", "english premier league", "epl"].includes(league)) return true;
+    if (!playerId) return false;
+    if (this.confirmedDepartureCache.has(playerId)) return Boolean(this.confirmedDepartureCache.get(playerId));
+    try {
+      const event = rowsOf(await db.execute(sql`
+        select 1
+        from app.player_transfer_events
+        where player_id=${playerId}
+          and left_premier_league=true
+        order by detected_at desc
+        limit 1
+      `))[0];
+      const confirmed = Boolean(event);
+      this.confirmedDepartureCache.set(playerId, confirmed);
+      return confirmed;
+    } catch {
+      this.confirmedDepartureCache.set(playerId, false);
+      return false;
+    }
+  }
+
+  private buildCardScores(cards: any[], context: ApiFootballGameweekScoringContext, confirmedDepartedPlayerIds = new Set<number>()) {
     const finishedStatuses = new Set(["FT", "AET", "PEN"]);
     return cards.map((card) => {
       if (!card?.player) return this.zeroScore(card, 0, "Player record is missing.");
 
       const resolved = resolveApiFootballGameweekPlayer(card.player, context);
       if (!resolved?.player) {
+        const playerId = Number(card?.player?.id || card?.playerId || 0);
+        if (confirmedDepartedPlayerIds.has(playerId)) {
+          return {
+            ...this.zeroScore(card, 0, `${String(card.player.name || "This player")} is confirmed outside the Premier League for this gameweek and has no eligible Premier League appearance.`),
+            data_source: "api-football-player-stats",
+            identity_status: "verified",
+            identity_message: `Confirmed Premier League departure; no eligible GW${context.gameWeek} Premier League appearance, so the card correctly scores 0.`,
+            identity_provider: "api-football",
+            official_player_name: String(card.player.name || "Player"),
+            official_team: String(card.player.team || ""),
+            official_position: String(card.player.position || ""),
+            minutes_played: 0,
+          };
+        }
         return this.zeroScore(card, 0, `${String(card.player.name || "This player")} could not be matched securely to the current API-Football Premier League squad directory.`);
       }
 
@@ -516,7 +557,14 @@ export class ScoreUpdateService {
         const resolvedCardIds = new Set(cards.map((card: any) => Number(card?.id || 0)));
         const missingCardIds = lineupCardIds.filter((cardId: number) => !resolvedCardIds.has(cardId));
         missingCardIds.forEach((cardId: number) => unresolved.add(cardId));
-        let cardScores = this.buildCardScores(cards, apiContext);
+        const confirmedDepartedPlayerIds = new Set<number>();
+        await Promise.all(cards.map(async (card: any) => {
+          if (await this.isConfirmedPremierLeagueDeparture(card?.player)) {
+            const playerId = Number(card?.player?.id || card?.playerId || 0);
+            if (playerId) confirmedDepartedPlayerIds.add(playerId);
+          }
+        }));
+        let cardScores = this.buildCardScores(cards, apiContext, confirmedDepartedPlayerIds);
         const previousScoresByCard = new Map<number, any>(
           (Array.isArray(previousSnapshot.cardScores) ? previousSnapshot.cardScores : [])
             .map((score: any) => [Number(score?.cardId || 0), score]),
