@@ -62,6 +62,13 @@ export async function openCommunityMention(notification: ArenaNotification) {
 
 export function notificationDestination(notification: ArenaNotification): string {
   if (notification.replacementClaimId) return "/account?tab=inbox";
+  const prizeClaim = String(notification.dedupeKey || "").match(/^competition:\d+:entry:\d+:free-card-claim-ready$/);
+  if (prizeClaim) {
+    const notificationId = Number(notification.id || 0);
+    return notificationId > 0
+      ? `/account?tab=inbox&notification=${notificationId}`
+      : "/account?tab=inbox";
+  }
   const decider = String(notification.dedupeKey || "").match(/^competition:(\d+):decider:/);
   if (decider) return `/competitions?leaderboard=${decider[1]}`;
   const subject = `${notification.notificationKind || ""} ${notification.type || ""} ${notification.title || ""} ${notification.message || ""}`.toLocaleLowerCase("en");
