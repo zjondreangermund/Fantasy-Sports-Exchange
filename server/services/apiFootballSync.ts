@@ -426,13 +426,22 @@ async function syncCompletedStats(): Promise<{ calls: number; records: number; d
       and f.status_short in ('FT','AET','PEN')
       and (
         f.stats_synced_at is null
+        or coalesce(stored.player_count,0) < 22
         or (
-          f.kickoff_at >= now()-interval '3 days'
-          and coalesce(stored.player_count,0) < 22
+          f.kickoff_at >= now()-interval '18 hours'
+          and f.stats_synced_at < now()-interval '20 minutes'
+        )
+        or (
+          f.kickoff_at >= now()-interval '4 days'
+          and f.stats_synced_at < now()-interval '6 hours'
         )
       )
     order by
-      case when f.kickoff_at >= now()-interval '3 days' then 0 else 1 end,
+      case
+        when f.kickoff_at >= now()-interval '18 hours' then 0
+        when f.kickoff_at >= now()-interval '4 days' then 1
+        else 2
+      end,
       f.kickoff_at desc
     limit ${maxFixtures}
   `));
