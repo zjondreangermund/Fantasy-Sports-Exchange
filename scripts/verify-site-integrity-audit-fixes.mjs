@@ -55,7 +55,7 @@ check(routes.includes("USER_SCOPED_MY_ENTRIES_API_V2"), "My entries API must be 
 
 check(!marketplace.includes('registerTournamentCreatorRoutes(app, { requireAuth })'), "Marketplace must not register tournament creator routes a second time");
 check(!marketplace.includes('app.post("/api/user-tournaments/create"'), "Marketplace must not shadow the canonical tournament creation endpoint");
-check(marketplace.includes('const imageCandidates = Array.from(new Set([apiImage, storedImage, fplImage].filter(Boolean)));'), "Tournament team API must return API-Football, stored and FPL portrait fallbacks");
+check(marketplace.includes('const imageCandidates = Array.from(new Set([apiImage, storedImage].filter(Boolean)));'), "Tournament team API must return API-Football and stored portrait fallbacks without reintroducing an FPL dependency");
 check(marketplace.includes('imageUrl: imageCandidates[0] || null'), "Tournament team API must expose the first verified portrait candidate as imageUrl");
 check(marketplace.includes('imageCandidates,'), "Tournament team API must expose the full portrait fallback list");
 check(count(userTournaments, 'app.post("/api/user-tournaments/create"') === 1, "User tournament module must own exactly one create endpoint");
