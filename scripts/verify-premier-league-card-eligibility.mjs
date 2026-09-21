@@ -68,6 +68,7 @@ const resolverSandbox = {
 };
 const resolverSource = apiDirectory.slice(resolverStart, resolverEnd)
   .replace(/:\s*(?:unknown|string|any|ApiFootballDirectoryPlayer(?:\[\])?)(?=[,)])/g, "")
+  .replace("export function diagnoseApiFootballPlayerMatch(", "function diagnoseApiFootballPlayerMatch(")
   .replace("export function resolveApiFootballPlayer(", "globalThis.resolveApiFootballPlayer = function(");
 vm.runInNewContext(resolverSource, resolverSandbox);
 const goalkeeper = { name: "Emiliano Martínez Romero", team: "Aston Villa", position: "GK" };
