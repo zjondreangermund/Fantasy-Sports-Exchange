@@ -17,6 +17,7 @@ import { fplApi } from "./fplApi.js";
 import { buildFplPlayerIndex } from "./fplPlayerIdentity.js";
 import { calculatePlayerScore, calculateLineupScore } from "./scoring.js";
 import { loadApiFootballGameweekScoringContext, resolveApiFootballGameweekPlayer, type ApiFootballGameweekScoringContext } from "./apiFootballScoringBridge.js";
+import { diagnoseApiFootballPlayerMatch } from "./apiFootballPlayerDirectory.js";
 import { createNotificationOnce } from "./notifications.js";
 
 const RARITY_PRESTIGE: Record<string, number> = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };
@@ -563,8 +564,12 @@ export class ScoreUpdateService {
           const auditKey = [gameWeek, Number(score?.player_id || 0), String(score?.official_player_name || ""), String(score?.official_team || ""), String(score?.official_position || "")].join(":");
           if (!this.identityAuditLogged.has(auditKey)) {
             this.identityAuditLogged.add(auditKey);
+            const sourceCard = cards.find((card: any) => Number(card?.id || 0) === Number(score?.card_id || 0));
+            const candidates = sourceCard?.player
+              ? diagnoseApiFootballPlayerMatch(sourceCard.player, apiContext.directory)
+              : [];
             console.warn(
-              `SCORING_IDENTITY_AUDIT gw=${gameWeek} competition=${Number(competition?.id || 0)} entry=${Number(entry?.id || 0)} card=${Number(score?.card_id || 0)} playerId=${Number(score?.player_id || 0)} name="${String(score?.official_player_name || "")}" team="${String(score?.official_team || "")}" position="${String(score?.official_position || "")}" status=${String(score?.identity_status || "identity-unlinked")} message="${String(score?.identity_message || "").replace(/"/g, "'")}"`,
+              `SCORING_IDENTITY_AUDIT gw=${gameWeek} competition=${Number(competition?.id || 0)} entry=${Number(entry?.id || 0)} card=${Number(score?.card_id || 0)} playerId=${Number(score?.player_id || 0)} name="${String(score?.official_player_name || "")}" team="${String(score?.official_team || "")}" position="${String(score?.official_position || "")}" status=${String(score?.identity_status || "identity-unlinked")} message="${String(score?.identity_message || "").replace(/"/g, "'")}" candidates=${JSON.stringify(candidates)}`,
             );
           }
         }
