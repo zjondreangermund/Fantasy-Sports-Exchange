@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import {
   loadApiFootballPlayerDirectory,
   resolveApiFootballPlayer,
+  normalizeApiFootballPosition,
   type ApiFootballDirectoryPlayer,
 } from "./apiFootballPlayerDirectory.js";
 import {
@@ -537,17 +538,14 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
         firstName: "",
         lastName: "",
         team: String(row.teamName || "").trim(),
-        position: String(row.position || "").toUpperCase() === "GK" || String(row.position || "").toUpperCase() === "G" ? "GK"
-          : String(row.position || "").toUpperCase() === "DEF" || String(row.position || "").toUpperCase() === "D" ? "DEF"
-          : String(row.position || "").toUpperCase() === "FWD" || String(row.position || "").toUpperCase() === "F" ? "FWD"
-          : "MID",
+        position: normalizeApiFootballPosition(row.position),
         photo: String(row.photo || ""),
         nationality: String(row.nationality || ""),
         age: row.age == null ? null : Number(row.age),
         squadNumber: row.squadNumber == null ? null : Number(row.squadNumber),
         active: false,
         updatedAt: row.transferDate ? new Date(row.transferDate).toISOString() : null,
-      })).filter((player: ApiFootballDirectoryPlayer) => player.apiPlayerId > 0 && player.name && player.team);
+      })).filter((player) => player.apiPlayerId > 0 && Boolean(player.name) && Boolean(player.team));
     } catch (error) {
       console.warn("API-Football departure identity lookup unavailable:", error);
     }
