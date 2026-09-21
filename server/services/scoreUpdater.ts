@@ -515,11 +515,38 @@ export class ScoreUpdateService {
         const resolvedCardIds = new Set(cards.map((card: any) => Number(card?.id || 0)));
         const missingCardIds = lineupCardIds.filter((cardId: number) => !resolvedCardIds.has(cardId));
         missingCardIds.forEach((cardId: number) => unresolved.add(cardId));
-        const cardScores = this.buildCardScores(cards, apiContext);
+        let cardScores = this.buildCardScores(cards, apiContext);
         const previousScoresByCard = new Map<number, any>(
           (Array.isArray(previousSnapshot.cardScores) ? previousSnapshot.cardScores : [])
             .map((score: any) => [Number(score?.cardId || 0), score]),
         );
+
+        // SCORING_IDENTITY_POINT_PRESERVATION_V1
+        // Never make an active team lose already-verified GW points merely
+        // because a later provider refresh temporarily cannot re-link the name.
+        // The entry stays unresolved (and therefore cannot finalize) until the
+        // API identity is healthy again, but its last verified score is retained.
+        if (Number(previousSnapshot?.gameWeek || 0) === gameWeek) {
+          cardScores = cardScores.map((score: any) => {
+            if (String(score?.identity_status || "") === "verified") return score;
+            const previous = previousScoresByCard.get(Number(score?.card_id || 0));
+            const previousVerified = String(previous?.identityStatus || "") === "verified"
+              && Number(previous?.apiFootballPlayerId || 0) > 0;
+            if (!previousVerified) return score;
+            return {
+              ...score,
+              total_score: toNumber(previous?.score),
+              breakdown: previous?.breakdown || score?.breakdown,
+              football_metrics: previous?.footballMetrics || score?.football_metrics,
+              reasons: Array.isArray(previous?.reasons) ? previous.reasons : score?.reasons,
+              data_source: previous?.dataSource || score?.data_source,
+              api_player_id: Number(previous?.apiFootballPlayerId || score?.api_player_id || 0),
+              minutes_played: toNumber(previous?.minutesPlayed ?? score?.minutes_played),
+              identity_message: `${String(score?.identity_message || "API-Football identity is refreshing.")} Last verified GW${gameWeek} points are being preserved until the link is healthy again.`,
+            };
+          });
+        }
+
         const recoveredScores = cardScores.filter((score: any) => {
           const previous = previousScoresByCard.get(Number(score?.card_id || 0));
           return previous && toNumber(previous.score) <= 0 && toNumber(score?.total_score) > 0 && toNumber(score?.minutes_played) > 0;
