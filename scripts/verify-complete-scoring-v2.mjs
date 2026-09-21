@@ -45,27 +45,26 @@ expect(!updater.includes("providerRatingTotal"), "API-Football match-rating tieb
 
 includesAll(bridge, [
   "app.api_football_player_match_stats",
-  "gameweekWindow",
+  "API_FOOTBALL_ONLY_SCORING_V1",
   "resolveApiFootballPlayer",
-  "mapApiFootballStatisticsToDetailedStats",
+  "mapApiFootballStatsToPlayerStats",
   "statsByApiPlayerId",
+  "fixtureByTeamId",
 ], "API-Football scoring bridge");
 
 includesAll(updater, [
-  "loadDetailedScoringContext",
-  "resolveDetailedStatsForPlayer",
-  "mergePlayerStatsWithDetailedStats",
-  "buildFplPlayerIndex",
-  "identityMap.resolve(player)",
-  "verifiedPlayer",
-  "verifiedPosition",
+  "loadApiFootballGameweekScoringContext",
+  "resolveApiFootballGameweekPlayer",
+  "identity_provider: \"api-football\"",
   "identity_status: \"verified\"",
-  "version: 6",
+  "version: 7",
+  'source: "api-football-player-stats"',
   "detailedStatsCards",
-  "coreStatsOnlyCards",
   "apiFootballPlayerId",
   "dataSource",
 ], "Tournament score updater");
+expect(!updater.includes("mapFplStatsToPlayerStats"), "Tournament score updater must not use FPL player statistics.");
+expect(!updater.includes("mergePlayerStatsWithDetailedStats(fplStats"), "Tournament score updater must not merge FPL scoring data.");
 
 includesAll(scoringPage, [
   "Complete points table",
@@ -89,7 +88,7 @@ for (const [source, label] of [[sync, "API-Football sync"], [admin, "API-Footbal
   ], label);
 }
 
-includesAll(integrity, ["version: 6", "verified-player-stats", "detailedStatsCards", "coreStatsOnlyCards"], "Tournament integrity verifier");
+includesAll(integrity, ["version: 7", "api-football-player-stats", "detailedStatsCards"], "Tournament integrity verifier");
 
 if (failures.length) {
   console.error("Complete scoring verification failed:");
@@ -97,4 +96,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("[scoring] Verified crucial passes, all-around actions, proxy-free player-stat scoring and published rules use one canonical engine");
+console.log("[scoring] Verified API-Football-only tournament scoring, full player actions, proxy-free rules and one canonical engine");
