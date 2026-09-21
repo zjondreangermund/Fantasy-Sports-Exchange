@@ -144,7 +144,7 @@ async function main() {
       events.find((event) => event.is_next) ||
       [...events].reverse().find((event) => event.finished) ||
       events[0];
-    const currentGw = Math.max(1, Math.min(38, Number(currentEvent?.id || 1)));
+    const fplCurrentGw = Math.max(1, Math.min(38, Number(currentEvent?.id || 1)));
 
     const windows = [];
     for (let gw = 1; gw <= 38; gw += 1) {
@@ -170,6 +170,12 @@ async function main() {
       });
     }
 
+    // CURRENT_TOURNAMENT_GAMEWEEK_POLICY_V1: tournament entry weeks roll on their Tuesday opening window.
+    // This can be one week ahead of FPL's is_current flag after the previous fixtures finish.
+    const entryWindowGw = windows.reduce((latest, window) =>
+      now.getTime() >= window.start.getTime() ? Math.max(latest, Number(window.gw || 0)) : latest, 0);
+    const currentGw = Math.max(fplCurrentGw, entryWindowGw || 1);
+
     await client.query("BEGIN");
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS created_by_user_id varchar(255)`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS prize_type text DEFAULT 'goods'`);
@@ -191,7 +197,21 @@ async function main() {
     let excludedPostponed = 0;
     let fallbackWindows = 0;
 
+    // Past official weeks are historical only. Close stale rows, but never recreate
+    // a past tournament that an admin intentionally deleted.
+    const retiredPast = await client.query(
+      `update app.competitions
+          set status = 'closed'::text::${competitionStatusType}
+        where created_by_user_id is null
+          and season = $1
+          and game_week < $2
+          and status::text not in ('completed', 'cancelled', 'closed')
+        returning id`,
+      [SEASON, currentGw],
+    );
+
     for (const window of windows) {
+      if (window.gw < currentGw) continue;
       const status = plannedStatus({ ...window, now });
       excludedPostponed += window.excludedPostponed;
       if (window.usedFallback) fallbackWindows += 1;
@@ -287,8 +307,9 @@ async function main() {
       }
     }
 
-    // Deployment must not start with partial official coverage. Count unique GW/rarity pairs,
-    // not raw rows, so duplicates cannot hide a missing gameweek or rarity.
+    // Only current/future slots are required. Existing past rows are preserved,
+    // but deleted past weeks stay deleted.
+    const expectedCoverage = (39 - currentGw) * RARITIES.length;
     const coverageResult = await client.query(
       `select count(*)::int as coverage_pairs
          from (
@@ -297,21 +318,21 @@ async function main() {
             where c.created_by_user_id is null
               and c.season = $1
               and c.prize_key = 'ladder'
-              and c.game_week between 1 and 38
+              and c.game_week between $2 and 38
               and c.tier::text in ('common','rare','unique','epic','legendary')
             group by c.game_week, c.tier::text
          ) coverage`,
-      [SEASON],
+      [SEASON, currentGw],
     );
     const coveragePairs = Number(coverageResult.rows?.[0]?.coverage_pairs || 0);
-    if (coveragePairs !== 190) {
-      throw new Error(`Official tournament coverage incomplete: expected 190 unique GW/rarity slots, found ${coveragePairs}`);
+    if (coveragePairs !== expectedCoverage) {
+      throw new Error(`Official tournament coverage incomplete from GW${currentGw}: expected ${expectedCoverage} unique GW/rarity slots, found ${coveragePairs}`);
     }
 
     await client.query("COMMIT");
-    console.log(`Official tournaments synced for ${SEASON}. Current GW: ${currentGw}. Created ${created}, updated ${updated}.`);
-    console.log(`Verified ${coveragePairs}/190 official GW/rarity slots across all 38 gameweeks.`);
-    console.log("Created/updated 5 official Prize Ladder tournaments per gameweek (190 total season slots) with no admin platform fee.");
+    console.log(`Official tournaments synced for ${SEASON}. Current entry GW: ${currentGw}. Created ${created}, updated ${updated}, retired stale past rows ${retiredPast.rowCount || 0}.`);
+    console.log(`Verified ${coveragePairs}/${expectedCoverage} current/future official GW/rarity slots (GW${currentGw}-GW38).`);
+    console.log("Deleted past official tournaments are not recreated.");
     console.log(`Preserved ${preservedEntries} existing official tournament entries; startup sync did not delete user teams.`);
     console.log(`Excluded ${excludedPostponed} postponed fixture assignment(s) that fall on or after the next gameweek starts.`);
     console.log(`${fallbackWindows} gameweek window(s) used fallback dates because live FPL fixture data was unavailable/incomplete; these refresh automatically on the next successful sync.`);
