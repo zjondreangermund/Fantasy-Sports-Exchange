@@ -315,7 +315,7 @@ function teamCompatibility(rawTeam: unknown, candidateTeam: string) {
     .trim();
   const keys = (value: unknown) => {
     const normalized = normalize(value);
-    const result = new Set<string>(normalized ? [normalized] : []);
+    const result = new Set(normalized ? [normalized] : []);
     for (const alias of aliases[normalized] || []) result.add(normalize(alias));
     for (const [canonical, variants] of Object.entries(aliases)) {
       if (variants.map(normalize).includes(normalized)) {
