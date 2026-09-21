@@ -121,8 +121,19 @@ export default function CompetitionsPage() {
   const totalUnlockedValue = liveComps.reduce((sum, comp) => sum + (comp.prizeUnlocked ? n(comp.prizeValue) : 0), 0);
   const nextUnlock = [...liveComps].filter((c) => !c.prizeUnlocked && n(c.requiredEntrants) > 0).sort((a, b) => n(a.requiredEntrants) - n(b.requiredEntrants))[0];
 
+  const currentPremierLeagueCard = (card: PlayerCardWithPlayer) => {
+    const player = card.player as any;
+    const status = String(player?.status || "").trim().toLowerCase();
+    const premierLeagueStatus = String(player?.premierLeagueStatus || "").trim().toLowerCase();
+    if (["departed", "superseded", "unlinked", "archived"].includes(status)) return false;
+    if (premierLeagueStatus === "outside-premier-league") return false;
+    if (player?.selectionEligibility?.eligible === false) return false;
+    const league = String(player?.league || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+    return ["premierleague", "englishpremierleague", "epl"].includes(league) || player?.premierLeagueEligible === true;
+  };
+
   const requiredTier = normalizeTier(selectedComp?.tier);
-  const availableCards = (Array.isArray(myCards) ? myCards : []).filter((card) => card && !card.forSale).filter((card) => !selectedComp || normalizeTier(card.rarity) === requiredTier);
+  const availableCards = (Array.isArray(myCards) ? myCards : []).filter((card) => card && !card.forSale && currentPremierLeagueCard(card)).filter((card) => !selectedComp || normalizeTier(card.rarity) === requiredTier);
   const selectedCardObjects = availableCards.filter((card) => selectedCards.includes(card.id));
   const positionCounts: Record<string, number> = {};
   selectedCardObjects.forEach((card) => { const pos = card.player?.position || ""; positionCounts[pos] = (positionCounts[pos] || 0) + 1; });
@@ -134,7 +145,7 @@ export default function CompetitionsPage() {
 
   const cardIdsForTier = (ids: unknown, tier: string) => {
     const sourceIds = Array.isArray(ids) ? ids.map((id) => Number(id)).filter((id) => Number.isFinite(id)) : [];
-    const allowed = new Set((Array.isArray(myCards) ? myCards : []).filter((card) => !card.forSale && normalizeTier(card.rarity) === normalizeTier(tier)).map((card) => card.id));
+    const allowed = new Set((Array.isArray(myCards) ? myCards : []).filter((card) => !card.forSale && currentPremierLeagueCard(card) && normalizeTier(card.rarity) === normalizeTier(tier)).map((card) => card.id));
     return sourceIds.filter((id) => allowed.has(id)).slice(0, 5);
   };
   const previousEntryForTier = (tier: string, excludeCompetitionId?: number) => [...(Array.isArray(myEntries) ? myEntries : [])].filter((entry) => entry.competitionId !== excludeCompetitionId && Array.isArray(entry.lineupCardIds) && entry.lineupCardIds.length > 0).sort((a: any, b: any) => new Date(b.joinedAt || 0).getTime() - new Date(a.joinedAt || 0).getTime()).find((entry) => cardIdsForTier(entry.lineupCardIds, tier).length === 5);
