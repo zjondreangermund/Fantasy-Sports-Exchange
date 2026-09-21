@@ -27,14 +27,15 @@ for (const [source, required, label] of [
   [bridge, '"match_rating"', "Stored API-Football match-rating ingestion"],
   [bridge, '"total_passes"', "Stored API-Football pass-total ingestion"],
   [updater, "scoringPrecision: 4", "Precise tournament scoring snapshots"],
-  [updater, 'import { buildFplPlayerIndex } from "./fplPlayerIdentity.js"', "Shared verified tournament player identity"],
-  [updater, "identityMap.resolve(player)", "Verified official player matching"],
-  [updater, "identityMap.canonical(officialElement)", "Canonical player position and identity"],
+  [updater, "loadApiFootballGameweekScoringContext", "API-Football gameweek scoring context"],
+  [updater, "resolveApiFootballGameweekPlayer(card.player, context)", "Verified API-Football player matching"],
+  [updater, "calculatePlayerScore(stats, apiPlayer.position)", "Canonical API-Football player position and identity"],
   [updater, "identityStatus: String(score?.identity_status", "Player identity status in official scoring snapshots"],
   [updater, "Recovered verified player points", "Automatic recovered-points diagnostics"],
   [bridge, "api_position: match.position", "Verified API-Football player position"],
   [leaderboard, "->>'completedPasses'", "Leaderboard completed-passes tie-breaker"],
-  [leaderboard, "snapshotMatchesVerifiedPlayer", "Verified snapshot player identity safeguard"],
+  [leaderboard, "resolveApiFootballGameweekPlayer(card, apiScoringContext)", "Verified API-Football submitted-team player safeguard"],
+  [leaderboard, 'identityProvider: "api-football"', "API-Football submitted-team scoring provider"],
   [standingsPage, "maximumFractionDigits: 4", "Visible precise tournament scores"],
   [standingsPage, "player.identityStatus !== \"verified\"", "Visible player-link explanation"],
   [scoringPage, "Precise scoring and fair tie-breakers", "Published precision and tiebreak rules"],
@@ -46,6 +47,7 @@ check(!scoring.includes("FPL BPS fallback"), "FPL BPS fallback points must not e
 check(!scoring.includes("official FPL bonus point(s)"), "Provider fantasy bonus points must not affect Fantasy Arena scoring.");
 check(!scoring.includes("matchRating * d.matchRating"), "API-Football match ratings must not affect Fantasy Arena scoring.");
 check(!updater.includes("providerRatingTotal"), "API-Football match ratings must not affect tournament tie-breaks.");
+check(!updater.includes("mapFplStatsToPlayerStats"), "Tournament score updater must not map FPL player statistics.");
 check(!leaderboard.includes("providerRatingTotal"), "Leaderboard ordering must not use API-Football match ratings.");
 check(!updater.includes("const explicit = Number(player?.externalId || player?.fplId || 0);"), "Stale player IDs must not bypass official identity verification.");
 
