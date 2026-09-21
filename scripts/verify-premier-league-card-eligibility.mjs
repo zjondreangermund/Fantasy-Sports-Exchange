@@ -105,9 +105,11 @@ if (resolverSandbox.resolveApiFootballPlayer(
 }
 
 requireText(identity, 'league: "Premier League"', "Official FPL identities must include their verified Premier League eligibility.");
-requireText(cards, 'league: identityVerified ? "Premier League" : player.league', "Collection must expose the verified current league rather than stale stored league metadata.");
-requireText(cards, "premierLeagueEligible: identityVerified", "Collection must explicitly mark officially verified players as tournament eligible.");
-requireText(cards, 'provider: selectionProvider', "Every collection card must explain which identity provider determines its eligibility.");
+requireText(cards, 'league: outsidePremierLeague ? "Outside Premier League" : identityVerified ? "Premier League" : player.league', "Collection must expose verified current league status and must not relabel confirmed departures as Premier League players.");
+requireText(cards, "premierLeagueEligible: identityVerified", "Collection must explicitly mark only officially verified current Premier League players as tournament eligible.");
+requireText(cards, 'provider: outsidePremierLeague ? "api-football-transfer" : selectionProvider', "Every collection card must explain whether eligibility comes from a current identity provider or a confirmed API-Football departure.");
+requireText(cards, "departedApiFootballPlayer", "Collection eligibility must consult API-Football departure evidence.");
+requireText(cards, 'code: identityVerified ? "eligible" : outsidePremierLeague ? "outside-premier-league" : "identity-unlinked"', "Departed players must be explicitly marked outside the Premier League and unselectable.");
 requireText(cards, '"api-football"', "API-Football current squads must be the primary card identity provider.");
 requireText(cards, '"fpl-fallback"', "FPL must remain available as the identity fallback.");
 requireText(enrichment, 'league: identityVerified ? "Premier League" : player.league', "Shared card enrichment must retain verified Premier League eligibility.");
@@ -117,8 +119,12 @@ requireText(client, "All owned cards are shown", "The picker must not hide a car
 requireText(client, "is required in this slot", "Position mismatches must be explicitly explained to the user.");
 requireText(client, "already used in another entry in this tournament", "The squad picker must explain tournament card locks.");
 requireText(client, "listed on the marketplace", "The squad picker must explain marketplace exclusions.");
-requireText(client, "not linked to a current Premier League squad", "The squad picker must explain identity exclusions.");
+requireText(client, "selectionEligibility", "The squad picker must use server-provided player eligibility reasons.");
+requireText(client, 'premierLeagueStatus === "outside-premier-league"', "The squad picker must block confirmed Premier League departures.");
 requireText(server, "officialPlayerIndex.resolve", "Tournament entry validation must independently resolve players against the official current roster.");
+requireText(server, "departedApiFootballDirectory", "Tournament entry validation must independently check API-Football departure evidence.");
+requireText(server, "explicitlyDeparted", "Confirmed departed players must be rejected before stale roster fallbacks can make them eligible.");
+requireText(server, "Premier League tournaments only accept current Premier League player cards.", "Tournament entry must reject departed or non-current Premier League players.");
 requireText(profile, "Outside Premier League", "Departed players must be clearly labeled in the card profile.");
 requireText(profile, "No replacement card is recorded yet", "Departed-player profiles must not falsely claim that a replacement was minted.");
 requireText(cards, "departureReplacement", "The card profile API must identify the exact replacement card when one was minted.");
