@@ -369,6 +369,49 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
         and coalesce(f.round,'') ~ ${roundPattern}
     `));
 
+    // Injured players can legitimately be absent from both the current squad
+    // response and every lineup/player-stat payload. API-Football's injury feed
+    // still gives us the provider player ID + current Premier League club.
+    const injuryIdentityRows = rowsOf(await db.execute(sql`
+      select distinct on (i.api_player_id)
+             i.api_player_id as "apiPlayerId", i.api_team_id as "apiTeamId",
+             coalesce(i.player_name,'') as "playerName", '' as position,
+             coalesce(t.name,'') as "teamName", ${season}::int as season,
+             i.fixture_date as "kickoffAt"
+      from app.api_football_injuries i
+      left join app.api_football_teams t on t.api_team_id=i.api_team_id
+      where i.season=${season}
+        and i.active=true
+        and coalesce(i.player_name,'') <> ''
+        and i.api_team_id in (
+          select home_team_id from app.api_football_fixtures where league_id=${LEAGUE_ID} and season=${season}
+          union
+          select away_team_id from app.api_football_fixtures where league_id=${LEAGUE_ID} and season=${season}
+        )
+      order by i.api_player_id, i.fixture_date desc nulls last, i.updated_at desc
+    `));
+
+    // A late return from loan / transfer can also precede the next squad refresh.
+    // Use only transfers INTO a current Premier League team and only as identity
+    // evidence; scoring still requires the player's API-Football fixture stats.
+    const transferIdentityRows = rowsOf(await db.execute(sql`
+      select distinct on (tr.api_player_id)
+             tr.api_player_id as "apiPlayerId", tr.to_team_id as "apiTeamId",
+             coalesce(tr.player_name,'') as "playerName", '' as position,
+             coalesce(t.name,'') as "teamName", ${season}::int as season,
+             tr.transfer_date::timestamptz as "kickoffAt"
+      from app.api_football_transfers tr
+      left join app.api_football_teams t on t.api_team_id=tr.to_team_id
+      where coalesce(tr.player_name,'') <> ''
+        and tr.to_team_id in (
+          select home_team_id from app.api_football_fixtures where league_id=${LEAGUE_ID} and season=${season}
+          union
+          select away_team_id from app.api_football_fixtures where league_id=${LEAGUE_ID} and season=${season}
+        )
+        and tr.transfer_date >= make_date(${season}, 6, 1)
+      order by tr.api_player_id, tr.transfer_date desc
+    `));
+
     const statsByApiPlayerId = new Map<number, PlayerStats>();
     const knownIds = new Set(directory.map((player) => Number(player.apiPlayerId || 0)));
 
@@ -400,6 +443,8 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
     };
 
     for (const row of historicalIdentityRows) addIdentityCandidate(row);
+    for (const row of injuryIdentityRows) addIdentityCandidate(row);
+    for (const row of transferIdentityRows) addIdentityCandidate(row);
     for (const lineup of lineupRows) {
       const rows = [
         ...(Array.isArray(lineup?.startXi) ? lineup.startXi : []),
