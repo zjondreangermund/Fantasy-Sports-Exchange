@@ -1,5 +1,6 @@
 import { PremiumFootballCard } from ".";
 import { type PlayerCardData } from "./types";
+import { getMarketplaceListingPrice } from "../../../../shared/card-economy";
 
 type Props = {
   player: PlayerCardData;
@@ -27,7 +28,7 @@ export default function UnifiedPlayerCard({
   const showPrice = Boolean(
     player.forSale ||
       player.listed ||
-      Number(player.price || player.listedPrice || 0) > 0,
+      getMarketplaceListingPrice(player) > 0,
   );
 
   return (

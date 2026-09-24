@@ -72,6 +72,13 @@ export function getMarketplaceFloorPrice(rarity: string): number {
   return Number(MARKETPLACE_FLOOR_BY_RARITY[tier] || 0);
 }
 
+export function getMarketplaceListingPrice(listing?: { price?: unknown; listedPrice?: unknown } | null): number {
+  const rawPrice = listing?.price !== undefined ? listing.price : listing?.listedPrice;
+  if (rawPrice === null || rawPrice === "") return 0;
+  const price = Number(rawPrice);
+  return Number.isFinite(price) ? price : 0;
+}
+
 export function isMarketplaceTradableRarity(rarity: string): boolean {
   const tier = normalizeRarityTier(rarity);
   return tier !== "common";

@@ -1,6 +1,7 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { type PlayerCardData } from "./types";
 import { normalizeRarity } from "./cardTheme";
+import { getMarketplaceListingPrice } from "../../../../shared/card-economy";
 
 type Props = {
   player: PlayerCardData;
@@ -104,7 +105,7 @@ export default function CollectionStableCard({ player, selected = false, onClick
   useEffect(() => { setImageIndex(0); }, [player.id, imageCandidates]);
   const image = imageCandidates[imageIndex] || "/players/fallback.svg";
   const team = player.team || player.club || "Fantasy Arena";
-  const price = Number(player.price || player.listedPrice || 0);
+  const price = getMarketplaceListingPrice(player);
   const statsVerified = player.statsVerified !== false;
   const level = Math.max(1, numberStat(player.level, 1));
   const exactPoints = Number(player.totalPoints ?? 0);

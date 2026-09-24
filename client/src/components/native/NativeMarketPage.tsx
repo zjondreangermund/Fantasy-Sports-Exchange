@@ -8,6 +8,7 @@ import { Input } from "../ui/input";
 import { apiRequest, queryClient } from "../../lib/queryClient";
 import { useToast } from "../../hooks/use-toast";
 import type { PlayerCardWithPlayer, Wallet } from "../../../../shared/schema";
+import { getMarketplaceListingPrice } from "../../../../shared/card-economy";
 
 const rarities = ["all", "common", "rare", "unique", "epic", "legendary"] as const;
 
@@ -56,7 +57,7 @@ function money(value: unknown) {
 }
 
 function cardPrice(card: any) {
-  return Number(card?.price || card?.listedPrice || 0);
+  return getMarketplaceListingPrice(card);
 }
 
 function points(card: any) {

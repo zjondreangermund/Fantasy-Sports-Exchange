@@ -1,5 +1,5 @@
 import { storage } from "./storage.js";
-import { RARITY_SUPPLY } from "../shared/schema.js";
+import { unlistNonRealMarketplaceListings } from "./services/marketplaceOwnership.js";
 
 const seedPlayers = [
   { name: "Marcus Rashford", team: "Manchester United", league: "Premier League", position: "FWD" as const, nationality: "England", age: 27, overall: 84, imageUrl: "/images/player-1.png" },
@@ -31,88 +31,24 @@ const seedPlayers = [
   { name: "Alessandro Bastoni", team: "Inter Milan", league: "Serie A", position: "DEF" as const, nationality: "Italy", age: 25, overall: 86, imageUrl: "/images/player-3.png" },
 ];
 
-const marketplaceCards = [
-  { playerIndex: 14, rarity: "legendary" as const, level: 5, price: 250, scores: [88, 92, 75, 95, 90] },
-  { playerIndex: 6, rarity: "legendary" as const, level: 4, price: 200, scores: [85, 90, 78, 88, 92] },
-  { playerIndex: 5, rarity: "unique" as const, level: 3, price: 120, scores: [72, 80, 85, 68, 77] },
-  { playerIndex: 12, rarity: "unique" as const, level: 3, price: 100, scores: [65, 78, 82, 70, 85] },
-  { playerIndex: 13, rarity: "unique" as const, level: 2, price: 90, scores: [70, 75, 60, 88, 72] },
-  { playerIndex: 7, rarity: "rare" as const, level: 2, price: 45, scores: [60, 72, 55, 80, 65] },
-  { playerIndex: 1, rarity: "rare" as const, level: 2, price: 35, scores: [55, 68, 72, 60, 58] },
-  { playerIndex: 11, rarity: "rare" as const, level: 1, price: 30, scores: [50, 62, 58, 70, 55] },
-  { playerIndex: 21, rarity: "rare" as const, level: 1, price: 28, scores: [58, 65, 48, 72, 60] },
-  { playerIndex: 4, rarity: "rare" as const, level: 1, price: 25, scores: [52, 60, 65, 55, 62] },
-];
-
-async function ensureMarketplaceListings(players: any[]) {
-  const existingListings = await storage.getMarketplaceListings();
-  if (existingListings.length > 0) {
-    console.log(`Marketplace already has ${existingListings.length} listings`);
-    return;
-  }
-
-  console.log("Repairing marketplace listings...");
-  let created = 0;
-  for (const listing of marketplaceCards) {
-    const player = players[listing.playerIndex] || players[created % Math.max(players.length, 1)];
-    if (!player) continue;
-
-    const supply = (RARITY_SUPPLY as any)[listing.rarity] || 0;
-    let serialId: string | null = null;
-    let serialNumber: number | null = null;
-    let maxSupply: number = supply;
-
-    if (supply > 0) {
-      const generated = await storage.generateSerialId(player.id, player.name, listing.rarity);
-      serialId = generated.serialId;
-      serialNumber = generated.serialNumber;
-      maxSupply = generated.maxSupply;
-    }
-
-    try {
-      await storage.createPlayerCard({
-        playerId: player.id,
-        ownerId: null,
-        rarity: listing.rarity,
-        serialId,
-        serialNumber,
-        maxSupply,
-        level: listing.level,
-        xp: listing.level * 100,
-        decisiveScore: Math.min(100, 35 + listing.level * 13),
-        last5Scores: listing.scores,
-        forSale: true,
-        price: listing.price,
-      } as any);
-      created++;
-    } catch (error) {
-      console.warn("Could not create marketplace listing:", error);
-    }
-  }
-  console.log(`Repaired ${created} marketplace listings`);
-}
-
 export async function seedDatabase() {
-  const count = await storage.getPlayerCount();
-  let players: any[] = [];
+  const unlistedCount = await unlistNonRealMarketplaceListings();
+  if (unlistedCount > 0) {
+    console.log(`Unlisted ${unlistedCount} marketplace cards without a real account owner`);
+  }
 
+  const count = await storage.getPlayerCount();
   if (count > 0) {
-    console.log(`Database already has ${count} players, checking marketplace repair`);
-    players = await storage.getPlayers();
-    await ensureMarketplaceListings(players);
+    console.log(`Database already has ${count} players, checking card serials`);
     await storage.backfillSerialIds();
     return;
   }
 
   console.log("Seeding database with players...");
-  const createdPlayers: any[] = [];
   for (const player of seedPlayers) {
-    const created = await storage.createPlayer(player as any);
-    createdPlayers.push(created);
+    await storage.createPlayer(player as any);
   }
   console.log(`Seeded ${seedPlayers.length} players`);
-
-  await ensureMarketplaceListings(createdPlayers);
 }
 
 export async function seedCompetitions() {
