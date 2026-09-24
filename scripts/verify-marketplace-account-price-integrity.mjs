@@ -13,10 +13,15 @@ const priceSurfaces = [
   "client/src/pages/marketplace-v2.tsx",
   "client/src/pages/marketplace.tsx",
   "client/src/components/native/NativeMarketPage.tsx",
+  "client/src/components/native/NativeCardTradeSheet.tsx",
   "client/src/lib/fantasy-card-adapter.ts",
   "client/src/components/cards/CollectionStableCard.tsx",
   "client/src/components/cards/UnifiedPlayerCard.tsx",
+  "client/src/components/cards/PlayerCard.tsx",
+  "client/src/components/CardThumbnail.tsx",
+  "client/src/components/Card3D.tsx",
   "client/src/pages/collection-clean.tsx",
+  "client/src/pages/collection.tsx",
 ].map(read);
 
 expect(economy.includes("export function getMarketplaceListingPrice"), "Marketplace prices must have one shared resolver");

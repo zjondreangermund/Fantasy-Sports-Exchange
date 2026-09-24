@@ -1,6 +1,7 @@
 import { PremiumFootballCard } from ".";
 import { toFantasyCardData } from "../../lib/fantasy-card-adapter";
 import { type PlayerCardWithPlayer } from "../../../../shared/schema";
+import { getMarketplaceListingPrice } from "../../../../shared/card-economy";
 
 export type MarketplaceCardData = ReturnType<typeof mapMarketplaceListingToCard>;
 
@@ -12,7 +13,7 @@ export function mapMarketplaceListingToCard(card: PlayerCardWithPlayer) {
     ...mapped,
     id: cardId as any,
     cardId,
-    price: Number(card.price || mapped.price || 0),
+    price: getMarketplaceListingPrice(card),
     seller: card.ownerUsername || card.ownerName || "Fantasy Arena",
     rawCard: card,
   };
@@ -27,7 +28,7 @@ type MarketplaceCardProps = {
 };
 
 export function MarketplaceCard({ player, onCardClick, onDetails, onToggleWatchlist, isWatched = false }: MarketplaceCardProps) {
-  const price = Number(player.price || 0);
+  const price = getMarketplaceListingPrice(player);
 
   return (
     <div className="group flex flex-col items-center gap-2 rounded-[24px] border border-white/10 bg-black/20 p-2.5 shadow-[0_18px_48px_rgba(0,0,0,0.34)] backdrop-blur-sm transition hover:border-emerald-300/35 hover:bg-black/30">
