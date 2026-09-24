@@ -9,6 +9,7 @@ import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog";
 import { type PlayerCardWithPlayer, type Lineup } from "../../../shared/schema";
+import { getMarketplaceListingPrice } from "../../../shared/card-economy";
 import { Archive, Crown, DollarSign, Filter, Gem, Lock, ShieldCheck, Sparkles, Trophy, Vault } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
@@ -38,7 +39,7 @@ function pct(value: number, target: number) {
 }
 
 function cardValue(card: PlayerCardWithPlayer) {
-  const listed = Number(card.price || 0);
+  const listed = getMarketplaceListingPrice(card);
   if (Number.isFinite(listed) && listed > 0) return listed;
   return BASE_PRICES[rarityOf(card)] || 0;
 }
@@ -281,7 +282,7 @@ export default function CollectionPage() {
                     />
                   </div>
                   <div className="z-30 flex min-h-8 gap-2">
-                    {card.forSale ? <Button size="sm" variant="destructive" onClick={() => cancelListingMutation.mutate(card.id)} disabled={cancelListingMutation.isPending} className="h-7 px-2 text-[11px]">Cancel {money(card.price)}</Button> : rarity === "common" ? <Button size="sm" variant="outline" disabled className="h-7 px-2 text-[11px]">Tournament Only</Button> : <Button size="sm" onClick={() => handleListCard(card)} className="h-7 bg-gradient-to-r from-emerald-400 to-lime-300 px-3 text-[11px] font-black text-black"><DollarSign className="mr-1 h-3 w-3" /> Sell</Button>}
+                    {card.forSale ? <Button size="sm" variant="destructive" onClick={() => cancelListingMutation.mutate(card.id)} disabled={cancelListingMutation.isPending} className="h-7 px-2 text-[11px]">Cancel {money(getMarketplaceListingPrice(card))}</Button> : rarity === "common" ? <Button size="sm" variant="outline" disabled className="h-7 px-2 text-[11px]">Tournament Only</Button> : <Button size="sm" onClick={() => handleListCard(card)} className="h-7 bg-gradient-to-r from-emerald-400 to-lime-300 px-3 text-[11px] font-black text-black"><DollarSign className="mr-1 h-3 w-3" /> Sell</Button>}
                   </div>
                 </div>
               );
