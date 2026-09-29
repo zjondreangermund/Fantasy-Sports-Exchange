@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from "../components/ui/dialog";
 import { type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
+import { getMarketplaceListingPrice } from "../../../shared/card-economy";
 import { Crown, Gem, HandCoins, Search, Shield, ShoppingCart, Star, Tag, XCircle } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { isUnauthorizedError } from "../lib/auth-utils";
@@ -48,7 +49,7 @@ function normalizeCardsResponse(data: CardsResponse): PlayerCardWithPlayer[] {
 }
 
 function getCardPrice(card: PlayerCardWithPlayer) {
-  return Number((card as any).price || (card as any).listedPrice || 0);
+  return getMarketplaceListingPrice(card as any);
 }
 
 function resolveCardId(card: PlayerCardWithPlayer): number {

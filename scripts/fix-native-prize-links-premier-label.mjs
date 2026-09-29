@@ -24,7 +24,8 @@ const oldPrizeHref = 'href={`/prize-vault?rarity=${normalizeTournamentRarity(tou
 const newPrizeHref = 'href={`/prize-vault?rarity=${normalizeTournamentRarity(tournament.tier)}&gameWeek=${Number(tournament.gameWeek ?? tournament.game_week ?? 0)}&competitionId=${Number(tournament.id || 0)}`}';
 if (play.includes(oldPrizeHref)) {
   play = play.replace(oldPrizeHref, newPrizeHref);
-} else if (!play.includes(newPrizeHref)) {
+} else if (!play.includes(newPrizeHref) && !(play.includes("href={freeCardPrizeTournament") &&
+    play.includes(newPrizeHref.slice(6, -1)))) {
   throw new Error("[native-prize-links] exact Prize Vault link anchor not found");
 }
 
@@ -32,7 +33,7 @@ const oldPrizeLabel = '<Gift className="h-3.5 w-3.5" />Prize Vault</Link>';
 const newPrizeLabel = '<Gift className="h-3.5 w-3.5" />Prizes</Link>';
 if (play.includes(oldPrizeLabel)) {
   play = play.replace(oldPrizeLabel, newPrizeLabel);
-} else if (!play.includes(newPrizeLabel)) {
+} else if (!play.includes(newPrizeLabel) && !play.includes('<Gift className="h-3.5 w-3.5" />{freeCardPrizeTournament ? "Prize" : "Prizes"}</Link>')) {
   throw new Error("[native-prize-links] Prizes button label anchor not found");
 }
 

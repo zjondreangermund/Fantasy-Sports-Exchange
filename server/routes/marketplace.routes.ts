@@ -7,6 +7,7 @@ import { registerCompetitionCancellationRoutes } from "./competitionCancellation
 import { registerTournamentCreatorRoutes } from "./tournamentCreator.routes.js";
 import { ensureTournamentSchema } from "./tournamentSchema.ensure.js";
 import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
+import { NON_REAL_MARKETPLACE_OWNER_IDS } from "../services/marketplaceOwnership.js";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
 import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
@@ -385,8 +386,12 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
   });
   app.get("/api/marketplace", async (_req, res) => {
     try {
+      const nonRealOwnerIds = sql.join(
+        NON_REAL_MARKETPLACE_OWNER_IDS.map((ownerId) => sql`${ownerId}`),
+        sql`, `,
+      );
       const [result, bootstrap, apiFootballDirectory, liveData] = await Promise.all([
-        db.execute(sql`select pc.*, p.name as player_name, p.team as player_team, p.position as player_position, p.image_url as player_image_url, p.fpl_id as player_fpl_id, p.code as player_code, p.photo as player_photo, p.web_name as player_web_name, p.nationality as player_nationality, p.league as player_league, p.overall as player_overall, p.total_points as player_total_points, p.form as player_form from app.player_cards pc join app.players p on p.id = pc.player_id where pc.for_sale = true order by pc.price asc nulls last, pc.id desc`),
+        db.execute(sql`select pc.*, p.name as player_name, p.team as player_team, p.position as player_position, p.image_url as player_image_url, p.fpl_id as player_fpl_id, p.code as player_code, p.photo as player_photo, p.web_name as player_web_name, p.nationality as player_nationality, p.league as player_league, p.overall as player_overall, p.total_points as player_total_points, p.form as player_form from app.player_cards pc join app.players p on p.id = pc.player_id join app.users real_owner on real_owner.id = pc.owner_id where pc.for_sale = true and pc.owner_id is not null and pc.owner_id not in (${nonRealOwnerIds}) order by pc.price asc nulls last, pc.id desc`),
         fplApi.bootstrap().catch(() => null),
         loadApiFootballPlayerDirectory().catch(() => []),
         fplApi.getLiveGameweek().catch(() => null),

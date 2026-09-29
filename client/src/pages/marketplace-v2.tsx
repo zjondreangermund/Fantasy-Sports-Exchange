@@ -16,6 +16,7 @@ import { LoanMarketPanel } from "../components/marketplace/LoanMarketPanel";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { cardMatchesSearch } from "../lib/search";
 import { type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
+import { getMarketplaceListingPrice } from "../../../shared/card-economy";
 import {
   ArrowRight,
   Crown,
@@ -76,7 +77,7 @@ function cardId(card: PlayerCardWithPlayer) {
 }
 
 function cardPrice(card: PlayerCardWithPlayer) {
-  return Number((card as any).price || (card as any).listedPrice || 0);
+  return getMarketplaceListingPrice(card as any);
 }
 
 function cardSerial(card: PlayerCardWithPlayer) {

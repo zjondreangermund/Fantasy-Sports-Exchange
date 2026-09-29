@@ -20,12 +20,19 @@ function replaceRequired(source, from, to, label) {
 {
   const path = "server/routes/marketplace.routes.ts";
   let source = read(path);
+  if (source.includes("join app.users real_owner on real_owner.id = pc.owner_id")) {
+    source = replaceRequired(source,
+      "p.form as player_form from app.player_cards pc",
+      "p.form as player_form, coalesce(nullif(trim(real_owner.manager_team_name), ''), 'Unnamed Club') as seller_club_name from app.player_cards pc",
+      "owned sale listing seller club");
+  } else {
   source = replaceRequired(
     source,
     "p.form as player_form from app.player_cards pc join app.players p on p.id = pc.player_id where pc.for_sale = true",
     "p.form as player_form, coalesce(nullif(trim(u.manager_team_name), ''), 'Unnamed Club') as seller_club_name from app.player_cards pc join app.players p on p.id = pc.player_id left join app.users u on u.id = pc.owner_id where pc.for_sale = true",
     "sale listing seller club",
   );
+  }
   write(path, source);
 }
 
@@ -140,7 +147,7 @@ const nativeMarket = read("client/src/components/native/NativeMarketPage.tsx");
 const desktopMarket = read("client/src/pages/marketplace.tsx");
 const desktopLoans = read("client/src/components/marketplace/LoanMarketPanel.tsx");
 const checks = [
-  [saleRoute.includes("seller_club_name") && saleRoute.includes("left join app.users u on u.id = pc.owner_id"), "sale API does not expose seller club"],
+  [saleRoute.includes("seller_club_name") && (saleRoute.includes("left join app.users u on u.id = pc.owner_id") || saleRoute.includes("join app.users real_owner on real_owner.id = pc.owner_id")), "sale API does not expose seller club"],
   [loanRoute.includes("owner_club_name") && !loanRoute.includes("u.email, 'Manager'"), "loan API club identity/privacy update missing"],
   [nativeMarket.includes("Seller club: {sellerClubName(card)}") && nativeMarket.includes("Lender club: {lenderClubName(loan)}"), "native listing club labels missing"],
   [nativeMarket.includes("Seller club: {sellerClubName(selected)}") && nativeMarket.includes("Lender club: {lenderClubName(selectedLoan)}"), "native confirmation club labels missing"],

@@ -8,6 +8,7 @@ import {
 import { type PlayerCardData, type Rarity } from "../components/cards/types";
 import {
   getCardStatus,
+  getMarketplaceListingPrice,
   getProvenanceMarker,
   isMainCompetitionEligible,
 } from "../../../shared/card-economy";
@@ -191,7 +192,7 @@ export function toFantasyCardData(
       card.maxSupply && Number(card.maxSupply) > 0 ? card.maxSupply : 1000,
     ),
     form,
-    price: Number(card.price || 0),
+    price: getMarketplaceListingPrice(card as any),
     forSale: Boolean(card.forSale),
     status,
     competitionEligible,

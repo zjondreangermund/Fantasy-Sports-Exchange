@@ -35,6 +35,13 @@ function replaceBetween(source, startToken, endToken, replacement, label) {
   else if (source.includes(legacySwitchable)) source = source.replace(legacySwitchable, responsiveMode);
   else if (!source.includes(responsiveMode)) throw new Error("[responsive-web] effective viewport mode anchor not found");
 
+  // With a single responsive mode the old desktop comparison is unreachable
+  // and TypeScript rejects it after this patch runs.
+  source = source.replace(
+    'viewport.setAttribute("content", effectiveMode === "desktop" ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT);',
+    'viewport.setAttribute("content", MOBILE_VIEWPORT);',
+  );
+
   write(path, source);
 }
 

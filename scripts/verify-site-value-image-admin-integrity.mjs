@@ -16,6 +16,7 @@ const cardApi = read("server/routes/cards.routes.ts");
 const cardEnrichment = read("server/services/playerCardEnrichment.ts");
 const scoring = read("server/services/scoreUpdater.ts");
 const collection = read("client/src/pages/collection-clean.tsx");
+const cardEconomy = read("shared/card-economy.ts");
 const marketplace = read("client/src/pages/marketplace-v2.tsx");
 const marketplaceServer = read("server/routes/marketplace.routes.ts");
 const entries = read("client/src/pages/my-entries.tsx");
@@ -75,7 +76,8 @@ includes(scoring, 'identity_provider: "api-football"', "Persisted tournament pla
 assert.ok(!scoring.includes("mapFplStatsToPlayerStats"), "Persisted tournament scoring must not use FPL player statistics.");
 includes(scoring, "detailedStatsCards", "Tournament scoring snapshots must identify how many cards used verified API-Football match actions.");
 assert.ok(!scoring.includes("card?.player?.nowCost") && !rules.includes("card?.player?.nowCost"), "Tournament squad values must never use another site's player prices.");
-includes(collection, "return card.forSale ? Math.max(0, Number(card.price || 0)) : 0", "Collection values must sum real active listing prices only.");
+includes(collection, "return card.forSale ? Math.max(0, getMarketplaceListingPrice(card)) : 0", "Collection values must sum real active listing prices only.");
+includes(cardEconomy, "export function getMarketplaceListingPrice", "Card and marketplace surfaces must share one current listing-price resolver.");
 includes(collection, 'label="Listed value"', "Collection totals must accurately describe what they measure.");
 includes(marketplace, 'label="Average Asking"', "Marketplace averages must not claim unsold listings are completed sales.");
 includes(marketplace, "Arena GW points", "Marketplace card performance must display Fantasy Arena gameweek scores.");

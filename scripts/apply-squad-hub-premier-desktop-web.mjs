@@ -22,23 +22,7 @@ function replaceBetween(source, startToken, endToken, replacement, label) {
   return source.slice(0, start) + replacement + source.slice(end);
 }
 
-// WEB_DESKTOP_ONLY_V1
-// Browser/PWA traffic always gets the desktop site. The dedicated mobile UI is
-// reserved for the native Capacitor APK, so an old mobile-view preference can no
-// longer make playfantasyarena.com reopen the retired phone web layout.
-{
-  const path = "client/src/lib/site-view.ts";
-  let source = read(path);
-  const replacement = `export function getSiteViewMode(): SiteViewMode {\n  if (typeof window === \"undefined\") return \"desktop\";\n  return isNativeMobileApp() ? \"mobile\" : \"desktop\";\n}\n\n`;
-  source = replaceBetween(source, "export function getSiteViewMode(): SiteViewMode {", "export function applySiteView", replacement, "desktop-only website mode");
-  source = replaceRequired(
-    source,
-    '  const effectiveMode: SiteViewMode = isNativeMobileApp() ? "mobile" : mode;',
-    '  const effectiveMode: SiteViewMode = isNativeMobileApp() ? "mobile" : "desktop";',
-    "desktop-only effective site mode",
-  );
-  write(path, source);
-}
+// Viewport behavior is owned by apply-responsive-web-default.mjs.
 
 // Remove the retired browser mobile-view controls/dock. The normal website now
 // has one responsive product mode: desktop. Native APK routing stays untouched.
@@ -55,7 +39,7 @@ function replaceBetween(source, startToken, endToken, replacement, label) {
   const togglePattern = /<div className="flex shrink-0 items-center gap-1\.5"><button type="button" onClick=\{\(\) => setSiteView\(applySiteView\(siteView === "desktop" \? "mobile" : "desktop"\)\)\}[\s\S]*?<\/button><ThemeToggle \/><\/div>/;
   if (togglePattern.test(source)) {
     source = source.replace(togglePattern, '<div className="flex shrink-0 items-center gap-1.5"><ThemeToggle /></div>');
-  } else if (!source.includes('<div className="flex shrink-0 items-center gap-1.5"><ThemeToggle /></div>')) {
+  } else if (source.includes("setSiteView(applySiteView")) {
     throw new Error("[squad-premier-web] desktop/mobile toggle anchor not found");
   }
   source = source.replace('          {!isInfoRoute && <MobileNavDock />}\n', "");
@@ -71,7 +55,7 @@ function replaceBetween(source, startToken, endToken, replacement, label) {
   source = replaceRequired(
     source,
     '  { label: "Cards", href: "/collection", icon: Gem },',
-    '  { label: "Premier", href: "/premier-league", icon: Activity },',
+    '  { label: "Premier League", href: "/premier-league", icon: Activity },',
     "Premier League primary nav",
   );
   source = replaceRequired(
@@ -123,9 +107,9 @@ function replaceBetween(source, startToken, endToken, replacement, label) {
     source = source.replace(firstTeamsSection, hubTabs + firstTeamsSection);
   }
   const finalLink = '      <Link href="/competitions" className="flex items-center justify-between rounded-[1.35rem] bg-violet-300/[.07] px-4 py-3.5 text-xs font-black text-violet-100"><span>Enter another tournament</span><ChevronRight className="h-4 w-4" /></Link>';
-  if (!source.includes('      </> : null}\n    </div>')) {
+  if (!source.includes('      </> : null}\n    </div>') && !source.includes('      </>}\n    </div>')) {
     if (!source.includes(finalLink)) throw new Error("[squad-premier-web] Squad final action anchor not found");
-    source = source.replace(finalLink, `${finalLink}\n      </> : null}`);
+    source = source.replace(finalLink, `${finalLink}\n      </>}`);
   }
   write(path, source);
 }
@@ -177,11 +161,11 @@ function replaceBetween(source, startToken, endToken, replacement, label) {
   const play = read("client/src/components/native/NativePlayPage.tsx");
   const premier = read("client/src/components/native/NativePremierLeaguePage.tsx");
   const checks = [
-    [site.includes('return isNativeMobileApp() ? "mobile" : "desktop";'), "website is not desktop-only"],
-    [site.includes('isNativeMobileApp() ? "mobile" : "desktop"'), "site view can still select browser mobile mode"],
+    [site.includes('export function getSiteViewMode()'), "site mode resolver is missing"],
+    [site.includes('export function applySiteView'), "site viewport application is missing"],
     [!app.includes("MobileNavDock"), "retired browser mobile dock is still mounted"],
     [!app.includes("Switch to mobile site view"), "retired mobile-view toggle is still visible"],
-    [shell.includes('{ label: "Premier", href: "/premier-league", icon: Activity }'), "Premier League did not replace Cards in primary nav"],
+    [shell.includes('{ label: "Premier League", href: "/premier-league", icon: Activity }'), "Premier League did not replace Cards in primary nav"],
     [shell.includes('{ label: "Collection & Trades", href: "/collection", icon: Gem'), "Collection is not retained under Squad"],
     [squad.includes("data-squad-hub-tabs") && squad.includes("<NativeCardsPage />"), "Squad does not contain both entered teams and Collection"],
     [cards.includes("real Premier League match performance"), "Collection does not explain real-match points"],
@@ -192,4 +176,4 @@ function replaceBetween(source, startToken, endToken, replacement, label) {
   if (failures.length) throw new Error(`[squad-premier-web] verification failed: ${failures.join("; ")}`);
 }
 
-console.log("[squad-premier-web] Squad now owns entered teams + Collection/trading, Premier League replaces Cards in the APK nav, real-match scoring is explicit, and browser/PWA traffic is desktop-only.");
+console.log("[squad-premier-web] Squad now owns entered teams + Collection/trading, Premier League replaces Cards in the APK nav, real-match scoring is explicit, and browser/PWA viewport behavior is preserved for the responsive patch.");

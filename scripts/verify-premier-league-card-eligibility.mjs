@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import vm from "node:vm";
+import ts from "typescript";
 
 const identity = fs.readFileSync("server/services/fplPlayerIdentity.ts", "utf8");
 const apiDirectory = fs.readFileSync("server/services/apiFootballPlayerDirectory.ts", "utf8");
@@ -66,10 +67,10 @@ const resolverSandbox = {
     return bt.slice(1).some((token) => at.slice(1).includes(token));
   },
 };
-const resolverSource = apiDirectory.slice(resolverStart, resolverEnd)
-  .replace(/:\s*(?:unknown|string|any|ApiFootballDirectoryPlayer(?:\[\])?)(?=[,)])/g, "")
+const resolverSource = ts.transpileModule(apiDirectory.slice(resolverStart, resolverEnd)
   .replace("export function diagnoseApiFootballPlayerMatch(", "function diagnoseApiFootballPlayerMatch(")
-  .replace("export function resolveApiFootballPlayer(", "globalThis.resolveApiFootballPlayer = function(");
+  .replace("export function resolveApiFootballPlayer(", "globalThis.resolveApiFootballPlayer = function("),
+  { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 vm.runInNewContext(resolverSource, resolverSandbox);
 const goalkeeper = { name: "Emiliano Martínez Romero", team: "Aston Villa", position: "GK" };
 const unrelatedMidfielder = {
