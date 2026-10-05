@@ -13,6 +13,14 @@ const required = [
   "...shuffle(byPosition.FWD).slice(0, 3)",
   "const wildcardPlayers = shuffle(currentPlayers.filter",
   "const candidates = [...requiredPlayers, ...wildcardPlayers]",
+  "verifiedImageUrl: photoUrl",
+  "imageCandidates: [photoUrl]",
+  "identityVerified: true",
+  'identitySource: "fpl"',
+  "fplId,",
+  "code,",
+  "photo,",
+  "webName,",
 ];
 
 for (const marker of required) {

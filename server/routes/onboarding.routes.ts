@@ -193,10 +193,31 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       const position = positionMap[Number(fplPlayer.element_type)] || "MID";
       const fullName = `${String(fplPlayer.first_name || "").trim()} ${String(fplPlayer.second_name || "").trim()}`.trim() || String(fplPlayer.web_name || "Unknown");
       const key = mapKey(fullName, teamName, position);
-      const existing = existingMap.get(key);
-      if (existing) return existing;
-
       const photoUrl = fplApi.playerPhotoUrl(fplPlayer, 250);
+      const fplId = Number(fplPlayer.id || 0) || null;
+      const code = Number(fplPlayer.code || 0) || null;
+      const photo = String(fplPlayer.photo || "").trim() || null;
+      const webName = String(fplPlayer.web_name || "").trim() || null;
+      const decorateCurrentPlayer = (player: any) => ({
+        ...player,
+        name: fullName,
+        team: teamName,
+        league: "Premier League",
+        position,
+        fplId,
+        code,
+        photo,
+        webName,
+        imageUrl: photoUrl,
+        verifiedImageUrl: photoUrl,
+        imageCandidates: [photoUrl],
+        identityVerified: true,
+        identitySource: "fpl",
+      });
+
+      const existing = existingMap.get(key);
+      if (existing) return decorateCurrentPlayer(existing);
+
       const overall = Math.max(55, Math.min(95, Math.round(Number(fplPlayer.now_cost || 50) + 30)));
       const created = await storage.createPlayer({
         name: fullName,
@@ -207,9 +228,21 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
         age: 24,
         overall,
         imageUrl: photoUrl,
+        fplId,
+        code,
+        photo,
+        webName,
+        status: String(fplPlayer.status || "a"),
+        news: String(fplPlayer.news || ""),
+        nowCost: Number(fplPlayer.now_cost || 0) / 10,
+        selectedByPercent: Number(fplPlayer.selected_by_percent || 0),
+        totalPoints: Number(fplPlayer.total_points || 0),
+        form: Number(fplPlayer.form || 0),
+        syncedAt: new Date(),
       } as any);
-      existingMap.set(key, created);
-      return created;
+      const decorated = decorateCurrentPlayer(created);
+      existingMap.set(key, decorated);
+      return decorated;
     };
 
     const result: any[] = [];
