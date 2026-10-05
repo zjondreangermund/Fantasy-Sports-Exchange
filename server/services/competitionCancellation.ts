@@ -88,7 +88,10 @@ export async function ensureCompetitionCancellationSchema(): Promise<void> {
           ADD COLUMN IF NOT EXISTS cancelled_by varchar(255),
           ADD COLUMN IF NOT EXISTS cancellation_reason text,
           ADD COLUMN IF NOT EXISTS refund_total real NOT NULL DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS refunded_entry_count integer NOT NULL DEFAULT 0
+          ADD COLUMN IF NOT EXISTS refunded_entry_count integer NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS admin_status_override text,
+          ADD COLUMN IF NOT EXISTS admin_status_override_at timestamptz,
+          ADD COLUMN IF NOT EXISTS admin_status_override_by varchar(255)
       `);
       await db.execute(sql`
         CREATE TABLE IF NOT EXISTS app.competition_entry_refunds (
