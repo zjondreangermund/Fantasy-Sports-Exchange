@@ -55,6 +55,56 @@ async function ensureCompetitionMultiEntrySchema(client) {
   console.log(`Prepared tournament entries for multiple teams and backfilled ${Number(backfill.rowCount || 0)} entry-fee snapshots.`);
 }
 
+async function ensureTournamentAdminStatusOverrides(client) {
+  // ADMIN_TOURNAMENT_STATUS_OVERRIDE_V1
+  // A status explicitly saved by an admin is authoritative. Startup sync and
+  // background lifecycle jobs may still refresh dates/scoring data, but they
+  // must not silently replace that manual status.
+  const tableResult = await client.query(`select to_regclass('app.competitions') as table_name`);
+  if (!tableResult.rows?.[0]?.table_name) {
+    console.log("Tournament admin-status override preflight skipped: app.competitions does not exist yet.");
+    return;
+  }
+
+  await client.query(`
+    ALTER TABLE app.competitions
+      ADD COLUMN IF NOT EXISTS admin_status_override text,
+      ADD COLUMN IF NOT EXISTS admin_status_override_at timestamptz,
+      ADD COLUMN IF NOT EXISTS admin_status_override_by varchar(255)
+  `);
+
+  const auditTable = await client.query(`select to_regclass('app.audit_logs') as table_name`);
+  if (auditTable.rows?.[0]?.table_name) {
+    const recovered = await client.query(`
+      WITH latest_manual AS (
+        SELECT DISTINCT ON ((meta->>'competitionId')::integer)
+          (meta->>'competitionId')::integer AS competition_id,
+          lower(meta->>'nextStatus') AS next_status,
+          created_at,
+          user_id
+        FROM app.audit_logs
+        WHERE action = 'admin.tournament.updated'
+          AND meta ? 'competitionId'
+          AND (meta->>'competitionId') ~ '^[0-9]+$'
+          AND lower(coalesce(meta->>'nextStatus', '')) IN ('open','upcoming','closed','active')
+          AND lower(coalesce(meta->>'previousStatus', '')) IS DISTINCT FROM lower(coalesce(meta->>'nextStatus', ''))
+          AND created_at >= now() - interval '30 days'
+        ORDER BY (meta->>'competitionId')::integer, created_at DESC
+      )
+      UPDATE app.competitions c
+      SET admin_status_override = m.next_status,
+          admin_status_override_at = m.created_at,
+          admin_status_override_by = m.user_id
+      FROM latest_manual m
+      WHERE c.id = m.competition_id
+        AND c.status::text NOT IN ('completed','cancelled')
+        AND c.admin_status_override IS NULL
+      RETURNING c.id
+    `);
+    console.log(`Prepared tournament admin-status overrides; recovered ${Number(recovered.rowCount || 0)} recent manual status decision(s) from audit history.`);
+  }
+}
+
 async function ensureTournamentPrizeAwards(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS app.competition_prize_awards (
@@ -389,6 +439,7 @@ async function main() {
     await ensureEnumValues(client, "competition_tier", ["common", "rare", "unique", "epic", "legendary"]);
     await ensureEnumValues(client, "withdrawal_status", ["pending", "approved", "paid", "rejected", "failed"]);
     await ensureCompetitionMultiEntrySchema(client);
+    await ensureTournamentAdminStatusOverrides(client);
     await ensureTournamentPrizeAwards(client);
     const repairedCount = await ensurePlayerCardSerials(client);
     console.log(`Runtime startup preflight complete. Repaired ${repairedCount} player-card serial metadata records without renumbering existing mints.`);

@@ -108,6 +108,9 @@ async function main() {
     }
 
     await client.query("BEGIN");
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS admin_status_override text`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS admin_status_override_at timestamptz`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS admin_status_override_by varchar(255)`);
     let created = 0;
     let updated = 0;
     let preservedEntries = 0;
@@ -122,6 +125,7 @@ async function main() {
           and game_week < $2
           and coalesce(entry_fee, 0) = 0
           and coalesce(prize_key, '') like 'free-%-card'
+          and admin_status_override is null
           and status::text not in ('completed','cancelled','closed')`,
       [SEASON, currentGw],
     );
@@ -139,6 +143,7 @@ async function main() {
 
         const existing = await client.query(
           `select c.id, c.status::text as status,
+                  c.admin_status_override,
                   (select count(*)::int from app.competition_entries ce where ce.competition_id = c.id) as entry_count
              from app.competitions c
             where c.created_by_user_id is null
@@ -155,11 +160,15 @@ async function main() {
         if (existing.rows.length) {
           const row = existing.rows[0];
           const forceOpen = forceGw2FreeCommonOpen(gw, rarity.tier, row.status);
-          const nextStatus = ["completed", "cancelled"].includes(String(row.status || ""))
-            ? String(row.status)
-            : forceOpen
-              ? "open"
-              : String(source.status || "upcoming");
+          const currentStatus = String(row.status || "").toLowerCase();
+          const manualOverride = String(row.admin_status_override || "").toLowerCase();
+          const nextStatus = ["completed", "cancelled"].includes(currentStatus)
+            ? currentStatus
+            : ["open", "upcoming", "closed", "active"].includes(manualOverride)
+              ? manualOverride
+              : forceOpen
+                ? "open"
+                : String(source.status || "upcoming");
           if (forceOpen) gw2CommonForcedOpen = true;
           preservedEntries += Number(row.entry_count || 0);
           await client.query(
@@ -258,6 +267,7 @@ async function main() {
     await client.query("COMMIT");
     console.log(`FREE Card Cups synced for ${SEASON}: current entry GW ${currentGw}, created ${created}, updated ${updated}, verified ${coveragePairs}/${expectedCoverage} current/future slots.`);
     console.log("Deleted past FREE Card Cups are not recreated.");
+    console.log("Explicit admin status overrides are preserved for FREE Card Cups; background sync cannot reset a manually saved status.");
     console.log("Prize progression: Common→Rare, Rare→Unique, Unique→Epic, Epic→Legendary, Legendary→Legendary.");
     console.log(`Preserved ${preservedEntries} existing FREE Cup entries; no tournament entry rows were deleted or moved.`);
     if (gw2CommonForcedOpen) {
