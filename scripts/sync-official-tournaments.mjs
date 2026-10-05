@@ -190,6 +190,9 @@ async function main() {
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS fixture_window_start timestamp`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS fixture_window_end timestamp`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS reschedule_alerts_enabled boolean DEFAULT true`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS admin_status_override text`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS admin_status_override_at timestamptz`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS admin_status_override_by varchar(255)`);
 
     let created = 0;
     let updated = 0;
@@ -205,6 +208,7 @@ async function main() {
         where created_by_user_id is null
           and season = $1
           and game_week < $2
+          and admin_status_override is null
           and status::text not in ('completed', 'cancelled', 'closed')
         returning id`,
       [SEASON, currentGw],
@@ -222,6 +226,7 @@ async function main() {
 
         const existing = await client.query(
           `select c.id, c.status::text as status,
+             c.admin_status_override,
              (select count(*)::int from app.competition_entries ce where ce.competition_id = c.id) as entry_count
            from app.competitions c
            where c.created_by_user_id is null
@@ -240,7 +245,13 @@ async function main() {
 
         if (existing.rows.length) {
           const row = existing.rows[0];
-          const nextStatus = ["completed", "cancelled"].includes(String(row.status || "")) ? String(row.status) : status;
+          const currentStatus = String(row.status || "").toLowerCase();
+          const manualOverride = String(row.admin_status_override || "").toLowerCase();
+          const nextStatus = ["completed", "cancelled"].includes(currentStatus)
+            ? currentStatus
+            : ["open", "upcoming", "closed", "active"].includes(manualOverride)
+              ? manualOverride
+              : status;
           preservedEntries += Number(row.entry_count || 0);
           await client.query(
             `update app.competitions
@@ -333,6 +344,7 @@ async function main() {
     console.log(`Official tournaments synced for ${SEASON}. Current entry GW: ${currentGw}. Created ${created}, updated ${updated}, retired stale past rows ${retiredPast.rowCount || 0}.`);
     console.log(`Verified ${coveragePairs}/${expectedCoverage} current/future official GW/rarity slots (GW${currentGw}-GW38).`);
     console.log("Deleted past official tournaments are not recreated.");
+    console.log("Explicit admin status overrides are preserved; startup schedule sync only controls tournaments still in automatic status mode.");
     console.log(`Preserved ${preservedEntries} existing official tournament entries; startup sync did not delete user teams.`);
     console.log(`Excluded ${excludedPostponed} postponed fixture assignment(s) that fall on or after the next gameweek starts.`);
     console.log(`${fallbackWindows} gameweek window(s) used fallback dates because live FPL fixture data was unavailable/incomplete; these refresh automatically on the next successful sync.`);
