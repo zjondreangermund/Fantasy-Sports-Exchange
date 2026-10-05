@@ -418,9 +418,14 @@ export class ScoreUpdateService {
     return Math.max(1, Number(event?.id || 1));
   }
 
+  private adminStatusOverride(competition: any): string {
+    const status = String(competition?.adminStatusOverride || competition?.admin_status_override || "").toLowerCase();
+    return ["open", "upcoming", "closed", "active"].includes(status) ? status : "";
+  }
+
   private async setCompetitionStatus(competitionId: number, status: "open" | "closed") {
-    if (status === "open") await db.execute(sql`update app.competitions set status = 'open' where id = ${competitionId} and status::text not in ('completed','cancelled')`);
-    if (status === "closed") await db.execute(sql`update app.competitions set status = 'closed' where id = ${competitionId} and status::text in ('open','active')`);
+    if (status === "open") await db.execute(sql`update app.competitions set status = 'open' where id = ${competitionId} and admin_status_override is null and status::text not in ('completed','cancelled')`);
+    if (status === "closed") await db.execute(sql`update app.competitions set status = 'closed' where id = ${competitionId} and admin_status_override is null and status::text in ('open','active')`);
   }
 
   private async activateCompetitionAtDeadline(competition: any): Promise<string> {
@@ -429,6 +434,7 @@ export class ScoreUpdateService {
       SET status = 'active'
       WHERE id = ${Number(competition.id)}
         AND status = 'open'
+        AND admin_status_override is null
         AND start_date <= now()
       RETURNING status::text AS status
     `))[0];
@@ -695,13 +701,18 @@ export class ScoreUpdateService {
         const startTime = new Date(String(competition?.startDate || competition?.start_date || 0)).getTime();
         const final = this.isSettlementFinal(competition);
         let status = String(competition?.status || "upcoming");
+        const manualStatus = this.adminStatusOverride(competition);
+        if (manualStatus) {
+          status = manualStatus;
+          competition.status = manualStatus;
+        }
 
-        if (status === "upcoming" && Number.isFinite(startTime) && now >= startTime) {
+        if (!manualStatus && status === "upcoming" && Number.isFinite(startTime) && now >= startTime) {
           await this.setCompetitionStatus(Number(competition.id), "open");
           status = "open";
           competition.status = "open";
         }
-        if (status === "open" && now >= deadline.getTime()) {
+        if (!manualStatus && status === "open" && now >= deadline.getTime()) {
           status = await this.activateCompetitionAtDeadline(competition);
         }
         if (status === "active" || (status === "closed" && final)) {
@@ -744,15 +755,17 @@ export class ScoreUpdateService {
     const [bootstrap, fixtures] = await Promise.all([fplApi.bootstrap(), fplApi.fixturesLive()]);
     const event = this.eventForGameweek(bootstrap, gameWeek);
     const deadline = this.entryDeadline(comp, event, fixtures);
+    const manualStatus = this.adminStatusOverride(comp);
+    if (manualStatus) comp.status = manualStatus;
     if (["open", "upcoming"].includes(String(comp.status)) && Date.now() < deadline.getTime()) {
       const entries = await this.storage.getCompetitionEntries(comp.id);
       return { updatedCount: 0, totalEntries: entries.length, gameWeek, final: false, complete: false, unresolvedCardIds: [], skipped: true, reason: "Tournament entries are still open" };
     }
-    if (String(comp.status) === "upcoming") {
+    if (!manualStatus && String(comp.status) === "upcoming") {
       await this.setCompetitionStatus(Number(comp.id), "open");
       comp.status = "open";
     }
-    if (String(comp.status) === "open") {
+    if (!manualStatus && String(comp.status) === "open") {
       await this.activateCompetitionAtDeadline(comp);
     }
     if (!["active", "closed"].includes(String(comp.status))) throw new Error(`Competition ${competitionId} cannot be scored (status: ${comp.status})`);
