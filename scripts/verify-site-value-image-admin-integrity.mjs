@@ -3,6 +3,8 @@ import fs from "node:fs";
 
 const read = (path) => fs.readFileSync(path, "utf8");
 const reward = read("server/services/dailyLoginReward.ts");
+const departedPolicy = read("server/services/departedCardPolicy.ts");
+const onboarding = read("server/routes/onboarding.routes.ts");
 const forge = read("server/services/forgeOperation.ts");
 const simulator = read("server/routes/testSimulator.routes.ts");
 const creator = read("server/routes/tournamentCreator.routes.ts");
@@ -44,6 +46,13 @@ includes(forge, "ANY(${cardIdArray}::int[])", "Forge card lookups must use the s
 assert.ok(!forge.includes("ANY(${cardIds}::int[])") && !forge.includes("ANY(${normalizeForgeCardIds(cardIds)}::int[])") , "Forge must never cast expanded Drizzle arrays to integer[].");
 includes(simulator, "jsonb_array_elements_text(${JSON.stringify(cardIds)}::jsonb)::integer", "Admin simulation must bind JSON arrays rather than record casts.");
 includes(creator, "any(${deletableIdArray}::int[])", "Tournament cleanup must use one validated PostgreSQL array literal.");
+includes(departedPolicy, "const idArray = toPgIntArrayLiteral(ids);", "Departed-card policy must bind one PostgreSQL integer-array literal.");
+includes(departedPolicy, "any(${idArray}::int[])", "Departed-card lookups must use the validated integer-array literal.");
+assert.ok(!departedPolicy.includes("any(${ids}::int[])"), "Departed-card policy must never cast an expanded Drizzle array to integer[].");
+includes(onboarding, "verifiedImageUrl: photoUrl", "Starter Draft cards must carry a current verified player portrait.");
+includes(onboarding, "identityVerified: true", "Starter Draft player identities must be marked verified for card rendering.");
+includes(reward, 'verifiedImageUrl: identityVerified ? imageUrl : null', "Weekly minted-card responses must carry their verified player portrait.");
+includes(reward, "identityVerified,", "Weekly minted-card responses must mark verified player identity for the reveal.");
 
 includes(images, "media.api-sports.io/football/players/${apiFootballId}.png", "API-Football portraits must be available before unreliable FPL photos.");
 includes(images, "&strict=1", "Official portrait candidates must request strict proxy failures.");
