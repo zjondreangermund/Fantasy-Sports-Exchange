@@ -265,6 +265,31 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
     return [gk.map((p: any) => p.id), def.map((p: any) => p.id), mid.map((p: any) => p.id), fwd.map((p: any) => p.id), wildcard.map((p: any) => p.id)];
   };
 
+  // SIGNUP_OFFER_RACE_FIX_V1
+  // GET /offers and POST /create-offer used to race during first signup and
+  // both attempted INSERTs for the same user. Keep offer creation idempotent:
+  // the first valid 5x3 offer wins and every concurrent caller reuses it.
+  const persistStarterOffer = async (userId: string, packCards: number[][]) => {
+    await db
+      .insert(userOnboarding)
+      .values({ userId, completed: false, packCards, selectedCards: [] } as any)
+      .onConflictDoNothing({ target: userOnboarding.userId });
+
+    let current = await storage.getOnboarding(userId);
+    const hasCompleteOffer = Boolean(
+      current?.packCards?.length === 5 &&
+      current.packCards.every((pack: number[]) => Array.isArray(pack) && pack.length === 3),
+    );
+
+    if (!current?.completed && !hasCompleteOffer) {
+      await storage.updateOnboarding(userId, { packCards, selectedCards: [] } as any);
+      current = await storage.getOnboarding(userId);
+    }
+
+    if (!current) throw new Error("Starter offer could not be persisted");
+    return current;
+  };
+
   const ensureStarterCards = async (tx: any, userId: string, selectedPlayerIds: number[]) => {
     const existingCards = await tx
       .select({ id: playerCards.id, playerId: playerCards.playerId })
@@ -500,9 +525,8 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       const packCards = buildPackCards(allPlayers);
       if (!packCards) return res.status(400).json({ message: "Not enough players per position" });
 
-      if (!ob) await storage.createOnboarding({ userId, completed: false, packCards, selectedCards: [] } as any);
-      else await storage.updateOnboarding(userId, { packCards, selectedCards: [] } as any);
-      return res.json({ packCards });
+      const persisted = await persistStarterOffer(String(userId), packCards);
+      return res.json({ packCards: persisted.packCards || packCards, completed: Boolean(persisted.completed) });
     } catch (error: any) {
       console.error("Onboarding/create-offer failed:", error);
       return res.status(500).json({ message: "Failed to create onboarding packs" });
@@ -521,9 +545,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
         if (!Array.isArray(allPlayers) || allPlayers.length < 15) return res.status(404).json({ message: "No offer found. Create offer first." });
         const packCards = buildPackCards(allPlayers);
         if (!packCards) return res.status(404).json({ message: "No offer found. Create offer first." });
-        if (!ob) await storage.createOnboarding({ userId, completed: false, packCards, selectedCards: [] } as any);
-        else await storage.updateOnboarding(userId, { packCards, selectedCards: [] } as any);
-        ob = await storage.getOnboarding(userId);
+        ob = await persistStarterOffer(String(userId), packCards);
       }
 
       const offeredPlayerIds = ob?.packCards?.flat() || [];
