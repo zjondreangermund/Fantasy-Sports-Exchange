@@ -70,6 +70,8 @@ export default function OnboardingPage() {
     // network/database work before the team-name input can even render.
     enabled: onboardingConfig?.requireTeamName === false || step !== "teamName",
     retry: 1,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
@@ -271,7 +273,7 @@ export default function OnboardingPage() {
         <div className="w-full max-w-md space-y-5 rounded-[2rem] border border-cyan-300/15 bg-[#070914]/90 p-6 text-center shadow-2xl backdrop-blur-xl">
           <Sparkles className="mx-auto h-10 w-10 text-cyan-300" />
           <div><h1 className="text-2xl font-black text-white">Preparing Your FREE Starter Cards</h1><p className="mt-2 text-sm leading-6 text-white/55">Your club name is saved. We are loading 15 current Premier League players for your Starter Draft.</p></div>
-          {!offersFailed && !offerError ? <div className="space-y-3"><Skeleton className="mx-auto h-3 w-3/4" /><Skeleton className="mx-auto h-3 w-1/2" /><p className="text-xs text-white/40">This should only take a moment.</p></div> : <div className="space-y-3"><p className="text-sm font-semibold text-amber-200">{offerError || "The player list did not load on the first try."}</p><Button type="button" onClick={() => void retryStarterOffer()} disabled={createOfferMutation.isPending} className="w-full">{createOfferMutation.isPending ? "Retrying..." : "Retry Starter Players"}</Button></div>}
+          {!offersFailed && !offerError && (isLoading || !onboardingData) ? <div className="space-y-3"><Skeleton className="mx-auto h-3 w-3/4" /><Skeleton className="mx-auto h-3 w-1/2" /><p className="text-xs text-white/40">This should only take a moment.</p></div> : <div className="space-y-3"><p className="text-sm font-semibold text-amber-200">{offerError || "The player list did not load completely on the first try."}</p><Button type="button" onClick={() => void retryStarterOffer()} disabled={createOfferMutation.isPending} className="w-full">{createOfferMutation.isPending ? "Retrying..." : "Retry Starter Players"}</Button></div>}
         </div>
       </div>
     );
