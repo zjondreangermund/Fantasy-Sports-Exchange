@@ -6,6 +6,10 @@ function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
 }
 
+function toPgIntArrayLiteral(ids: number[]): string {
+  return `{${ids.join(",")}}`;
+}
+
 let policySchemaPromise: Promise<void> | null = null;
 
 export async function ensureDepartedCardPolicySchema() {
@@ -32,6 +36,7 @@ async function purchasedCardIds(userId: string, cardIds: number[]) {
   const ids = cardIds.filter((id) => Number.isInteger(id) && id > 0);
   const purchased = new Set<number>();
   if (!ids.length) return purchased;
+  const idArray = toPgIntArrayLiteral(ids);
 
   const marketplace = rowsOf(await db.execute(sql`
     select distinct (meta->>'cardId')::int as "cardId"
@@ -40,7 +45,7 @@ async function purchasedCardIds(userId: string, cardIds: number[]) {
       and action='marketplace.purchase.completed'
       and meta ? 'cardId'
       and (meta->>'cardId') ~ '^[0-9]+$'
-      and (meta->>'cardId')::int = any(${ids}::int[])
+      and (meta->>'cardId')::int = any(${idArray}::int[])
   `));
   for (const row of marketplace) purchased.add(Number(row.cardId));
 
@@ -51,7 +56,7 @@ async function purchasedCardIds(userId: string, cardIds: number[]) {
       join app.auctions a on a.id=h.auction_id
       where h.bidder_user_id=${userId}
         and h.status='settled'
-        and a.card_id = any(${ids}::int[])
+        and a.card_id = any(${idArray}::int[])
     `));
     for (const row of auctions) purchased.add(Number(row.cardId));
   } catch {
@@ -66,7 +71,7 @@ async function purchasedCardIds(userId: string, cardIds: number[]) {
       and action in ('auction.purchase.completed','auction.win.completed')
       and meta ? 'cardId'
       and (meta->>'cardId') ~ '^[0-9]+$'
-      and (meta->>'cardId')::int = any(${ids}::int[])
+      and (meta->>'cardId')::int = any(${idArray}::int[])
   `).catch(() => ({ rows: [] } as any)));
   for (const row of legacyAuctionAudits) purchased.add(Number(row.cardId));
 
@@ -76,10 +81,11 @@ async function purchasedCardIds(userId: string, cardIds: number[]) {
 async function activeLockCardIds(cardIds: number[]) {
   const ids = cardIds.filter((id) => Number.isInteger(id) && id > 0);
   if (!ids.length) return new Set<number>();
+  const idArray = toPgIntArrayLiteral(ids);
   const rows = rowsOf(await db.execute(sql`
     select distinct card_id as "cardId"
     from app.card_locks
-    where card_id = any(${ids}::int[])
+    where card_id = any(${idArray}::int[])
       and (expires_at is null or expires_at > now())
   `));
   return new Set(rows.map((row) => Number(row.cardId)).filter(Boolean));
