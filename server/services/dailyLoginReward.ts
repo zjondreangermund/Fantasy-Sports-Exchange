@@ -98,7 +98,11 @@ async function loadRewardCard(executor: any, userId: string, rewardDay?: string 
       p.league,
       p.position::text AS position,
       p.overall,
-      p.image_url AS "imageUrl"
+      p.image_url AS "imageUrl",
+      p.fpl_id AS "fplId",
+      p.code,
+      p.photo,
+      p.web_name AS "webName"
     FROM app.daily_login_rewards dlr
     JOIN app.player_cards pc ON pc.id = dlr.card_id
     JOIN app.players p ON p.id = pc.player_id
@@ -108,6 +112,11 @@ async function loadRewardCard(executor: any, userId: string, rewardDay?: string 
   `));
   const row = rows[0];
   if (!row) return null;
+  const imageUrl = String(row.imageUrl || "").trim() || null;
+  const trustedOfficialImage = Boolean(
+    imageUrl && /^https?:\/\/(resources\.premierleague\.com|media\.api-sports\.io)\//i.test(imageUrl),
+  );
+  const identityVerified = Boolean(row.fplId || row.code || row.photo || trustedOfficialImage);
   return {
     id: Number(row.id),
     playerId: Number(row.playerId),
@@ -128,7 +137,15 @@ async function loadRewardCard(executor: any, userId: string, rewardDay?: string 
       league: row.league,
       position: row.position,
       overall: Number(row.overall || 0),
-      imageUrl: row.imageUrl || null,
+      fplId: row.fplId == null ? null : Number(row.fplId),
+      code: row.code == null ? null : Number(row.code),
+      photo: row.photo || null,
+      webName: row.webName || null,
+      imageUrl,
+      verifiedImageUrl: identityVerified ? imageUrl : null,
+      imageCandidates: imageUrl ? [imageUrl] : [],
+      identityVerified,
+      identitySource: identityVerified ? "fpl" : null,
     },
   };
 }
