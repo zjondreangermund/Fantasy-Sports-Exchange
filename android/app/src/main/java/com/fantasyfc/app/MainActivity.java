@@ -59,6 +59,12 @@ public class MainActivity extends BridgeActivity {
         WebView webView = getBridge().getWebView();
         if (webView == null) return;
 
+        // SIGNUP_INPUT_RELIABILITY_V1: keep the WebView focusable from touch so
+        // tapping a real text input can always hand control to Android's IME.
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.requestFocusFromTouch();
+
         WebSettings settings = webView.getSettings();
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);

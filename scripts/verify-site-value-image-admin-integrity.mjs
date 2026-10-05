@@ -5,6 +5,7 @@ const read = (path) => fs.readFileSync(path, "utf8");
 const reward = read("server/services/dailyLoginReward.ts");
 const departedPolicy = read("server/services/departedCardPolicy.ts");
 const onboarding = read("server/routes/onboarding.routes.ts");
+const onboardingPage = read("client/src/pages/onboarding.tsx");
 const forge = read("server/services/forgeOperation.ts");
 const simulator = read("server/routes/testSimulator.routes.ts");
 const creator = read("server/routes/tournamentCreator.routes.ts");
@@ -51,6 +52,18 @@ includes(departedPolicy, "any(${idArray}::int[])", "Departed-card lookups must u
 assert.ok(!departedPolicy.includes("any(${ids}::int[])"), "Departed-card policy must never cast an expanded Drizzle array to integer[].");
 includes(onboarding, "verifiedImageUrl: photoUrl", "Starter Draft cards must carry a current verified player portrait.");
 includes(onboarding, "identityVerified: true", "Starter Draft player identities must be marked verified for card rendering.");
+includes(onboarding, "SIGNUP_OFFER_RACE_FIX_V1", "Starter offer creation must be concurrency-safe for first-time signups.");
+includes(onboarding, ".onConflictDoNothing({ target: userOnboarding.userId })", "Concurrent Starter Draft offer requests must not throw a duplicate onboarding-row error.");
+includes(onboardingPage, "SIGNUP_INPUT_RELIABILITY_V1", "Signup must render the team-name input before Starter Draft network work.");
+includes(onboardingPage, 'enabled: onboardingConfig?.requireTeamName === false || step !== "teamName"', "Starter offer fetch must stay disabled until the club-name step is finished.");
+includes(onboardingPage, 'data-onboarding-team-name', "Signup team-name screen needs its keyboard-safe mobile scope.");
+includes(onboardingPage, 'ref={teamNameInputRef}', "Club-name input must keep an explicit focus target for mobile keyboards.");
+includes(onboardingPage, 'onPointerDown={(event) => {', "Club-name input must focus from a real user tap.");
+assert.ok(!onboardingPage.includes("\n              autoFocus\n"), "Club-name input must not rely on mobile-unreliable autoFocus.");
+assert.ok(!onboardingPage.includes('apiRequest("POST", "/api/onboarding/create-offer", {}).catch'), "Signup must not race an eager create-offer POST against the offers GET.");
+includes(scroll, "SIGNUP_INPUT_RELIABILITY_V1", "Signup input must override global touch rules with native text editing.");
+includes(androidManifest, 'android:windowSoftInputMode="adjustResize"', "Android native signup must resize for the soft keyboard.");
+includes(androidMain, "webView.setFocusableInTouchMode(true);", "Android WebView must accept touch focus for text inputs.");
 includes(reward, 'verifiedImageUrl: identityVerified ? imageUrl : null', "Weekly minted-card responses must carry their verified player portrait.");
 includes(reward, "identityVerified,", "Weekly minted-card responses must mark verified player identity for the reveal.");
 

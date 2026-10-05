@@ -177,6 +177,35 @@ html.app-scroll-locked .app-content > header {
   max-width: none;
 }
 
+/* SIGNUP_INPUT_RELIABILITY_V1
+ * The conversion-critical club-name field must remain a normal editable text
+ * control in Android WebView, iOS Safari and mobile Chrome. Global scroll/touch
+ * rules are deliberately overridden only for this input. */
+[data-onboarding-team-name] input {
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  caret-color: auto;
+}
+
+[data-onboarding-team-name] form {
+  width: 100%;
+}
+
+@media (max-width: 767px) {
+  [data-onboarding-team-name] {
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  [data-onboarding-team-name] input {
+    /* 16px+ also prevents iOS from zooming the viewport when the keyboard opens. */
+    font-size: 16px !important;
+  }
+}
+
 /* Starter Draft rows use the full available width. Each of the three choices
  * owns one equal column so cards are easy to compare instead of bunching in
  * the centre of the screen. */
