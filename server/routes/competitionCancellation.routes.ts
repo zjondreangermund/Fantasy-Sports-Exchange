@@ -168,6 +168,11 @@ export function registerCompetitionCancellationRoutes(app: Express, deps: Regist
         const prizeKey = hasOwn(req.body, "prizeKey") ? String(req.body.prizeKey || "").trim().slice(0, 120) : current.prize_key;
         const startDate = hasOwn(req.body, "startDate") ? new Date(String(req.body.startDate)) : new Date(current.start_date);
         const endDate = hasOwn(req.body, "endDate") ? new Date(String(req.body.endDate)) : new Date(current.end_date);
+        const adminStatusOverride = requestedStatusRaw
+          ? status
+          : (current.admin_status_override ? String(current.admin_status_override).toLowerCase() : null);
+        const adminStatusOverrideAt = requestedStatusRaw ? new Date() : current.admin_status_override_at;
+        const adminStatusOverrideBy = requestedStatusRaw ? adminId : current.admin_status_override_by;
 
         if (!name) throw new Error("Tournament name required");
         if (!RARITIES.has(tier)) throw new Error("Invalid rarity tier");
@@ -188,14 +193,17 @@ export function registerCompetitionCancellationRoutes(app: Express, deps: Regist
             game_week = ${gameWeek}, start_date = ${startDate}, end_date = ${endDate},
             prize_card_rarity = ${tier === "common" ? "rare" : tier}, visibility = ${visibility},
             max_entries = ${maxEntries}, prize_type = ${prizeType},
-            prize_description = ${prizeDescription}, prize_key = ${prizeKey}
+            prize_description = ${prizeDescription}, prize_key = ${prizeKey},
+            admin_status_override = ${adminStatusOverride},
+            admin_status_override_at = ${adminStatusOverrideAt},
+            admin_status_override_by = ${adminStatusOverrideBy}
           WHERE id = ${competitionId}
           RETURNING *
         `))[0] || null;
 
         await tx.execute(sql`
           INSERT INTO app.audit_logs (user_id, action, meta)
-          VALUES (${adminId}, 'admin.tournament.updated', ${JSON.stringify({ competitionId, previousStatus: currentStatus, nextStatus: status, entryCount })}::jsonb)
+          VALUES (${adminId}, 'admin.tournament.updated', ${JSON.stringify({ competitionId, previousStatus: currentStatus, nextStatus: status, entryCount, manualStatusOverride: requestedStatusRaw ? status : adminStatusOverride })}::jsonb)
         `);
         return updated;
       });
