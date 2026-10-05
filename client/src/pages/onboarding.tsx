@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { Button } from "../components/ui/button";
@@ -45,18 +45,15 @@ export default function OnboardingPage() {
   const [step, setStep] = useState<OnboardingStep>("teamName");
   const [teamName, setTeamName] = useState("");
   const [teamNameError, setTeamNameError] = useState("");
+  const [offerError, setOfferError] = useState("");
+  const teamNameInputRef = useRef<HTMLInputElement>(null);
   const [revealedPacks, setRevealedPacks] = useState<Set<number>>(new Set([0, 1, 2, 3, 4]));
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<number>>(new Set());
 
   const { data: onboardingConfig } = useQuery<OnboardingConfig>({ queryKey: ["/api/onboarding/config"] });
   const resolvedTeamNameMinLength = Math.max(2, Number(onboardingConfig?.teamNameMinLength || 3));
 
-  useEffect(() => {
-    if (onboardingConfig?.signupPacksEnabled === false) return;
-    apiRequest("POST", "/api/onboarding/create-offer", {}).catch(() => {});
-  }, [onboardingConfig?.signupPacksEnabled]);
-
-  const { data: onboardingData, isLoading, refetch } = useQuery<{
+  const { data: onboardingData, isLoading, isError: offersFailed, refetch } = useQuery<{
     packCards: number[][];
     offeredPlayerIds: number[];
     players: any[];
@@ -69,12 +66,11 @@ export default function OnboardingPage() {
       if (!res.ok) throw new Error("Failed to fetch onboarding offers");
       return res.json();
     },
+    // SIGNUP_INPUT_RELIABILITY_V1: do not make a new manager wait on player-pack
+    // network/database work before the team-name input can even render.
+    enabled: onboardingConfig?.requireTeamName === false || step !== "teamName",
+    retry: 1,
   });
-
-  useEffect(() => {
-    const t = setTimeout(() => refetch(), 400);
-    return () => clearTimeout(t);
-  }, [refetch]);
 
   useEffect(() => {
     if (onboardingData?.completed) setStep("done");
@@ -116,6 +112,15 @@ export default function OnboardingPage() {
     const packCards = onboardingData?.packCards || [];
     return packCards.map((pack) => pack.map((playerId) => cardsByPlayerId.get(playerId)).filter(Boolean) as PlayerCardWithPlayer[]);
   }, [onboardingData, cardsByPlayerId]);
+
+  const packsReady = packs.length === 5 && packs.every((pack) => pack.length === 3);
+
+  useEffect(() => {
+    if (step === "packs" && packsReady) {
+      setOfferError("");
+      setStep("select");
+    }
+  }, [step, packsReady]);
 
   const updateTeamNameMutation = useMutation({
     mutationFn: async (name: string) => (await apiRequest("PATCH", "/api/user/profile", { managerTeamName: name })).json(),
@@ -171,68 +176,109 @@ export default function OnboardingPage() {
 
   const handleContinueAfterTeamName = async () => {
     const normalizedName = teamName.trim().replace(/\s+/g, " ");
-    if (normalizedName.length < resolvedTeamNameMinLength) return;
+    if (normalizedName.length < resolvedTeamNameMinLength || updateTeamNameMutation.isPending) return;
     setTeamNameError("");
+    setOfferError("");
     try {
+      // Save the lightweight club-name step first, then move off the input
+      // immediately. Starter packs load on the dedicated preparation screen.
       await updateTeamNameMutation.mutateAsync(normalizedName);
-      await createOfferMutation.mutateAsync();
-      await refetch();
       setRevealedPacks(new Set([0, 1, 2, 3, 4]));
-      setStep("select");
+      setStep("packs");
     } catch (error) {
       setTeamNameError(readableTeamNameError(error));
+      window.setTimeout(() => teamNameInputRef.current?.focus({ preventScroll: true }), 0);
     }
   };
 
-  if (isLoading) {
-    return <div className={`${onboardingShell} items-center justify-center p-8`}><div className="flex flex-col items-center gap-4"><Skeleton className="h-8 w-64" /><div className="flex gap-4">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-52 w-36 rounded-md" />)}</div></div></div>;
-  }
+  const retryStarterOffer = async () => {
+    setOfferError("");
+    try {
+      await createOfferMutation.mutateAsync();
+      const refreshed = await refetch();
+      if (!refreshed.data?.packCards?.length) {
+        setOfferError("We could not load your starter players yet. Please tap retry.");
+      }
+    } catch {
+      setOfferError("We could not load your starter players yet. Please tap retry.");
+    }
+  };
 
   if (onboardingConfig?.signupPacksEnabled === false) {
     return <div className={`${onboardingShell} flex-col items-center justify-center p-4 sm:p-8`}><div className="max-w-md space-y-3 text-center"><h1 className="text-2xl font-bold text-foreground sm:text-3xl">Starter packs are currently unavailable</h1><p className="text-muted-foreground">An admin has temporarily disabled signup packs. You can continue to the dashboard.</p><Button onClick={() => setLocation("/")}>Continue</Button></div></div>;
   }
 
-  if (!onboardingData) return null;
   const packLabels = Array.isArray(onboardingConfig?.packLabels) && onboardingConfig.packLabels.length === 5 ? onboardingConfig.packLabels : defaultPackLabels;
 
   if (step === "teamName") {
     if (onboardingConfig?.requireTeamName === false) return null;
     return (
-      <div className={`${onboardingShell} flex-col items-center justify-center p-4 sm:p-8`}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md space-y-6 rounded-[2rem] border border-white/10 bg-black/45 p-6 text-center shadow-2xl backdrop-blur-xl sm:p-8">
+      <div data-onboarding-team-name className={`${onboardingShell} flex-col items-center justify-start px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] sm:justify-center sm:p-8`}>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="my-auto w-full max-w-md space-y-6 rounded-[2rem] border border-white/10 bg-black/45 p-6 text-center shadow-2xl backdrop-blur-xl sm:p-8">
           <div className="space-y-2"><Sparkles className="mx-auto h-12 w-12 text-primary" /><h1 className="text-3xl font-bold text-foreground sm:text-4xl">Welcome to Fantasy Arena</h1><p className="text-muted-foreground">Create your unique manager team name, then choose 5 starter common cards.</p></div>
-          <div className="space-y-4">
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleContinueAfterTeamName();
+            }}
+          >
+            <label htmlFor="manager-team-name" className="block text-xs font-black uppercase tracking-[0.14em] text-white/60">Club name</label>
             <Input
+              ref={teamNameInputRef}
+              id="manager-team-name"
+              name="managerTeamName"
               type="text"
-              placeholder="Enter your team name..."
+              inputMode="text"
+              enterKeyHint="next"
+              autoComplete="organization"
+              autoCapitalize="words"
+              spellCheck={false}
+              placeholder="Tap here and enter your club name..."
               value={teamName}
               onChange={(event) => {
                 setTeamName(event.target.value);
                 if (teamNameError) setTeamNameError("");
               }}
+              onPointerDown={(event) => {
+                // Focus is triggered by the user's actual tap. This is much more
+                // reliable for Android WebView/iOS keyboards than programmatic mount focus.
+                if (document.activeElement !== event.currentTarget) {
+                  event.currentTarget.focus({ preventScroll: true });
+                }
+              }}
+              onFocus={(event) => {
+                window.setTimeout(() => event.currentTarget.scrollIntoView({ block: "center", inline: "nearest" }), 120);
+              }}
               maxLength={30}
-              className="h-14 text-center text-lg"
+              className="h-14 touch-manipulation select-text text-center text-lg"
               aria-invalid={Boolean(teamNameError)}
-              autoFocus
+              aria-describedby={teamNameError ? "manager-team-name-error" : undefined}
             />
-            <Button onClick={handleContinueAfterTeamName} disabled={teamName.trim().length < resolvedTeamNameMinLength || Boolean(teamNameError) || updateTeamNameMutation.isPending || createOfferMutation.isPending} size="lg" className="w-full text-lg">{updateTeamNameMutation.isPending || createOfferMutation.isPending ? "Creating..." : <>Continue <ChevronRight className="ml-2 h-5 w-5" /></>}</Button>
-            {teamNameError ? <p className="text-sm font-semibold text-destructive" role="alert">{teamNameError}</p> : null}
+            <Button type="submit" disabled={teamName.trim().length < resolvedTeamNameMinLength || Boolean(teamNameError) || updateTeamNameMutation.isPending} size="lg" className="w-full text-lg">{updateTeamNameMutation.isPending ? "Saving club..." : <>Continue <ChevronRight className="ml-2 h-5 w-5" /></>}</Button>
+            {teamNameError ? <p id="manager-team-name-error" className="text-sm font-semibold text-destructive" role="alert">{teamNameError}</p> : null}
             {!teamNameError && teamName.trim().length > 0 && teamName.trim().length < resolvedTeamNameMinLength ? <p className="text-sm text-destructive">Team name must be at least {resolvedTeamNameMinLength} characters</p> : null}
             <p className="text-xs text-muted-foreground">Team names are unique and cannot be reused by another manager.</p>
-          </div>
+          </form>
         </motion.div>
       </div>
     );
   }
 
   if (step === "packs") {
-    const packsReady = packs.length === 5 && packs.every((pack) => pack.length === 3);
     return (
-      <div className={`${onboardingShell} flex-col items-center p-4 sm:p-8`}>
-        <div className="mb-6 w-full max-w-5xl text-center"><h1 className="mb-2 text-2xl font-bold text-foreground sm:text-3xl">Starter Player Pool</h1><p className="text-muted-foreground">You can reveal packs or skip straight to choosing your 5 starter cards.</p></div>
-        {!packsReady ? <div className="w-full max-w-2xl space-y-4 rounded-xl border border-white/10 bg-card/40 p-6 text-center"><p className="text-sm text-muted-foreground">Preparing your player choices...</p><Button variant="outline" onClick={async () => { try { await createOfferMutation.mutateAsync(); } finally { await refetch(); } }} disabled={createOfferMutation.isPending}>{createOfferMutation.isPending ? "Loading..." : "Retry Load Players"}</Button></div> : <><div className="mb-6 flex w-full max-w-5xl flex-wrap justify-center gap-4 sm:gap-6">{packs.map((pack, i) => { const PackIcon = packIcons[i] || Zap; const isRevealed = revealedPacks.has(i); return isRevealed ? <div key={i} className={`flex flex-col items-center gap-3 rounded-xl border border-white/10 bg-gradient-to-b p-4 ${packColors[i]}`}><span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-foreground"><PackIcon className="h-3 w-3" />{packLabels[i]}</span><div className="grid grid-cols-3 gap-1.5">{pack.map((card) => <CardThumbnail key={card.id} card={card} size="xs" />)}</div></div> : <motion.button key={i} onClick={() => revealPack(i)} className={`flex h-52 w-36 flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-primary/40 bg-gradient-to-b transition-all duration-300 hover:scale-105 hover:border-primary/70 active:scale-95 ${packColors[i]}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, delay: i * 0.06 }}><Package className="h-10 w-10 text-primary" /><span className="text-sm font-bold text-foreground">{packLabels[i]}</span><span className="text-xs text-muted-foreground">3 Players</span></motion.button>; })}</div><Button onClick={() => setStep("select")} size="lg">Choose Starter 5 <ChevronRight className="ml-2 h-5 w-5" /></Button></>}
+      <div className={`${onboardingShell} flex-col items-center justify-center p-4 sm:p-8`}>
+        <div className="w-full max-w-md space-y-5 rounded-[2rem] border border-cyan-300/15 bg-[#070914]/90 p-6 text-center shadow-2xl backdrop-blur-xl">
+          <Sparkles className="mx-auto h-10 w-10 text-cyan-300" />
+          <div><h1 className="text-2xl font-black text-white">Preparing Your FREE Starter Cards</h1><p className="mt-2 text-sm leading-6 text-white/55">Your club name is saved. We are loading 15 current Premier League players for your Starter Draft.</p></div>
+          {!offersFailed && !offerError ? <div className="space-y-3"><Skeleton className="mx-auto h-3 w-3/4" /><Skeleton className="mx-auto h-3 w-1/2" /><p className="text-xs text-white/40">This should only take a moment.</p></div> : <div className="space-y-3"><p className="text-sm font-semibold text-amber-200">{offerError || "The player list did not load on the first try."}</p><Button type="button" onClick={() => void retryStarterOffer()} disabled={createOfferMutation.isPending} className="w-full">{createOfferMutation.isPending ? "Retrying..." : "Retry Starter Players"}</Button></div>}
+        </div>
       </div>
     );
+  }
+
+  if (isLoading || !onboardingData) {
+    return <div className={`${onboardingShell} items-center justify-center p-8`}><div className="flex flex-col items-center gap-4"><Skeleton className="h-8 w-64" /><div className="flex gap-4">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-52 w-36 rounded-md" />)}</div></div></div>;
   }
 
   if (step === "select") {
