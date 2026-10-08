@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { claimReplacementCard, ensurePlayerTransferMonitoringSchema } from "./playerTransferMonitoring.js";
+import { createNotificationOnce } from "./notifications.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -247,6 +248,15 @@ export async function autoReplaceUnlockedDepartures(userId?: string) {
     try {
       const result = await claimReplacementCard(claimUserId, claimId);
       await finalizeReplacementChoice(claimUserId, claimId);
+      const replacementName = String(result?.card?.playerName || "Premier League Player");
+      const replacementPosition = String(result?.card?.position || "").toUpperCase();
+      const rarity = String(claim.rarity || "card");
+      await createNotificationOnce(db, {
+        userId: claimUserId,
+        title: "Premier League replacement added",
+        message: `${String(claim.sourcePlayerName || "Your player")} left the Premier League. ${replacementName} (${replacementPosition}) has been added to your Collection as the automatic ${rarity} replacement.`,
+        dedupeKey: `replacement-complete:${claimId}`,
+      });
       reminted += 1;
       console.info(
         `DIRECT_EPL_DEPARTURE_REPLACED claim=${claimId} user=${claimUserId}`
