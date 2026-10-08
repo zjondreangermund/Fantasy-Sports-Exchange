@@ -314,8 +314,6 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
       const claims = await decorateReplacementClaims(userId, rawClaims);
       const openClaims = claims.filter((claim: any) =>
         !claim.replacementCardId
-        && !claim.claimedAt
-        && claim.decision !== "keep"
       ).length;
       return res.json({ claims, openClaims });
     } catch (error: any) {
@@ -329,10 +327,6 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
       const userId = String(req.authUserId || "");
       const claimId = Number(req.params.id);
       if (!Number.isInteger(claimId) || claimId <= 0) return res.status(400).json({ message: "Valid replacement claim required" });
-      const rawClaims = await listUserReplacementClaims(userId);
-      const decorated = await decorateReplacementClaims(userId, rawClaims);
-      const selected = decorated.find((claim: any) => Number(claim.id) === claimId);
-      if (selected?.decision === "keep") return res.status(409).json({ message: "This legacy keep decision cannot be retried automatically." });
       const result = await claimReplacementCard(userId, claimId);
       await finalizeReplacementChoice(userId, claimId);
       return res.json({ success: true, ...result });
