@@ -90,7 +90,17 @@ async function activeLockCardIds(cardIds: number[]) {
       and (cl.expires_at is null or cl.expires_at > now())
       and not (
         cl.reason::text = 'competition'
-        and coalesce(cl.ref_id,'') ~ '^[0-9]+
+        and coalesce(cl.ref_id,'') ~ '^[0-9]+$'
+        and (
+          not exists (select 1 from app.competitions c where c.id=cl.ref_id::int)
+          or exists (
+            select 1 from app.competitions c
+            where c.id=cl.ref_id::int
+              and lower(c.status::text) in ('completed','cancelled')
+          )
+        )
+      )
+  `));
   return new Set(rows.map((row) => Number(row.cardId)).filter(Boolean));
 }
 
