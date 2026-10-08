@@ -22,7 +22,7 @@ if (!source.includes("TRANSFER_SOURCE_CARD_ARCHIVE_V3")) {
 }
 
 const claimAnchor = `    if (!claim?.id) continue;\n\n    const prettyRarity = rarity.charAt(0).toUpperCase() + rarity.slice(1);`;
-const claimReplacement = `    if (!claim?.id) continue;\n\n    // DIRECT_EPL_DEPARTURE_REPLACEMENT_V1\n    // Keep the source card owned until the replacement mint succeeds. Runtime\n    // finalization archives it only after replacement_card_id is recorded and\n    // the old card is no longer protected by an active tournament lock.\n    const prettyRarity = rarity.charAt(0).toUpperCase() + rarity.slice(1);`;
+const claimReplacement = `    if (!claim?.id) continue;\n\n    // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1\n    // Keep the source card owned until the replacement mint succeeds. Runtime\n    // finalization archives it only after replacement_card_id is recorded and\n    // the old card is no longer protected by an active tournament lock.\n    const prettyRarity = rarity.charAt(0).toUpperCase() + rarity.slice(1);`;
 source = replaceRequired(source, claimAnchor, claimReplacement, "preserve source card until direct replacement succeeds");
 
 // The same-position replacement patch runs later in the production generator
@@ -33,18 +33,19 @@ if (source.includes("EPL_REPLACEMENT_SAME_POSITION_V1")) {
     '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card stays in your collection as a record, but it is no longer eligible for Premier League tournaments. Claim one free random current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity. Fantasy Arena will keep reminding you until the replacement is claimed.`,'.replace(/\\`/g, "`"),
     '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. Fantasy Arena will automatically mint one current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity as soon as any active tournament lock clears.`,'.replace(/\\`/g, "`"),
     '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. Fantasy Arena will automatically mint one current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity immediately. Any active tournament lock protects only the old card until that older entry settles.`,'.replace(/\\`/g, "`"),
+    '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. You can mint one free current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity from your Inbox. Fantasy Arena will remind you after 7 days and will mint it automatically after 14 days if you have not claimed it.`,'.replace(/\\`/g, "`"),
   ];
-  const automaticMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. It remains owned until a same-position, same-rarity replacement is successfully minted, then the old card is archived after any active tournament lock clears. Fantasy Arena handles this automatically.`,'.replace(/\\`/g, "`");
+  const automaticMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. Mint the same-position, same-rarity replacement from Inbox within 14 days. Fantasy Arena sends a reminder after 7 days and auto-mints after 14 days if you do nothing. The old card remains owned until the replacement exists and any active tournament lock clears.`,'.replace(/\\`/g, "`");
   if (!source.includes(automaticMessage)) {
     const found = legacyMessages.find((message) => source.includes(message));
-    if (!found) throw new Error("[departed-card-archive] anchor not found: final automatic same-position departure notification copy");
+    if (!found) throw new Error("[departed-card-archive] anchor not found: final delayed same-position departure notification copy");
     source = source.replace(found, automaticMessage);
   }
 }
 
 if (source !== original) {
   fs.writeFileSync(FILE, source);
-  console.log("[departed-card-archive] departed source cards remain owned until a direct replacement is successfully minted; active tournament locks are preserved.");
+  console.log("[departed-card-archive] departed source cards remain owned through the 14-day claim window and until replacement mint succeeds; active tournament locks are preserved.");
 } else {
   console.log("[departed-card-archive] lock-safe source-card archive behavior already applied.");
 }
