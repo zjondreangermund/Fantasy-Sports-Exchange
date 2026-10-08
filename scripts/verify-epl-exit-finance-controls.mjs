@@ -42,10 +42,13 @@ need(dialog, "Automatic replacement applies to every rarity and every acquisitio
 need(dialog, "Retry ${rarity} ${position} replacement", "replacement dialog must be a fallback retry, not an owner-choice workflow.");
 assert.ok(!dialog.includes("Keep bought card"), "departed EPL cards must not offer a keep-ineligible-card path.");
 need(departurePolicy, "DIRECT_EPL_DEPARTURE_REPLACEMENT_V1", "direct automatic departure replacement marker is missing.");
-need(departurePolicy, "coalesce(pr.decision,'pending') in ('pending','replace')", "direct replacement sweep must include all pending replaceable claims.");
+assert.ok(!departurePolicy.includes("and pr.claimed_at is null"), "direct replacement sweep must repair legacy keep decisions that never received a replacement.");
+assert.ok(!departurePolicy.includes("coalesce(pr.decision,'pending') in ('pending','replace')"), "direct replacement sweep must not exclude a legacy keep decision when no replacement exists.");
 assert.ok(!departurePolicy.includes("and lower(pr.rarity)='common'"), "automatic departure replacement must not be limited to Common cards.");
 need(cardsRoutes, "autoReplaceUnlockedDepartures", "collection reads must repair departed cards before tournament selection.");
 need(cardsRoutes, "same-position, same-rarity replacement", "collection eligibility text must not falsely claim a replacement already exists.");
+need(cardsRoutes, "PROVIDER_CONFIRMED_DEPARTURE_REPLACEMENT_V1", "API-Football transfer-out evidence must be persisted before the collection returns an unavailable departed card.");
+need(cardsRoutes, "providerDepartedPlayerIds", "provider-confirmed departures must trigger a same-request replacement sweep.");
 need(departurePolicy, "it must never delay minting the new same-position/same-rarity replacement", "old tournament locks must not delay the new replacement mint.");
 need(notificationRoutes, "autoReplaceUnlockedDepartures", "notification/background sync must use universal direct departure replacement.");
 assert.ok(!notificationRoutes.includes("if (selected?.locked) return res.status(409)"), "manual replacement retry must not be blocked by an old tournament lock.");
