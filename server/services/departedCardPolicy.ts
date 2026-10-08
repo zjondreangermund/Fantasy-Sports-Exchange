@@ -260,6 +260,8 @@ export async function autoReplaceUnlockedDepartures(userId?: string) {
   // An existing tournament lock protects only the old source card from being archived;
   // it must never delay minting the new same-position/same-rarity replacement.
   // Signup, reward, marketplace and auction cards all use the same rule.
+  // Legacy "keep" decisions are also upgraded to this one-for-one policy when
+  // no replacement card has ever been minted.
   await ensureDepartedCardPolicySchema();
   await ensureDepartedOwnedCardClaims(userId);
   // Also clean up any already-replaced source cards whose old competition lock
@@ -272,8 +274,6 @@ export async function autoReplaceUnlockedDepartures(userId?: string) {
     from app.player_replacement_claims pr
     join app.players source on source.id=pr.source_player_id
     where pr.replacement_card_id is null
-      and pr.claimed_at is null
-      and coalesce(pr.decision,'pending') in ('pending','replace')
       and (${userId || null}::text is null or pr.user_id=${userId || null})
       and (lower(coalesce(source.league,'')) <> 'premier league' or lower(coalesce(source.status,''))='departed')
     order by pr.created_at, pr.id
