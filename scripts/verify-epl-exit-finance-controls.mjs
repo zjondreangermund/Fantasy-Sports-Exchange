@@ -7,7 +7,7 @@ const need = (source, token, message) => assert.ok(source.includes(token), messa
 
 const transfer = read("server/services/playerTransferMonitoring.ts");
 const app = read("client/src/App.tsx");
-const dialog = read("client/src/components/MandatoryReplacementClaimDialog.tsx");
+const account = read("client/src/pages/account.tsx");
 const economy = read("server/routes/economyIntegrity.routes.ts");
 const competitions = read("client/src/pages/competitions-vault.tsx");
 const admin = read("server/routes/admin.routes.ts");
@@ -30,31 +30,33 @@ need(transfer, 'source.position::text as "sourcePosition"', "replacement claims 
 need(transfer, 'and p.position::text=${sourcePosition}', "replacement candidates are not restricted to the same position");
 need(transfer, "CURRENT_EPL_REPLACEMENT_POOL_V1", "replacement candidates must be checked against the official current EPL roster.");
 need(transfer, 'p.fpl_id = any(${currentFplIdArray}::int[])', "replacement candidates must still exist in the current FPL player pool.");
-need(transfer, "same-position, same-rarity replacement is successfully minted", "departure notification does not explain same-position/same-rarity automatic replacement");
-need(transfer, "Fantasy Arena handles this automatically", "departure notification does not explain automatic replacement");
+need(transfer, "Mint the same-position, same-rarity replacement from Inbox within 14 days", "departure notification does not explain the 14-day manual claim window");
+need(transfer, "reminder after 7 days", "departure notification does not explain the 7-day reminder");
+need(transfer, "auto-mints after 14 days", "departure notification does not explain delayed automatic minting");
 need(transfer, "cl.card_id=pc.id", "departed source-card archive does not protect active tournament locks");
 need(transfer, "cl.expires_at is null or cl.expires_at > now()", "departed source-card archive does not wait for active tournament locks to clear");
-need(app, "<MandatoryReplacementClaimDialog />", "mandatory EPL replacement dialog is not mounted globally");
+assert.ok(!app.includes("<MandatoryReplacementClaimDialog />"), "EPL replacement claims must not block the whole app with a mandatory modal.");
 need(app, "<PushNotificationControl />", "installed-app push notification control is not mounted globally");
-need(dialog, "onEscapeKeyDown={(event) => event.preventDefault()}", "replacement dialog can still be dismissed with Escape");
-need(dialog, "onPointerDownOutside={(event) => event.preventDefault()}", "replacement dialog can still be dismissed by tapping outside");
-need(dialog, "same <b>{rarity}</b> rarity", "replacement dialog does not clearly explain rarity protection");
-need(dialog, "<b>{position}</b> card", "replacement dialog does not clearly explain position protection");
-need(dialog, "Automatic replacement applies to every rarity and every acquisition source", "replacement dialog must explain universal automatic replacement.");
-need(dialog, "Retry ${rarity} ${position} replacement", "replacement dialog must be a fallback retry, not an owner-choice workflow.");
-assert.ok(!dialog.includes("Keep bought card"), "departed EPL cards must not offer a keep-ineligible-card path.");
-need(departurePolicy, "DIRECT_EPL_DEPARTURE_REPLACEMENT_V1", "direct automatic departure replacement marker is missing.");
-assert.ok(!departurePolicy.includes("and pr.claimed_at is null"), "direct replacement sweep must repair legacy keep decisions that never received a replacement.");
-assert.ok(!departurePolicy.includes("coalesce(pr.decision,'pending') in ('pending','replace')"), "direct replacement sweep must not exclude a legacy keep decision when no replacement exists.");
-assert.ok(!departurePolicy.includes("and lower(pr.rarity)='common'"), "automatic departure replacement must not be limited to Common cards.");
-need(cardsRoutes, "autoReplaceUnlockedDepartures", "collection reads must repair departed cards before tournament selection.");
+need(account, "Mint {String(note.replacementRarity", "Inbox must expose the manual replacement mint action.");
+need(account, "replacementSourcePosition", "Inbox replacement action must show the protected football position.");
+need(account, "replacementAutoMintAt", "Inbox must show when the replacement will auto-mint.");
+need(departurePolicy, "EPL_REPLACEMENT_CLAIM_WINDOW_V1", "replacement claim-window marker is missing.");
+need(departurePolicy, "EPL_REPLACEMENT_REMINDER_DAYS = 7", "replacement reminder must be scheduled after 7 days.");
+need(departurePolicy, "EPL_REPLACEMENT_AUTO_MINT_DAYS = 14", "replacement auto-mint deadline must be 14 days.");
+need(departurePolicy, "replacement-reminder:${claimId}", "replacement reminder notification is missing.");
+need(departurePolicy, "now < autoMintMs", "replacement must remain manual before the 14-day deadline.");
+need(departurePolicy, "Delayed EPL departure replacement failed", "overdue replacement auto-mint path is missing.");
+assert.ok(!departurePolicy.includes("and lower(pr.rarity)='common'"), "delayed automatic replacement must not be limited to Common cards.");
+need(cardsRoutes, "autoReplaceUnlockedDepartures", "collection reads must prepare/remind overdue departure claims.");
+need(cardsRoutes, "DELAYED_EPL_DEPARTURE_REPLACEMENT_V1", "collection must preserve the 14-day replacement claim window.");
 need(cardsRoutes, "same-position, same-rarity replacement", "collection eligibility text must not falsely claim a replacement already exists.");
 need(cardsRoutes, "PROVIDER_CONFIRMED_DEPARTURE_REPLACEMENT_V1", "API-Football transfer-out evidence must be persisted before the collection returns an unavailable departed card.");
-need(cardsRoutes, "providerDepartedPlayerIds", "provider-confirmed departures must trigger a same-request replacement sweep.");
-need(departurePolicy, "it must never delay minting the new same-position/same-rarity replacement", "old tournament locks must not delay the new replacement mint.");
-need(notificationRoutes, "autoReplaceUnlockedDepartures", "notification/background sync must use universal direct departure replacement.");
+need(cardsRoutes, "providerDepartedPlayerIds", "provider-confirmed departures must create the same-request protected replacement claim.");
+need(notificationRoutes, "autoReplaceUnlockedDepartures", "notification/background sync must process reminders and overdue replacement claims.");
+need(notificationRoutes, "replacementAutoMintAt", "notification API must expose the automatic mint deadline.");
+need(notificationRoutes, "replacement-reminder:", "notification API must link reminder notifications to their replacement claim.");
 assert.ok(!notificationRoutes.includes("if (selected?.locked) return res.status(409)"), "manual replacement retry must not be blocked by an old tournament lock.");
-assert.ok(!dialog.includes("&& !claim.locked"), "replacement fallback UI must not hide a claim just because the old source card is locked.");
+assert.ok(!account.includes("Keep bought card"), "departed EPL replacement notifications must not offer a keep-ineligible-card path.");
 need(departedArchive, "pr.replacement_card_id is not null", "source cards must not be archived before replacement_card_id exists.");
 need(departedArchive, "Keep the source card owned until the replacement mint succeeds", "source-card archival must occur only after a successful replacement mint.");
 
@@ -115,7 +117,7 @@ need(serviceWorker, 'self.addEventListener("notificationclick"', "service worker
 need(capacitorConfig, "PushNotifications", "Capacitor foreground notification presentation is not configured");
 need(androidWorkflow, "FIREBASE_ANDROID_GOOGLE_SERVICES_JSON_BASE64", "Android build cannot receive its Firebase client configuration securely");
 
-console.log("EPL departure replacements verified: same rarity + same position, departed source cards archive after active tournament locks clear, mandatory claim popup, installed PWA and native Android push, under-minimum Prize Ladder 80/20 winner fallback, and bank/reserve tournament finance reconciliation are protected.");
+console.log("EPL departure replacements verified: notification-first manual minting, 7-day reminder, 14-day automatic mint fallback, same rarity + same position, lock-safe source archival, installed PWA/native Android push, under-minimum Prize Ladder 80/20 fallback, and bank/reserve reconciliation are protected.");
 
 // This verifier is the final shared mutating/checkpoint pass in every production
 // build target after the large generated tournament/notification patch stack. Keep

@@ -111,36 +111,29 @@ patchFile("server/services/playerTransferMonitoring.ts", (original) => {
   return source;
 });
 
-// Global claim dialog: authenticated users cannot dismiss an EPL departure replacement until it is claimed.
+// Replacement claims are notification-driven. Do not force a blocking global
+// modal: managers can mint from Inbox during the 14-day claim window, while
+// installed-app push remains globally available.
 patchFile("client/src/App.tsx", (original) => {
   let source = original;
-  if (!source.includes('MandatoryReplacementClaimDialog from "./components/MandatoryReplacementClaimDialog"')) {
+  source = source
+    .replace('import MandatoryReplacementClaimDialog from "./components/MandatoryReplacementClaimDialog";\n', "")
+    .replace('          <MandatoryReplacementClaimDialog />\n', "");
+
+  if (!source.includes('PushNotificationControl from "./components/PushNotificationControl"')) {
     const installImport = 'import InstallAppButton from "./components/InstallAppButton";\n';
     const globalImport = 'import GlobalActionToasts from "./components/GlobalActionToasts";\n';
     const importAnchor = source.includes(installImport) ? installImport : globalImport;
-    if (!source.includes(importAnchor)) throw new Error("[epl-exit-finance] anchor not found: mandatory replacement dialog import");
-    source = source.replace(importAnchor, () => `${importAnchor}import MandatoryReplacementClaimDialog from "./components/MandatoryReplacementClaimDialog";\n`);
+    if (!source.includes(importAnchor)) throw new Error("[epl-exit-finance] anchor not found: installed-app push control import");
+    source = source.replace(importAnchor, () => `${importAnchor}import PushNotificationControl from "./components/PushNotificationControl";\n`);
   }
-  source = insertAfter(
-    source,
-    'import MandatoryReplacementClaimDialog from "./components/MandatoryReplacementClaimDialog";\n',
-    'import PushNotificationControl from "./components/PushNotificationControl";\n',
-    'PushNotificationControl from "./components/PushNotificationControl"',
-    "installed-app push control import",
-  );
+
   source = insertBefore(
     source,
     '<ThemeToggle />',
     '<PushNotificationControl />',
     '<PushNotificationControl />',
     "installed-app push control mount",
-  );
-  source = insertAfter(
-    source,
-    '          <FloatingSupportWidget />\n',
-    '          <MandatoryReplacementClaimDialog />\n',
-    '<MandatoryReplacementClaimDialog />',
-    "mandatory replacement dialog mount",
   );
   return source;
 });
@@ -357,4 +350,8 @@ patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) =
   return source;
 });
 
-console.log("[epl-exit-finance] Same-position EPL replacements, mandatory claims, under-minimum 80/20 Prize Ladder fallback and bank/reserve reconciliation are ready.");
+// Ensure the Inbox replacement action exists even when build:server is run on
+// its own without the earlier profile/client generator chain.
+await import("./apply-player-transfer-notifications.mjs");
+
+console.log("[epl-exit-finance] Same-position EPL replacements now use notification-first manual claims, a 7-day reminder and a 14-day auto-mint fallback; Prize Ladder and bank/reserve protections remain ready.");

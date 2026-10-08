@@ -40,7 +40,7 @@ need(transfer, "set owner_id=null, for_sale=false, price=0", "departed cards are
 need(transfer, "pr.source_card_id=pc.id", "archived card row is no longer linked to its replacement claim");
 need(transfer, "pc.owner_id=pr.user_id", "historical source-card cleanup is not scoped to the original claimant");
 need(transfer, "pr.replacement_card_id is not null", "departed source cards must remain owned until a replacement is actually finalized");
-need(transfer, "DIRECT_EPL_DEPARTURE_REPLACEMENT_V1", "direct replacement must be minted before the source-card archive path runs");
+need(transfer, "DELAYED_EPL_DEPARTURE_REPLACEMENT_V1", "departure replacement must preserve the 14-day manual claim window before automatic minting");
 need(transfer, "cl.card_id=pc.id", "departed-card archive is not checking the source card's tournament lock");
 need(transfer, "cl.expires_at is null or cl.expires_at > now()", "active tournament locks are not protected during departed-card archive");
 
@@ -82,4 +82,4 @@ need(browserPan, 'data-app-runtime="native"', "browser Desktop-site fallback mus
 need(browserPan, "height: auto !important", "browser Desktop-site fallback must release fixed heights");
 need(browserPan, "max-height: none !important", "browser Desktop-site fallback must release max-height caps");
 
-console.log("Player transfer/runtime repairs verified: canonical club identities suppress provider-name noise, EPL replacements mint before old-card archival, departed source cards archive only after replacement exists and tournament locks clear, notification/replacement reads stay safe, Google Fonts match CSP, current Premier League portrait fallbacks are ordered, and both Fantasy Arena Desktop view and browser-requested Desktop site can scroll the full document without changing the native APK.");
+console.log("Player transfer/runtime repairs verified: canonical club identities suppress provider-name noise, EPL replacements offer a 14-day manual claim window before automatic minting, departed source cards archive only after replacement exists and tournament locks clear, notification/replacement reads stay safe, Google Fonts match CSP, current Premier League portrait fallbacks are ordered, and both Fantasy Arena Desktop view and browser-requested Desktop site can scroll the full document without changing the native APK.");

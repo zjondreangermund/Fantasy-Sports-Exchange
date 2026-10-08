@@ -2,7 +2,8 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "../hooks/use-toast";
 import { ToastAction } from "./ui/toast";
-import { openCommunityMention } from "../lib/notifications";
+import { openCommunityMention, notificationDestination } from "../lib/notifications";
+import { useLocation } from "wouter";
 
 type NotificationItem = {
   id: number;
@@ -13,6 +14,8 @@ type NotificationItem = {
   createdAt: string | null;
   communityMessageId?: number | null;
   notificationKind?: string | null;
+  dedupeKey?: string | null;
+  replacementClaimId?: number | null;
 };
 
 type NotificationResponse = {
@@ -22,6 +25,7 @@ type NotificationResponse = {
 
 export default function FloatingEventNotifications() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const seenIdsRef = React.useRef<Set<number>>(new Set());
 
   const { data } = useQuery<NotificationResponse>({
@@ -39,6 +43,9 @@ export default function FloatingEventNotifications() {
       .filter((item) => !item.read && (
         item.type === "win"
         || item.type === "runner_up"
+        || Number(item.replacementClaimId || 0) > 0
+        || String(item.dedupeKey || "").startsWith("replacement-claim:")
+        || String(item.dedupeKey || "").startsWith("replacement-reminder:")
         || (item.notificationKind === "community_mention" && Number(item.communityMessageId || 0) > 0)
       ))
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
@@ -58,9 +65,18 @@ export default function FloatingEventNotifications() {
             View message
           </ToastAction>
         ),
+      } : Number(newest.replacementClaimId || 0) > 0 || String(newest.dedupeKey || "").startsWith("replacement-") ? {
+        action: (
+          <ToastAction
+            altText="Open your replacement card claim"
+            onClick={() => setLocation(notificationDestination(newest))}
+          >
+            Mint replacement
+          </ToastAction>
+        ),
       } : {}),
     });
-  }, [data, toast]);
+  }, [data, toast, setLocation]);
 
   return null;
 }
