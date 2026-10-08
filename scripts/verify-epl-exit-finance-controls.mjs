@@ -28,6 +28,8 @@ const androidWorkflow = read(".github/workflows/android-app-build.yml");
 need(transfer, "EPL_REPLACEMENT_SAME_POSITION_V1", "same-position replacement marker is missing");
 need(transfer, 'source.position::text as "sourcePosition"', "replacement claims do not expose the departed player position");
 need(transfer, 'and p.position::text=${sourcePosition}', "replacement candidates are not restricted to the same position");
+need(transfer, "CURRENT_EPL_REPLACEMENT_POOL_V1", "replacement candidates must be checked against the official current EPL roster.");
+need(transfer, 'p.fpl_id = any(${currentFplIdArray}::int[])', "replacement candidates must still exist in the current FPL player pool.");
 need(transfer, "same-position, same-rarity replacement is successfully minted", "departure notification does not explain same-position/same-rarity automatic replacement");
 need(transfer, "Fantasy Arena handles this automatically", "departure notification does not explain automatic replacement");
 need(transfer, "cl.card_id=pc.id", "departed source-card archive does not protect active tournament locks");
