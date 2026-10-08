@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { claimReplacementCard, ensurePlayerTransferMonitoringSchema } from "./playerTransferMonitoring.js";
+import { createNotificationOnce } from "./notifications.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -83,10 +84,22 @@ async function activeLockCardIds(cardIds: number[]) {
   if (!ids.length) return new Set<number>();
   const idArray = toPgIntArrayLiteral(ids);
   const rows = rowsOf(await db.execute(sql`
-    select distinct card_id as "cardId"
-    from app.card_locks
-    where card_id = any(${idArray}::int[])
-      and (expires_at is null or expires_at > now())
+    select distinct cl.card_id as "cardId"
+    from app.card_locks cl
+    where cl.card_id = any(${idArray}::int[])
+      and (cl.expires_at is null or cl.expires_at > now())
+      and not (
+        cl.reason::text = 'competition'
+        and coalesce(cl.ref_id,'') ~ '^[0-9]+$'
+        and (
+          not exists (select 1 from app.competitions c where c.id=cl.ref_id::int)
+          or exists (
+            select 1 from app.competitions c
+            where c.id=cl.ref_id::int
+              and lower(c.status::text) in ('completed','cancelled')
+          )
+        )
+      )
   `));
   return new Set(rows.map((row) => Number(row.cardId)).filter(Boolean));
 }
@@ -163,12 +176,20 @@ export async function archiveReplacedSourceCard(userId: string, claimId: number)
   const locked = await activeLockCardIds([sourceCardId]);
   if (locked.has(sourceCardId)) return false;
 
-  await db.execute(sql`
-    update app.player_cards
-    set owner_id=null, for_sale=false, price=0
-    where id=${sourceCardId} and owner_id=${userId}
-  `);
-  return true;
+  try {
+    await db.execute(sql`
+      update app.player_cards
+      set owner_id=null, for_sale=false, price=0
+      where id=${sourceCardId} and owner_id=${userId}
+    `);
+    return true;
+  } catch (error) {
+    // The replacement card has already been minted and recorded. A legacy or
+    // concurrent lock must never roll that replacement back; leave the old card
+    // owned and let a later archival sweep clean it up after settlement.
+    console.warn(`Departed source card ${sourceCardId} could not be archived yet:`, error);
+    return false;
+  }
 }
 
 export async function finalizeReplacementChoice(userId: string, claimId: number) {
@@ -213,50 +234,86 @@ export async function keepPurchasedDepartedCard(userId: string, claimId: number)
   return { kept: true, sourceCardId };
 }
 
-export async function autoReplaceUnlockedCommonDepartures(userId?: string) {
+export async function archiveReadyReplacedSourceCards(userId?: string) {
+  await ensureDepartedCardPolicySchema();
+  const ready = rowsOf(await db.execute(sql`
+    select pr.id, pr.user_id as "userId"
+    from app.player_replacement_claims pr
+    join app.player_cards source on source.id=pr.source_card_id
+    where pr.replacement_card_id is not null
+      and source.owner_id=pr.user_id
+      and (${userId || null}::text is null or pr.user_id=${userId || null})
+    order by pr.id
+    limit 500
+  `));
+
+  let archived = 0;
+  for (const row of ready) {
+    if (await archiveReplacedSourceCard(String(row.userId || ""), Number(row.id || 0))) archived += 1;
+  }
+  return archived;
+}
+
+export async function autoReplaceUnlockedDepartures(userId?: string) {
+  // DIRECT_EPL_DEPARTURE_REPLACEMENT_V1
+  // Confirmed EPL departures always receive a one-for-one replacement immediately.
+  // An existing tournament lock protects only the old source card from being archived;
+  // it must never delay minting the new same-position/same-rarity replacement.
+  // Signup, reward, marketplace and auction cards all use the same rule.
+  // Legacy "keep" decisions are also upgraded to this one-for-one policy when
+  // no replacement card has ever been minted.
   await ensureDepartedCardPolicySchema();
   await ensureDepartedOwnedCardClaims(userId);
+  // Also clean up any already-replaced source cards whose old competition lock
+  // has since settled. This cleanup never gates the new replacement mint.
+  await archiveReadyReplacedSourceCards(userId);
 
   const pending = rowsOf(await db.execute(sql`
-    select pr.id, pr.user_id as "userId", pr.source_card_id as "sourceCardId"
+    select pr.id, pr.user_id as "userId", pr.source_card_id as "sourceCardId",
+           pr.source_player_name as "sourcePlayerName", pr.rarity
     from app.player_replacement_claims pr
     join app.players source on source.id=pr.source_player_id
     where pr.replacement_card_id is null
-      and pr.claimed_at is null
-      and coalesce(pr.decision,'pending')='pending'
-      and lower(pr.rarity)='common'
       and (${userId || null}::text is null or pr.user_id=${userId || null})
       and (lower(coalesce(source.league,'')) <> 'premier league' or lower(coalesce(source.status,''))='departed')
-      and not exists (
-        select 1 from app.card_locks cl
-        where cl.card_id=pr.source_card_id
-          and (cl.expires_at is null or cl.expires_at > now())
-      )
     order by pr.created_at, pr.id
-    limit 250
+    limit 500
   `));
 
   let reminted = 0;
-  let ownerChoice = 0;
   let failed = 0;
   for (const claim of pending) {
     const claimUserId = String(claim.userId || "");
-    const sourceCardId = Number(claim.sourceCardId || 0);
-    if (!claimUserId || !sourceCardId) continue;
-    const purchased = await purchasedCardIds(claimUserId, [sourceCardId]);
-    if (purchased.has(sourceCardId)) {
-      ownerChoice += 1;
-      continue;
-    }
+    const claimId = Number(claim.id || 0);
+    if (!claimUserId || !claimId) continue;
     try {
-      await claimReplacementCard(claimUserId, Number(claim.id));
-      await finalizeReplacementChoice(claimUserId, Number(claim.id));
+      const result = await claimReplacementCard(claimUserId, claimId);
+      await finalizeReplacementChoice(claimUserId, claimId);
+
+      const replacementName = String(result?.card?.playerName || "Premier League Player");
+      const replacementPosition = String(result?.card?.position || "").toUpperCase();
+      const rarity = String(claim.rarity || "card");
+      await createNotificationOnce(db, {
+        userId: claimUserId,
+        title: "Premier League replacement added",
+        message: `${String(claim.sourcePlayerName || "Your player")} left the Premier League. ${replacementName} (${replacementPosition}) has been added to your Collection as the automatic ${rarity} replacement.`,
+        dedupeKey: `replacement-complete:${claimId}`,
+      });
+
       reminted += 1;
+      console.info(
+        `DIRECT_EPL_DEPARTURE_REPLACED claim=${claimId} user=${claimUserId}`
+        + ` source="${String(claim.sourcePlayerName || "Player")}" rarity=${String(claim.rarity || "")}`
+        + ` replacement="${replacementName}" position=${replacementPosition}`,
+      );
     } catch (error) {
       failed += 1;
-      console.warn(`Automatic Common EPL departure remint failed for claim ${Number(claim.id)}:`, error);
+      console.warn(`Direct EPL departure replacement failed for claim ${claimId}:`, error);
     }
   }
 
-  return { reminted, ownerChoice, failed };
+  return { reminted, failed };
 }
+
+// Backward-compatible export for any older build/runtime import.
+export const autoReplaceUnlockedCommonDepartures = autoReplaceUnlockedDepartures;

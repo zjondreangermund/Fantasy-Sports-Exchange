@@ -8,10 +8,9 @@ import {
   listUserReplacementClaims,
 } from "../services/playerTransferMonitoring.js";
 import {
-  autoReplaceUnlockedCommonDepartures,
+  autoReplaceUnlockedDepartures,
   decorateReplacementClaims,
   finalizeReplacementChoice,
-  keepPurchasedDepartedCard,
 } from "../services/departedCardPolicy.js";
 import {
   disableWebPushSubscription,
@@ -132,10 +131,11 @@ async function syncSubscribedUserNotifications() {
   subscribedNotificationSyncRunning = true;
   try {
     await ensureNotificationsSchema();
-    // Automatic departed Common remint sweep: only unlocked, non-purchased
-    // cards are replaced. Purchased cards remain for owner choice.
-    await autoReplaceUnlockedCommonDepartures().catch((error) => {
-      console.error("Automatic departed Common remint sweep failed:", error);
+    // DIRECT_EPL_DEPARTURE_REPLACEMENT_V1
+    // Every confirmed EPL departure is replaced one-for-one after tournament
+    // locks clear, regardless of rarity or how the card was acquired.
+    await autoReplaceUnlockedDepartures().catch((error) => {
+      console.error("Automatic EPL departure replacement sweep failed:", error);
     });
     const users = rowsOf(await db.execute(sql`
       select user_id as "userId"
@@ -301,8 +301,8 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
   app.get("/api/player-replacements", requireAuth, async (req: any, res) => {
     try {
       const userId = String(req.authUserId || "");
-      await autoReplaceUnlockedCommonDepartures(userId).catch((error) => {
-        console.error("User Common departure remint sweep failed:", error);
+      await autoReplaceUnlockedDepartures(userId).catch((error) => {
+        console.error("User EPL departure replacement sweep failed:", error);
       });
       const rawClaims = await listUserReplacementClaims(userId);
       const claims = await decorateReplacementClaims(userId, rawClaims);
@@ -310,7 +310,6 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
         !claim.replacementCardId
         && !claim.claimedAt
         && claim.decision !== "keep"
-        && !claim.locked
       ).length;
       return res.json({ claims, openClaims });
     } catch (error: any) {
@@ -327,8 +326,7 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
       const rawClaims = await listUserReplacementClaims(userId);
       const decorated = await decorateReplacementClaims(userId, rawClaims);
       const selected = decorated.find((claim: any) => Number(claim.id) === claimId);
-      if (selected?.locked) return res.status(409).json({ message: "This card is locked in the current gameweek. Choose after settlement." });
-      if (selected?.decision === "keep") return res.status(409).json({ message: "You already chose to keep this purchased card." });
+      if (selected?.decision === "keep") return res.status(409).json({ message: "This legacy keep decision cannot be retried automatically." });
       const result = await claimReplacementCard(userId, claimId);
       await finalizeReplacementChoice(userId, claimId);
       return res.json({ success: true, ...result });
@@ -340,18 +338,10 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
     }
   });
 
-  app.post("/api/player-replacements/:id/keep", requireAuth, async (req: any, res) => {
-    try {
-      const userId = String(req.authUserId || "");
-      const claimId = Number(req.params.id);
-      if (!Number.isInteger(claimId) || claimId <= 0) return res.status(400).json({ message: "Valid replacement choice required" });
-      const result = await keepPurchasedDepartedCard(userId, claimId);
-      return res.json({ success: true, ...result });
-    } catch (error: any) {
-      console.error("Purchased departed-card keep choice failed:", error);
-      const message = String(error?.message || "Failed to save replacement choice");
-      return res.status(/not found/i.test(message) ? 404 : /locked|already|only a purchased/i.test(message) ? 409 : 500).json({ message });
-    }
+  app.post("/api/player-replacements/:id/keep", requireAuth, async (_req: any, res) => {
+    return res.status(409).json({
+      message: "Premier League departure cards are replaced automatically with the same position and rarity. Keeping an ineligible card instead is no longer an option.",
+    });
   });
 
   app.post("/api/notifications/:id/read", requireAuth, async (req: any, res) => {

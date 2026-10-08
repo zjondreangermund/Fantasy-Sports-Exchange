@@ -12,6 +12,7 @@ import {
 import { db } from "../db.js";
 import { auditLogs, transactions } from "../../shared/schema.js";
 import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../shared/card-economy.js";
+import { autoReplaceUnlockedDepartures } from "../services/departedCardPolicy.js";
 
 interface RegisterCardsRoutesDeps {
   requireAuth: any;
@@ -64,9 +65,17 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
   const sendUserCards = async (req: any, res: any) => {
     try {
       const userId = req.authUserId;
-      // Collection is strictly read-only: starter cards are minted only after
+      // DIRECT_EPL_DEPARTURE_REPLACEMENT_V1
+      // Repair a confirmed departed player before returning the collection so
+      // the tournament picker never strands a manager without the required
+      // same-position/same-rarity card. Old tournament locks protect only the
+      // source card from archival; they do not delay the replacement mint.
+      await autoReplaceUnlockedDepartures(String(userId)).catch((error) => {
+        console.warn("Collection departure replacement sweep failed:", error);
+      });
+      // Collection is otherwise read-only: starter cards are minted only after
       // the owner confirms their exact five onboarding player selections.
-      const cards = await storage.getUserCards(userId);
+      let cards = await storage.getUserCards(userId);
       const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([fplApi.bootstrap().catch(() => null), fplApi.getLiveGameweek().catch(() => null), loadApiFootballPlayerDirectory().catch(() => [])]);
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const currentGameweek = Number((bootstrap as any)?.events?.find((event: any) => event?.is_current)?.id || await fplApi.getCurrentGameweek().catch(() => 0));
@@ -77,6 +86,47 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       const liveElements = Array.isArray((liveData as any)?.elements) ? (liveData as any).elements : [];
       const liveByElementId = new Map<number, any>();
       for (const liveElement of liveElements) liveByElementId.set(Number(liveElement.id), liveElement);
+
+      // PROVIDER_CONFIRMED_DEPARTURE_REPLACEMENT_V1
+      // The collection can learn about a transfer-out directly from API-Football
+      // before the stored player row has been marked departed. Persist that same
+      // provider-confirmed state first, then mint the replacement in this request.
+      // Without this bridge the UI could say "left the Premier League" while no
+      // replacement claim existed yet.
+      const providerDepartedPlayerIds = new Set<number>();
+      if (gameweekScoringContext?.departedDirectory?.length) {
+        for (const card of cards as any[]) {
+          const player = card?.player as any;
+          const playerId = Number(card?.playerId || player?.id || 0);
+          if (!player || !playerId) continue;
+          const departedPlayer = resolveApiFootballPlayer(player, gameweekScoringContext.departedDirectory);
+          if (departedPlayer) providerDepartedPlayerIds.add(playerId);
+        }
+      }
+
+      if (providerDepartedPlayerIds.size > 0) {
+        for (const playerId of providerDepartedPlayerIds) {
+          await db.execute(sql`
+            update app.players
+            set league='Outside Premier League',
+                status='departed',
+                news=case
+                  when coalesce(news,'') ilike '%no longer in the Premier League%' then news
+                  else concat_ws(' ', nullif(news,''), 'No longer in the Premier League; automatic same-position/same-rarity replacement applies.')
+                end,
+                synced_at=now()
+            where id=${playerId}
+          `);
+        }
+
+        const repair = await autoReplaceUnlockedDepartures(String(userId)).catch((error) => {
+          console.warn("Provider-confirmed departure replacement failed:", error);
+          return { reminted: 0, failed: providerDepartedPlayerIds.size };
+        });
+        if (Number(repair?.reminted || 0) > 0) {
+          cards = await storage.getUserCards(userId);
+        }
+      }
 
       const enrichedCards = cards.map((card: any) => {
         const player = card.player as any;
@@ -156,7 +206,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
               message: identityVerified
                 ? `Eligible: linked by ${selectionProvider === "api-football" ? "API-Football current squads" : "FPL fallback"}.`
                 : outsidePremierLeague
-                  ? `${player.name} has left the Premier League and cannot be selected for a Premier League tournament. Use the same-position replacement card in this collection.`
+                  ? `${player.name} has left the Premier League and cannot be selected for a Premier League tournament. Fantasy Arena automatically mints a same-position, same-rarity replacement; any older tournament lock remains attached only to this old card.`
                   : `${player.name} is not linked to a current Premier League player yet.`,
             },
             identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
