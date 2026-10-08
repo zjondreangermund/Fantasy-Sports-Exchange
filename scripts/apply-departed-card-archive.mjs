@@ -16,14 +16,14 @@ if (!source.includes("TRANSFER_SOURCE_CARD_ARCHIVE_V3")) {
   source = replaceRequired(
     source,
     schemaAnchor,
-    `${schemaAnchor}\n      // TRANSFER_SOURCE_CARD_ARCHIVE_V3\n      // A player who leaves the Premier League is preserved in the card/claim\n      // database for admin and audit history. Archive the old card only after any\n      // active tournament lock clears; changing ownership while a card is locked\n      // is deliberately blocked by app.prevent_locked_card_transfer().\n      await db.execute(sql\`\n        update app.player_cards pc\n        set owner_id=null, for_sale=false, price=0\n        from app.player_replacement_claims pr\n        where pr.source_card_id=pc.id\n          and pc.owner_id=pr.user_id\n          and not exists (\n            select 1\n            from app.card_locks cl\n            where cl.card_id=pc.id\n              and (cl.expires_at is null or cl.expires_at > now())\n          )\n      \`);`,
+    `${schemaAnchor}\n      // TRANSFER_SOURCE_CARD_ARCHIVE_V3\n      // A player who leaves the Premier League is preserved in the card/claim\n      // database for admin and audit history. Never archive the source merely\n      // because a claim exists: replacement_card_id must already be recorded.\n      await db.execute(sql\`\n        update app.player_cards pc\n        set owner_id=null, for_sale=false, price=0\n        from app.player_replacement_claims pr\n        where pr.source_card_id=pc.id\n          and pr.replacement_card_id is not null\n          and pc.owner_id=pr.user_id\n          and not exists (\n            select 1\n            from app.card_locks cl\n            where cl.card_id=pc.id\n              and (cl.expires_at is null or cl.expires_at > now())\n          )\n      \`);`,
     "historical source-card archive",
   );
 }
 
 const claimAnchor = `    if (!claim?.id) continue;\n\n    const prettyRarity = rarity.charAt(0).toUpperCase() + rarity.slice(1);`;
-const claimReplacement = `    if (!claim?.id) continue;\n\n    // Detach the departed card as soon as it is safe. A card that is still locked\n    // into an active competition stays owned until that lock clears, so settlement\n    // integrity is never broken and notification/replacement reads cannot fail.\n    await db.execute(sql\`\n      update app.player_cards pc\n      set owner_id=null, for_sale=false, price=0\n      where pc.id=\${sourceCardId}\n        and pc.owner_id=\${userId}\n        and not exists (\n          select 1\n          from app.card_locks cl\n          where cl.card_id=pc.id\n            and (cl.expires_at is null or cl.expires_at > now())\n        )\n    \`);\n\n    const prettyRarity = rarity.charAt(0).toUpperCase() + rarity.slice(1);`;
-source = replaceRequired(source, claimAnchor, claimReplacement, "archive source card after creating departure claim");
+const claimReplacement = `    if (!claim?.id) continue;\n\n    // DIRECT_EPL_DEPARTURE_REPLACEMENT_V1\n    // Keep the source card owned until the replacement mint succeeds. Runtime\n    // finalization archives it only after replacement_card_id is recorded and\n    // the old card is no longer protected by an active tournament lock.\n    const prettyRarity = rarity.charAt(0).toUpperCase() + rarity.slice(1);`;
+source = replaceRequired(source, claimAnchor, claimReplacement, "preserve source card until direct replacement succeeds");
 
 // The same-position replacement patch runs later in the production generator
 // chain. Leave its original notification anchor untouched until then, and only
