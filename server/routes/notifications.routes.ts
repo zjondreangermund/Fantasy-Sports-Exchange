@@ -131,11 +131,11 @@ async function syncSubscribedUserNotifications() {
   subscribedNotificationSyncRunning = true;
   try {
     await ensureNotificationsSchema();
-    // DIRECT_EPL_DEPARTURE_REPLACEMENT_V1
-    // Every confirmed EPL departure is replaced one-for-one after tournament
-    // locks clear, regardless of rarity or how the card was acquired.
+    // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1
+    // Create/remind pending departure claims and auto-mint only after the
+    // 14-day manual claim window expires.
     await autoReplaceUnlockedDepartures().catch((error) => {
-      console.error("Automatic EPL departure replacement sweep failed:", error);
+      console.error("Delayed EPL departure replacement sweep failed:", error);
     });
     const users = rowsOf(await db.execute(sql`
       select user_id as "userId"
@@ -280,12 +280,18 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
                pr.rarity as "replacementRarity",
                pr.source_card_id as "replacementSourceCardId",
                pr.source_player_name as "replacementSourcePlayerName",
+               source_player.position::text as "replacementSourcePosition",
                pr.replacement_card_id as "replacementCardId",
-               pr.claimed_at as "replacementClaimedAt"
+               pr.claimed_at as "replacementClaimedAt",
+               case when pr.id is not null then pr.created_at + interval '14 days' else null end as "replacementAutoMintAt"
         from app.notifications n
         left join app.player_replacement_claims pr
           on pr.user_id=n.user_id
-         and n.dedupe_key=concat('replacement-claim:', pr.id::text)
+         and n.dedupe_key in (
+           concat('replacement-claim:', pr.id::text),
+           concat('replacement-reminder:', pr.id::text)
+         )
+        left join app.players source_player on source_player.id=pr.source_player_id
         where n.user_id = ${userId}
         order by n.created_at desc nulls last, n.id desc
         limit 100
@@ -302,7 +308,7 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
     try {
       const userId = String(req.authUserId || "");
       await autoReplaceUnlockedDepartures(userId).catch((error) => {
-        console.error("User EPL departure replacement sweep failed:", error);
+        console.error("User delayed EPL departure replacement sweep failed:", error);
       });
       const rawClaims = await listUserReplacementClaims(userId);
       const claims = await decorateReplacementClaims(userId, rawClaims);
@@ -340,7 +346,7 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
 
   app.post("/api/player-replacements/:id/keep", requireAuth, async (_req: any, res) => {
     return res.status(409).json({
-      message: "Premier League departure cards are replaced automatically with the same position and rarity. Keeping an ineligible card instead is no longer an option.",
+      message: "Premier League departure cards must be replaced with the same position and rarity. You can mint manually within 14 days; after that Fantasy Arena mints the replacement automatically.",
     });
   });
 
