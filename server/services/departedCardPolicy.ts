@@ -217,9 +217,10 @@ export async function keepPurchasedDepartedCard(userId: string, claimId: number)
 
 export async function autoReplaceUnlockedDepartures(userId?: string) {
   // DIRECT_EPL_DEPARTURE_REPLACEMENT_V1
-  // Confirmed EPL departures always receive a one-for-one replacement after
-  // active tournament locks clear. Ownership source does not change this rule:
-  // signup, reward, marketplace and auction cards are all replaced directly.
+  // Confirmed EPL departures always receive a one-for-one replacement immediately.
+  // An existing tournament lock protects only the old source card from being archived;
+  // it must never delay minting the new same-position/same-rarity replacement.
+  // Signup, reward, marketplace and auction cards all use the same rule.
   await ensureDepartedCardPolicySchema();
   await ensureDepartedOwnedCardClaims(userId);
 
@@ -233,24 +234,6 @@ export async function autoReplaceUnlockedDepartures(userId?: string) {
       and coalesce(pr.decision,'pending') in ('pending','replace')
       and (${userId || null}::text is null or pr.user_id=${userId || null})
       and (lower(coalesce(source.league,'')) <> 'premier league' or lower(coalesce(source.status,''))='departed')
-      and not exists (
-        select 1
-        from app.card_locks cl
-        where cl.card_id=pr.source_card_id
-          and (cl.expires_at is null or cl.expires_at > now())
-          and not (
-            cl.reason::text='competition'
-            and coalesce(cl.ref_id,'') ~ '^[0-9]+$'
-            and (
-              not exists (select 1 from app.competitions c where c.id=cl.ref_id::int)
-              or exists (
-                select 1 from app.competitions c
-                where c.id=cl.ref_id::int
-                  and lower(c.status::text) in ('completed','cancelled')
-              )
-            )
-          )
-      )
     order by pr.created_at, pr.id
     limit 500
   `));
