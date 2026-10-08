@@ -176,12 +176,20 @@ export async function archiveReplacedSourceCard(userId: string, claimId: number)
   const locked = await activeLockCardIds([sourceCardId]);
   if (locked.has(sourceCardId)) return false;
 
-  await db.execute(sql`
-    update app.player_cards
-    set owner_id=null, for_sale=false, price=0
-    where id=${sourceCardId} and owner_id=${userId}
-  `);
-  return true;
+  try {
+    await db.execute(sql`
+      update app.player_cards
+      set owner_id=null, for_sale=false, price=0
+      where id=${sourceCardId} and owner_id=${userId}
+    `);
+    return true;
+  } catch (error) {
+    // The replacement card has already been minted and recorded. A legacy or
+    // concurrent lock must never roll that replacement back; leave the old card
+    // owned and let a later archival sweep clean it up after settlement.
+    console.warn(`Departed source card ${sourceCardId} could not be archived yet:`, error);
+    return false;
+  }
 }
 
 export async function finalizeReplacementChoice(userId: string, claimId: number) {
