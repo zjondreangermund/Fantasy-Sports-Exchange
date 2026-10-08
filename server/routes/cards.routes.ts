@@ -65,11 +65,10 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
   const sendUserCards = async (req: any, res: any) => {
     try {
       const userId = req.authUserId;
-      // DIRECT_EPL_DEPARTURE_REPLACEMENT_V1
-      // Repair a confirmed departed player before returning the collection so
-      // the tournament picker never strands a manager without the required
-      // same-position/same-rarity card. Old tournament locks protect only the
-      // source card from archival; they do not delay the replacement mint.
+      // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1
+      // Ensure a confirmed departure has a protected replacement claim before
+      // returning the collection. The manager may mint manually for 14 days;
+      // only overdue claims are minted by this sweep.
       await autoReplaceUnlockedDepartures(String(userId)).catch((error) => {
         console.warn("Collection departure replacement sweep failed:", error);
       });
@@ -90,9 +89,9 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       // PROVIDER_CONFIRMED_DEPARTURE_REPLACEMENT_V1
       // The collection can learn about a transfer-out directly from API-Football
       // before the stored player row has been marked departed. Persist that same
-      // provider-confirmed state first, then mint the replacement in this request.
-      // Without this bridge the UI could say "left the Premier League" while no
-      // replacement claim existed yet.
+      // provider-confirmed state first, then create the protected replacement
+      // claim/notification in this request. The manual 14-day claim window starts
+      // from that claim rather than silently minting immediately.
       const providerDepartedPlayerIds = new Set<number>();
       if (gameweekScoringContext?.departedDirectory?.length) {
         for (const card of cards as any[]) {
@@ -112,7 +111,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
                 status='departed',
                 news=case
                   when coalesce(news,'') ilike '%no longer in the Premier League%' then news
-                  else concat_ws(' ', nullif(news,''), 'No longer in the Premier League; automatic same-position/same-rarity replacement applies.')
+                  else concat_ws(' ', nullif(news,''), 'No longer in the Premier League; same-position/same-rarity replacement claim is available for 14 days before automatic minting.')
                 end,
                 synced_at=now()
             where id=${playerId}
@@ -120,7 +119,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         }
 
         const repair = await autoReplaceUnlockedDepartures(String(userId)).catch((error) => {
-          console.warn("Provider-confirmed departure replacement failed:", error);
+          console.warn("Provider-confirmed departure claim preparation failed:", error);
           return { reminted: 0, failed: providerDepartedPlayerIds.size };
         });
         if (Number(repair?.reminted || 0) > 0) {
@@ -206,7 +205,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
               message: identityVerified
                 ? `Eligible: linked by ${selectionProvider === "api-football" ? "API-Football current squads" : "FPL fallback"}.`
                 : outsidePremierLeague
-                  ? `${player.name} has left the Premier League and cannot be selected for a Premier League tournament. Fantasy Arena automatically mints a same-position, same-rarity replacement; any older tournament lock remains attached only to this old card.`
+                  ? `${player.name} has left the Premier League and cannot be selected for a Premier League tournament. A same-position, same-rarity replacement is waiting in your Inbox. You can mint it manually for 14 days; after that Fantasy Arena will mint it automatically.`
                   : `${player.name} is not linked to a current Premier League player yet.`,
             },
             identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
