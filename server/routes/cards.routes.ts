@@ -68,7 +68,8 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       // DIRECT_EPL_DEPARTURE_REPLACEMENT_V1
       // Repair a confirmed departed player before returning the collection so
       // the tournament picker never strands a manager without the required
-      // same-position/same-rarity card once its gameweek lock has cleared.
+      // same-position/same-rarity card. Old tournament locks protect only the
+      // source card from archival; they do not delay the replacement mint.
       await autoReplaceUnlockedDepartures(String(userId)).catch((error) => {
         console.warn("Collection departure replacement sweep failed:", error);
       });
@@ -164,7 +165,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
               message: identityVerified
                 ? `Eligible: linked by ${selectionProvider === "api-football" ? "API-Football current squads" : "FPL fallback"}.`
                 : outsidePremierLeague
-                  ? `${player.name} has left the Premier League and cannot be selected for a Premier League tournament. Fantasy Arena automatically mints a same-position, same-rarity replacement as soon as any active tournament lock clears.`
+                  ? `${player.name} has left the Premier League and cannot be selected for a Premier League tournament. Fantasy Arena automatically mints a same-position, same-rarity replacement; any older tournament lock remains attached only to this old card.`
                   : `${player.name} is not linked to a current Premier League player yet.`,
             },
             identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
