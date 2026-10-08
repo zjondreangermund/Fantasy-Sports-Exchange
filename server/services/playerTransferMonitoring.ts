@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "./notifications.js";
+import { fplApi } from "./fplApi.js";
 
 const SUPPLY_BY_RARITY: Record<string, number> = {
   common: 1000,
@@ -299,6 +300,17 @@ export async function claimReplacementCard(userId: string, claimId: number) {
   await ensurePlayerTransferMonitoringSchema();
   if (!userId || !Number.isInteger(claimId) || claimId <= 0) throw new Error("Valid replacement claim required");
 
+  // CURRENT_EPL_REPLACEMENT_POOL_V1
+  // A replacement must itself still exist in the official current FPL roster.
+  // This prevents a stale app.players row for another transferred-out player
+  // from ever being minted as the "replacement".
+  const bootstrap = await fplApi.bootstrap();
+  const currentFplIds = (Array.isArray((bootstrap as any)?.elements) ? (bootstrap as any).elements : [])
+    .map((player: any) => Number(player?.id || 0))
+    .filter((id: number) => Number.isInteger(id) && id > 0);
+  if (currentFplIds.length < 300) throw new Error("Current Premier League player pool is unavailable; replacement will retry automatically.");
+  const currentFplIdArray = `{${currentFplIds.join(",")}}`;
+
   return db.transaction(async (tx: any) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`player-replacement:${claimId}`}))`);
     const claim = rowsOf(await tx.execute(sql`
@@ -335,6 +347,7 @@ export async function claimReplacementCard(userId: string, claimId: number) {
       from app.players p
       where lower(p.league)='premier league'
         and p.fpl_id is not null
+        and p.fpl_id = any(${currentFplIdArray}::int[])
         and p.position::text=${sourcePosition}
         and p.id <> ${Number(claim.sourcePlayerId)}
         and coalesce(p.status,'a') <> 'departed'
