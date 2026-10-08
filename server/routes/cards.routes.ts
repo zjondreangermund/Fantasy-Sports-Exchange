@@ -12,6 +12,7 @@ import {
 import { db } from "../db.js";
 import { auditLogs, transactions } from "../../shared/schema.js";
 import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../shared/card-economy.js";
+import { autoReplaceUnlockedDepartures } from "../services/departedCardPolicy.js";
 
 interface RegisterCardsRoutesDeps {
   requireAuth: any;
@@ -64,7 +65,14 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
   const sendUserCards = async (req: any, res: any) => {
     try {
       const userId = req.authUserId;
-      // Collection is strictly read-only: starter cards are minted only after
+      // DIRECT_EPL_DEPARTURE_REPLACEMENT_V1
+      // Repair a confirmed departed player before returning the collection so
+      // the tournament picker never strands a manager without the required
+      // same-position/same-rarity card once its gameweek lock has cleared.
+      await autoReplaceUnlockedDepartures(String(userId)).catch((error) => {
+        console.warn("Collection departure replacement sweep failed:", error);
+      });
+      // Collection is otherwise read-only: starter cards are minted only after
       // the owner confirms their exact five onboarding player selections.
       const cards = await storage.getUserCards(userId);
       const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([fplApi.bootstrap().catch(() => null), fplApi.getLiveGameweek().catch(() => null), loadApiFootballPlayerDirectory().catch(() => [])]);
@@ -156,7 +164,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
               message: identityVerified
                 ? `Eligible: linked by ${selectionProvider === "api-football" ? "API-Football current squads" : "FPL fallback"}.`
                 : outsidePremierLeague
-                  ? `${player.name} has left the Premier League and cannot be selected for a Premier League tournament. Use the same-position replacement card in this collection.`
+                  ? `${player.name} has left the Premier League and cannot be selected for a Premier League tournament. Fantasy Arena automatically mints a same-position, same-rarity replacement as soon as any active tournament lock clears.`
                   : `${player.name} is not linked to a current Premier League player yet.`,
             },
             identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football" : apiFootballPlayer ? "api-football-current-squad" : matchedElement ? "fpl" : "unverified-card-data",
