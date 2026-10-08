@@ -234,6 +234,26 @@ export async function keepPurchasedDepartedCard(userId: string, claimId: number)
   return { kept: true, sourceCardId };
 }
 
+export async function archiveReadyReplacedSourceCards(userId?: string) {
+  await ensureDepartedCardPolicySchema();
+  const ready = rowsOf(await db.execute(sql`
+    select pr.id, pr.user_id as "userId"
+    from app.player_replacement_claims pr
+    join app.player_cards source on source.id=pr.source_card_id
+    where pr.replacement_card_id is not null
+      and source.owner_id=pr.user_id
+      and (${userId || null}::text is null or pr.user_id=${userId || null})
+    order by pr.id
+    limit 500
+  `));
+
+  let archived = 0;
+  for (const row of ready) {
+    if (await archiveReplacedSourceCard(String(row.userId || ""), Number(row.id || 0))) archived += 1;
+  }
+  return archived;
+}
+
 export async function autoReplaceUnlockedDepartures(userId?: string) {
   // DIRECT_EPL_DEPARTURE_REPLACEMENT_V1
   // Confirmed EPL departures always receive a one-for-one replacement immediately.
@@ -242,6 +262,9 @@ export async function autoReplaceUnlockedDepartures(userId?: string) {
   // Signup, reward, marketplace and auction cards all use the same rule.
   await ensureDepartedCardPolicySchema();
   await ensureDepartedOwnedCardClaims(userId);
+  // Also clean up any already-replaced source cards whose old competition lock
+  // has since settled. This cleanup never gates the new replacement mint.
+  await archiveReadyReplacedSourceCards(userId);
 
   const pending = rowsOf(await db.execute(sql`
     select pr.id, pr.user_id as "userId", pr.source_card_id as "sourceCardId",
