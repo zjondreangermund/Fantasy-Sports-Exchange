@@ -16,6 +16,7 @@ const notifications = read("server/services/notifications.ts");
 const notificationRoutes = read("server/routes/notifications.routes.ts");
 const departurePolicy = read("server/services/departedCardPolicy.ts");
 const cardsRoutes = read("server/routes/cards.routes.ts");
+const departedArchive = read("scripts/apply-departed-card-archive.mjs");
 const webPush = read("server/services/webPush.ts");
 const nativePush = read("server/services/nativePush.ts");
 const pushControl = read("client/src/components/PushNotificationControl.tsx");
@@ -45,6 +46,12 @@ need(departurePolicy, "coalesce(pr.decision,'pending') in ('pending','replace')"
 assert.ok(!departurePolicy.includes("and lower(pr.rarity)='common'"), "automatic departure replacement must not be limited to Common cards.");
 need(cardsRoutes, "autoReplaceUnlockedDepartures", "collection reads must repair departed cards before tournament selection.");
 need(cardsRoutes, "same-position, same-rarity replacement", "collection eligibility text must not falsely claim a replacement already exists.");
+need(departurePolicy, "it must never delay minting the new same-position/same-rarity replacement", "old tournament locks must not delay the new replacement mint.");
+need(notificationRoutes, "autoReplaceUnlockedDepartures", "notification/background sync must use universal direct departure replacement.");
+assert.ok(!notificationRoutes.includes("if (selected?.locked) return res.status(409)"), "manual replacement retry must not be blocked by an old tournament lock.");
+assert.ok(!dialog.includes("&& !claim.locked"), "replacement fallback UI must not hide a claim just because the old source card is locked.");
+need(departedArchive, "pr.replacement_card_id is not null", "source cards must not be archived before replacement_card_id exists.");
+need(departedArchive, "Keep the source card owned until the replacement mint succeeds", "source-card archival must occur only after a successful replacement mint.");
 
 need(economy, "PRIZE_LADDER_UNDER_MINIMUM_CASH_FALLBACK_V1", "under-minimum Prize Ladder settlement fallback is missing");
 need(economy, "const underMinimumCashFallback = prizeVault && !prizeAward && grossPool > 0", "fallback is not restricted to an official Prize Ladder with no unlocked reward");
