@@ -350,4 +350,8 @@ patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) =
   return source;
 });
 
-console.log("[epl-exit-finance] Same-position EPL replacements, mandatory claims, under-minimum 80/20 Prize Ladder fallback and bank/reserve reconciliation are ready.");
+// Ensure the Inbox replacement action exists even when build:server is run on
+// its own without the earlier profile/client generator chain.
+await import("./apply-player-transfer-notifications.mjs");
+
+console.log("[epl-exit-finance] Same-position EPL replacements now use notification-first manual claims, a 7-day reminder and a 14-day auto-mint fallback; Prize Ladder and bank/reserve protections remain ready.");
