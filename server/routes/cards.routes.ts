@@ -75,7 +75,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       });
       // Collection is otherwise read-only: starter cards are minted only after
       // the owner confirms their exact five onboarding player selections.
-      const cards = await storage.getUserCards(userId);
+      let cards = await storage.getUserCards(userId);
       const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([fplApi.bootstrap().catch(() => null), fplApi.getLiveGameweek().catch(() => null), loadApiFootballPlayerDirectory().catch(() => [])]);
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const currentGameweek = Number((bootstrap as any)?.events?.find((event: any) => event?.is_current)?.id || await fplApi.getCurrentGameweek().catch(() => 0));
@@ -86,6 +86,47 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       const liveElements = Array.isArray((liveData as any)?.elements) ? (liveData as any).elements : [];
       const liveByElementId = new Map<number, any>();
       for (const liveElement of liveElements) liveByElementId.set(Number(liveElement.id), liveElement);
+
+      // PROVIDER_CONFIRMED_DEPARTURE_REPLACEMENT_V1
+      // The collection can learn about a transfer-out directly from API-Football
+      // before the stored player row has been marked departed. Persist that same
+      // provider-confirmed state first, then mint the replacement in this request.
+      // Without this bridge the UI could say "left the Premier League" while no
+      // replacement claim existed yet.
+      const providerDepartedPlayerIds = new Set<number>();
+      if (gameweekScoringContext?.departedDirectory?.length) {
+        for (const card of cards as any[]) {
+          const player = card?.player as any;
+          const playerId = Number(card?.playerId || player?.id || 0);
+          if (!player || !playerId) continue;
+          const departedPlayer = resolveApiFootballPlayer(player, gameweekScoringContext.departedDirectory);
+          if (departedPlayer) providerDepartedPlayerIds.add(playerId);
+        }
+      }
+
+      if (providerDepartedPlayerIds.size > 0) {
+        for (const playerId of providerDepartedPlayerIds) {
+          await db.execute(sql`
+            update app.players
+            set league='Outside Premier League',
+                status='departed',
+                news=case
+                  when coalesce(news,'') ilike '%no longer in the Premier League%' then news
+                  else concat_ws(' ', nullif(news,''), 'No longer in the Premier League; automatic same-position/same-rarity replacement applies.')
+                end,
+                synced_at=now()
+            where id=${playerId}
+          `);
+        }
+
+        const repair = await autoReplaceUnlockedDepartures(String(userId)).catch((error) => {
+          console.warn("Provider-confirmed departure replacement failed:", error);
+          return { reminted: 0, failed: providerDepartedPlayerIds.size };
+        });
+        if (Number(repair?.reminted || 0) > 0) {
+          cards = await storage.getUserCards(userId);
+        }
+      }
 
       const enrichedCards = cards.map((card: any) => {
         const player = card.player as any;
