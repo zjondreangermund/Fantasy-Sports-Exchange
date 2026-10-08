@@ -45,7 +45,6 @@ export default function MandatoryReplacementClaimDialog() {
     !claim.replacementCardId
     && !claim.claimedAt
     && claim.decision !== "keep"
-    && !claim.locked
   );
   const claim = openClaims[0] || null;
 
@@ -128,7 +127,7 @@ export default function MandatoryReplacementClaimDialog() {
         </div>
 
         <div className="rounded-xl border border-cyan-300/15 bg-cyan-400/[.07] px-3 py-2 text-xs leading-5 text-cyan-50/80">
-          <Trophy className="mr-1 inline h-3.5 w-3.5" />Automatic replacement applies to every rarity and every acquisition source. Active tournament locks are the only reason a replacement waits.
+          <Trophy className="mr-1 inline h-3.5 w-3.5" />Automatic replacement applies to every rarity and every acquisition source. A tournament lock may keep the old card archived later, but it never delays minting the new replacement.
         </div>
 
         <div className="sticky bottom-0 z-10 -mx-1 rounded-2xl border border-amber-300/15 bg-[#080c18]/95 p-1.5 pb-[calc(.375rem+env(safe-area-inset-bottom,0px))] shadow-[0_-12px_28px_rgba(8,12,24,.92)] backdrop-blur-xl">
