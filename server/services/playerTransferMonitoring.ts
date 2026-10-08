@@ -177,7 +177,7 @@ async function createDepartureClaims(input: {
     await createNotificationOnce(db, {
       userId,
       title: `${input.playerName} left the Premier League`,
-      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. Fantasy Arena will automatically mint one current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity immediately. Any active tournament lock protects only the old card until that older entry settles.`,
+      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. You can mint one free current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity from your Inbox. Fantasy Arena will remind you after 7 days and will mint it automatically after 14 days if you have not claimed it.`,
       dedupeKey: `replacement-claim:${Number(claim.id)}`,
     });
   }
