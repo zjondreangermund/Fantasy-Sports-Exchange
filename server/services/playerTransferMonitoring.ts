@@ -136,9 +136,11 @@ async function createDepartureClaims(input: {
   playerName: string;
   fromTeam: string;
 }) {
+  // EPL_REPLACEMENT_SAME_POSITION_V1
   const cards = rowsOf(await db.execute(sql`
-    select pc.id, pc.owner_id as "ownerId", pc.rarity::text as rarity
+    select pc.id, pc.owner_id as "ownerId", pc.rarity::text as rarity, source.position::text as "sourcePosition"
     from app.player_cards pc
+    join app.players source on source.id=pc.player_id
     where pc.player_id=${input.playerId} and pc.owner_id is not null
     order by pc.id asc
   `));
@@ -148,7 +150,8 @@ async function createDepartureClaims(input: {
     const sourceCardId = Number(card.id || 0);
     const userId = String(card.ownerId || "");
     const rarity = String(card.rarity || "common").toLowerCase();
-    if (!sourceCardId || !userId || !SUPPLY_BY_RARITY[rarity]) continue;
+    const sourcePosition = String(card.sourcePosition || "").trim().toUpperCase();
+    if (!sourceCardId || !userId || !SUPPLY_BY_RARITY[rarity] || !["GK", "DEF", "MID", "FWD"].includes(sourcePosition)) continue;
 
     const inserted = rowsOf(await db.execute(sql`
       insert into app.player_replacement_claims (
@@ -173,7 +176,7 @@ async function createDepartureClaims(input: {
     await createNotificationOnce(db, {
       userId,
       title: `${input.playerName} left the Premier League`,
-      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} card stays in your collection as a record, but it is no longer eligible for Premier League tournaments. Mint one free ${prettyRarity} replacement from the current Premier League player pool for future entries.`,
+      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. Fantasy Arena will automatically mint one current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity as soon as any active tournament lock clears.`,
       dedupeKey: `replacement-claim:${Number(claim.id)}`,
     });
   }
@@ -280,11 +283,13 @@ export async function listUserReplacementClaims(userId: string) {
            pr.source_card_id as "sourceCardId",
            pr.source_player_id as "sourcePlayerId",
            pr.source_player_name as "sourcePlayerName",
+           source.position::text as "sourcePosition",
            pr.rarity,
            pr.replacement_card_id as "replacementCardId",
            pr.claimed_at as "claimedAt",
            pr.created_at as "createdAt"
     from app.player_replacement_claims pr
+    join app.players source on source.id=pr.source_player_id
     where pr.user_id=${userId}
     order by pr.created_at desc, pr.id desc
   `));
@@ -299,8 +304,9 @@ export async function claimReplacementCard(userId: string, claimId: number) {
     const claim = rowsOf(await tx.execute(sql`
       select pr.id, pr.user_id as "userId", pr.source_card_id as "sourceCardId",
              pr.source_player_id as "sourcePlayerId", pr.source_player_name as "sourcePlayerName",
-             pr.rarity, pr.replacement_card_id as "replacementCardId", pr.claimed_at as "claimedAt"
+             source.position::text as "sourcePosition", pr.rarity, pr.replacement_card_id as "replacementCardId", pr.claimed_at as "claimedAt"
       from app.player_replacement_claims pr
+      join app.players source on source.id=pr.source_player_id
       where pr.id=${claimId} and pr.user_id=${userId}
       for update
     `))[0];
@@ -309,7 +315,7 @@ export async function claimReplacementCard(userId: string, claimId: number) {
     if (claim.replacementCardId) {
       const existing = rowsOf(await tx.execute(sql`
         select pc.id, pc.rarity::text as rarity, pc.serial_id as "serialId", pc.serial_number as "serialNumber",
-               p.id as "playerId", p.name as "playerName", p.team
+               p.id as "playerId", p.name as "playerName", p.team, p.position::text as position
         from app.player_cards pc
         join app.players p on p.id=pc.player_id
         where pc.id=${Number(claim.replacementCardId)} and pc.owner_id=${userId}
@@ -321,12 +327,15 @@ export async function claimReplacementCard(userId: string, claimId: number) {
     const rarity = String(claim.rarity || "common").toLowerCase();
     const supplyLimit = SUPPLY_BY_RARITY[rarity];
     if (!supplyLimit) throw new Error("Unsupported replacement rarity");
+    const sourcePosition = String(claim.sourcePosition || "").trim().toUpperCase();
+    if (!["GK", "DEF", "MID", "FWD"].includes(sourcePosition)) throw new Error("Replacement position could not be verified; your claim remains open.");
 
     const candidates = rowsOf(await tx.execute(sql`
-      select p.id, p.name, p.team
+      select p.id, p.name, p.team, p.position::text as position
       from app.players p
       where lower(p.league)='premier league'
         and p.fpl_id is not null
+        and p.position::text=${sourcePosition}
         and p.id <> ${Number(claim.sourcePlayerId)}
         and coalesce(p.status,'a') <> 'departed'
         and not exists (
@@ -343,7 +352,7 @@ export async function claimReplacementCard(userId: string, claimId: number) {
       limit 50
     `));
     const chosen = candidates[0];
-    if (!chosen?.id) throw new Error(`No ${rarity} replacement supply is currently available. Your claim remains open.`);
+    if (!chosen?.id) throw new Error(`No ${rarity} ${sourcePosition} replacement supply is currently available. Your claim remains open.`);
 
     const card = rowsOf(await tx.execute(sql`
       insert into app.player_cards (
@@ -369,6 +378,7 @@ export async function claimReplacementCard(userId: string, claimId: number) {
         playerId: Number(chosen.id),
         playerName: String(chosen.name || "Premier League Player"),
         team: String(chosen.team || "Premier League"),
+        position: String(chosen.position || sourcePosition),
       },
     };
   });
