@@ -61,7 +61,9 @@ export async function openCommunityMention(notification: ArenaNotification) {
 }
 
 export function notificationDestination(notification: ArenaNotification): string {
-  if (notification.replacementClaimId) return "/account?tab=inbox";
+  const replacementKey = String(notification.dedupeKey || "");
+  if (notification.replacementClaimId || replacementKey.startsWith("replacement-claim:") || replacementKey.startsWith("replacement-reminder:")) return "/account?tab=inbox";
+  if (replacementKey.startsWith("replacement-complete:")) return "/collection";
   const prizeClaim = String(notification.dedupeKey || "").match(/^competition:\d+:entry:\d+:free-card-claim-ready$/);
   if (prizeClaim) {
     const notificationId = Number(notification.id || 0);
