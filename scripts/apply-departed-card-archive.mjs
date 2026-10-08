@@ -11,12 +11,12 @@ function replaceRequired(source, from, to, label) {
 const original = fs.readFileSync(FILE, "utf8");
 let source = original;
 
-if (!source.includes("TRANSFER_SOURCE_CARD_ARCHIVE_V2")) {
+if (!source.includes("TRANSFER_SOURCE_CARD_ARCHIVE_V3")) {
   const schemaAnchor = '      await db.execute(sql`create index if not exists player_replacement_claims_user_idx on app.player_replacement_claims (user_id, claimed_at, created_at desc)`);';
   source = replaceRequired(
     source,
     schemaAnchor,
-    `${schemaAnchor}\n      // TRANSFER_SOURCE_CARD_ARCHIVE_V2\n      // A player who leaves the Premier League is preserved in the card/claim\n      // database for admin and audit history. Archive the old card only after any\n      // active tournament lock clears; changing ownership while a card is locked\n      // is deliberately blocked by app.prevent_locked_card_transfer().\n      await db.execute(sql\`\n        update app.player_cards pc\n        set owner_id=null, for_sale=false, price=0\n        from app.player_replacement_claims pr\n        where pr.source_card_id=pc.id\n          and pc.owner_id=pr.user_id\n          and not exists (\n            select 1\n            from app.card_locks cl\n            where cl.card_id=pc.id\n              and (cl.expires_at is null or cl.expires_at > now())\n          )\n      \`);`,
+    `${schemaAnchor}\n      // TRANSFER_SOURCE_CARD_ARCHIVE_V3\n      // A player who leaves the Premier League is preserved in the card/claim\n      // database for admin and audit history. Archive the old card only after any\n      // active tournament lock clears; changing ownership while a card is locked\n      // is deliberately blocked by app.prevent_locked_card_transfer().\n      await db.execute(sql\`\n        update app.player_cards pc\n        set owner_id=null, for_sale=false, price=0\n        from app.player_replacement_claims pr\n        where pr.source_card_id=pc.id\n          and pc.owner_id=pr.user_id\n          and not exists (\n            select 1\n            from app.card_locks cl\n            where cl.card_id=pc.id\n              and (cl.expires_at is null or cl.expires_at > now())\n          )\n      \`);`,
     "historical source-card archive",
   );
 }
@@ -29,14 +29,21 @@ source = replaceRequired(source, claimAnchor, claimReplacement, "archive source 
 // chain. Leave its original notification anchor untouched until then, and only
 // rewrite the final same-position copy once that patch is present.
 if (source.includes("EPL_REPLACEMENT_SAME_POSITION_V1")) {
-  const oldMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card stays in your collection as a record, but it is no longer eligible for Premier League tournaments. Claim one free random current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity. Fantasy Arena will keep reminding you until the replacement is claimed.`,'.replace(/\\`/g, "`");
-  const newMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. It stays owned while any gameweek lock or replacement decision is pending, and is archived only after a replacement is finalized. Claim one free random current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity. Fantasy Arena will keep reminding you until the replacement is claimed.`,'.replace(/\\`/g, "`");
-  source = replaceRequired(source, oldMessage, newMessage, "final same-position departure notification copy");
+  const legacyMessages = [
+    '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card stays in your collection as a record, but it is no longer eligible for Premier League tournaments. Claim one free random current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity. Fantasy Arena will keep reminding you until the replacement is claimed.`,'.replace(/\\`/g, "`"),
+    '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. Fantasy Arena will automatically mint one current Premier League ${sourcePosition} card of the same ${prettyRarity} rarity as soon as any active tournament lock clears.`,'.replace(/\\`/g, "`"),
+  ];
+  const automaticMessage = '      message: `${input.playerName} is no longer in the Premier League. Your ${prettyRarity} ${sourcePosition} card is no longer eligible for new Premier League entries. It remains owned until a same-position, same-rarity replacement is successfully minted, then the old card is archived after any active tournament lock clears. Fantasy Arena handles this automatically.`,'.replace(/\\`/g, "`");
+  if (!source.includes(automaticMessage)) {
+    const found = legacyMessages.find((message) => source.includes(message));
+    if (!found) throw new Error("[departed-card-archive] anchor not found: final automatic same-position departure notification copy");
+    source = source.replace(found, automaticMessage);
+  }
 }
 
 if (source !== original) {
   fs.writeFileSync(FILE, source);
-  console.log("[departed-card-archive] departed source cards remain owned until replacement is finalized; active tournament locks and owner decisions are preserved.");
+  console.log("[departed-card-archive] departed source cards remain owned until a direct replacement is successfully minted; active tournament locks are preserved.");
 } else {
   console.log("[departed-card-archive] lock-safe source-card archive behavior already applied.");
 }
