@@ -310,7 +310,6 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
         !claim.replacementCardId
         && !claim.claimedAt
         && claim.decision !== "keep"
-        && !claim.locked
       ).length;
       return res.json({ claims, openClaims });
     } catch (error: any) {
@@ -327,8 +326,7 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
       const rawClaims = await listUserReplacementClaims(userId);
       const decorated = await decorateReplacementClaims(userId, rawClaims);
       const selected = decorated.find((claim: any) => Number(claim.id) === claimId);
-      if (selected?.locked) return res.status(409).json({ message: "This card is locked in the current gameweek. Choose after settlement." });
-      if (selected?.decision === "keep") return res.status(409).json({ message: "You already chose to keep this purchased card." });
+      if (selected?.decision === "keep") return res.status(409).json({ message: "This legacy keep decision cannot be retried automatically." });
       const result = await claimReplacementCard(userId, claimId);
       await finalizeReplacementChoice(userId, claimId);
       return res.json({ success: true, ...result });
