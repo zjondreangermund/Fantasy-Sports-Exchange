@@ -33,7 +33,7 @@ need(realLoan, "departure_kind='real_life_loan'", "real-life loan claims are not
 need(realLoan, "If you mint a replacement, the original card is permanently retired", "replacement permanence is not explained");
 need(realLoan, "You chose to keep", "keep-until-return persistence is missing");
 need(realLoan, "returned to the Premier League", "return-to-PL reactivation handling is missing");
-need(realLoan, "A newer transfer", "API-backed loans can be ended by lagging roster data");
+need(realLoan, "until a newer transfer explicitly brings", "API-backed loans can be ended by lagging roster data");
 need(realLoan, "transfer_date >", "API-backed loan return does not require newer transfer evidence");
 
 need(departed, "coalesce(pr.departure_kind,'permanent') <> 'real_life_loan'", "14-day permanent-departure auto-mint still includes real-life loans");
