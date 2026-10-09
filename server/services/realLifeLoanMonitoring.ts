@@ -40,6 +40,7 @@ export async function ensureRealLifeLoanPolicySchema() {
       await Promise.all([ensureNotificationsSchema(), ensurePlayerTransferMonitoringSchema()]);
       await db.execute(sql`
         alter table app.player_replacement_claims
+          add column if not exists decision text not null default 'pending',
           add column if not exists departure_kind text not null default 'permanent',
           add column if not exists real_life_loan_transfer_key text,
           add column if not exists real_life_loan_from_team text,
