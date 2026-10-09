@@ -163,7 +163,7 @@ async function latestApiFootballTransferIsLoanOut(playerName: string) {
   `))[0];
 
   return Number(transfer?.plTeamCount || 0) >= 18
-    && /\\bloan\\b/i.test(String(transfer?.transferType || ""))
+    && /\bloan\b/i.test(String(transfer?.transferType || ""))
     && Boolean(transfer?.fromPremierLeague)
     && !Boolean(transfer?.toPremierLeague);
 }
