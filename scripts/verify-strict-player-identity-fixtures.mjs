@@ -40,13 +40,19 @@ expect(!fplIdentity.includes("bTokens.slice(1).some((token) => surnamesA.has(tok
 
 expect(!directory.includes("normalizePlayerText(candidate.lastName),"), "API-Football matching must not use surname-only aliases");
 expect(!directory.includes("source.length === 1"), "API-Football matching must not link a card from one token");
-includesAll(directory, ["row.nameScore >= 92", "rawPosition === row.candidate.position", "best.nameScore < 92", "apiFootballPhotoUrl"], "API-Football strict resolver");
+includesAll(directory, [
+  "row.nameScore >= 92",
+  "const positionMatches = !rawPosition || rawPosition === candidate.position",
+  "row.positionMatches || row.safePositionMismatch",
+  "if (best && best.nameScore >= 92)",
+  "apiFootballPhotoUrl",
+], "API-Football strict resolver");
 
 includesAll(cards, [
   "const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl",
   "imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
   "verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
-  "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
+  "const identityVerified = !outsidePremierLeague && Boolean(apiFootballPlayer || matchedElement)",
   'identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football"',
   "imageUrl: null",
   "verifiedImageUrl: null",
