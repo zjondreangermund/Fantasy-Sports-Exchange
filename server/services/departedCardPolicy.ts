@@ -129,6 +129,13 @@ export async function ensureDepartedOwnedCardClaims(userId?: string) {
       and (${userId || null}::text is null or pc.owner_id=${userId || null})
       and (lower(coalesce(p.league,'')) <> 'premier league' or lower(coalesce(p.status,''))='departed')
       and not exists (
+        select 1
+        from app.card_loans active_loan
+        where active_loan.card_id=pc.id
+          and active_loan.status='active'
+          and active_loan.borrower_user_id=pc.owner_id
+      )
+      and not exists (
         select 1 from app.player_replacement_claims pr where pr.source_card_id=pc.id
       )
     order by pc.id
@@ -205,6 +212,16 @@ export async function archiveReplacedSourceCard(userId: string, claimId: number)
   const sourceCardId = Number(claim?.sourceCardId || 0);
   if (!sourceCardId || !claim?.replacementCardId) return false;
 
+  const activeBorrow = rowsOf(await db.execute(sql`
+    select l.id
+    from app.card_loans l
+    where l.card_id=${sourceCardId}
+      and l.status='active'
+      and l.borrower_user_id=${userId}
+    limit 1
+  `))[0];
+  if (activeBorrow?.id) return false;
+
   const locked = await activeLockCardIds([sourceCardId]);
   if (locked.has(sourceCardId)) return false;
 
@@ -274,6 +291,13 @@ export async function archiveReadyReplacedSourceCards(userId?: string) {
     join app.player_cards source on source.id=pr.source_card_id
     where pr.replacement_card_id is not null
       and source.owner_id=pr.user_id
+      and not exists (
+        select 1
+        from app.card_loans active_loan
+        where active_loan.card_id=pr.source_card_id
+          and active_loan.status='active'
+          and active_loan.borrower_user_id=pr.user_id
+      )
       and (${userId || null}::text is null or pr.user_id=${userId || null})
     order by pr.id
     limit 500
@@ -304,6 +328,13 @@ export async function autoReplaceUnlockedDepartures(userId?: string) {
     join app.players source on source.id=pr.source_player_id
     where pr.replacement_card_id is null
       and (${userId || null}::text is null or pr.user_id=${userId || null})
+      and not exists (
+        select 1
+        from app.card_loans active_loan
+        where active_loan.card_id=pr.source_card_id
+          and active_loan.status='active'
+          and active_loan.borrower_user_id=pr.user_id
+      )
       and (lower(coalesce(source.league,'')) <> 'premier league' or lower(coalesce(source.status,''))='departed')
     order by pr.created_at, pr.id
     limit 500
