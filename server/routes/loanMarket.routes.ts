@@ -216,7 +216,7 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
       let created: any = null;
       await db.transaction(async (tx) => {
         const cardResult = await tx.execute(sql`
-          select pc.*, p.name as player_name
+          select pc.*, p.name as player_name, p.league as player_league, p.status as player_status
           from app.player_cards pc
           join app.players p on p.id = pc.player_id
           where pc.id = ${cardId}
@@ -226,6 +226,9 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
         if (!card) throw new Error("Card not found");
         if (String(card.owner_id || "") !== userId) throw new Error("You can only loan out cards you own");
         if (card.for_sale) throw new Error("Cards listed for sale cannot also be loaned");
+        if (String(card.player_league || "").toLowerCase() !== "premier league" || String(card.player_status || "").toLowerCase() === "departed") {
+          throw new Error("Only current Premier League player cards can be listed for loan");
+        }
 
         const temporaryReplacement = rowsOf(await tx.execute(sql`
           select id
@@ -285,9 +288,11 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
       let replayed = false;
       await db.transaction(async (tx) => {
         const loanResult = await tx.execute(sql`
-          select l.*, pc.owner_id, pc.for_sale, pc.rarity
+          select l.*, pc.owner_id, pc.for_sale, pc.rarity,
+                 p.league as player_league, p.status as player_status
           from app.card_loans l
           join app.player_cards pc on pc.id = l.card_id
+          join app.players p on p.id = pc.player_id
           where l.id = ${loanId}
           for update of l, pc
         `);
@@ -319,6 +324,10 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
         }
 
         if (ownerId === borrowerId) throw new Error("You cannot loan your own card");
+        if (String(loan.player_league || "").toLowerCase() !== "premier league" || String(loan.player_status || "").toLowerCase() === "departed") {
+          await tx.execute(sql`update app.card_loans set status='cancelled' where id=${loanId} and status='open'`);
+          throw new Error("This player is no longer in the Premier League, so the loan listing has been cancelled");
+        }
         if (String(loan.owner_id || "") !== ownerId) throw new Error("Card is no longer owned by the lender");
         if (loan.for_sale) throw new Error("Card is currently listed for sale");
         if (!normalizeLoanRarity(String(loan.rarity || ""))) throw new Error("This rarity cannot be loaned");
