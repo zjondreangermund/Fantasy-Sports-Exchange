@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "./notifications.js";
 import { fplApi } from "./fplApi.js";
+import { syncActiveLoanDepartureChoices } from "./loanDeparturePolicy.js";
 
 const SUPPLY_BY_RARITY: Record<string, number> = {
   common: 1000,
@@ -143,6 +144,13 @@ async function createDepartureClaims(input: {
     from app.player_cards pc
     join app.players source on source.id=pc.player_id
     where pc.player_id=${input.playerId} and pc.owner_id is not null
+      and not exists (
+        select 1
+        from app.card_loans active_loan
+        where active_loan.card_id=pc.id
+          and active_loan.status='active'
+          and active_loan.borrower_user_id=pc.owner_id
+      )
     order by pc.id asc
   `));
 
@@ -274,6 +282,10 @@ export async function processFplRosterChanges(existingRows: any[], currentFplIds
     leftLeague += 1;
   }
 
+  await syncActiveLoanDepartureChoices().catch((error) => {
+    console.error("Active loan departure notification sync failed:", error);
+  });
+
   return { movedWithinLeague, leftLeague, replacementClaims };
 }
 
@@ -323,6 +335,18 @@ export async function claimReplacementCard(userId: string, claimId: number) {
       for update
     `))[0];
     if (!claim) throw new Error("Replacement claim not found");
+
+    const activeBorrow = rowsOf(await tx.execute(sql`
+      select l.id
+      from app.card_loans l
+      where l.card_id=${Number(claim.sourceCardId)}
+        and l.status='active'
+        and l.borrower_user_id=${userId}
+      limit 1
+    `))[0];
+    if (activeBorrow?.id) {
+      throw new Error("This is an active loan card. Choose Keep until return or Mint loan replacement from the loan-player notification.");
+    }
 
     if (claim.replacementCardId) {
       const existing = rowsOf(await tx.execute(sql`
