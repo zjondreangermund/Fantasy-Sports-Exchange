@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { claimReplacementCard, ensurePlayerTransferMonitoringSchema } from "./playerTransferMonitoring.js";
 import { createNotificationOnce } from "./notifications.js";
+import { ensureLoanPaymentSchema } from "./loanPaymentSchema.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -30,7 +31,7 @@ let policySchemaPromise: Promise<void> | null = null;
 export async function ensureDepartedCardPolicySchema() {
   if (!policySchemaPromise) {
     policySchemaPromise = (async () => {
-      await ensurePlayerTransferMonitoringSchema();
+      await Promise.all([ensurePlayerTransferMonitoringSchema(), ensureLoanPaymentSchema()]);
       await db.execute(sql`
         alter table app.player_replacement_claims
           add column if not exists decision text not null default 'pending'
