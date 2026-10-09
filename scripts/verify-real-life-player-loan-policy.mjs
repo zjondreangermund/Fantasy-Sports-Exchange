@@ -45,6 +45,8 @@ need(notifications, "replacementDepartureKind", "Inbox API does not expose real-
 need(notifications, 'app.post("/api/player-replacements/:id/keep"', "keep-until-return endpoint is missing");
 need(notifications, "assertRealLifeLoanReplacementAllowed", "replacement mint does not respect a prior keep decision");
 
+need(transferMonitoring, "latestApiFootballTransferIsLoanOut", "permanent departure processing does not guard against API-Football real-life loans");
+need(transferMonitoring, "if (await latestApiFootballTransferIsLoanOut(playerName)) continue", "real-life loans can still enter permanent-departure claims");
 need(transferMonitoring, 'departure_kind as "departureKind"', "replacement claims do not expose departure kind");
 need(transferMonitoring, "Replacement is deferred until that platform loan ends", "platform-borrowed cards are not safely deferred");
 
