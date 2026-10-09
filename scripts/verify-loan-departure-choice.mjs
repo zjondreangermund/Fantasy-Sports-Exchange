@@ -34,7 +34,7 @@ need(policy, "departure_source_returned_at", "Original lender card return state 
 need(policy, "loan-player-returned:${loanId}", "Keep-until-return path does not notify the borrower when the player returns.");
 need(policy, "loan-replacement:${loanId}", "Temporary replacement lock marker is missing.");
 need(policy, "'transfer_pending'", "Temporary replacement must be transfer-locked for the loan period.");
-need(policy, "replacementLockExpiry", "Temporary replacement lock does not follow the loan expiry.");
+need(policy, "now(), null", "Temporary replacement lock must stay active until the loan is explicitly settled.");
 need(policy, "reusable.owner_id is null", "Temporary replacements should reuse safe unowned supply when available.");
 need(policy, "clearUnmintedOwnedReplacementClaim", "Loan departures do not clear stale permanent replacement claims for borrowers.");
 
