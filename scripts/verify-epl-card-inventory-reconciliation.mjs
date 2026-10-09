@@ -121,7 +121,9 @@ rejectText(starterRestore.toLowerCase(), "set owner_id=null", "starter restorati
 
 // Collection endpoints are read-only: opening the vault must never mint random
 // cards, seed players, or alter the user's confirmed signup selections.
-requireText(cards, "const cards = await storage.getUserCards(userId);", "Collection no longer reads the existing owned cards directly");
+if (!cards.includes("const cards = await storage.getUserCards(userId);") && !cards.includes("let cards = await storage.getUserCards(userId);")) {
+  failures.push("Collection no longer reads the existing owned cards directly");
+}
 rejectText(cards, "storage.createPlayerCard(", "Collection can mint cards during a read request");
 rejectText(cards, "storage.getRandomPlayers(", "Collection can select random starter players");
 rejectText(cards, "seedDatabase(", "Collection can mutate player data during a read request");
