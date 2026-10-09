@@ -36,7 +36,7 @@ patchFile("server/services/apiFootballSync.ts", (original) => {
   source = replaceOnce(
     source,
     'import { db } from "../db.js";',
-    'import { db } from "../db.js";\nimport { createNotificationOnce } from "./notifications.js";',
+    'import { db } from "../db.js";\nimport { createNotificationOnce } from "./notifications.js";\nimport { syncRealLifePlayerLoanChoices } from "./realLifeLoanMonitoring.js";',
     "starting-XI notification import",
   );
 
@@ -439,7 +439,8 @@ patchFile("server/services/apiFootballSync.ts", (original) => {
     '      }',
     '    }',
     '  }',
-    '  return { calls, records, details: { season, teamsChecked: teamRows.length } };',
+    '  const realLifeLoanSync = await syncRealLifePlayerLoanChoices().catch((error) => ({ error: String(error?.message || error || "real-life loan sync failed") }));',
+    '  return { calls, records, details: { season, teamsChecked: teamRows.length, realLifeLoanSync } };',
     '}',
     '',
   );
