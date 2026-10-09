@@ -34,7 +34,12 @@ export async function ensureDepartedCardPolicySchema() {
       await Promise.all([ensurePlayerTransferMonitoringSchema(), ensureLoanPaymentSchema()]);
       await db.execute(sql`
         alter table app.player_replacement_claims
-          add column if not exists decision text not null default 'pending'
+          add column if not exists decision text not null default 'pending',
+          add column if not exists departure_kind text not null default 'permanent',
+          add column if not exists real_life_loan_transfer_key text,
+          add column if not exists real_life_loan_from_team text,
+          add column if not exists real_life_loan_to_team text,
+          add column if not exists real_life_loan_evidence text
       `);
       await db.execute(sql`
         create index if not exists player_replacement_claims_decision_idx
@@ -129,6 +134,7 @@ export async function ensureDepartedOwnedCardClaims(userId?: string) {
     where pc.owner_id is not null
       and (${userId || null}::text is null or pc.owner_id=${userId || null})
       and (lower(coalesce(p.league,'')) <> 'premier league' or lower(coalesce(p.status,''))='departed')
+      and lower(coalesce(p.status,'')) <> 'loaned_out'
       and not exists (
         select 1
         from app.card_loans active_loan
@@ -181,20 +187,29 @@ export async function decorateReplacementClaims(userId: string, claims: any[]) {
     activeLockCardIds(sourceIds),
   ]);
   const decisions = rowsOf(await db.execute(sql`
-    select id, decision
+    select id, decision, departure_kind as "departureKind",
+           real_life_loan_from_team as "realLifeLoanFromTeam",
+           real_life_loan_to_team as "realLifeLoanToTeam",
+           real_life_loan_evidence as "realLifeLoanEvidence"
     from app.player_replacement_claims
     where user_id=${userId}
   `));
-  const decisionById = new Map(decisions.map((row) => [Number(row.id), String(row.decision || "pending")]));
+  const decisionById = new Map(decisions.map((row) => [Number(row.id), row]));
 
   return claims.map((claim) => {
-    const reminderAt = claimDeadline(claim.createdAt, EPL_REPLACEMENT_REMINDER_DAYS);
-    const autoMintAt = claimDeadline(claim.createdAt, EPL_REPLACEMENT_AUTO_MINT_DAYS);
+    const decisionRow: any = decisionById.get(Number(claim.id || 0)) || {};
+    const realLifeLoan = String(decisionRow.departureKind || claim.departureKind || "") === "real_life_loan";
+    const reminderAt = realLifeLoan ? null : claimDeadline(claim.createdAt, EPL_REPLACEMENT_REMINDER_DAYS);
+    const autoMintAt = realLifeLoan ? null : claimDeadline(claim.createdAt, EPL_REPLACEMENT_AUTO_MINT_DAYS);
     return {
       ...claim,
       ownerChoice: purchased.has(Number(claim.sourceCardId || 0)),
       locked: locked.has(Number(claim.sourceCardId || 0)),
-      decision: decisionById.get(Number(claim.id || 0)) || "pending",
+      decision: String(decisionRow.decision || claim.decision || "pending"),
+      departureKind: String(decisionRow.departureKind || claim.departureKind || "permanent"),
+      realLifeLoanFromTeam: decisionRow.realLifeLoanFromTeam || claim.realLifeLoanFromTeam || null,
+      realLifeLoanToTeam: decisionRow.realLifeLoanToTeam || claim.realLifeLoanToTeam || null,
+      realLifeLoanEvidence: decisionRow.realLifeLoanEvidence || claim.realLifeLoanEvidence || null,
       reminderAt: reminderAt?.toISOString() || null,
       autoMintAt: autoMintAt?.toISOString() || null,
       autoMintOverdue: Boolean(autoMintAt && autoMintAt.getTime() <= Date.now() && !claim.replacementCardId),
@@ -328,6 +343,7 @@ export async function autoReplaceUnlockedDepartures(userId?: string) {
     from app.player_replacement_claims pr
     join app.players source on source.id=pr.source_player_id
     where pr.replacement_card_id is null
+      and coalesce(pr.departure_kind,'permanent') <> 'real_life_loan'
       and (${userId || null}::text is null or pr.user_id=${userId || null})
       and not exists (
         select 1

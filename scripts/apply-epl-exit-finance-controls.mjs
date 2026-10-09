@@ -353,6 +353,6 @@ patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) =
 // Ensure the Inbox replacement action exists even when build:server is run on
 // its own without the earlier profile/client generator chain.
 await import("./apply-player-transfer-notifications.mjs");
-await import("./verify-loan-departure-choice.mjs");
+await import("./verify-real-life-player-loan-policy.mjs");
 
-console.log("[epl-exit-finance] Same-position EPL replacements now use notification-first manual claims, a 7-day reminder and a 14-day auto-mint fallback; Prize Ladder and bank/reserve protections remain ready.");
+console.log("[epl-exit-finance] Permanent EPL exits keep the 7-day reminder / 14-day auto-mint fallback; confirmed real-life loans outside the Premier League now offer Keep-until-return or a permanent same-position/same-rarity replacement. Prize Ladder and bank/reserve protections remain ready.");

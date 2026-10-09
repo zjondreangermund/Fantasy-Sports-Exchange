@@ -27,9 +27,11 @@ import {
   upsertNativePushSubscription,
 } from "../services/nativePush.js";
 import {
-  ensureLoanDeparturePolicySchema,
-  syncActiveLoanDepartureChoices,
-} from "../services/loanDeparturePolicy.js";
+  assertRealLifeLoanReplacementAllowed,
+  ensureRealLifeLoanPolicySchema,
+  keepRealLifeLoanCard,
+  syncRealLifePlayerLoanChoices,
+} from "../services/realLifeLoanMonitoring.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -138,11 +140,11 @@ async function syncSubscribedUserNotifications() {
     // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1
     // Create/remind pending departure claims and auto-mint only after the
     // 14-day manual claim window expires.
+    await syncRealLifePlayerLoanChoices().catch((error) => {
+      console.error("Real-life player loan sync failed:", error);
+    });
     await autoReplaceUnlockedDepartures().catch((error) => {
       console.error("Delayed EPL departure replacement sweep failed:", error);
-    });
-    await syncActiveLoanDepartureChoices().catch((error) => {
-      console.error("Active loan departure-choice sync failed:", error);
     });
     const users = rowsOf(await db.execute(sql`
       select user_id as "userId"
@@ -273,12 +275,10 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
     try {
       await ensureNotificationsSchema();
       await ensurePlayerTransferMonitoringSchema();
-      await ensureLoanDeparturePolicySchema();
+      await ensureRealLifeLoanPolicySchema();
       const userId = String(req.authUserId || "");
-      await Promise.all([
-        syncGameweekNotifications(userId),
-        syncActiveLoanDepartureChoices(userId),
-      ]);
+      await syncRealLifePlayerLoanChoices(userId);
+      await syncGameweekNotifications(userId);
       const notifications = rowsOf(await db.execute(sql`
         select n.id, n.user_id as "userId", n.type::text as type, n.title, n.message, n.read,
                n.dedupe_key as "dedupeKey",
@@ -294,14 +294,16 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
                source_player.position::text as "replacementSourcePosition",
                pr.replacement_card_id as "replacementCardId",
                pr.claimed_at as "replacementClaimedAt",
-               case when pr.id is not null then pr.created_at + interval '14 days' else null end as "replacementAutoMintAt",
-               loan_departure.id as "loanDepartureId",
-               loan_departure.departure_decision as "loanDepartureDecision",
-               loan_departure.departure_replacement_card_id as "loanDepartureReplacementCardId",
-               loan_departure.expires_at as "loanDepartureExpiresAt",
-               loan_source.rarity::text as "loanDepartureRarity",
-               loan_player.name as "loanDeparturePlayerName",
-               loan_player.position::text as "loanDeparturePosition"
+               pr.decision as "replacementDecision",
+               pr.departure_kind as "replacementDepartureKind",
+               pr.real_life_loan_from_team as "replacementLoanFromTeam",
+               pr.real_life_loan_to_team as "replacementLoanToTeam",
+               pr.real_life_loan_evidence as "replacementLoanEvidence",
+               case
+                 when pr.id is not null and coalesce(pr.departure_kind,'permanent') <> 'real_life_loan'
+                 then pr.created_at + interval '14 days'
+                 else null
+               end as "replacementAutoMintAt"
         from app.notifications n
         left join app.player_replacement_claims pr
           on pr.user_id=n.user_id
@@ -310,11 +312,6 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
            concat('replacement-reminder:', pr.id::text)
          )
         left join app.players source_player on source_player.id=pr.source_player_id
-        left join app.card_loans loan_departure
-          on loan_departure.borrower_user_id=n.user_id
-         and n.dedupe_key=concat('loan-departure-choice:', loan_departure.id::text)
-        left join app.player_cards loan_source on loan_source.id=loan_departure.card_id
-        left join app.players loan_player on loan_player.id=loan_source.player_id
         where n.user_id = ${userId}
         order by n.created_at desc nulls last, n.id desc
         limit 100
@@ -350,6 +347,7 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
       const userId = String(req.authUserId || "");
       const claimId = Number(req.params.id);
       if (!Number.isInteger(claimId) || claimId <= 0) return res.status(400).json({ message: "Valid replacement claim required" });
+      await assertRealLifeLoanReplacementAllowed(userId, claimId);
       const result = await claimReplacementCard(userId, claimId);
       await finalizeReplacementChoice(userId, claimId);
       return res.json({ success: true, ...result });
@@ -361,10 +359,17 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
     }
   });
 
-  app.post("/api/player-replacements/:id/keep", requireAuth, async (_req: any, res) => {
-    return res.status(409).json({
-      message: "Premier League departure cards must be replaced with the same position and rarity. You can mint manually within 14 days; after that Fantasy Arena mints the replacement automatically.",
-    });
+  app.post("/api/player-replacements/:id/keep", requireAuth, async (req: any, res) => {
+    try {
+      const userId = String(req.authUserId || "");
+      const claimId = Number(req.params.id);
+      if (!Number.isInteger(claimId) || claimId <= 0) return res.status(400).json({ message: "Valid replacement claim required" });
+      const result = await keepRealLifeLoanCard(userId, claimId);
+      return res.json({ success: true, ...result });
+    } catch (error: any) {
+      const message = String(error?.message || "Could not keep this card");
+      return res.status(message.includes("not found") ? 404 : 409).json({ message });
+    }
   });
 
   app.post("/api/notifications/:id/read", requireAuth, async (req: any, res) => {

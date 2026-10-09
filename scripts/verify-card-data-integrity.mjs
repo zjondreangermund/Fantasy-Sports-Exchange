@@ -59,7 +59,7 @@ includesAll(cards, [
   "loadApiFootballPlayerDirectory",
   "resolveApiFootballPlayer",
   "verifiedImageUrl",
-  "identityVerified: Boolean(apiFootballPlayer || matchedElement)",
+  "const identityVerified = !outsidePremierLeague && Boolean(apiFootballPlayer || matchedElement)",
   'stats: "API-Football match actions with official FPL fallback"',
   "cleanSheets: Number(row.clean_sheets || 0)",
   "yellowCards: Number(row.yellow_cards || 0)",
