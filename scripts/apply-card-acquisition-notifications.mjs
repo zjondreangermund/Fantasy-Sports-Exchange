@@ -364,17 +364,32 @@ patchFile("server/routes/loanMarket.routes.ts", (original) => {
     'import { ensureLoanPaymentSchema } from "../services/loanPaymentSchema.js";',
     "loan notifications",
   );
-  source = replaceOnce(
-    source,
-    "async function ensureLoanMarketTables() {\n  await ensureLoanPaymentSchema();\n}",
-    "async function ensureLoanMarketTables() {\n  await ensureLoanPaymentSchema();\n  await ensureNotificationsSchema();\n}",
-    "loan notification schema",
-  );
+  if (!source.includes("ensureNotificationsSchema()")) {
+    const legacySchema = "async function ensureLoanMarketTables() {\\n  await ensureLoanPaymentSchema();\\n}";
+    const departureSchema = "async function ensureLoanMarketTables() {\\n  await Promise.all([ensureLoanPaymentSchema(), ensureLoanDeparturePolicySchema()]);\\n}";
+    if (source.includes(departureSchema)) {
+      source = source.replace(
+        departureSchema,
+        "async function ensureLoanMarketTables() {\\n  await Promise.all([ensureLoanPaymentSchema(), ensureLoanDeparturePolicySchema(), ensureNotificationsSchema()]);\\n}",
+      );
+    } else {
+      source = replaceOnce(
+        source,
+        legacySchema,
+        "async function ensureLoanMarketTables() {\\n  await ensureLoanPaymentSchema();\\n  await ensureNotificationsSchema();\\n}",
+        "loan notification schema",
+      );
+    }
+  }
 
   if (!source.includes("loan:${Number(loan.id)}:owner-returned")) {
+    const legacyReturn = "      returned.push({ loanId: Number(loan.id), cardId });";
+    const departureReturn = "      returned.push({ loanId: Number(loan.id), cardId, replacementCardId: replacementCardId || null });";
+    const returnAnchor = source.includes(departureReturn) ? departureReturn : legacyReturn;
+    const returnTail = source.includes(departureReturn) ? departureReturn : legacyReturn;
     source = replaceOnce(
       source,
-      "      returned.push({ loanId: Number(loan.id), cardId });",
+      returnAnchor,
       `      await createNotificationOnce(tx, {
         userId: ownerId,
         type: "system",
@@ -386,10 +401,12 @@ patchFile("server/routes/loanMarket.routes.ts", (original) => {
         userId: borrowerId,
         type: "system",
         title: "Card loan ended",
-        message: \`Your loan of card #\${cardId} has ended and the card was returned to its owner.\`,
+        message: replacementCardId > 0
+          ? \`Your temporary replacement loan has ended. The temporary card was retired and the original loan is closed.\`
+          : \`Your loan of card #\${cardId} has ended and the card was returned to its owner.\`,
         dedupeKey: \`loan:\${Number(loan.id)}:borrower-ended\`,
       });
-      returned.push({ loanId: Number(loan.id), cardId });`,
+${returnTail}`,
       "expired loan return notifications",
     );
   }
