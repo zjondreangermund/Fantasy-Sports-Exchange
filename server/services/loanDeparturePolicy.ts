@@ -365,7 +365,7 @@ export async function chooseLoanDepartureAction(userId: string, loanId: number, 
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`loan-departure:${loanId}`}))`);
     const loan = rowsOf(await tx.execute(sql`
       select l.id, l.card_id as "cardId", l.original_owner_id as "originalOwnerId",
-             l.borrower_user_id as "borrowerUserId", l.status, l.expires_at as "expiresAt",
+             l.borrower_user_id as "borrowerUserId", l.status, l.expires_at as "expiresAt", l.gameweeks,
              l.departure_decision as "departureDecision",
              l.departure_replacement_card_id as "departureReplacementCardId",
              l.departure_source_returned_at as "departureSourceReturnedAt",
@@ -431,6 +431,20 @@ export async function chooseLoanDepartureAction(userId: string, loanId: number, 
           departure_decided_at=now(),
           departure_replacement_card_id=${Number(card.id)}
       where id=${loanId}
+    `);
+    const fallbackExpiry = new Date(Date.now() + Math.max(1, Number(loan.gameweeks || 1)) * 7 * 24 * 60 * 60 * 1000);
+    const replacementLockExpiry = loan.expiresAt ? new Date(String(loan.expiresAt)) : fallbackExpiry;
+    await tx.execute(sql`
+      insert into app.card_locks (card_id, user_id, reason, ref_id, created_at, expires_at)
+      select ${Number(card.id)}, ${userId}, 'transfer_pending', ${`loan-replacement:${loanId}`}, now(), ${replacementLockExpiry}
+      where not exists (
+        select 1
+        from app.card_locks
+        where card_id=${Number(card.id)}
+          and reason='transfer_pending'
+          and ref_id=${`loan-replacement:${loanId}`}
+          and (expires_at is null or expires_at > now())
+      )
     `);
     const sourceReturned = await returnSourceToLenderIfUnlocked(tx, loan);
     await tx.execute(sql`
