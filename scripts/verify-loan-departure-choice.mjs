@@ -47,7 +47,7 @@ need(loans, "loan-replacement:${Number(loan.id)}", "Expired temporary replacemen
 need(loans, "A temporary loan replacement cannot be sold, loaned or transferred", "Direct loan listing does not block temporary replacements.");
 
 need(transfers, "active_loan.status='active'", "Permanent EPL departure claim creation does not exclude active borrowed cards.");
-need(transfers, "Only the borrower can choose", "Active-loan replacement guard is missing from permanent claim flow.");
+need(transfers, "This is an active loan card", "Active-loan replacement guard is missing from permanent claim flow.");
 need(transfers, "syncActiveLoanDepartureChoices", "Transfer detection does not trigger loan departure notifications.");
 
 need(ownedPolicy, "active_loan.borrower_user_id=pc.owner_id", "Owned-card 14-day policy can still create claims for active borrowed cards.");
