@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "./notifications.js";
 import { fplApi } from "./fplApi.js";
-import { syncActiveLoanDepartureChoices } from "./loanDeparturePolicy.js";
 import { ensureLoanPaymentSchema } from "./loanPaymentSchema.js";
 
 const SUPPLY_BY_RARITY: Record<string, number> = {
@@ -283,10 +282,6 @@ export async function processFplRosterChanges(existingRows: any[], currentFplIds
     leftLeague += 1;
   }
 
-  await syncActiveLoanDepartureChoices().catch((error) => {
-    console.error("Active loan departure notification sync failed:", error);
-  });
-
   return { movedWithinLeague, leftLeague, replacementClaims };
 }
 
@@ -301,7 +296,13 @@ export async function listUserReplacementClaims(userId: string) {
            pr.rarity,
            pr.replacement_card_id as "replacementCardId",
            pr.claimed_at as "claimedAt",
-           pr.created_at as "createdAt"
+           pr.created_at as "createdAt",
+           pr.decision,
+           pr.departure_kind as "departureKind",
+           pr.real_life_loan_transfer_key as "realLifeLoanTransferKey",
+           pr.real_life_loan_from_team as "realLifeLoanFromTeam",
+           pr.real_life_loan_to_team as "realLifeLoanToTeam",
+           pr.real_life_loan_evidence as "realLifeLoanEvidence"
     from app.player_replacement_claims pr
     join app.players source on source.id=pr.source_player_id
     where pr.user_id=${userId}
@@ -346,7 +347,7 @@ export async function claimReplacementCard(userId: string, claimId: number) {
       limit 1
     `))[0];
     if (activeBorrow?.id) {
-      throw new Error("This is an active loan card. Choose Keep until return or Mint loan replacement from the loan-player notification.");
+      throw new Error("This card is currently on a Fantasy Arena marketplace loan. Replacement is deferred until that platform loan ends.");
     }
 
     if (claim.replacementCardId) {
