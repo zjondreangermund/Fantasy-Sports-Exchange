@@ -41,7 +41,7 @@ includesAll(sync, [
   "nextFirst",
   "platform_fee_rate = 0",
   "platform_fee_total = 0",
-  "190 total season slots",
+  "current/future official GW/rarity slots",
   "day after the last eligible Premier League fixture",
   "postponed fixture assignment(s)",
   "FA Cup",
