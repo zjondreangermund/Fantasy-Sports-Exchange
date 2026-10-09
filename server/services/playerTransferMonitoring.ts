@@ -3,6 +3,7 @@ import { db } from "../db.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "./notifications.js";
 import { fplApi } from "./fplApi.js";
 import { syncActiveLoanDepartureChoices } from "./loanDeparturePolicy.js";
+import { ensureLoanPaymentSchema } from "./loanPaymentSchema.js";
 
 const SUPPLY_BY_RARITY: Record<string, number> = {
   common: 1000,
@@ -40,7 +41,7 @@ function isPremierLeague(value: unknown) {
 export async function ensurePlayerTransferMonitoringSchema() {
   if (!schemaPromise) {
     schemaPromise = (async () => {
-      await ensureNotificationsSchema();
+      await Promise.all([ensureNotificationsSchema(), ensureLoanPaymentSchema()]);
       await db.execute(sql`create schema if not exists app`);
       await db.execute(sql`
         create table if not exists app.player_transfer_events (
