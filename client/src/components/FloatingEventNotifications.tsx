@@ -16,7 +16,7 @@ type NotificationItem = {
   notificationKind?: string | null;
   dedupeKey?: string | null;
   replacementClaimId?: number | null;
-  loanDepartureId?: number | null;
+  replacementDepartureKind?: string | null;
 };
 
 type NotificationResponse = {
@@ -47,8 +47,6 @@ export default function FloatingEventNotifications() {
         || Number(item.replacementClaimId || 0) > 0
         || String(item.dedupeKey || "").startsWith("replacement-claim:")
         || String(item.dedupeKey || "").startsWith("replacement-reminder:")
-        || Number(item.loanDepartureId || 0) > 0
-        || String(item.dedupeKey || "").startsWith("loan-departure-choice:")
         || (item.notificationKind === "community_mention" && Number(item.communityMessageId || 0) > 0)
       ))
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
@@ -68,22 +66,13 @@ export default function FloatingEventNotifications() {
             View message
           </ToastAction>
         ),
-      } : Number(newest.loanDepartureId || 0) > 0 || String(newest.dedupeKey || "").startsWith("loan-departure-choice:") ? {
-        action: (
-          <ToastAction
-            altText="Choose what happens to your loan card"
-            onClick={() => setLocation(notificationDestination(newest))}
-          >
-            Choose loan option
-          </ToastAction>
-        ),
       } : Number(newest.replacementClaimId || 0) > 0 || String(newest.dedupeKey || "").startsWith("replacement-") ? {
         action: (
           <ToastAction
             altText="Open your replacement card claim"
             onClick={() => setLocation(notificationDestination(newest))}
           >
-            Mint replacement
+            {String(newest.replacementDepartureKind || "") === "real_life_loan" ? "Choose card option" : "Mint replacement"}
           </ToastAction>
         ),
       } : {}),
