@@ -383,8 +383,7 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
 
         if (ownerId === borrowerId) throw new Error("You cannot loan your own card");
         if (String(loan.player_league || "").toLowerCase() !== "premier league" || String(loan.player_status || "").toLowerCase() === "departed") {
-          await tx.execute(sql`update app.card_loans set status='cancelled' where id=${loanId} and status='open'`);
-          throw new Error("This player is no longer in the Premier League, so the loan listing has been cancelled");
+          throw new Error("This player is no longer in the Premier League and the loan cannot be accepted");
         }
         if (String(loan.owner_id || "") !== ownerId) throw new Error("Card is no longer owned by the lender");
         if (loan.for_sale) throw new Error("Card is currently listed for sale");
