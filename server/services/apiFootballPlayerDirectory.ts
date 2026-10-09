@@ -297,7 +297,7 @@ function nameCompatibility(rawName: unknown, candidate: ApiFootballDirectoryPlay
 }
 
 function teamCompatibility(rawTeam: unknown, candidateTeam: string) {
-  const aliases: Record<string, string[]> = {
+  const aliases = {
     "afc bournemouth": ["bournemouth"],
     "brighton and hove albion": ["brighton", "brighton hove albion"],
     "leeds united": ["leeds"],
@@ -316,7 +316,8 @@ function teamCompatibility(rawTeam: unknown, candidateTeam: string) {
   const keys = (value: unknown) => {
     const normalized = normalize(value);
     const result = new Set(normalized ? [normalized] : []);
-    for (const alias of aliases[normalized] || []) result.add(normalize(alias));
+    const directAliases = Object.entries(aliases).find(([canonical]) => canonical === normalized)?.[1] || [];
+    for (const alias of directAliases) result.add(normalize(alias));
     for (const [canonical, variants] of Object.entries(aliases)) {
       if (variants.map(normalize).includes(normalized)) {
         result.add(normalize(canonical));
