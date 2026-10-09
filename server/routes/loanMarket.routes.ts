@@ -91,6 +91,11 @@ async function returnExpiredLoans() {
         where cl.card_id = any(${idLiteral}::int[])
           and (cl.expires_at is null or cl.expires_at > now())
           and not (
+            cl.card_id=${replacementCardId}
+            and cl.reason::text='transfer_pending'
+            and cl.ref_id=${`loan-replacement:${Number(loan.id)}`}
+          )
+          and not (
             cl.reason::text = 'competition'
             and coalesce(cl.ref_id,'') ~ '^[0-9]+$'
             and (
@@ -121,7 +126,6 @@ async function returnExpiredLoans() {
           where card_id=${replacementCardId}
             and reason='transfer_pending'
             and ref_id=${`loan-replacement:${Number(loan.id)}`}
-            and (expires_at is null or expires_at <= now())
         `);
         await tx.execute(sql`
           update app.player_cards
