@@ -365,18 +365,18 @@ patchFile("server/routes/loanMarket.routes.ts", (original) => {
     "loan notifications",
   );
   if (!source.includes("ensureNotificationsSchema()")) {
-    const legacySchema = "async function ensureLoanMarketTables() {\\n  await ensureLoanPaymentSchema();\\n}";
-    const departureSchema = "async function ensureLoanMarketTables() {\\n  await Promise.all([ensureLoanPaymentSchema(), ensureLoanDeparturePolicySchema()]);\\n}";
+    const legacySchema = "async function ensureLoanMarketTables() {\n  await ensureLoanPaymentSchema();\n}";
+    const departureSchema = "async function ensureLoanMarketTables() {\n  await Promise.all([ensureLoanPaymentSchema(), ensureLoanDeparturePolicySchema()]);\n}";
     if (source.includes(departureSchema)) {
       source = source.replace(
         departureSchema,
-        "async function ensureLoanMarketTables() {\\n  await Promise.all([ensureLoanPaymentSchema(), ensureLoanDeparturePolicySchema(), ensureNotificationsSchema()]);\\n}",
+        "async function ensureLoanMarketTables() {\n  await Promise.all([ensureLoanPaymentSchema(), ensureLoanDeparturePolicySchema(), ensureNotificationsSchema()]);\n}",
       );
     } else {
       source = replaceOnce(
         source,
         legacySchema,
-        "async function ensureLoanMarketTables() {\\n  await ensureLoanPaymentSchema();\\n  await ensureNotificationsSchema();\\n}",
+        "async function ensureLoanMarketTables() {\n  await ensureLoanPaymentSchema();\n  await ensureNotificationsSchema();\n}",
         "loan notification schema",
       );
     }
