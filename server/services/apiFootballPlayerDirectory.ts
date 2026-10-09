@@ -297,7 +297,7 @@ function nameCompatibility(rawName: unknown, candidate: ApiFootballDirectoryPlay
 }
 
 function teamCompatibility(rawTeam: unknown, candidateTeam: string) {
-  const aliases = {
+  const aliases: Record<string, string[]> = {
     "afc bournemouth": ["bournemouth"],
     "brighton and hove albion": ["brighton", "brighton hove albion"],
     "leeds united": ["leeds"],
