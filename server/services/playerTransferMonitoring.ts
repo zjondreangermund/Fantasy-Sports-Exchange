@@ -131,6 +131,43 @@ async function notifyPremierLeagueMove(input: {
   }
 }
 
+async function latestApiFootballTransferIsLoanOut(playerName: string) {
+  const tables = rowsOf(await db.execute(sql`
+    select to_regclass('app.api_football_transfers') as transfers,
+           to_regclass('app.api_football_fixtures') as fixtures
+  `))[0];
+  if (!tables?.transfers || !tables?.fixtures) return false;
+
+  const transfer = rowsOf(await db.execute(sql`
+    with pl_teams as (
+      select distinct team_id
+      from (
+        select home_team_id as team_id from app.api_football_fixtures where season=${currentSeasonStartYear()}
+        union
+        select away_team_id as team_id from app.api_football_fixtures where season=${currentSeasonStartYear()}
+      ) ids
+      where team_id is not null and team_id > 0
+    )
+    select tr.transfer_type as "transferType",
+           tr.from_team_id as "fromTeamId",
+           tr.to_team_id as "toTeamId",
+           (select count(*)::int from pl_teams) as "plTeamCount",
+           exists(select 1 from pl_teams where team_id=tr.from_team_id) as "fromPremierLeague",
+           exists(select 1 from pl_teams where team_id=tr.to_team_id) as "toPremierLeague"
+    from app.api_football_transfers tr
+    where regexp_replace(lower(coalesce(tr.player_name,'')), '[^a-z0-9]+', '', 'g')
+        = regexp_replace(lower(${playerName}), '[^a-z0-9]+', '', 'g')
+      and tr.transfer_date >= make_date(${currentSeasonStartYear()}, 6, 1)
+    order by tr.transfer_date desc, tr.updated_at desc
+    limit 1
+  `))[0];
+
+  return Number(transfer?.plTeamCount || 0) >= 18
+    && /\\bloan\\b/i.test(String(transfer?.transferType || ""))
+    && Boolean(transfer?.fromPremierLeague)
+    && !Boolean(transfer?.toPremierLeague);
+}
+
 async function createDepartureClaims(input: {
   eventId: number;
   eventKey: string;
@@ -256,6 +293,9 @@ export async function processFplRosterChanges(existingRows: any[], currentFplIds
 
     const playerName = String(row.name || "Player");
     const fromTeam = String(row.team || "Premier League club");
+    // A confirmed API-Football PL -> non-PL loan is not a permanent departure.
+    // realLifeLoanMonitoring owns the Keep-until-return / replacement choice.
+    if (await latestApiFootballTransferIsLoanOut(playerName)) continue;
     const eventKey = `left-pl:${season}:${playerId}:${normalizeTeam(fromTeam)}`;
     const eventId = await ensureTransferEvent({
       playerId,
