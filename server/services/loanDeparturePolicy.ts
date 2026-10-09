@@ -262,7 +262,7 @@ export async function syncActiveLoanDepartureChoices(_userId?: string) {
   return { notified: 0, sourceReturns: 0, returnedPlayerNotices: 0, disabled: true };
 }
 
-export async function chooseLoanDepartureAction(_userId: string, _loanId: number, _decision: "keep" | "replace") {
+export async function chooseLoanDepartureAction(_userId: string, _loanId: number, _decision: "keep" | "replace"): Promise<Record<string, unknown>> {
   await ensureLoanDeparturePolicySchema();
   throw new Error("Fantasy Arena marketplace loans do not use the real-life football loan replacement rule.");
 }
