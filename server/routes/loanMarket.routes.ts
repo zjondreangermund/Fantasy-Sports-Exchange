@@ -227,6 +227,16 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
         if (String(card.owner_id || "") !== userId) throw new Error("You can only loan out cards you own");
         if (card.for_sale) throw new Error("Cards listed for sale cannot also be loaned");
 
+        const temporaryReplacement = rowsOf(await tx.execute(sql`
+          select id
+          from app.card_loans
+          where departure_replacement_card_id=${cardId}
+            and borrower_user_id=${userId}
+            and status='active'
+          limit 1
+        `))[0];
+        if (temporaryReplacement?.id) throw new Error("A temporary loan replacement cannot be sold, loaned or transferred");
+
         const normalizedRarity = normalizeLoanRarity(String(card.rarity || ""));
         if (!normalizedRarity) throw new Error("Common cards cannot be loaned");
 
