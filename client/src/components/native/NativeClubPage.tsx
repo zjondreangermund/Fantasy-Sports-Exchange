@@ -87,36 +87,36 @@ export default function NativeClubPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
   });
 
-  const loanDepartureMutation = useMutation({
-    mutationFn: async ({ loanId, decision }: { loanId: number; decision: "keep" | "replace" }) => {
-      const response = await fetch(`/api/marketplace/loans/${loanId}/departure-choice`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision }),
-      });
+  const replacementMutation = useMutation({
+    mutationFn: async (claimId: number) => {
+      const response = await fetch(`/api/player-replacements/${claimId}/claim`, { method: "POST", credentials: "include" });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body?.message || "Could not update loan player choice");
+      if (!response.ok) throw new Error(body?.message || "Could not mint replacement card");
       return body;
     },
     onSuccess: (body: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/marketplace/loans/mine"] });
-      const replaced = String(body?.decision || "") === "replace";
-      toast({
-        title: replaced ? "Temporary loan replacement added" : "Loan player kept",
-        description: replaced
-          ? `${String(body?.card?.playerName || "Premier League player")} is available for the remaining loan period.`
-          : "If the player returns to the Premier League before the loan expires, the card becomes eligible again.",
-      });
+      toast({ title: "Replacement minted", description: `${String(body?.card?.playerName || "Premier League player")} is now in your Collection.` });
       setSelectedNotification(null);
     },
-    onError: (error: any) => toast({
-      title: "Loan choice unavailable",
-      description: error?.message || "Could not update this loan card.",
-      variant: "destructive",
-    }),
+    onError: (error: any) => toast({ title: "Replacement unavailable", description: error?.message || "Could not mint the replacement card.", variant: "destructive" }),
+  });
+
+  const keepRealLifeLoanMutation = useMutation({
+    mutationFn: async (claimId: number) => {
+      const response = await fetch(`/api/player-replacements/${claimId}/keep`, { method: "POST", credentials: "include" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.message || "Could not keep this card");
+      return body;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
+      toast({ title: "Original card kept", description: "The card stays in your Collection and becomes eligible again if the football player returns to the Premier League." });
+      setSelectedNotification(null);
+    },
+    onError: (error: any) => toast({ title: "Choice unavailable", description: error?.message || "Could not update this card.", variant: "destructive" }),
   });
 
   const claimPrizeMutation = useMutation({
@@ -172,7 +172,8 @@ export default function NativeClubPage() {
   };
 
   const selectedPrizeEntryId = Number(String(selectedNotification?.dedupeKey || "").match(/^competition:\d+:entry:(\d+):free-card-claim-ready$/)?.[1] || 0);
-  const selectedLoanDepartureId = Number(selectedNotification?.loanDepartureId || String(selectedNotification?.dedupeKey || "").match(/^loan-departure-choice:(\d+)$/)?.[1] || 0);
+  const selectedReplacementClaimId = Number(selectedNotification?.replacementClaimId || String(selectedNotification?.dedupeKey || "").match(/^replacement-(?:claim|reminder):(\d+)$/)?.[1] || 0);
+  const selectedRealLifeLoan = String(selectedNotification?.replacementDepartureKind || "") === "real_life_loan";
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-club>
@@ -201,8 +202,15 @@ export default function NativeClubPage() {
           <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-300">{selectedNotification.message || "You have a new update."}</p>
           <p className="mt-5 text-[10px] text-slate-600">{dateLabel(selectedNotification.createdAt || selectedNotification.created_at)}</p>
           {selectedPrizeEntryId > 0 ? <Button type="button" onClick={() => claimPrizeMutation.mutate(selectedPrizeEntryId)} disabled={claimPrizeMutation.isPending} className="mt-4 h-11 w-full rounded-2xl bg-emerald-300 font-black text-emerald-950 hover:bg-emerald-200"><Gift className="mr-2 h-4 w-4" />{claimPrizeMutation.isPending ? "Claiming…" : "Claim prize card"}</Button> : null}
-          {selectedLoanDepartureId > 0 && !selectedNotification?.loanDepartureDecision ? <div className="mt-4 rounded-2xl border border-cyan-300/12 bg-cyan-300/[.04] p-3"><p className="text-[10px] font-black uppercase tracking-[.13em] text-cyan-200/70">Loan player choice</p><p className="mt-1 text-[11px] leading-5 text-slate-400">Keep the borrowed player until they return to the Premier League, or mint a temporary same-position, same-rarity Premier League card for the remaining loan period.</p><div className="mt-3 grid grid-cols-2 gap-2"><Button type="button" variant="outline" onClick={() => loanDepartureMutation.mutate({ loanId: selectedLoanDepartureId, decision: "keep" })} disabled={loanDepartureMutation.isPending} className="h-11 rounded-2xl border-white/10 bg-white/[.04] text-[10px] font-black text-white">Keep until return</Button><Button type="button" onClick={() => loanDepartureMutation.mutate({ loanId: selectedLoanDepartureId, decision: "replace" })} disabled={loanDepartureMutation.isPending} className="h-11 rounded-2xl bg-cyan-300 text-[10px] font-black text-slate-950 hover:bg-cyan-200"><Gift className="mr-1 h-4 w-4" />Mint replacement</Button></div><p className="mt-2 text-[9px] leading-4 text-slate-600">The replacement is temporary and is retired when this loan ends.</p></div> : null}
-          {selectedLoanDepartureId > 0 && selectedNotification?.loanDepartureDecision ? <div className="mt-4 rounded-2xl border border-emerald-300/12 bg-emerald-300/[.04] p-3 text-[11px] text-emerald-100">{selectedNotification.loanDepartureDecision === "replace" ? "Temporary replacement selected for this loan." : "You chose to keep the player until a Premier League return."}</div> : null}
+          {selectedReplacementClaimId > 0 ? <div className="mt-4 rounded-2xl border border-cyan-300/12 bg-cyan-300/[.04] p-3">
+            <p className="text-[10px] font-black uppercase tracking-[.13em] text-cyan-200/70">{selectedRealLifeLoan ? "Real-life loan decision" : "Premier League replacement"}</p>
+            {selectedRealLifeLoan ? <p className="mt-1 text-[11px] leading-5 text-slate-400">{String(selectedNotification?.replacementSourcePlayerName || "This player")} is on loan outside the Premier League{selectedNotification?.replacementLoanToTeam ? ` at ${String(selectedNotification.replacementLoanToTeam)}` : ""}. Keep the exact card until the player returns, or permanently replace it with a current Premier League card of the same position and rarity.</p> : <p className="mt-1 text-[11px] leading-5 text-slate-400">This player left the Premier League permanently. Mint the protected same-position, same-rarity replacement.</p>}
+            {selectedNotification?.replacementCardId ? <div className="mt-3 rounded-xl bg-emerald-300/10 p-3 text-[11px] font-black text-emerald-200">Replacement already minted.</div> : selectedRealLifeLoan && selectedNotification?.replacementDecision === "keep" ? <div className="mt-3 rounded-xl bg-emerald-300/10 p-3 text-[11px] font-black text-emerald-200">Keeping the original card until the player returns.</div> : <div className={`mt-3 grid ${selectedRealLifeLoan ? "grid-cols-2" : "grid-cols-1"} gap-2`}>
+              {selectedRealLifeLoan ? <Button type="button" variant="outline" onClick={() => keepRealLifeLoanMutation.mutate(selectedReplacementClaimId)} disabled={keepRealLifeLoanMutation.isPending || replacementMutation.isPending} className="h-11 rounded-2xl border-white/10 bg-white/[.04] text-[10px] font-black text-white">Keep until return</Button> : null}
+              <Button type="button" onClick={() => replacementMutation.mutate(selectedReplacementClaimId)} disabled={replacementMutation.isPending || keepRealLifeLoanMutation.isPending} className="h-11 rounded-2xl bg-cyan-300 text-[10px] font-black text-slate-950 hover:bg-cyan-200"><Gift className="mr-1 h-4 w-4" />Mint replacement</Button>
+            </div>}
+            <p className="mt-2 text-[9px] leading-4 text-slate-600">{selectedRealLifeLoan ? "No automatic 14-day mint applies to a real-life loan. If you replace, the original card is retired permanently." : selectedNotification?.replacementAutoMintAt ? `Automatic replacement: ${new Date(selectedNotification.replacementAutoMintAt).toLocaleDateString()}` : "Same position and rarity are protected."}</p>
+          </div> : null}
           {notificationDestination(selectedNotification) !== "/account?tab=inbox" ? <Button type="button" onClick={() => navigate(notificationDestination(selectedNotification))} variant="outline" className="mt-2 h-11 w-full rounded-2xl border-white/10 bg-white/[.04] font-black text-white">View related page<ChevronRight className="ml-2 h-4 w-4" /></Button> : null}
         </section> : <>
           <div className="mb-2 flex items-center justify-between px-1"><div><p className="text-[10px] font-black uppercase tracking-[.15em] text-slate-600">Notifications</p><p className="text-sm font-black">{Number(inbox?.unreadCount || 0)} unread</p></div>{Number(inbox?.unreadCount || 0) > 0 ? <button onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending} className="inline-flex items-center gap-1.5 rounded-xl border border-white/8 bg-white/[.03] px-3 py-2 text-[10px] font-black text-slate-300"><CheckCheck className="h-3.5 w-3.5" />Mark all read</button> : null}</div>
