@@ -424,6 +424,13 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
       if (replacementCardId > 0) {
         await removeReturnedCardFromBorrowerLineup(tx, borrowerId, replacementCardId);
         await tx.execute(sql`
+          delete from app.card_locks
+          where card_id=${replacementCardId}
+            and reason='transfer_pending'
+            and ref_id=${`loan-replacement:${Number(loan.id)}`}
+            and (expires_at is null or expires_at <= now())
+        `);
+        await tx.execute(sql`
           update app.player_cards
           set owner_id = null, for_sale = false, price = 0
           where id = ${replacementCardId}
