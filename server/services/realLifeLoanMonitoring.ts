@@ -386,7 +386,8 @@ async function processTrustedNewsFallback(candidates: any[], currentByPlayerId: 
 async function reconcileReturnedLoans(candidates: any[], currentByPlayerId: Map<number, { current: boolean; team: string | null }>) {
   const activeLoans = rowsOf(await db.execute(sql`
     select id, app_player_id as "appPlayerId", api_player_id as "apiPlayerId",
-           transfer_key as "transferKey", to_team as "loanTeam"
+           transfer_key as "transferKey", transfer_date as "transferDate",
+           from_team_id as "fromTeamId", to_team_id as "toTeamId", to_team as "loanTeam"
     from app.real_life_player_loans
     where active=true
     order by detected_at
@@ -399,6 +400,31 @@ async function reconcileReturnedLoans(candidates: any[], currentByPlayerId: Map<
     if (!player) continue;
     const roster = currentByPlayerId.get(playerId);
     if (!roster?.current) continue;
+
+    // API-Football transfer evidence outranks a lagging FPL/current-squad row.
+    // An API-backed loan remains active until a newer transfer explicitly brings
+    // the player back to a current Premier League club.
+    if (String(loan.transferKey || "").startsWith("api-football-loan:") && Number(loan.apiPlayerId || 0) > 0) {
+      const season = seasonStartYear();
+      const plTeams = await currentPremierLeagueTeamIds(season);
+      const newer = rowsOf(await db.execute(sql`
+        select transfer_date::text as "transferDate", from_team_id as "fromTeamId",
+               to_team_id as "toTeamId", transfer_type as "transferType", updated_at as "updatedAt"
+        from app.api_football_transfers
+        where api_player_id=${Number(loan.apiPlayerId)}
+          and (
+            transfer_date > ${String(loan.transferDate || "") || null}::date
+            or (
+              transfer_date = ${String(loan.transferDate || "") || null}::date
+              and (from_team_id <> ${Number(loan.fromTeamId || 0)} or to_team_id <> ${Number(loan.toTeamId || 0)})
+            )
+          )
+        order by transfer_date desc, updated_at desc
+        limit 1
+      `))[0];
+      if (!newer) continue;
+      if (!plTeams.has(Number(newer.toTeamId || 0))) continue;
+    }
 
     const returnTeam = String(roster.team || player.team || "Premier League club");
     await db.transaction(async (tx: any) => {
