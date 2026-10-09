@@ -86,6 +86,9 @@ async function removeCardFromBorrowerLineups(executor: any, borrowerUserId: stri
 }
 
 async function clearUnmintedOwnedReplacementClaim(executor: any, sourceCardId: number, borrowerUserId: string) {
+  const table = rowsOf(await executor.execute(sql`select to_regclass('app.player_replacement_claims') as name`))[0];
+  if (!table?.name) return;
+
   const staleClaims = rowsOf(await executor.execute(sql`
     select id
     from app.player_replacement_claims
