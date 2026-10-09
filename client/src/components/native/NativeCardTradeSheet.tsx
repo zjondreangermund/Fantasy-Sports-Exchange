@@ -105,6 +105,7 @@ export default function NativeCardTradeSheet({
     [card.id, myLoans],
   );
   const activeBorrow = currentLoan?.relation === "borrower" && String(currentLoan.status).toLowerCase() === "active";
+  const activeLenderReservation = currentLoan?.relation === "lender" && String(currentLoan.status).toLowerCase() === "active";
   const temporaryLoanReplacement = activeBorrow
     && Number(currentLoan?.departure_replacement_card_id ?? currentLoan?.departureReplacementCardId ?? 0) === Number(card.id);
   const openLoanListing = currentLoan?.relation === "lender" && String(currentLoan.status).toLowerCase() === "open";
@@ -117,8 +118,8 @@ export default function NativeCardTradeSheet({
   const saleNet = Math.round((Math.max(0, salePrice) - saleFee) * 100) / 100;
   const tradable = isMarketplaceTradableRarity(rarity);
   const loanRarity = Boolean(normalizeLoanRarity(rarity));
-  const canSell = tradable && !activeBorrow && !openLoanListing;
-  const canLoan = loanRarity && !card.forSale && !activeBorrow && !openLoanListing;
+  const canSell = tradable && !activeBorrow && !activeLenderReservation && !openLoanListing;
+  const canLoan = loanRarity && !card.forSale && !activeBorrow && !activeLenderReservation && !openLoanListing;
 
   React.useEffect(() => {
     setMode("actions");
@@ -205,6 +206,7 @@ export default function NativeCardTradeSheet({
               {card.forSale ? <StatusPill label={`For sale · ${money(card.price)}`} /> : null}
               {openLoanListing ? <StatusPill label="Loan market" /> : null}
               {activeBorrow ? <StatusPill label={temporaryLoanReplacement ? "Temporary loan replacement" : "Borrowed card"} amber /> : null}
+              {activeLenderReservation ? <StatusPill label="Loan still active" amber /> : null}
             </div>
           </div>
         </div>
@@ -216,6 +218,11 @@ export default function NativeCardTradeSheet({
                 {temporaryLoanReplacement
                   ? <>This is a temporary replacement for an active loan. It is retired automatically {expiryLabel(currentLoan?.expires_at || currentLoan?.expiresAt)} and cannot be sold or re-loaned.</>
                   : <>This card is temporarily in your collection on loan. It returns to the lender automatically {expiryLabel(currentLoan?.expires_at || currentLoan?.expiresAt)} and cannot be sold or re-loaned.</>}
+              </div>
+            ) : null}
+            {activeLenderReservation ? (
+              <div className="mt-4 rounded-2xl border border-amber-300/15 bg-amber-400/[.07] p-3 text-xs leading-5 text-amber-100">
+                This original card has returned to you because the borrower selected a temporary replacement, but the paid loan is still active until {expiryLabel(currentLoan?.expires_at || currentLoan?.expiresAt)}. It cannot be sold or loaned again before then.
               </div>
             ) : null}
             {openLoanListing ? (
