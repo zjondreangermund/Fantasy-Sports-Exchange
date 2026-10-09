@@ -14,6 +14,7 @@ export type ArenaNotification = {
   dedupeKey?: string | null;
   communityMessageId?: number | null;
   replacementClaimId?: number | null;
+  loanDepartureId?: number | null;
 };
 
 export const communityMentionOpenEvent = "fantasy-arena:open-community-message";
@@ -62,6 +63,7 @@ export async function openCommunityMention(notification: ArenaNotification) {
 
 export function notificationDestination(notification: ArenaNotification): string {
   const replacementKey = String(notification.dedupeKey || "");
+  if (notification.loanDepartureId || replacementKey.startsWith("loan-departure-choice:")) return "/account?tab=inbox";
   if (notification.replacementClaimId || replacementKey.startsWith("replacement-claim:") || replacementKey.startsWith("replacement-reminder:")) return "/account?tab=inbox";
   if (replacementKey.startsWith("replacement-complete:")) return "/collection";
   const prizeClaim = String(notification.dedupeKey || "").match(/^competition:\d+:entry:\d+:free-card-claim-ready$/);

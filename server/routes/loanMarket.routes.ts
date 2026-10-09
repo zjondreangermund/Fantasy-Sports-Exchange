@@ -16,6 +16,11 @@ import {
   postLoanPaymentExactlyOnce,
   verifyLoanPaymentExactlyOnce,
 } from "../services/loanPayment.js";
+import {
+  chooseLoanDepartureAction,
+  ensureLoanDeparturePolicySchema,
+  syncActiveLoanDepartureChoices,
+} from "../services/loanDeparturePolicy.js";
 
 interface RegisterLoanMarketRoutesDeps {
   requireAuth: any;
@@ -34,7 +39,7 @@ function toMoney(amount: unknown): number {
 }
 
 async function ensureLoanMarketTables() {
-  await ensureLoanPaymentSchema();
+  await Promise.all([ensureLoanPaymentSchema(), ensureLoanDeparturePolicySchema()]);
 }
 
 async function isAdminUser(userId: string): Promise<boolean> {
@@ -73,9 +78,33 @@ async function returnExpiredLoans() {
 
     for (const loan of rowsOf(result)) {
       const cardId = Number(loan.card_id);
+      const replacementCardId = Number(loan.departure_replacement_card_id || 0);
       const ownerId = String(loan.original_owner_id || "");
       const borrowerId = String(loan.borrower_user_id || "");
       if (!cardId || !ownerId || !borrowerId) continue;
+
+      const protectedIds = [cardId, replacementCardId].filter((id) => Number.isInteger(id) && id > 0);
+      const idLiteral = `{${protectedIds.join(",")}}`;
+      const lockedRows = protectedIds.length ? rowsOf(await tx.execute(sql`
+        select distinct cl.card_id as "cardId"
+        from app.card_locks cl
+        where cl.card_id = any(${idLiteral}::int[])
+          and (cl.expires_at is null or cl.expires_at > now())
+          and not (
+            cl.reason::text = 'competition'
+            and coalesce(cl.ref_id,'') ~ '^[0-9]+$'
+            and (
+              not exists (select 1 from app.competitions c where c.id=cl.ref_id::int)
+              or exists (
+                select 1 from app.competitions c
+                where c.id=cl.ref_id::int
+                  and lower(c.status::text) in ('completed','cancelled')
+              )
+            )
+          )
+      `)) : [];
+      const locked = new Set(lockedRows.map((row) => Number(row.cardId)).filter(Boolean));
+      if (locked.has(cardId) || (replacementCardId > 0 && locked.has(replacementCardId))) continue;
 
       await tx.execute(sql`
         update app.player_cards
@@ -84,6 +113,24 @@ async function returnExpiredLoans() {
           and owner_id = ${borrowerId}
       `);
       await removeReturnedCardFromBorrowerLineup(tx, borrowerId, cardId);
+
+      if (replacementCardId > 0) {
+        await removeReturnedCardFromBorrowerLineup(tx, borrowerId, replacementCardId);
+        await tx.execute(sql`
+          delete from app.card_locks
+          where card_id=${replacementCardId}
+            and reason='transfer_pending'
+            and ref_id=${`loan-replacement:${Number(loan.id)}`}
+            and (expires_at is null or expires_at <= now())
+        `);
+        await tx.execute(sql`
+          update app.player_cards
+          set owner_id = null, for_sale = false, price = 0
+          where id = ${replacementCardId}
+            and owner_id = ${borrowerId}
+        `);
+      }
+
       await tx.execute(sql`
         update app.card_loans
         set status = 'returned', returned_at = now()
@@ -91,9 +138,18 @@ async function returnExpiredLoans() {
       `);
       await tx.execute(sql`
         insert into app.audit_logs (user_id, action, meta)
-        values (${ownerId}, 'loan.returned.expired', ${JSON.stringify({ loanId: Number(loan.id), cardId, borrowerId })}::jsonb)
+        values (
+          ${ownerId},
+          'loan.returned.expired',
+          jsonb_build_object(
+            'loanId', ${Number(loan.id)},
+            'cardId', ${cardId},
+            'borrowerId', ${borrowerId},
+            'temporaryReplacementCardId', ${replacementCardId || null}
+          )
+        )
       `);
-      returned.push({ loanId: Number(loan.id), cardId });
+      returned.push({ loanId: Number(loan.id), cardId, replacementCardId: replacementCardId || null });
     }
   });
   return returned;
@@ -103,11 +159,16 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
   const { requireAuth } = deps;
 
   ensureLoanMarketTables()
-    .then(() => returnExpiredLoans())
+    .then(async () => {
+      await returnExpiredLoans();
+      await syncActiveLoanDepartureChoices();
+    })
     .catch((error) => console.error("Loan market bootstrap failed:", error));
 
   const timer = setInterval(() => {
-    returnExpiredLoans().catch((error) => console.error("Expired loan return failed:", error));
+    returnExpiredLoans()
+      .then(() => syncActiveLoanDepartureChoices())
+      .catch((error) => console.error("Loan expiry/departure sync failed:", error));
   }, 10 * 60 * 1000);
   timer.unref?.();
 
@@ -213,7 +274,7 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
       let created: any = null;
       await db.transaction(async (tx) => {
         const cardResult = await tx.execute(sql`
-          select pc.*, p.name as player_name
+          select pc.*, p.name as player_name, p.league as player_league, p.status as player_status
           from app.player_cards pc
           join app.players p on p.id = pc.player_id
           where pc.id = ${cardId}
@@ -223,6 +284,19 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
         if (!card) throw new Error("Card not found");
         if (String(card.owner_id || "") !== userId) throw new Error("You can only loan out cards you own");
         if (card.for_sale) throw new Error("Cards listed for sale cannot also be loaned");
+        if (String(card.player_league || "").toLowerCase() !== "premier league" || String(card.player_status || "").toLowerCase() === "departed") {
+          throw new Error("Only current Premier League player cards can be listed for loan");
+        }
+
+        const temporaryReplacement = rowsOf(await tx.execute(sql`
+          select id
+          from app.card_loans
+          where departure_replacement_card_id=${cardId}
+            and borrower_user_id=${userId}
+            and status='active'
+          limit 1
+        `))[0];
+        if (temporaryReplacement?.id) throw new Error("A temporary loan replacement cannot be sold, loaned or transferred");
 
         const normalizedRarity = normalizeLoanRarity(String(card.rarity || ""));
         if (!normalizedRarity) throw new Error("Common cards cannot be loaned");
@@ -272,9 +346,11 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
       let replayed = false;
       await db.transaction(async (tx) => {
         const loanResult = await tx.execute(sql`
-          select l.*, pc.owner_id, pc.for_sale, pc.rarity
+          select l.*, pc.owner_id, pc.for_sale, pc.rarity,
+                 p.league as player_league, p.status as player_status
           from app.card_loans l
           join app.player_cards pc on pc.id = l.card_id
+          join app.players p on p.id = pc.player_id
           where l.id = ${loanId}
           for update of l, pc
         `);
@@ -306,6 +382,9 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
         }
 
         if (ownerId === borrowerId) throw new Error("You cannot loan your own card");
+        if (String(loan.player_league || "").toLowerCase() !== "premier league" || String(loan.player_status || "").toLowerCase() === "departed") {
+          throw new Error("This player is no longer in the Premier League and the loan cannot be accepted");
+        }
         if (String(loan.owner_id || "") !== ownerId) throw new Error("Card is no longer owned by the lender");
         if (loan.for_sale) throw new Error("Card is currently listed for sale");
         if (!normalizeLoanRarity(String(loan.rarity || ""))) throw new Error("This rarity cannot be loaned");
@@ -364,6 +443,25 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
       const rawMessage = String(error?.message || "Failed to accept loan");
       const message = rawMessage.includes("Insufficient available balance") ? "Insufficient balance" : rawMessage;
       return res.status(message.includes("not found") ? 404 : 400).json({ message });
+    }
+  });
+
+  app.post("/api/marketplace/loans/:loanId/departure-choice", requireAuth, async (req: any, res) => {
+    try {
+      await returnExpiredLoans();
+      const userId = String(req.authUserId || "");
+      const loanId = Number(req.params.loanId);
+      const decision = String(req.body?.decision || "").toLowerCase();
+      if (!Number.isInteger(loanId) || loanId <= 0) return res.status(400).json({ message: "Valid loanId required" });
+      if (!["keep", "replace"].includes(decision)) return res.status(400).json({ message: "Choose keep or replace" });
+
+      const result = await chooseLoanDepartureAction(userId, loanId, decision as "keep" | "replace");
+      return res.json({ success: true, ...result });
+    } catch (error: any) {
+      const message = String(error?.message || "Could not update the loan card");
+      console.error("Loan departure choice failed:", error);
+      const status = message.includes("not found") ? 404 : /only the borrower|no longer active|already chose|already back/i.test(message) ? 409 : 400;
+      return res.status(status).json({ message });
     }
   });
 
