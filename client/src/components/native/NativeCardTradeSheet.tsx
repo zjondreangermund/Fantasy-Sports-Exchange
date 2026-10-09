@@ -8,6 +8,7 @@ import { useToast } from "../../hooks/use-toast";
 import type { PlayerCardWithPlayer } from "../../../../shared/schema";
 import {
   getMarketplaceFloorPrice,
+  getMarketplaceListingPrice,
   isMarketplaceTradableRarity,
   MARKETPLACE_FEE_RATE,
 } from "../../../../shared/card-economy";
@@ -78,7 +79,7 @@ export default function NativeCardTradeSheet({
   const [mode, setMode] = React.useState<Mode>("actions");
   const rarity = String(card.rarity || "common").toLowerCase();
   const saleFloor = getMarketplaceFloorPrice(rarity);
-  const [salePrice, setSalePrice] = React.useState(Math.max(Number(card.price || 0), saleFloor || 0));
+  const [salePrice, setSalePrice] = React.useState(Math.max(getMarketplaceListingPrice(card as any), saleFloor || 0));
   const [gameweeks, setGameweeks] = React.useState(1);
   const [loanPrice, setLoanPrice] = React.useState(0);
 
@@ -112,9 +113,9 @@ export default function NativeCardTradeSheet({
 
   React.useEffect(() => {
     setMode("actions");
-    setSalePrice(Math.max(Number(card.price || 0), saleFloor || 0));
+    setSalePrice(Math.max(getMarketplaceListingPrice(card as any), saleFloor || 0));
     setGameweeks(1);
-  }, [card.id, card.price, saleFloor]);
+  }, [card.id, card.price, (card as any).listedPrice, saleFloor]);
 
   React.useEffect(() => {
     if (loanFloor > 0) setLoanPrice(loanFloor);
@@ -192,7 +193,7 @@ export default function NativeCardTradeSheet({
             <h3 className="mt-1 truncate text-lg font-black">{card.player?.name || "Player"}</h3>
             <p className="mt-1 truncate text-xs text-slate-500">{card.player?.team || "Premier League"}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {card.forSale ? <StatusPill label={`For sale · ${money(card.price)}`} /> : null}
+              {card.forSale ? <StatusPill label={`For sale · ${money(getMarketplaceListingPrice(card as any))}`} /> : null}
               {openLoanListing ? <StatusPill label="Loan market" /> : null}
               {activeBorrow ? <StatusPill label="Borrowed card" amber /> : null}
             </div>

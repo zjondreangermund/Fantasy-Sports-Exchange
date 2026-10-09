@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
+import { getMarketplaceListingPrice } from "../../../shared/card-economy";
 import { PremiumFootballCard } from "./cards";
 
 type CardThumbnailProps = {
@@ -39,8 +40,8 @@ function CardThumbnailBase({
         showStats={showStats}
       />
 
-      {showPrice && Number(card.price || 0) > 0 ? (
-        <p className="mt-2 text-center text-[11px] font-bold text-emerald-300">N${Number(card.price || 0).toFixed(2)}</p>
+      {showPrice && getMarketplaceListingPrice(card) > 0 ? (
+        <p className="mt-2 text-center text-[11px] font-bold text-emerald-300">N${getMarketplaceListingPrice(card).toFixed(2)}</p>
       ) : null}
       {showMeta ? (
         <p className={`${size === "xs" ? "max-w-[96px] text-[8px] tracking-[0.1em]" : "max-w-[220px] text-[10px] tracking-[0.18em]"} mt-1 truncate text-center font-semibold uppercase text-white/60`}>

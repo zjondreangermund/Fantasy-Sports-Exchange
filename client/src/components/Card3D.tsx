@@ -13,6 +13,7 @@ import { useRef, useState, useMemo, useCallback, Suspense, Component, type React
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
+import { getMarketplaceListingPrice } from "../../../shared/card-economy";
 type EplPlayer = any;
 import { Shield } from "lucide-react";
 import { toApiUrl } from "../lib/api-base";
@@ -943,7 +944,7 @@ export default function Card3D({
         </div>
 
         {/* Price badge */}
-        {(showPrice || card.forSale) && card.price != null && card.price > 0 && (
+        {(showPrice || card.forSale) && getMarketplaceListingPrice(card) > 0 && (
           <div
             style={{
               position: "absolute",
@@ -969,7 +970,7 @@ export default function Card3D({
                 textShadow: "0 0 10px rgba(74,222,128,0.5)",
               }}
             >
-              N${card.price.toFixed(2)}
+              N${getMarketplaceListingPrice(card).toFixed(2)}
             </span>
           </div>
         )}
