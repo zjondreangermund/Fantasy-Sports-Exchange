@@ -194,20 +194,10 @@ async function upsertRealLifeLoanClaims(input: {
     update app.players
     set league='Outside Premier League',
         status='loaned_out',
-        for_sale=false,
         news=${`${String(input.player.name || "Player")} is on loan outside the Premier League${input.toTeam ? ` at ${input.toTeam}` : ""}. Fantasy Arena card owners may keep the card until the player returns or mint a same-position, same-rarity replacement.`},
         synced_at=now()
     where id=${playerId}
-  `.catch(async () => {
-    await db.execute(sql`
-      update app.players
-      set league='Outside Premier League',
-          status='loaned_out',
-          news=${`${String(input.player.name || "Player")} is on loan outside the Premier League${input.toTeam ? ` at ${input.toTeam}` : ""}. Fantasy Arena card owners may keep the card until the player returns or mint a same-position, same-rarity replacement.`},
-          synced_at=now()
-      where id=${playerId}
-    `);
-  }));
+  `);
 
   await db.execute(sql`
     update app.player_cards
