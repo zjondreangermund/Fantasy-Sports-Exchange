@@ -26,6 +26,10 @@ import {
   startNativePushDeliveryWorker,
   upsertNativePushSubscription,
 } from "../services/nativePush.js";
+import {
+  ensureLoanDeparturePolicySchema,
+  syncActiveLoanDepartureChoices,
+} from "../services/loanDeparturePolicy.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -136,6 +140,9 @@ async function syncSubscribedUserNotifications() {
     // 14-day manual claim window expires.
     await autoReplaceUnlockedDepartures().catch((error) => {
       console.error("Delayed EPL departure replacement sweep failed:", error);
+    });
+    await syncActiveLoanDepartureChoices().catch((error) => {
+      console.error("Active loan departure-choice sync failed:", error);
     });
     const users = rowsOf(await db.execute(sql`
       select user_id as "userId"
@@ -266,8 +273,12 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
     try {
       await ensureNotificationsSchema();
       await ensurePlayerTransferMonitoringSchema();
+      await ensureLoanDeparturePolicySchema();
       const userId = String(req.authUserId || "");
-      await syncGameweekNotifications(userId);
+      await Promise.all([
+        syncGameweekNotifications(userId),
+        syncActiveLoanDepartureChoices(userId),
+      ]);
       const notifications = rowsOf(await db.execute(sql`
         select n.id, n.user_id as "userId", n.type::text as type, n.title, n.message, n.read,
                n.dedupe_key as "dedupeKey",
@@ -283,7 +294,14 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
                source_player.position::text as "replacementSourcePosition",
                pr.replacement_card_id as "replacementCardId",
                pr.claimed_at as "replacementClaimedAt",
-               case when pr.id is not null then pr.created_at + interval '14 days' else null end as "replacementAutoMintAt"
+               case when pr.id is not null then pr.created_at + interval '14 days' else null end as "replacementAutoMintAt",
+               loan_departure.id as "loanDepartureId",
+               loan_departure.departure_decision as "loanDepartureDecision",
+               loan_departure.departure_replacement_card_id as "loanDepartureReplacementCardId",
+               loan_departure.expires_at as "loanDepartureExpiresAt",
+               loan_source.rarity::text as "loanDepartureRarity",
+               loan_player.name as "loanDeparturePlayerName",
+               loan_player.position::text as "loanDeparturePosition"
         from app.notifications n
         left join app.player_replacement_claims pr
           on pr.user_id=n.user_id
@@ -292,6 +310,11 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
            concat('replacement-reminder:', pr.id::text)
          )
         left join app.players source_player on source_player.id=pr.source_player_id
+        left join app.card_loans loan_departure
+          on loan_departure.borrower_user_id=n.user_id
+         and n.dedupe_key=concat('loan-departure-choice:', loan_departure.id::text)
+        left join app.player_cards loan_source on loan_source.id=loan_departure.card_id
+        left join app.players loan_player on loan_player.id=loan_source.player_id
         where n.user_id = ${userId}
         order by n.created_at desc nulls last, n.id desc
         limit 100
