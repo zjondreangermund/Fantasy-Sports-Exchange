@@ -251,15 +251,20 @@ async function upsertRealLifeLoanClaims(input: {
         returning id, replacement_card_id as "replacementCardId", departure_kind as "departureKind", decision
       `))[0];
     } else if (!existing.replacementCardId) {
+      // REAL_LIFE_LOAN_NOTIFICATION_STABILITY_V1
+      // Preserve a manager's Keep-until-return choice on every sync. When an
+      // older permanent-departure claim is converted to a real-life loan we
+      // reset it to pending once, but a real-life-loan claim must never be
+      // forced back to pending by background or Inbox refreshes.
       claim = rowsOf(await db.execute(sql`
         update app.player_replacement_claims
         set user_id=${ownerId},
             source_player_id=${playerId},
             source_player_name=${String(card.playerName || input.player.name || "Player")},
             rarity=${String(card.rarity || "common")},
+            decision=case when departure_kind='real_life_loan' then decision else 'pending' end,
+            claimed_at=case when departure_kind='real_life_loan' then claimed_at else null end,
             departure_kind='real_life_loan',
-            decision='pending',
-            claimed_at=null,
             real_life_loan_transfer_key=${input.transferKey},
             real_life_loan_from_team=${input.fromTeam || null},
             real_life_loan_to_team=${input.toTeam || null},
@@ -271,24 +276,28 @@ async function upsertRealLifeLoanClaims(input: {
 
     if (!claim?.id || claim.replacementCardId) continue;
     const claimId = Number(claim.id);
-    await db.execute(sql`
-      delete from app.notifications
-      where user_id=${ownerId}
-        and dedupe_key in (
-          ${`replacement-claim:${claimId}`},
-          ${`replacement-reminder:${claimId}`}
-        )
-    `);
-
     const prettyRarity = String(card.rarity || "common").replace(/^./, (ch) => ch.toUpperCase());
     const position = String(card.position || "same-position").toUpperCase();
-    await createNotificationOnce(db, {
+    const notificationTitle = `${String(card.playerName || input.player.name || "Your player")} has gone out on loan`;
+    const notificationMessage = `${String(card.playerName || input.player.name || "Your player")} has moved on loan outside the Premier League${input.toTeam ? ` to ${input.toTeam}` : ""}. Your ${prettyRarity} ${position} card cannot be used for new Premier League entries while the player is away. Choose Keep until return to preserve this exact card, or mint one current Premier League ${position} card of the same ${prettyRarity} rarity. If you mint a replacement, the original card is permanently retired and will not reactivate when the player returns.`;
+    const dedupeKey = `replacement-claim:${claimId}`;
+
+    // Never delete/recreate this notification during sync. Deleting it gave
+    // the same football event a fresh notification ID on every refresh, which
+    // re-enqueued Android/Web pushes and caused repeated alerts. Update the
+    // existing row in place, then create it only if it does not exist.
+    await db.execute(sql`
+      update app.notifications
+      set title=${notificationTitle}, message=${notificationMessage}
+      where user_id=${ownerId} and dedupe_key=${dedupeKey}
+    `);
+    const createdNotification = await createNotificationOnce(db, {
       userId: ownerId,
-      title: `${String(card.playerName || input.player.name || "Your player")} has gone out on loan`,
-      message: `${String(card.playerName || input.player.name || "Your player")} has moved on loan outside the Premier League${input.toTeam ? ` to ${input.toTeam}` : ""}. Your ${prettyRarity} ${position} card cannot be used for new Premier League entries while the player is away. Choose Keep until return to preserve this exact card, or mint one current Premier League ${position} card of the same ${prettyRarity} rarity. If you mint a replacement, the original card is permanently retired and will not reactivate when the player returns.`,
-      dedupeKey: `replacement-claim:${claimId}`,
+      title: notificationTitle,
+      message: notificationMessage,
+      dedupeKey,
     });
-    claims += 1;
+    if (createdNotification?.id) claims += 1;
   }
 
   return { claims, deferredPlatformLoans };
