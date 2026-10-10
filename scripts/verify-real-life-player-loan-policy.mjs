@@ -35,6 +35,11 @@ need(realLoan, "Keep until return", "owner notification is missing the keep-unti
 need(realLoan, "same", "real-life loan notification/replacement copy is incomplete");
 need(realLoan, "departure_kind='real_life_loan'", "real-life loan claims are not typed separately");
 need(realLoan, "If you mint a replacement, the original card is permanently retired", "replacement permanence is not explained");
+need(realLoan, "REAL_LIFE_LOAN_NOTIFICATION_STABILITY_V1", "real-life loan notification stability marker is missing");
+need(realLoan, "decision=case when departure_kind='real_life_loan' then decision else 'pending' end", "Keep-until-return choice is reset on every sync");
+need(realLoan, "update app.notifications", "real-life loan notification content is not refreshed in place");
+need(realLoan, "if (createdNotification?.id) claims += 1", "real-life loan sync does not distinguish a newly created notification from an existing one");
+reject(realLoan, "delete from app.notifications\n      where user_id=", "real-life loan sync must never delete and recreate the replacement notification");
 need(realLoan, "You chose to keep", "keep-until-return persistence is missing");
 need(realLoan, "returned to the Premier League", "return-to-PL reactivation handling is missing");
 need(realLoan, "until a newer transfer explicitly brings", "API-backed loans can be ended by lagging roster data");
