@@ -69,7 +69,7 @@ need(webPush, '/account?tab=inbox&notification=', "web replacement push does not
 need(nativePush, '/account?tab=inbox&notification=', "native replacement push does not deep-link to the exact Inbox message");
 need(notificationClient, '/account?tab=inbox&notification=', "in-app replacement alerts do not deep-link to the exact Inbox message");
 need(notificationService, "native_subscription.disabled_at is null", "push creation does not prefer native Android delivery when the native app is registered");
-need(notificationService, "lower(coalesce(subscription.user_agent,'')) like '%android%'", "push creation does not identify Android web subscriptions for duplicate suppression");
+need(notificationService, "lower(coalesce(mobile_subscription.user_agent,'')) like '%android%'", "push creation does not identify Android web subscriptions for duplicate suppression");
 need(notificationService, "order by mobile_subscription.updated_at desc", "multiple stale Android web subscriptions are not collapsed to the most recent subscription");
 
 need(platformLoan, "PLATFORM_LOAN_DEPARTURE_POLICY_DISABLED_V1", "Fantasy Arena marketplace loans can still trigger the wrong real-life loan workflow");
