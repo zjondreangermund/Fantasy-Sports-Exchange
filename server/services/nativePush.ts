@@ -177,7 +177,10 @@ function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
   }
   const decider = key.match(/^competition:(\d+):decider:/);
   if (decider) return `/competitions?leaderboard=${decider[1]}`;
-  if (key.startsWith("replacement-claim:") || key.startsWith("replacement-reminder:")) return "/account?tab=inbox";
+  if (key.startsWith("replacement-claim:") || key.startsWith("replacement-reminder:")) {
+    const id = Number(notificationId || 0);
+    return id > 0 ? `/account?tab=inbox&notification=${id}` : "/account?tab=inbox";
+  }
   if (key.startsWith("replacement-complete:")) return "/collection";
   if (key.startsWith("community-mention:")) return "/community";
   if (key.startsWith("competition:") || key.startsWith("gameweek:")) return "/my-entries";
