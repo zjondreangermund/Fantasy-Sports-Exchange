@@ -100,6 +100,26 @@ function safeNotificationPath(value) {
   }
 }
 
+function actionableNotificationPath(value, notificationIdValue) {
+  const path = safeNotificationPath(value);
+  const notificationId = Number(notificationIdValue || 0);
+  if (!Number.isInteger(notificationId) || notificationId <= 0) return path;
+  try {
+    const target = new URL(path, self.location.origin);
+    if (
+      target.pathname === "/account"
+      && target.searchParams.get("tab") === "inbox"
+      && !target.searchParams.has("notification")
+    ) {
+      target.searchParams.set("notification", String(notificationId));
+      return `${target.pathname}${target.search}${target.hash}`;
+    }
+  } catch {
+    return path;
+  }
+  return path;
+}
+
 self.addEventListener("push", (event) => {
   let payload = {};
   try {
@@ -110,7 +130,7 @@ self.addEventListener("push", (event) => {
 
   const title = String(payload.title || "Fantasy Arena");
   const body = String(payload.body || "You have a new Fantasy Arena notification.");
-  const url = safeNotificationPath(payload.url);
+  const url = actionableNotificationPath(payload.url, payload.notificationId);
   const tag = String(payload.tag || `fantasy-arena-${Date.now()}`);
   event.waitUntil(self.registration.showNotification(title, {
     body,
@@ -124,7 +144,10 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const path = safeNotificationPath(event.notification?.data?.url);
+  const path = actionableNotificationPath(
+    event.notification?.data?.url,
+    event.notification?.data?.notificationId,
+  );
   const targetUrl = new URL(path, self.location.origin).href;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (windows) => {
