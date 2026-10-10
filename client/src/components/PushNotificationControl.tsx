@@ -83,6 +83,26 @@ function safeAppPath(value: unknown): string {
   }
 }
 
+function actionableNotificationPath(value: unknown, notificationIdValue: unknown): string {
+  const path = safeAppPath(value);
+  const notificationId = Number(notificationIdValue || 0);
+  if (!Number.isInteger(notificationId) || notificationId <= 0) return path;
+  try {
+    const target = new URL(path, window.location.origin);
+    if (
+      target.pathname === "/account"
+      && target.searchParams.get("tab") === "inbox"
+      && !target.searchParams.has("notification")
+    ) {
+      target.searchParams.set("notification", String(notificationId));
+      return `${target.pathname}${target.search}${target.hash}`;
+    }
+  } catch {
+    return path;
+  }
+  return path;
+}
+
 async function configureAndroidChannel() {
   const { PushNotifications } = await import("@capacitor/push-notifications");
   await PushNotifications.createChannel({
@@ -210,7 +230,10 @@ export default function PushNotificationControl() {
         void queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       }));
       handles.push(await PushNotifications.addListener("pushNotificationActionPerformed", ({ notification }) => {
-        const path = safeAppPath(notification?.data?.url || notification?.link);
+        const path = actionableNotificationPath(
+          notification?.data?.url || notification?.link,
+          notification?.data?.notificationId,
+        );
         window.location.assign(path);
       }));
       if (!active) await Promise.all(handles.map((handle) => handle.remove()));
