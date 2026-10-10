@@ -9,6 +9,8 @@ const realLoan = read("server/services/realLifeLoanMonitoring.ts");
 const transferMonitoring = read("server/services/playerTransferMonitoring.ts");
 const departed = read("server/services/departedCardPolicy.ts");
 const notifications = read("server/routes/notifications.routes.ts");
+const notificationService = read("server/services/notifications.ts");
+const notificationClient = read("client/src/lib/notifications.ts");
 const apiProGenerator = read("scripts/apply-api-football-pro-mode.mjs");
 const accountGenerator = read("scripts/apply-player-transfer-notifications.mjs");
 const nativeClub = read("client/src/components/native/NativeClubPage.tsx");
@@ -63,6 +65,12 @@ need(nativeClub, "If you replace, the original card is retired permanently", "na
 need(floating, "Choose card option", "floating alert does not distinguish real-life loan choice");
 need(webPush, 'key.startsWith("replacement-claim:")', "web push does not route real-life loan claim notifications to Inbox");
 need(nativePush, 'key.startsWith("replacement-claim:")', "native push does not route real-life loan claim notifications to Inbox");
+need(webPush, '/account?tab=inbox&notification=', "web replacement push does not deep-link to the exact Inbox message");
+need(nativePush, '/account?tab=inbox&notification=', "native replacement push does not deep-link to the exact Inbox message");
+need(notificationClient, '/account?tab=inbox&notification=', "in-app replacement alerts do not deep-link to the exact Inbox message");
+need(notificationService, "native_subscription.disabled_at is null", "push creation does not prefer native Android delivery when the native app is registered");
+need(notificationService, "lower(coalesce(mobile_subscription.user_agent,'')) like '%android%'", "push creation does not identify Android web subscriptions for duplicate suppression");
+need(notificationService, "order by mobile_subscription.updated_at desc", "multiple stale Android web subscriptions are not collapsed to the most recent subscription");
 
 need(platformLoan, "PLATFORM_LOAN_DEPARTURE_POLICY_DISABLED_V1", "Fantasy Arena marketplace loans can still trigger the wrong real-life loan workflow");
 need(platformLoan, "Fantasy Arena marketplace loans do not use the real-life football loan replacement rule.", "old platform-loan choice endpoint is not disabled");
@@ -71,4 +79,4 @@ reject(accountGenerator, "Mint temporary replacement", "full Inbox still exposes
 reject(nativeClub, "Temporary loan replacement added", "native Inbox still exposes the old platform-loan temporary replacement result");
 reject(floating, "Choose loan option", "floating alerts still expose the old platform-loan action");
 
-console.log("Real-life player-loan policy verified: API-Football PL-to-non-PL loan transfers are primary evidence, guarded confirmed-news fallback is supported, owners may keep until return or permanently mint the same position/rarity replacement, and Fantasy Arena marketplace loans are not the trigger.");
+console.log("Real-life player-loan policy verified: API-Football PL-to-non-PL loan transfers are primary evidence, owners may keep until return or replace, replacement pushes open the exact actionable Inbox item, and native Android delivery suppresses duplicate mobile-web pushes.");
