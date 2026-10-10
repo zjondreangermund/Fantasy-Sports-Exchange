@@ -131,7 +131,28 @@ export async function createNotificationOnce(tx: any, input: {
       insert into app.notification_push_deliveries (notification_id, subscription_id, status, next_attempt_at, created_at, updated_at)
       select ${Number(notification.id)}, subscription.id, 'pending', now(), now(), now()
       from app.web_push_subscriptions subscription
-      where subscription.user_id = ${userId} and subscription.disabled_at is null
+      where subscription.user_id = ${userId}
+        and subscription.disabled_at is null
+        and (
+          lower(coalesce(subscription.user_agent,'')) not like '%android%'
+          or (
+            not exists (
+              select 1
+              from app.native_push_subscriptions native_subscription
+              where native_subscription.user_id=${userId}
+                and native_subscription.disabled_at is null
+            )
+            and subscription.id = (
+              select mobile_subscription.id
+              from app.web_push_subscriptions mobile_subscription
+              where mobile_subscription.user_id=${userId}
+                and mobile_subscription.disabled_at is null
+                and lower(coalesce(mobile_subscription.user_agent,'')) like '%android%'
+              order by mobile_subscription.updated_at desc, mobile_subscription.id desc
+              limit 1
+            )
+          )
+        )
       on conflict (notification_id, subscription_id) do nothing
     `);
     await tx.execute(sql`
