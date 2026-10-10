@@ -1,5 +1,7 @@
 import type { Express, Response } from "express";
 import { and, eq, sql } from "drizzle-orm";
+import { buildFplPlayerIndex, fplPlayerFullName, fplPlayerPosition, strongPlayerNameMatch } from "../services/fplPlayerIdentity.js";
+import { ensureRealLifeLoanPolicySchema } from "../services/realLifeLoanMonitoring.js";
 import { db } from "../db.js";
 import { auditLogs, playerCards, userOnboarding } from "../../shared/schema.js";
 
@@ -145,53 +147,128 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
   void ensureCommunityChatSchema().catch((error) => console.warn("Community chat schema ensure failed:", error));
   void ensureUniqueTeamNameIndex().catch((error) => console.warn("Team-name unique index ensure failed; route-level uniqueness remains active:", error));
 
+  // STARTER_CURRENT_PL_ELIGIBILITY_V1: stale FPL rows must not override
+  // confirmed departures or real-life loans outside the Premier League.
+  const loadStarterEligibility = async () => {
+    const bootstrap = await fplApi.bootstrap();
+    if (!Array.isArray(bootstrap?.elements) || bootstrap.elements.length < 300 || bootstrap?.teams?.length < 18) {
+      throw new Error("Current Premier League roster is unavailable. Please try again shortly.");
+    }
+    await ensureRealLifeLoanPolicySchema();
+    const now = new Date();
+    const season = now.getUTCMonth() >= 6 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+    const [departures, loans] = await Promise.all([
+      db.execute(sql`
+        with pl_teams as (
+          select home_team_id as id from app.api_football_fixtures where league_id=39 and season=${season}
+          union select away_team_id from app.api_football_fixtures where league_id=39 and season=${season}
+        ), latest as (
+          select distinct on (api_player_id) api_player_id, player_name, from_team_id, to_team_id
+          from app.api_football_transfers where transfer_date >= make_date(${season}, 6, 1)
+          order by api_player_id, transfer_date desc, updated_at desc
+        )
+        select latest.player_name as name from latest
+        join pl_teams source on source.id=latest.from_team_id
+        left join pl_teams destination on destination.id=latest.to_team_id
+        where destination.id is null
+      `),
+      db.execute(sql`select p.id, p.fpl_id as "fplId", p.code, p.name, p.team, p.position
+        from app.players p join app.real_life_player_loans l on l.app_player_id=p.id
+        where l.active=true`),
+    ]);
+    const index = buildFplPlayerIndex(bootstrap);
+    const loanElements = new Set(rowsOf(loans).map((player: any) => Number(index.resolve(player)?.id || 0)));
+    const teams = new Map<number, any>(bootstrap.teams.map((team: any) => [Number(team.id), team]));
+    const eligibleElement = (element: any) => {
+      if (!element || !teams.has(Number(element.team)) || String(element.status || "").toLowerCase() === "u") return false;
+      if (loanElements.has(Number(element.id))) return false;
+      const identity = { name: fplPlayerFullName(element), webName: element.web_name,
+        team: teams.get(Number(element.team))?.name, position: fplPlayerPosition(element) };
+      return !rowsOf(departures).some((departure: any) => strongPlayerNameMatch(identity.name, departure.name));
+    };
+    const eligiblePlayer = (player: any) => {
+      if (!player) return false;
+      if (rowsOf(loans).some((loan: any) => Number(loan.id) === Number(player.id))) return false;
+      return eligibleElement(index.resolve(player));
+    };
+    return { eligibleElement, eligiblePlayer };
+  };
+
+  const validStarterOffer = async (ob: any) => {
+    if (ob?.completed) return true;
+    if (ob?.packCards?.length !== 5 || ob.packCards.some((pack: any) => !Array.isArray(pack) || pack.length !== 3)) return false;
+    const eligibility = await loadStarterEligibility();
+    const players = await Promise.all(ob.packCards.flat().map((id: number) => storage.getPlayer(id)));
+    return players.every(eligibility.eligiblePlayer);
+  };
+
   const getOnboardingPlayerPool = async () => {
-    const [fplPlayers, bootstrap, fixtures] = await Promise.all([
+    // FAIR_STARTER_DRAFT_V1
+    // Draw Starter Draft offers from the complete CURRENT Premier League/FPL
+    // player list before touching the local player table. This avoids the old
+    // starts/minutes/top-120 and matchday-team bias that made the same popular
+    // players appear disproportionately often for new signups.
+    const [fplPlayers, bootstrap] = await Promise.all([
       fplApi.getPlayers(),
       fplApi.bootstrap(),
-      fplApi.fixtures(),
     ]);
 
     const teams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
     const teamMap = new Map<number, any>(teams.map((t: any) => [Number(t.id), t] as [number, any]));
+    const currentTeamIds = new Set<number>(teams.map((team: any) => Number(team.id)).filter((id: number) => Number.isFinite(id) && id > 0));
+    const positionMap: Record<number, "GK" | "DEF" | "MID" | "FWD"> = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
 
-    const now = new Date();
-    const sameUtcDay = (dateStr: string) => {
-      const d = new Date(dateStr);
-      return d.getUTCFullYear() === now.getUTCFullYear() && d.getUTCMonth() === now.getUTCMonth() && d.getUTCDate() === now.getUTCDate();
+    const eligibility = await loadStarterEligibility();
+    const currentPlayers = (Array.isArray(fplPlayers) ? fplPlayers : []).filter((player: any) => {
+      const teamId = Number(player?.team);
+      const elementType = Number(player?.element_type);
+      return currentTeamIds.has(teamId) && Boolean(positionMap[elementType]) && eligibility.eligibleElement(player);
+    });
+
+    const byPosition = {
+      GK: currentPlayers.filter((player: any) => Number(player.element_type) === 1),
+      DEF: currentPlayers.filter((player: any) => Number(player.element_type) === 2),
+      MID: currentPlayers.filter((player: any) => Number(player.element_type) === 3),
+      FWD: currentPlayers.filter((player: any) => Number(player.element_type) === 4),
     };
 
-    const todayTeamIds = new Set<number>();
-    (Array.isArray(fixtures) ? fixtures : []).forEach((fixture: any) => {
-      if (!fixture?.kickoff_time || !sameUtcDay(String(fixture.kickoff_time))) return;
-      todayTeamIds.add(Number(fixture.team_h));
-      todayTeamIds.add(Number(fixture.team_a));
-    });
+    if (byPosition.GK.length < 3 || byPosition.DEF.length < 3 || byPosition.MID.length < 3 || byPosition.FWD.length < 3) {
+      console.warn("Starter Draft cannot build a full offer from the current Premier League player list", {
+        gk: byPosition.GK.length,
+        def: byPosition.DEF.length,
+        mid: byPosition.MID.length,
+        fwd: byPosition.FWD.length,
+      });
+      return [];
+    }
 
-    const positionMap: Record<number, "GK" | "DEF" | "MID" | "FWD"> = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
-    const allFplPlayers = Array.isArray(fplPlayers) ? fplPlayers : [];
-    const todayCandidates = allFplPlayers.filter((p: any) => todayTeamIds.has(Number(p.team)));
-    const sourcePool = todayCandidates.length >= 15 ? todayCandidates : allFplPlayers;
+    // Every current player in the relevant position pool has the same chance
+    // of being drawn. Choose the four required rows first, then draw three
+    // wildcards from every remaining current Premier League player.
+    const requiredPlayers = [
+      ...shuffle(byPosition.GK).slice(0, 3),
+      ...shuffle(byPosition.DEF).slice(0, 3),
+      ...shuffle(byPosition.MID).slice(0, 3),
+      ...shuffle(byPosition.FWD).slice(0, 3),
+    ];
+    const usedFplIds = new Set<number>(requiredPlayers.map((player: any) => Number(player.id)));
+    const wildcardPlayers = shuffle(currentPlayers.filter((player: any) => !usedFplIds.has(Number(player.id)))).slice(0, 3);
+    const candidates = [...requiredPlayers, ...wildcardPlayers];
 
-    const candidates = sourcePool.sort((a: any, b: any) => {
-      const sa = Number(a.starts || 0);
-      const sb = Number(b.starts || 0);
-      if (sb !== sa) return sb - sa;
-      const ma = Number(a.minutes || 0);
-      const mb = Number(b.minutes || 0);
-      if (mb !== ma) return mb - ma;
-      return Number(b.form || 0) - Number(a.form || 0);
-    });
+    if (candidates.length !== 15) {
+      console.warn("Starter Draft did not produce exactly 15 unique current-player candidates", { count: candidates.length });
+      return [];
+    }
 
     const existingPlayers = await storage.getPlayers();
-    const mapKey = (name: string, team: string, pos: string) => `${name.toLowerCase()}::${team.toLowerCase()}::${pos}`;
+    const mapKey = (name: string, team: string, pos: string) => name.toLowerCase() + "::" + team.toLowerCase() + "::" + pos;
     const existingMap = new Map<string, any>();
     existingPlayers.forEach((p: any) => existingMap.set(mapKey(String(p.name), String(p.team), String(p.position)), p));
 
     const ensurePlayer = async (fplPlayer: any) => {
       const teamName = String(teamMap.get(Number(fplPlayer.team))?.name || "Unknown");
       const position = positionMap[Number(fplPlayer.element_type)] || "MID";
-      const fullName = `${String(fplPlayer.first_name || "").trim()} ${String(fplPlayer.second_name || "").trim()}`.trim() || String(fplPlayer.web_name || "Unknown");
+      const fullName = (String(fplPlayer.first_name || "").trim() + " " + String(fplPlayer.second_name || "").trim()).trim() || String(fplPlayer.web_name || "Unknown");
       const key = mapKey(fullName, teamName, position);
       const photoUrl = fplApi.playerPhotoUrl(fplPlayer, 250);
       const fplId = Number(fplPlayer.id || 0) || null;
@@ -246,7 +323,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
     };
 
     const result: any[] = [];
-    for (const player of candidates.slice(0, 120)) result.push(await ensurePlayer(player));
+    for (const player of candidates) result.push(await ensurePlayer(player));
     return result;
   };
 
@@ -281,7 +358,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       current.packCards.every((pack: number[]) => Array.isArray(pack) && pack.length === 3),
     );
 
-    if (!current?.completed && !hasCompleteOffer) {
+    if (!current?.completed && (!hasCompleteOffer || !await validStarterOffer(current))) {
       await storage.updateOnboarding(userId, { packCards, selectedCards: [] } as any);
       current = await storage.getOnboarding(userId);
     }
@@ -516,7 +593,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       const userId = req.authUserId;
       const ob = await storage.getOnboarding(userId);
       if (ob?.completed) return res.json({ packCards: ob.packCards || [], completed: true });
-      if (ob?.packCards?.length === 5 && ob.packCards.flat().length === 15) return res.json({ packCards: ob.packCards });
+      if (await validStarterOffer(ob)) return res.json({ packCards: ob.packCards });
 
       const allPlayers = await getOnboardingPlayerPool();
       if (!Array.isArray(allPlayers) || allPlayers.length < 15) {
@@ -540,7 +617,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       const userId = req.authUserId;
       let ob = await storage.getOnboarding(userId);
 
-      if (!ob?.packCards?.length) {
+      if (!await validStarterOffer(ob)) {
         const allPlayers = await getOnboardingPlayerPool();
         if (!Array.isArray(allPlayers) || allPlayers.length < 15) return res.status(404).json({ message: "No offer found. Create offer first." });
         const packCards = buildPackCards(allPlayers);
@@ -569,6 +646,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       if (selected.some((id) => !Number.isSafeInteger(id) || id <= 0)) return res.status(400).json({ message: "Selections must contain valid player IDs" });
       if (new Set(selected).size !== 5) return res.status(400).json({ message: "Duplicate selections not allowed" });
 
+      const eligibility = await loadStarterEligibility();
       const result = await db.transaction(async (tx: any) => {
         // Serialize repeated confirmations and keep the visible selection,
         // minted cards, completion flag, and audit evidence in one transaction.
@@ -603,6 +681,14 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
           return selected.find((id) => packPlayerIds.has(id))!;
         });
 
+        const selectedPlayers = rowsOf(await tx.execute(sql`
+          select id, name, team, position, fpl_id as "fplId", code, web_name as "webName"
+          from app.players where id in (${sql.join(orderedSelected.map((id) => sql`${id}`), sql`, `)})
+          for share
+        `));
+        if (selectedPlayers.length !== 5 || !selectedPlayers.every(eligibility.eligiblePlayer)) {
+          return { error: "A selected player has left the Premier League. Refresh your starter offer and choose again." };
+        }
         const grantResult = await ensureStarterCards(tx, userId, orderedSelected);
         const [updated] = await tx.update(userOnboarding)
           .set({ selectedCards: orderedSelected, completed: true } as any)
