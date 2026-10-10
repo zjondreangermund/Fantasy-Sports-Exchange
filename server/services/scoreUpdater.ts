@@ -4,7 +4,7 @@
  * Integrity rules:
  * - Entry windows close at the FPL deadline / first Premier League kickoff.
  * - API-Football Premier League player actions drive scoring; departed players with no eligible PL appearance score a verified zero.
- * - Scores freeze at the configured Tuesday settlement cutoff and never change afterwards.
+ * - Scores freeze at the configured gameweek settlement cutoff and never change afterwards.
  * - FA Cup matches and Premier League fixtures played after the settlement cutoff do not count.
  * - Historical competition scores are never reset when the current gameweek changes.
  * - Every entry receives a gameweek-specific immutable scoring snapshot in tiebreak_meta.
@@ -400,6 +400,16 @@ export class ScoreUpdateService {
     return new Date(String(competition?.startDate || competition?.start_date || 0));
   }
 
+  // MANUAL_OPEN_LIVE_SCORING_V1: entry status and match scoring are independent.
+  // An admin may keep entries open without freezing the submitted teams at zero.
+  private hasGameweekStarted(competition: any, event: any, fixtures: any[], now = Date.now()) {
+    const deadline = this.entryDeadline(competition, event, fixtures).getTime();
+    return (Number.isFinite(deadline) && now >= deadline)
+      || this.fixturesForGameweek(fixtures, Number(competition?.gameWeek || competition?.game_week || 0))
+        .some((fixture: any) => fixture?.started || fixture?.finished || fixture?.finished_provisional
+          || (fixture?.kickoff_time && new Date(String(fixture.kickoff_time)).getTime() <= now));
+  }
+
   private settlementDeadline(competition: any): Date | null {
     const raw = competition?.settlementAt || competition?.endDate || competition?.end_date;
     if (!raw) return null;
@@ -715,8 +725,12 @@ export class ScoreUpdateService {
         if (!manualStatus && status === "open" && now >= deadline.getTime()) {
           status = await this.activateCompetitionAtDeadline(competition);
         }
-        if (status === "active" || (status === "closed" && final)) {
-          toScore.push({ competition: { ...competition, status }, final });
+        const liveWhileOpen = ["open", "upcoming", "closed"].includes(status)
+          && this.hasGameweekStarted(competition, event, fixtures, now);
+        if (status === "active" || (status === "closed" && final) || liveWhileOpen) {
+          // Open/upcoming overrides remain live snapshots, never settlement.
+          const scoreFinal = final && ["active", "closed"].includes(status);
+          toScore.push({ competition: { ...competition, status }, final: scoreFinal });
         }
       }
 
@@ -742,7 +756,7 @@ export class ScoreUpdateService {
     } catch (error) { console.error("Failed to update competition scores:", error); throw error; }
   }
 
-  async updateCompetition(competitionId: number): Promise<CompetitionScoreResult> {
+  async updateCompetition(competitionId: number, options: { forceFinal?: boolean } = {}): Promise<CompetitionScoreResult> {
     const comp = await this.storage.getCompetition(competitionId);
     if (!comp) throw new Error(`Competition ${competitionId} not found`);
     if (String(comp.status) === "completed") {
@@ -750,6 +764,7 @@ export class ScoreUpdateService {
       return { updatedCount: 0, totalEntries: entries.length, gameWeek: Number(comp.gameWeek || 0), final: true, complete: true, unresolvedCardIds: [], skipped: true, reason: "Tournament already completed" };
     }
     if (String(comp.status) === "cancelled") throw new Error(`Competition ${competitionId} is cancelled`);
+    const forceFinal = Boolean(options.forceFinal);
 
     const gameWeek = Number(comp.gameWeek || comp.game_week || 0);
     const [bootstrap, fixtures] = await Promise.all([fplApi.bootstrap(), fplApi.fixturesLive()]);
@@ -757,7 +772,7 @@ export class ScoreUpdateService {
     const deadline = this.entryDeadline(comp, event, fixtures);
     const manualStatus = this.adminStatusOverride(comp);
     if (manualStatus) comp.status = manualStatus;
-    if (["open", "upcoming"].includes(String(comp.status)) && Date.now() < deadline.getTime()) {
+    if (["open", "upcoming"].includes(String(comp.status)) && !this.hasGameweekStarted(comp, event, fixtures)) {
       const entries = await this.storage.getCompetitionEntries(comp.id);
       return { updatedCount: 0, totalEntries: entries.length, gameWeek, final: false, complete: false, unresolvedCardIds: [], skipped: true, reason: "Tournament entries are still open" };
     }
@@ -768,9 +783,26 @@ export class ScoreUpdateService {
     if (!manualStatus && String(comp.status) === "open") {
       await this.activateCompetitionAtDeadline(comp);
     }
-    if (!["active", "closed"].includes(String(comp.status))) throw new Error(`Competition ${competitionId} cannot be scored (status: ${comp.status})`);
+    const liveWhileOpen = ["open", "upcoming"].includes(String(comp.status))
+      && this.hasGameweekStarted(comp, event, fixtures);
+    if (!["active", "closed"].includes(String(comp.status)) && !liveWhileOpen) throw new Error(`Competition ${competitionId} cannot be scored (status: ${comp.status})`);
+    if (forceFinal && liveWhileOpen) throw new Error("Close tournament entries before manual settlement");
 
-    const final = this.isSettlementFinal(comp);
+    // MANUAL_TOURNAMENT_SETTLEMENT_V1
+    if (forceFinal) {
+      const settlement = this.settlementDeadline(comp);
+      const eligibleFixtures = this.fixturesForGameweek(fixtures, gameWeek).filter((fixture: any) => {
+        if (!fixture?.kickoff_time) return false;
+        const kickoff = new Date(String(fixture.kickoff_time));
+        if (!Number.isFinite(kickoff.getTime())) return false;
+        return !settlement || kickoff.getTime() <= settlement.getTime();
+      });
+      if (!eligibleFixtures.length) throw new Error("No eligible Premier League fixtures are available for manual settlement");
+      const unfinishedFixtures = eligibleFixtures.filter((fixture: any) => !fixture?.finished && !fixture?.finished_provisional);
+      if (unfinishedFixtures.length) throw new Error("Eligible Premier League fixtures are still unfinished");
+    }
+
+    const final = !liveWhileOpen && (forceFinal || this.isSettlementFinal(comp));
     const currentGameweek = this.currentOrNextGameweek(bootstrap);
     const result = await this.scoreCompetitionEntries(comp, await loadApiFootballGameweekScoringContext(gameWeek), final, final || gameWeek === currentGameweek);
     if(!final)await this.sendPostScoreAlerts(comp,bootstrap,fixtures);

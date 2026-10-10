@@ -1,3 +1,4 @@
+import "./verify-manual-open-live-scoring.mjs";
 import fs from "node:fs";
 
 const routes = fs.readFileSync("server/routes/marketplace.routes.ts", "utf8");
