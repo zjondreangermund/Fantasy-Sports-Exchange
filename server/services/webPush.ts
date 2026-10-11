@@ -162,6 +162,7 @@ export async function disableWebPushSubscription(userId: string, endpointValue: 
 
 function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
   const key = String(dedupeKey || "");
+  if (key.startsWith("booking:")) return "/live-lineup";
   if (/^competition:\d+:entry:\d+:free-card-claim-ready$/.test(key)) {
     const id = Number(notificationId || 0);
     return id > 0 ? `/account?tab=inbox&notification=${id}` : "/account?tab=inbox";

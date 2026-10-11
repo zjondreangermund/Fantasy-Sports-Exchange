@@ -1,8 +1,21 @@
-import { relations } from "drizzle-orm";
-import { pgSchema, pgEnum, text, varchar, integer, real, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { pgSchema, pgEnum, text, varchar, integer, real, boolean, timestamp, jsonb, primaryKey, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 export const appSchema = pgSchema("app");
+
+export const playerBookingAlerts = appSchema.table("player_booking_alerts", {
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id),
+  apiFixtureId: integer("api_fixture_id").notNull(),
+  apiPlayerId: integer("api_player_id").notNull(),
+  cardKind: text("card_kind").notNull(),
+  occurrence: integer("occurrence").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  primaryKey({ name: "player_booking_alerts_pkey", columns: [table.userId, table.apiFixtureId, table.apiPlayerId, table.cardKind, table.occurrence] }),
+  check("player_booking_alerts_card_kind_check", sql`${table.cardKind} in ('yellow','red')`),
+  check("player_booking_alerts_occurrence_check", sql`${table.occurrence} > 0`),
+]);
 
 export const rarityEnum = pgEnum("rarity", ["common", "rare", "unique", "epic", "legendary"]);
 export const positionEnum = pgEnum("position", ["GK", "DEF", "MID", "FWD"]);

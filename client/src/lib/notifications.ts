@@ -77,6 +77,7 @@ export function notificationDestination(notification: ArenaNotification): string
       ? `/account?tab=inbox&notification=${notificationId}`
       : "/account?tab=inbox";
   }
+  if (String(notification.dedupeKey || "").startsWith("booking:")) return "/live-lineup";
   const decider = String(notification.dedupeKey || "").match(/^competition:(\d+):decider:/);
   if (decider) return `/competitions?leaderboard=${decider[1]}`;
   const subject = `${notification.notificationKind || ""} ${notification.type || ""} ${notification.title || ""} ${notification.message || ""}`.toLocaleLowerCase("en");

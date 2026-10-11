@@ -1,3 +1,4 @@
+import { notifyFixtureBookings } from "./playerBookingNotifications.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { calculatePlayerScore, mapApiFootballStatsToPlayerStats } from "./scoring.js";
@@ -444,6 +445,9 @@ async function syncLive(): Promise<{ calls: number; records: number; details: an
       }
     }
   }
+  for (const fixture of fixtures) {
+    await notifyFixtureBookings(Number(fixture?.fixture?.id || 0)).catch(error => console.warn("[booking-alerts] live notification retry pending:", error));
+  }
   return { calls, records, details: { possibleLive, liveFixtures: fixtures.length } };
 }
 
@@ -517,6 +521,7 @@ async function syncCompletedStats(): Promise<{ calls: number; records: number; d
         records += 1;
       }
     }
+    await notifyFixtureBookings(fixtureId).catch(error => console.warn("[booking-alerts] completed notification retry pending:", error));
     if (teams.length >= 2 && fixturePlayerIds.size >= 22) {
       await db.execute(sql`update app.api_football_fixtures set stats_synced_at=now(),updated_at=now() where api_fixture_id=${fixtureId}`);
     } else {

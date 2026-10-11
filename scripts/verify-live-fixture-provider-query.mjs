@@ -1,3 +1,4 @@
+import "./verify-player-booking-notifications.mjs";
 import fs from "node:fs";
 
 const route = fs.readFileSync("server/routes/footballData.routes.ts", "utf8");
