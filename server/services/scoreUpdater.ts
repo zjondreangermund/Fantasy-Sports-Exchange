@@ -610,7 +610,9 @@ export class ScoreUpdateService {
               data_source: previous?.dataSource || score?.data_source,
               api_player_id: Number(previous?.apiFootballPlayerId || score?.api_player_id || 0),
               minutes_played: toNumber(previous?.minutesPlayed ?? score?.minutes_played),
-              identity_message: `${String(score?.identity_message || "API-Football identity is refreshing.")} Last verified GW${gameWeek} points are being preserved until the link is healthy again.`,
+              identity_message: ["awaiting-gameweek", "awaiting-appearance"].includes(String(score?.identity_status || ""))
+                ? score.identity_message
+                : `${String(score?.identity_message || "API-Football identity is refreshing.")} Last verified GW${gameWeek} points are being preserved until the link is healthy again.`,
             };
           });
         }
@@ -623,7 +625,7 @@ export class ScoreUpdateService {
           console.info(`[scoring] Recovered verified player points for entry ${entry.id}: ${recoveredScores.map((score: any) => `${score.official_player_name} (${score.minutes_played} min, ${score.total_score} pts)`).join("; ")}`);
         }
         for (const score of cardScores) {
-          if (String(score?.identity_status || "") === "verified") continue;
+          if (["verified", "awaiting-gameweek", "awaiting-appearance"].includes(String(score?.identity_status || ""))) continue;
           const previous = previousScoresByCard.get(Number(score?.card_id || 0));
           if (String(previous?.identityStatus || "") !== String(score?.identity_status || "")) {
             console.warn(`[scoring] Card ${Number(score?.card_id || 0)} cannot score: ${String(score?.identity_message || "Official player identity unavailable.")}`);
