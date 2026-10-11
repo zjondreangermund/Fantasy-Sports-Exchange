@@ -51,7 +51,7 @@ includesAll(cards, [
   'apiFootballPlayer && matchedElement ? "fpl+api-football"',
   'apiFootballPlayer ? "api-football-current-squad"',
   "verifiedImageUrl",
-  "const identityVerified = !outsidePremierLeague && Boolean(apiFootballPlayer || matchedElement)",
+  "const identityVerified = !outsidePremierLeague && Boolean(apiFootballPlayer)",
   'source: "card-fallback"',
   "last10: []",
   'verifiedIdentity ? "API-Football current squads"',

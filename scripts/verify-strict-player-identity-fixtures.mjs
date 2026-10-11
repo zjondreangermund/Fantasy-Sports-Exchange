@@ -52,7 +52,7 @@ includesAll(cards, [
   "const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl",
   "imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
   "verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
-  "const identityVerified = !outsidePremierLeague && Boolean(apiFootballPlayer || matchedElement)",
+  "const identityVerified = !outsidePremierLeague && Boolean(apiFootballPlayer)",
   'identitySource: apiFootballPlayer && matchedElement ? "fpl+api-football"',
   "imageUrl: null",
   "verifiedImageUrl: null",
