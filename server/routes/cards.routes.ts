@@ -142,7 +142,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
           || ["departed", "superseded", "unlinked", "archived"].includes(storedStatus)
           || (storedLeague && !["premier league", "english premier league", "epl"].includes(storedLeague));
         const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
-        const identityVerified = !outsidePremierLeague && Boolean(apiFootballPlayer || matchedElement);
+        const identityVerified = !outsidePremierLeague && Boolean(apiFootballPlayer);
         const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
         const selectionProvider = apiFootballPlayer
           ? "api-football"

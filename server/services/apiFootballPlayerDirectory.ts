@@ -236,7 +236,7 @@ export async function loadApiFootballPlayerDirectory(season = apiFootballSeasonN
     `));
   }
 
-  return rows.map((row: any) => ({
+  const directory = rows.map((row: any) => ({
     apiPlayerId: Number(row.apiPlayerId || 0),
     season: Number(row.season || season),
     apiTeamId: Number(row.apiTeamId || 0),
@@ -252,6 +252,80 @@ export async function loadApiFootballPlayerDirectory(season = apiFootballSeasonN
     active: Boolean(row.active),
     updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
   }));
+  await synchronizeProviderIdentities(directory);
+  return directory;
+}
+
+// Durable links survive provider abbreviations and Premier League club changes.
+const stableProviderIdentityMap = new Map<number, number>();
+let identityLinksRefreshAt = 0;
+let providerIdentitySchemaReady = false;
+let identityLinksRefresh: Promise<void> | null = null;
+async function synchronizeProviderIdentities(directory: ApiFootballDirectoryPlayer[]) {
+  if (!directory.length || Date.now() < identityLinksRefreshAt) return;
+  if (!identityLinksRefresh) identityLinksRefresh = (async () => {
+    if (!providerIdentitySchemaReady) {
+    await db.execute(sql`create table if not exists app.player_provider_identities (
+      player_id integer primary key references app.players(id) on delete cascade,
+      api_player_id integer not null, verified_at timestamptz not null default now()
+    )`);
+    // Prospective mint guard: existing cards and submitted entries are untouched.
+    await db.execute(sql`create or replace function app.guard_current_pl_owned_mint()
+      returns trigger language plpgsql as $$
+      declare local_player record; provider_id integer; destination_id integer; pl_count integer; on_loan boolean;
+      begin
+        if new.owner_id is null then return new; end if;
+        select league, status into local_player from app.players where id=new.player_id;
+        if lower(coalesce(local_player.status,'')) in ('departed','loaned_out','superseded','unlinked','archived')
+          or (coalesce(local_player.league,'') <> '' and regexp_replace(lower(local_player.league),'[^a-z0-9]+','','g') not in ('premierleague','englishpremierleague','epl')) then
+          raise exception 'This player is unavailable for a new Premier League card. Choose another current player.';
+        end if;
+        if to_regclass('app.real_life_player_loans') is not null then
+          select exists(select 1 from app.real_life_player_loans where app_player_id=new.player_id and active=true) into on_loan;
+          if on_loan then raise exception 'This player is on loan outside the Premier League. Choose another current player.'; end if;
+        end if;
+        select api_player_id into provider_id from app.player_provider_identities where player_id=new.player_id;
+        if provider_id is not null and to_regclass('app.api_football_transfers') is not null and to_regclass('app.api_football_fixtures') is not null then
+          select to_team_id into destination_id from app.api_football_transfers
+            where api_player_id=provider_id and transfer_date <= current_date
+            order by transfer_date desc, updated_at desc limit 1;
+          select count(distinct team_id) into pl_count from (
+            select home_team_id as team_id from app.api_football_fixtures where league_id=39 and season=(select max(season) from app.api_football_fixtures where league_id=39)
+            union select away_team_id from app.api_football_fixtures where league_id=39 and season=(select max(season) from app.api_football_fixtures where league_id=39)
+          ) teams;
+          if destination_id is not null and pl_count >= 18 and not exists (
+            select 1 from app.api_football_fixtures where league_id=39
+              and season=(select max(season) from app.api_football_fixtures where league_id=39)
+              and (home_team_id=destination_id or away_team_id=destination_id)
+          ) then raise exception 'This player transferred outside the Premier League. Choose another current player.'; end if;
+        end if;
+        return new;
+      end $$`);
+    await db.execute(sql`create or replace trigger guard_current_pl_owned_mint
+      before insert on app.player_cards for each row execute function app.guard_current_pl_owned_mint()`);
+    providerIdentitySchemaReady = true;
+    }
+    const links = rowsOf(await db.execute(sql`select player_id as "playerId", api_player_id as "apiPlayerId" from app.player_provider_identities`));
+    for (const link of links) stableProviderIdentityMap.set(Number(link.playerId), Number(link.apiPlayerId));
+    const players = rowsOf(await db.execute(sql`select id, name, team, position::text as position from app.players`));
+    const newLinks: any[] = [];
+    for (const player of players) {
+      if (stableProviderIdentityMap.has(Number(player.id))) continue;
+      const match = resolveApiFootballPlayer(player, directory);
+      if (match && teamCompatibility(player.team, match.team) >= 20) newLinks.push({ player_id: Number(player.id), api_player_id: match.apiPlayerId });
+    }
+    if (newLinks.length) {
+      await db.execute(sql`insert into app.player_provider_identities (player_id, api_player_id)
+        select player_id, api_player_id from jsonb_to_recordset(${JSON.stringify(newLinks)}::jsonb)
+          as links(player_id integer, api_player_id integer)
+        on conflict (player_id) do nothing`);
+      // Read back the winning identities after concurrent refreshes.
+      const saved = rowsOf(await db.execute(sql`select player_id as "playerId", api_player_id as "apiPlayerId" from app.player_provider_identities`));
+      for (const link of saved) stableProviderIdentityMap.set(Number(link.playerId), Number(link.apiPlayerId));
+    }
+    identityLinksRefreshAt = Date.now() + 60_000;
+  })().finally(() => { identityLinksRefresh = null; });
+  await identityLinksRefresh;
 }
 
 function tokenSet(value: unknown) {
@@ -360,6 +434,14 @@ export function diagnoseApiFootballPlayerMatch(player: any, directory: ApiFootba
 }
 
 export function resolveApiFootballPlayer(player: any, directory: ApiFootballDirectoryPlayer[]) {
+  const linkedId = Number(player?.apiFootballPlayerId || player?.api_football_player_id
+    || (typeof stableProviderIdentityMap !== "undefined" ? stableProviderIdentityMap.get(Number(player?.playerId || player?.id || 0)) : 0) || 0);
+  if (linkedId > 0) {
+    const linked = directory.filter((candidate) => candidate.apiPlayerId === linkedId);
+    if (linked.length) return linked.find((candidate) => teamCompatibility(player?.team, candidate.team) >= 20) || linked[0];
+    // A known ID must never silently rematch to a different football player.
+    return null;
+  }
   const rawNames = [player?.name, player?.webName, player?.web_name].filter(Boolean);
   const rawPosition = String(player?.position || "").toUpperCase();
   const scored = directory.map((candidate) => {
@@ -378,8 +460,20 @@ export function resolveApiFootballPlayer(player: any, directory: ApiFootballDire
   const best = scored[0];
   if (best && best.nameScore >= 92) {
     const second = scored[1];
-    if (!second || best.nameScore >= 120 || best.score - second.score >= 12) return best.candidate;
+    if (!second || best.score - second.score >= 12) return best.candidate;
   }
+
+  // A provider mononym (Kepa) may match the first token of a legal name,
+  // only when club + position identify exactly one distinct provider player.
+  const mononyms = directory.filter((candidate) => {
+    const alias = normalizePlayerText(candidate.name);
+    return alias.length >= 4 && !alias.includes(" ")
+      && rawNames.some((name) => normalizePlayerText(name).split(" ")[0] === alias)
+      && teamCompatibility(player?.team, candidate.team) >= 20
+      && Boolean(rawPosition) && rawPosition === candidate.position;
+  });
+  const uniqueMononyms = Array.from(new Map(mononyms.map((candidate) => [candidate.apiPlayerId, candidate])).values());
+  if (uniqueMononyms.length === 1) return uniqueMononyms[0];
 
   // SCORE_DETAIL_NICKNAME_SURNAME_V1
   // Some verified Premier League names use a football nickname while the

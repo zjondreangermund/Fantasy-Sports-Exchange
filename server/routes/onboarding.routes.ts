@@ -2,6 +2,7 @@ import type { Express, Response } from "express";
 import { and, eq, sql } from "drizzle-orm";
 import { buildFplPlayerIndex, fplPlayerFullName, fplPlayerPosition, strongPlayerNameMatch } from "../services/fplPlayerIdentity.js";
 import { ensureRealLifeLoanPolicySchema } from "../services/realLifeLoanMonitoring.js";
+import { loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 import { db } from "../db.js";
 import { auditLogs, playerCards, userOnboarding } from "../../shared/schema.js";
 
@@ -157,7 +158,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
     await ensureRealLifeLoanPolicySchema();
     const now = new Date();
     const season = now.getUTCMonth() >= 6 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
-    const [departures, loans] = await Promise.all([
+    const [departures, loans, directory] = await Promise.all([
       db.execute(sql`
         with pl_teams as (
           select home_team_id as id from app.api_football_fixtures where league_id=39 and season=${season}
@@ -175,6 +176,7 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       db.execute(sql`select p.id, p.fpl_id as "fplId", p.code, p.name, p.team, p.position
         from app.players p join app.real_life_player_loans l on l.app_player_id=p.id
         where l.active=true`),
+      loadApiFootballPlayerDirectory(),
     ]);
     const index = buildFplPlayerIndex(bootstrap);
     const loanElements = new Set(rowsOf(loans).map((player: any) => Number(index.resolve(player)?.id || 0)));
@@ -184,7 +186,8 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       if (loanElements.has(Number(element.id))) return false;
       const identity = { name: fplPlayerFullName(element), webName: element.web_name,
         team: teams.get(Number(element.team))?.name, position: fplPlayerPosition(element) };
-      return !rowsOf(departures).some((departure: any) => strongPlayerNameMatch(identity.name, departure.name));
+      return Boolean(resolveApiFootballPlayer(identity, directory))
+        && !rowsOf(departures).some((departure: any) => strongPlayerNameMatch(identity.name, departure.name));
     };
     const eligiblePlayer = (player: any) => {
       if (!player) return false;

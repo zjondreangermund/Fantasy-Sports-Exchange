@@ -1,3 +1,4 @@
+import "./verify-player-provider-identities.mjs";
 import fs from "node:fs";
 import vm from "node:vm";
 

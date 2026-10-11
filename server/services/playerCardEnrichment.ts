@@ -39,7 +39,7 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
       { ...player, ...(canonical || {}) },
       apiFootballDirectory,
     );
-    const identityVerified = Boolean(apiFootballPlayer || matchedElement);
+    const identityVerified = Boolean(apiFootballPlayer);
     const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
     const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
     const detailedStats = liveElement ? resolveDetailedStatsForPlayer({ ...player, ...(canonical || {}) }, detailedScoringContext) : null;

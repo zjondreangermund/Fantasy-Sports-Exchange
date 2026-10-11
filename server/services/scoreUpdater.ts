@@ -163,7 +163,7 @@ export class ScoreUpdateService {
             minutes_played: 0,
           };
         }
-        return this.zeroScore(card, 0, `${String(card.player.name || "This player")} could not be matched securely to the current API-Football Premier League squad directory.`);
+        return this.zeroScore(card, 0, `${String(card.player.name || "This player")}: player link needs checking; points are pending verification.`);
       }
 
       const apiPlayer = resolved.player;
@@ -173,13 +173,13 @@ export class ScoreUpdateService {
 
       if (!fixture) {
         return {
-          ...this.zeroScore(card, 0, `API-Football fixture for ${apiPlayer.team} is not available for this gameweek yet.`),
+          ...this.zeroScore(card, 0, `Awaiting GW${context.gameWeek} matches for ${apiPlayer.team}.`),
           api_player_id: apiPlayer.apiPlayerId,
           official_player_name: apiPlayer.name,
           official_team: apiPlayer.team,
           official_position: apiPlayer.position,
           identity_provider: "api-football",
-          identity_status: "awaiting-api-football-fixture",
+          identity_status: "awaiting-gameweek",
         };
       }
 
@@ -205,7 +205,7 @@ export class ScoreUpdateService {
             : `API-Football verified ${apiPlayer.name}; awaiting this gameweek appearance.`),
           api_player_id: apiPlayer.apiPlayerId,
           data_source: "verified-player-stats",
-          identity_status: "verified",
+          identity_status: fixtureFinished ? "verified" : "awaiting-appearance",
           identity_message: fixtureFinished
             ? `API-Football verified Premier League player; no appearance recorded for GW${context.gameWeek}.`
             : `API-Football verified Premier League player; fixture has not produced player statistics yet.`,

@@ -267,7 +267,12 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         join app.players p on p.id = pc.player_id
         order by ordered.ordinality asc
       `);
-      const apiScoringContext = await loadApiFootballGameweekScoringContext(Number(entry.gameWeek || 0)).catch(() => null);
+      const [apiScoringContext, entryBootstrap] = await Promise.all([
+        loadApiFootballGameweekScoringContext(Number(entry.gameWeek || 0)).catch(() => null),
+        fplApi.bootstrap().catch(() => null),
+      ]);
+      const targetEvent = entryBootstrap?.events?.find((event: any) => Number(event.id) === Number(entry.gameWeek));
+      const awaitingGameweek = Boolean(targetEvent?.deadline_time && new Date(String(targetEvent.deadline_time)).getTime() > Date.now());
       const apiFootballDirectory = apiScoringContext?.directory || await loadApiFootballPlayerDirectory().catch(() => []);
       const snapshot = entry.tiebreakMeta?.scoring && Number(entry.tiebreakMeta.scoring.gameWeek || 0) === Number(entry.gameWeek || 0)
         ? entry.tiebreakMeta.scoring
@@ -289,7 +294,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         const storedScore = savedScores.get(Number(card.cardId));
         const saved = storedScore && snapshot ? storedScore : null;
         const fixtureFinished = ["FT", "AET", "PEN"].includes(String(resolved?.fixture?.statusShort || ""));
-        const identityStatus = saved?.identityStatus
+        let identityStatus = saved?.identityStatus
           ? String(saved.identityStatus)
           : !apiPlayer
             ? "identity-unlinked"
@@ -298,7 +303,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
               : fixtureFinished && !resolved?.fixture?.statsReady
                 ? "awaiting-api-football-stats"
                 : "verified";
-        const identityMessage = saved?.identityMessage
+        let identityMessage = saved?.identityMessage
           ? String(saved.identityMessage)
           : !apiPlayer
             ? `${String(card.name || "This player")} could not be securely linked to the API-Football Premier League player directory.`
@@ -307,6 +312,18 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
               : fixtureFinished
                 ? `API-Football verified ${apiPlayer.name}; no appearance was recorded in this fixture.`
                 : `API-Football verified ${apiPlayer.name}; player statistics will appear when the fixture produces them.`;
+        // Future entries have a valid current-player identity even when their
+        // gameweek fixture/stat feed has not been populated yet.
+        if (awaitingGameweek && apiPlayer) {
+          identityStatus = "awaiting-gameweek";
+          identityMessage = `Awaiting GW${Number(entry.gameWeek)} matches. Points appear after the player takes part.`;
+        } else if (!saved && apiPlayer && !resolved?.stats && !fixtureFinished) {
+          identityStatus = "awaiting-appearance";
+          identityMessage = `${apiPlayer.name}: awaiting this gameweek appearance and match statistics.`;
+        } else if (!apiPlayer && !saved) {
+          identityStatus = "identity-unlinked";
+          identityMessage = `${String(card.name || "This player")}: player link needs checking; points are pending verification.`;
+        }
         const points = Number(saved?.score ?? calculated?.total_score ?? 0);
         const captain = Number(card.cardId) === captainId;
         const calculatedCaptainBonus = Math.round(points * 0.1 * 10000) / 10000;

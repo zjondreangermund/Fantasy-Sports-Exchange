@@ -449,12 +449,13 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           });
           const canonical = officialPlayer ? officialPlayerIndex.canonical(officialPlayer) : null;
           const apiFootballPlayer = resolveApiFootballPlayer({ ...card, name: card.playerName, ...(canonical || {}) }, apiFootballDirectory);
-          if (!apiFootballPlayer && !canonical) return card;
+          if (!apiFootballPlayer) return { ...card, scoringIdentityLinked: false };
           return {
             ...card,
             league: "Premier League",
             position: canonical?.position || card.position || apiFootballPlayer?.position,
-            selectionProvider: apiFootballPlayer ? "API-Football" : "FPL fallback",
+            selectionProvider: "API-Football",
+            scoringIdentityLinked: true,
             departed: false,
           };
         });
@@ -470,7 +471,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         if (new Set(cards.map((card) => Number(card.playerId))).size !== 5) {
           throw new Error("Lineup must use 5 different players");
         }
-        const ineligiblePlayer = cards.find((card) => Boolean(card.departed) || !isPremierLeague(card.league));
+        const ineligiblePlayer = cards.find((card) => Boolean(card.departed) || card.scoringIdentityLinked === false || !isPremierLeague(card.league));
         if (ineligiblePlayer) {
           const reason = Boolean(ineligiblePlayer.departed)
             ? "has left the Premier League and cannot be selected"
