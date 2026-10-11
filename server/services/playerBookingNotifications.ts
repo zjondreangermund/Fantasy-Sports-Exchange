@@ -72,9 +72,11 @@ export async function notifyFixtureBookings(fixtureId: number): Promise<number> 
     for (const kind of ["yellow", "red"] as const) {
       const count = Number(row.statistics?.cards?.[kind] || 0);
       if (!Number.isInteger(count) || count < 1 || count > 2) continue;
+      // A second yellow with a confirmed dismissal is one red-card incident.
+      if (kind === "yellow" && count === 2 && Number(row.statistics?.cards?.red || 0) > 0) continue;
       const playerName = String(row.player_name || linked!.name || recipient.name);
       const title = kind === "red" ? "🟥 Your player received a red card" : "🟨 Your player was booked";
-      const incident = kind === "red" ? "received a red card" : count === 2 ? "received a second yellow card" : "received a yellow card";
+      const incident = kind === "red" ? Number(row.statistics?.cards?.yellow || 0) >= 2 ? "was sent off after a second yellow card" : "received a red card" : count === 2 ? "received a second yellow card" : "received a yellow card";
       const message = `${playerName} ${incident} in ${matchLabel}. This player is in your submitted GW${gameWeek} lineup. Open Live Lineup to see the updated scoring breakdown.`;
       const created = await db.transaction(async tx => {
         const claim = rowsOf(await tx.execute(sql`
