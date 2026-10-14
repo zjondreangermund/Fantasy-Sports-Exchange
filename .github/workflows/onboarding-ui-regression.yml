@@ -1,0 +1,43 @@
+name: Isolated onboarding frontend regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client/src/pages/onboarding.tsx'
+      - 'client/src/components/CardThumbnail.tsx'
+      - 'client/src/components/cards/**'
+      - 'scripts/onboarding-ui-smoke.cjs'
+      - '.github/workflows/onboarding-ui-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  onboarding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - name: Install test browser
+        run: |
+          npm install --prefix /tmp/onboarding-qa --no-audit --no-fund playwright@1.56.1
+          /tmp/onboarding-qa/node_modules/.bin/playwright install --with-deps chromium
+      - name: Test disposable fixture at phone and desktop widths
+        env:
+          NODE_PATH: /tmp/onboarding-qa/node_modules
+        run: |
+          python3 -m http.server 8765 --directory dist/public > /tmp/qa-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          node scripts/onboarding-ui-smoke.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-onboarding-ui-results
+          path: onboarding-ui-results/
+          retention-days: 7
