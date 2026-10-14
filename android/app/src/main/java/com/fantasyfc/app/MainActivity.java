@@ -33,7 +33,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 public class MainActivity extends BridgeActivity {
-    private static final String NATIVE_APP_UA = "FantasyArenaNative/1.1.11";
+    private static final String NATIVE_APP_UA = "FantasyArenaNative/1.1.12";
     private static final String APP_BASE_URL = "https://playfantasyarena.com";
     private static final String APP_UPDATE_URL = APP_BASE_URL + "/api/android/releases/latest.apk";
     private static final long MIN_APK_BYTES = 1024L * 1024L;

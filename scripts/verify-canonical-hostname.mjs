@@ -9,6 +9,13 @@ const sandbox = { exports: {} };
 vm.runInNewContext(compiled, sandbox);
 const redirect = sandbox.exports.redirectLegacyHostname;
 const old = 'fantasy-sports-exchange-production-d05c.up.railway.app';
+const server = fs.readFileSync(new URL('../server/index.ts', import.meta.url), 'utf8');
+assert.match(server, /redirectLegacyHostname\([^\n]*req\.path, String\(req\.get\('user-agent'\)/);
+for (const version of ['1.1.9', '1.1.10', '1.1.11', '1.1.12']) {
+  for (const page of ['/', '/onboarding', '/collection', '/api/login', '/api/auth/native/complete']) {
+    assert.equal(redirect(true, 'GET', old, page, `Mozilla/5.0 FantasyArenaNative/${version}`), false, `Installed ${version}: ${page}`);
+  }
+}
 for (const page of ['/', '/collection', '/onboarding', '/admin', '/install', '/api/login', '/api/auth/google']) {
   assert.equal(redirect(true, 'GET', old, page), true, page);
 }
@@ -19,4 +26,4 @@ assert.equal(redirect(true, 'POST', old, '/api/onboarding/choose'), false);
 assert.equal(redirect(true, 'GET', 'playfantasyarena.com', '/'), false);
 assert.equal(redirect(true, 'GET', 'another-app.up.railway.app', '/'), false);
 assert.equal(redirect(false, 'GET', old, '/'), false);
-console.log('Legacy browser pages and login use the public hostname; callbacks, APIs, local development and other services are preserved.');
+console.log('Legacy browser pages use the public hostname; installed native APK origins, callbacks and APIs are preserved.');

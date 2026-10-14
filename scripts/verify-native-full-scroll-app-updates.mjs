@@ -50,7 +50,7 @@ need(updatePrompt, "Your browser and GitHub will not open", "no-browser update g
 if (updatePrompt.includes("window.open(release.downloadUrl")) throw new Error("[native-scroll-update] legacy GitHub/browser updater still present");
 if (updatePrompt.includes("api.github.com/repos/zjondreangermund")) throw new Error("[native-scroll-update] client must not expose GitHub release API");
 
-need(activity, 'FantasyArenaNative/1.1.11', "Android 1.1.11 user agent");
+need(activity, 'FantasyArenaNative/1.1.12', "Android 1.1.12 user agent");
 need(activity, "webView.addJavascriptInterface", "native updater JavaScript bridge");
 need(activity, "APP_UPDATE_URL", "fixed Fantasy Arena update URL");
 need(activity, "getPackageArchiveInfo", "downloaded APK package validation");
@@ -58,7 +58,7 @@ need(activity, "archiveVersion <= installedVersion", "Android update version val
 need(activity, "FileProvider.getUriForFile", "private APK install URI");
 need(activity, "ACTION_MANAGE_UNKNOWN_APP_SOURCES", "Android source permission flow");
 need(manifest, "android.permission.REQUEST_INSTALL_PACKAGES", "APK update install permission");
-need(gradle, "versionCode 13", "Android 1.1.11 versionCode");
-need(gradle, 'versionName "1.1.11"', "Android 1.1.11 versionName");
+need(gradle, "versionCode 14", "Android 1.1.12 versionCode");
+need(gradle, 'versionName "1.1.12"', "Android 1.1.12 versionName");
 
 console.log("Native full-page scroll + Android in-app updater verified: no GitHub/browser update handoff, APK is proxied/validated through Fantasy Arena, and rollout notifications remain gated until explicit enablement.");

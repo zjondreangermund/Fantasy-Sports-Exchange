@@ -47,7 +47,8 @@ declare module "http" {
 
 app.set("trust proxy", 1);
 app.use((req, res, next) => {
-  if (redirectLegacyHostname(process.env.NODE_ENV === "production", req.method, req.hostname, req.path)) {
+  if (redirectLegacyHostname(process.env.NODE_ENV === "production", req.method, req.hostname, req.path, String(req.get('user-agent') || ''))) {
+    res.setHeader('Cache-Control', 'no-store');
     return res.redirect(308, `https://${CANONICAL_HOST}${req.originalUrl}`);
   }
   if (process.env.NODE_ENV === "production" && req.hostname.toLowerCase() === `www.${CANONICAL_HOST}`) {
