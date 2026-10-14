@@ -10,8 +10,11 @@ const fs = require('node:fs');
   const results = [];
   try {
     for (const width of [320, 360, 390, 414, 768, 1280]) {
-      const context = await browser.newContext({ viewport: { width, height: 800 }, isMobile: width < 600, hasTouch: width < 600 });
+      const context = await browser.newContext({ viewport: { width, height: 800 }, isMobile: width < 600, hasTouch: width < 600, serviceWorkers: 'block' });
       const page = await context.newPage();
+      const diagnostics = [];
+      page.on('pageerror', e => diagnostics.push(e.message));
+      page.on('requestfailed', r => diagnostics.push(r.url() + ' ' + r.failure()?.errorText));
       let complete = false, club = '', mintRequests = 0;
       const positions = ['GK', 'DEF', 'MID', 'FWD', 'MID'];
       const labels = ['Goalkeeper', 'Defender', 'Midfielder', 'Forward', 'Wildcard'];
@@ -43,7 +46,7 @@ const fs = require('node:fs');
         return route.fulfill({ status: 200, json: body });
       });
       try {
-        await page.goto('http://127.0.0.1:8765/');
+        await page.goto('http://127.0.0.1:8765/onboarding');
         const input = page.getByLabel('Club name', { exact: true });
         await input.waitFor({ timeout: 20000 });
         await input.click();
@@ -87,7 +90,8 @@ const fs = require('node:fs');
         await page.screenshot({ path: `onboarding-ui-results/completed-${width}.png` });
         results.push({ width, passed: true, choices: 15, selected: 5, mintRequests });
       } catch (error) {
-        results.push({ width, passed: false, error: error.message });
+        results.push({ width, passed: false, error: error.message, diagnostics });
+        fs.writeFileSync(`onboarding-ui-results/failed-${width}.txt`, await page.locator('body').innerText());
         await page.screenshot({ path: `onboarding-ui-results/failed-${width}.png` }).catch(() => {});
       } finally { await context.close(); }
     }

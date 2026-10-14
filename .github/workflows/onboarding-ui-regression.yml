@@ -7,6 +7,7 @@ on:
       - 'client/src/components/CardThumbnail.tsx'
       - 'client/src/components/cards/**'
       - 'scripts/onboarding-ui-smoke.cjs'
+      - 'scripts/serve-onboarding-fixture.cjs'
       - '.github/workflows/onboarding-ui-regression.yml'
   workflow_dispatch:
 permissions:
@@ -31,7 +32,7 @@ jobs:
         env:
           NODE_PATH: /tmp/onboarding-qa/node_modules
         run: |
-          python3 -m http.server 8765 --directory dist/public > /tmp/qa-server.log 2>&1 &
+          node scripts/serve-onboarding-fixture.cjs > /tmp/qa-server.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           node scripts/onboarding-ui-smoke.cjs
