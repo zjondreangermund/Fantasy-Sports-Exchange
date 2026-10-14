@@ -11,6 +11,7 @@ on:
       - "server/seed.ts"
       - "server/services/archiveConfirmedTestTournaments.ts"
       - "scripts/verify-current-arena-week.mjs"
+      - "scripts/apply-free-card-cups.mjs"
       - ".github/workflows/current-gameweek-regression.yml"
   workflow_dispatch:
 
