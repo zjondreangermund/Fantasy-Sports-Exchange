@@ -19,6 +19,27 @@ export async function archiveConfirmedTestTournaments() {
         or (c.status::text in ('completed','cancelled') and not
           (c.status::text = 'completed' and c.name ~ '^GW[1-6] FREE Common Card Cup$'))
       ) on conflict do nothing returning competition_id`);
+    // LEGACY_FUTURE_GW_QUARANTINE_V1: Only archive unused automated GW27–GW30
+    // cups. Never change entered competitions, owner-created cups, manual
+    // overrides, or current/future official calendar-synced free cup records.
+    // The complete original row is saved in this reversible archive.
+    const legacy: any = await tx.execute(sql`insert into app.confirmed_test_tournament_archive (competition_id, original_record)
+      select c.id, to_jsonb(c) from app.competitions c
+      where c.name ~ '^FREE Rare Card Cup - GW(27|28|29|30)
+    await tx.execute(sql`update app.competitions c set name = '[TEST] ' || c.name,
+      visibility = 'private', status = 'cancelled', admin_status_override = 'cancelled',
+      cancellation_reason = 'Owner-confirmed old testing tournament; archived from live operation'
+      where c.id in (select competition_id from app.confirmed_test_tournament_archive) and c.name not like '[TEST]%'`);
+    console.log('[confirmed-test-tournaments-archived]', { count: result.rows?.length || 0, unusedLegacyFutureCups: legacy.rows?.length || 0, entriesAndManualOverridesPreserved: true });
+  });
+}
+
+        and c.created_by_user_id is null
+        and coalesce(c.entry_fee, 0) = 0
+        and c.prize_card_rarity::text = 'rare'
+        and c.admin_status_override is null
+        and not exists (select 1 from app.competition_entries e where e.competition_id = c.id)
+      on conflict do nothing returning competition_id`);
     await tx.execute(sql`update app.competitions c set name = '[TEST] ' || c.name,
       visibility = 'private', status = 'cancelled', admin_status_override = 'cancelled',
       cancellation_reason = 'Owner-confirmed old testing tournament; archived from live operation'
