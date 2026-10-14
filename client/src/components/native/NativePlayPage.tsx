@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import CardPlayerImage from "../CardPlayerImage";
 import { apiRequest, queryClient } from "../../lib/queryClient";
+import { currentArenaDisplayWeek } from "../../lib/arena-current-gameweek";
 import { useToast } from "../../hooks/use-toast";
 import type { CompetitionEntry, PlayerCardWithPlayer } from "../../../../shared/schema";
 import {
@@ -202,20 +203,9 @@ export default function NativePlayPage() {
     [competitions],
   );
 
-  const currentGameweek = React.useMemo(() => {
-    const active = publicCompetitions
-      .filter((item) => ["open", "active"].includes(String(item.status || "").toLowerCase()))
-      .map((item) => Number(item.gameWeek ?? item.game_week ?? 0))
-      .filter(Boolean)
-      .sort((a, b) => a - b);
-    if (active.length) return active[0];
-    const upcoming = publicCompetitions
-      .filter((item) => String(item.status || "").toLowerCase() === "upcoming")
-      .map((item) => Number(item.gameWeek ?? item.game_week ?? 0))
-      .filter(Boolean)
-      .sort((a, b) => a - b);
-    return upcoming[0] || 1;
-  }, [publicCompetitions]);
+  // The calendar, not a stale GW29 "open" flag, decides which week Play opens.
+  // A legitimately/manual-opened next week remains accessible without changing statuses.
+  const currentGameweek = React.useMemo(() => currentArenaDisplayWeek(publicCompetitions), [publicCompetitions]);
 
   const shown = React.useMemo(() => publicCompetitions
     .filter((item) => Number(item.gameWeek ?? item.game_week ?? 0) === currentGameweek)
