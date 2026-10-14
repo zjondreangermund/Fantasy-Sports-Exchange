@@ -4,7 +4,6 @@ import passport from "passport";
 import { sql } from "drizzle-orm";
 import { storage } from "./storage.js";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth/index.js";
-import { seedCompetitions } from "./seed.js";
 import { fplApi } from "./services/fplApi.js";
 import { ScoreUpdateService } from "./services/scoreUpdater.js";
 import { registerCardsRoutes } from "./routes/cards.routes.js";
@@ -149,7 +148,6 @@ function allowedStatus(raw: unknown) { const status = String(raw || "open").toLo
 function allowedPrizeType(raw: unknown) { const type = String(raw || "goods").toLowerCase(); return ["cash_pool", "goods", "goods_plus_cash", "packs", "sponsor_prize"].includes(type) ? type : "goods"; }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  try { await seedCompetitions(); } catch (error) { console.warn("Could not auto-seed tournaments:", error); }
   await registerAuthModeRoutes(app, { isReplit, useMockAuth, googleAuthEnabled, authConfigurationError, setupAuth, registerReplitAuthRoutes: registerAuthRoutes, passport });
   registerCardsRoutes(app, { requireAuth, storage });
   registerOnboardingRoutes(app, { requireAuth, storage, fplApi });
