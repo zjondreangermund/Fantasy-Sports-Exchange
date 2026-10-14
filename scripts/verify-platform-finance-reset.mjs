@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
+import { createHash } from 'node:crypto';
 
 let reset = false;
-let wallet = { user_id: 'manager', balance: 5520, locked_balance: 200 };
+let wallet = { user_id: 'google|manager@example.com', balance: 5520, locked_balance: 200 };
 const postings = [];
 const queries = [];
 const execute = async query => {
@@ -24,8 +25,9 @@ const execute = async query => {
 const exported = {};
 const sandbox = { exports: exported, process: { env: {} }, console: { log() {} }, require: name => {
   if (name === 'drizzle-orm') return { sql: (parts, ...values) => ({ text: parts.join('?'), values }) };
+  if (name === 'node:crypto') return { createHash };
   if (name === '../db.js') return { db: { execute, transaction: async fn => fn({ execute }) } };
-  if (name === './walletPosting.js') return { toPostingMoney: n => Math.round(Number(n)*100)/100, postWalletAmountExactlyOnce: async (_tx, input) => { postings.push(input); wallet.balance += input.amount; } };
+  if (name === './walletPosting.js') return { toPostingMoney: n => Math.round(Number(n)*100)/100, postWalletAmountExactlyOnce: async (_tx, input) => { assert.match(input.postingKey, /^[A-Za-z0-9][A-Za-z0-9:._-]+$/); assert.ok(input.postingKey.length <= 200); postings.push(input); wallet.balance += input.amount; } };
   if (name.includes('card-economy')) return { getMarketplaceFloorPrice: rarity => rarity === 'rare' ? 20 : 0 };
   if (name.includes('auctionEscrow')) return { cancelAuctionWithEscrowRecovery: async () => {} };
   if (name.includes('withdrawalPayout')) return { reviewWithdrawal: async () => {} };

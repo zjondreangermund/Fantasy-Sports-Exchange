@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { db } from "../db.js";
 import { postWalletAmountExactlyOnce, toPostingMoney } from "./walletPosting.js";
 import { getMarketplaceFloorPrice } from "../../shared/card-economy.js";
@@ -34,7 +35,7 @@ export async function resetConfirmedTestingBalances() {
       // service can reverse the complete balance with a durable ledger entry.
       await tx.execute(sql`update app.wallets set balance = balance + locked_balance, locked_balance = 0 where user_id = ${wallet.user_id}`);
       if (total !== 0) await postWalletAmountExactlyOnce(tx, {
-        postingKey: `${RESET_KEY}:${wallet.user_id}`, userId: wallet.user_id,
+        postingKey: `${RESET_KEY}:${createHash('sha256').update(String(wallet.user_id)).digest('hex')}`, userId: wallet.user_id,
         amount: -total, transactionType: 'admin_adjustment', sourceType: 'confirmed_testing_reset',
         description: 'Testing balance cleared before live operation',
         reason: 'Owner confirmed all existing balances were for testing',

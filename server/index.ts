@@ -212,8 +212,10 @@ app.use((req, res, next) => {
   try { await seedDatabase(); } catch (error) { console.warn("Could not auto-seed player/card data:", error); }
   registerDepositVerificationRoutes(app, { requireAuth, isAdmin });
   await ensureRuntimeSchema();
-  await resetConfirmedTestingBalances();
-  console.log('[live-platform-finance]', await getPlatformFinance());
+  try {
+    await resetConfirmedTestingBalances();
+    console.log('[live-platform-finance]', await getPlatformFinance());
+  } catch (error) { console.error('[confirmed-testing-reset] Failed; transaction rolled back:', error); }
   registerPlatformFinanceRoutes(app, { requireAuth, isAdmin });
   try { await removeFantasyTestInventory(); } catch (error) { console.error("Fantasy test inventory cleanup failed:", error); }
   registerSecurityAdminRoutes(app, { requireAuth, isAdmin });
