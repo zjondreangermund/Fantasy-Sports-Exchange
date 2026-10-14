@@ -10,6 +10,19 @@ const rows = (result: any): any[] => result.rows || [];
 const RESET_KEY = 'owner-confirmed-testing-reset-20261014';
 
 export async function resetConfirmedTestingBalances() {
+  // Upgrade the enum attached to the actual production ledger column, which may
+  // live in app or public. Commit this before using new enum values in a posting.
+  await db.execute(sql`DO $$
+    DECLARE enum_schema text; enum_name text;
+    BEGIN
+      SELECT n.nspname, t.typname INTO enum_schema, enum_name
+      FROM pg_attribute a JOIN pg_type t ON t.oid = a.atttypid JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE a.attrelid = 'app.transactions'::regclass AND a.attname = 'type' AND t.typtype = 'e';
+      IF enum_schema IS NOT NULL THEN
+        EXECUTE format('ALTER TYPE %I.%I ADD VALUE IF NOT EXISTS %L', enum_schema, enum_name, 'admin_adjustment');
+        EXECUTE format('ALTER TYPE %I.%I ADD VALUE IF NOT EXISTS %L', enum_schema, enum_name, 'prize');
+      END IF;
+    END $$`);
   await db.execute(sql`create table if not exists app.platform_finance_baseline (
     id text primary key, reset_at timestamptz not null default now(), metadata jsonb not null default '{}'::jsonb
   )`);
