@@ -94,6 +94,10 @@ function replaceOnce(source, from, to, label) {
 {
   const file = "server/seed.ts";
   let source = read(file);
+  // Calendar-based sync owns tournaments; never resurrect the retired GW27-GW30 seeder.
+  if (source.includes("LEGACY_GW27_SEED_DISABLED")) {
+    console.log("[free-card-cups] Legacy GW27-GW30 seeder retired; skipping its old source patch.");
+  } else {
   source = replaceOnce(source,
     '  console.log("Ensuring common tournaments exist for GW27+ ...");',
     '  console.log("Ensuring FREE Rare Card Cups exist for GW27+ ...");',
@@ -135,6 +139,7 @@ ${byWeekAnchor}`;
   source = source.replace('Common tournaments GW27-GW30 already present', 'FREE Rare Card Cups GW27-GW30 already present');
   source = source.replace('missing common tournaments (GW27-GW30)', 'missing FREE Rare Card Cups (GW27-GW30)');
   write(file, source);
+  }
 }
 
 // Give Free Card Cups their own obvious tournament lane and explain the card reward instead of Prize Vault funding.
