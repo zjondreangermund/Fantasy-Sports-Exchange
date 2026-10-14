@@ -365,7 +365,7 @@ export default function OnboardingPage() {
                     <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${hasSelectionInPack ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-200" : "border-white/10 bg-white/[0.04] text-white/35"}`}>{hasSelectionInPack ? "Picked" : "1 required"}</span>
                   </div>
 
-                  <div className="mx-auto grid w-full max-w-[330px] grid-cols-3 items-start justify-items-center gap-1 px-1 py-2 sm:max-w-[390px] sm:gap-3 sm:px-3 sm:py-3">
+                  <div className="mx-auto grid w-full max-w-[330px] grid-cols-2 min-[360px]:grid-cols-3 items-start justify-items-center gap-1 px-1 py-2 sm:max-w-[390px] sm:gap-3 sm:px-3 sm:py-3">
                     {pack.map((card, cardIndex) => {
                       const isSelected = selectedPlayerIds.has(card.playerId);
                       return (
