@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { BellRing, ChevronRight, Crown, Gem, ShoppingBag, Sparkles, Trophy, UsersRound, WalletCards } from "lucide-react";
 import { useAuth } from "../../hooks/use-auth";
+import { currentArenaOpenCups } from "../../lib/arena-current-gameweek";
 import type { Competition, CompetitionEntry, PlayerCardWithPlayer, Wallet } from "../../../../shared/schema";
 
 type CompetitionRow = Competition & { gameWeek?: number | null; submissionClosesAt?: string | Date | null };
@@ -32,12 +33,10 @@ export default function NativeHomePage() {
   const lineupCards: PlayerCardWithPlayer[] = Array.isArray(lineup?.cards) ? lineup.cards : [];
   const competitions: CompetitionRow[] = Array.isArray(competitionsRaw) ? competitionsRaw : Array.isArray(competitionsRaw?.competitions) ? competitionsRaw.competitions : [];
   const activeEntries = Array.isArray(entries) ? entries.filter((entry: any) => !["completed", "cancelled"].includes(String(entry.status || "").toLowerCase())) : [];
-  const openCups = competitions.filter((row: any) => String(row.status || "").toLowerCase() === "open" && row.entryOpen !== false);
-  const featured = [...openCups].sort((a: any, b: any) => {
-    const freeA = Number(a.entryFee || 0) <= 0 ? 1 : 0;
-    const freeB = Number(b.entryFee || 0) <= 0 ? 1 : 0;
-    return freeB - freeA || Number(b.gameWeek || 0) - Number(a.gameWeek || 0);
-  })[0];
+  // Only this official entry week (or a manually opened following week) can be featured.
+  // Legacy GW27-GW30 cups cannot override the current Premier League calendar.
+  const openCups = currentArenaOpenCups(competitions);
+  const featured = openCups[0];
   const latest = notifications?.notifications?.find((row: any) => !row.read) || notifications?.notifications?.[0];
   const lineupScore = lineupCards.reduce((sum, card: any) => sum + Number(card.currentGameweekPoints ?? card.player?.currentGameweekPoints ?? 0), 0);
   const readiness = Math.round(([cards.length >= 5, lineupCards.length === 5, activeEntries.length > 0].filter(Boolean).length / 3) * 100);
