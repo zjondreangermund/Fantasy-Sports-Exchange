@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Check production image health
         env:
-          HEALTH_URL: https://fantasy-sports-exchange-production-d05c.up.railway.app/api/health/player-images
+          HEALTH_URL: https://playfantasyarena.com/api/health/player-images
         run: |
           set -euo pipefail
           body=""
