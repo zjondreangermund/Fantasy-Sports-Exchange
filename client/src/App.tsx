@@ -34,6 +34,7 @@ import { Skeleton } from "./components/ui/skeleton";
 import NotFound from "./pages/not-found";
 
 const LandingPage = React.lazy(() => import("./pages/landing"));
+const InstallPage = React.lazy(() => import("./pages/install"));
 const FreeGameweekLandingPage = React.lazy(() => import("./pages/free-gameweek"));
 const LegalCentrePage = React.lazy(() => import("./pages/legal-centre"));
 const ScoringRulesPage = React.lazy(() => import("./pages/scoring-rules"));
@@ -229,6 +230,7 @@ function AppContent() {
   const { user, isLoading } = useAuth();
   React.useEffect(() => { const params = new URLSearchParams(window.location.search); const ref = String(params.get("ref") || "").trim(); if (ref) localStorage.setItem("fantasy_referral_code", ref); }, []);
   React.useEffect(() => { if (!user) return; const code = localStorage.getItem("fantasy_referral_code"); if (!code) return; fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) }).then(() => localStorage.removeItem("fantasy_referral_code")).catch(() => {}); }, [user]);
+  if (window.location.pathname.replace(/\/$/, "") === "/install") return <React.Suspense fallback={<RouteFallback />}><InstallPage /></React.Suspense>;
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Skeleton className="h-12 w-12 rounded-md" /><Skeleton className="h-4 w-32" /></div></div>;
   if (!user) { const pathname = window.location.pathname || "/"; return <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen"><PublicRouter /></PageScene>; }
   return <AuthenticatedApp />;

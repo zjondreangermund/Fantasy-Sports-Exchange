@@ -7,10 +7,8 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
-const ANDROID_APK_BASE_URL =
-  "https://github.com/zjondreangermund/Fantasy-Sports-Exchange/releases/download/android-1.1.10/Fantasy-Arena-Android.apk";
-const ANDROID_VERSION = "1.1.10";
-const ANDROID_SIZE_LABEL = "about 6 MB";
+const ANDROID_VERSION = "latest";
+const ANDROID_SIZE_LABEL = "latest available release";
 const INSTALL_PROMPT_SNOOZE_KEY = "fantasy_arena_install_prompt_snoozed_until";
 const INSTALL_PROMPT_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -45,7 +43,7 @@ function fallbackInstallInstructions() {
 
 function freshAndroidApkUrl() {
   const nonce = Date.now();
-  return `${ANDROID_APK_BASE_URL}?version=${encodeURIComponent(ANDROID_VERSION)}&nocache=${nonce}`;
+  return `/api/android/releases/latest.apk?nocache=${nonce}`;
 }
 
 function installPromptIsSnoozed() {
