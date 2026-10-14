@@ -26,6 +26,7 @@ import {
 } from "../ui/dialog";
 import { Label } from "../ui/label";
 import CardShowcase from "../CardShowcase";
+import RecentPlayerPerformance from "../cards/RecentPlayerPerformance";
 import { useToast } from "../../hooks/use-toast";
 import { apiRequest, queryClient } from "../../lib/queryClient";
 import { type PlayerCardWithPlayer } from "../../../../shared/schema";
@@ -36,6 +37,13 @@ import {
 } from "../../../../shared/loan-market";
 
 type LoanListing = Record<string, any>;
+type LoanMinimum = {
+  cardId: number;
+  rarity: string;
+  costBasis: number;
+  acquisitionSource: "marketplace" | "auction" | "rarity_floor";
+  minimumPricePerGameweek: number;
+};
 type SortMode = "performance" | "priceAsc" | "priceDesc" | "rarity";
 
 const rarityOrder: Record<string, number> = {
@@ -91,7 +99,7 @@ function loanPlayerName(loan: LoanListing) {
 }
 
 function loanOwnerName(loan: LoanListing) {
-  return String(loan.owner_name || loan.ownerName || "Manager");
+  return String(loan.owner_club_name || loan.ownerClubName || loan.owner_name || loan.ownerName || "Unnamed Club");
 }
 
 function loanCard(loan: LoanListing): PlayerCardWithPlayer {
@@ -187,9 +195,23 @@ export function LoanMarketPanel({
   const [pricePerGameweek, setPricePerGameweek] = useState(20);
 
   const selectedCard = loanableCards.find((card) => card.id === selectedCardId) || loanableCards[0];
+  const { data: loanMinimumData } = useQuery<{ minimums: LoanMinimum[] }>({
+    queryKey: ["/api/marketplace/loans/my-minimums"],
+    queryFn: async () => {
+      const res = await fetch("/api/marketplace/loans/my-minimums", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to calculate loan minimums");
+      return res.json();
+    },
+  });
+  const minimumByCard = useMemo(
+    () => new Map((loanMinimumData?.minimums || []).map((item) => [Number(item.cardId), item])),
+    [loanMinimumData?.minimums],
+  );
+  const selectedMinimum = selectedCard ? minimumByCard.get(Number(selectedCard.id)) : undefined;
   const selectedRarity = selectedCard ? rarityOfCard(selectedCard) : "rare";
-  const floor = getLoanFloorPerGameweek(selectedRarity) || 20;
-  const breakdown = getLoanFeeBreakdown({ rarity: selectedRarity, pricePerGameweek, gameweeks });
+  const costBasis = Number(selectedMinimum?.costBasis || 0);
+  const floor = Number(selectedMinimum?.minimumPricePerGameweek ?? getLoanFloorPerGameweek(selectedRarity, costBasis));
+  const breakdown = getLoanFeeBreakdown({ rarity: selectedRarity, pricePerGameweek, gameweeks, costBasis });
 
   useEffect(() => {
     if (requestedCardId && loanableCards.some((card) => card.id === requestedCardId)) {
@@ -202,8 +224,8 @@ export function LoanMarketPanel({
 
   useEffect(() => {
     if (!selectedCard) return;
-    setPricePerGameweek(getLoanFloorPerGameweek(rarityOfCard(selectedCard)) || 20);
-  }, [selectedCard?.id]);
+    setPricePerGameweek(floor);
+  }, [selectedCard?.id, floor]);
 
   const { data, isLoading } = useQuery<{ loans: LoanListing[] }>({
     queryKey: ["/api/marketplace/loans"],
@@ -323,7 +345,7 @@ export function LoanMarketPanel({
           <DialogHeader>
             <DialogTitle>Create Loan Listing</DialogTitle>
             <DialogDescription className="text-slate-400">
-              Choose a card, duration and price per gameweek. Common cards cannot be loaned.
+              Choose a card, duration and price per gameweek. Purchased cards start at 10% of what you paid; won/free cards start at 10% of the rarity floor. Common cards cannot be loaned.
             </DialogDescription>
           </DialogHeader>
           {loanableCards.length ? (
@@ -375,6 +397,7 @@ export function LoanMarketPanel({
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm">
                   <p className="text-white/55">Minimum: {money(floor)} per gameweek</p>
+                  <p className="text-xs text-white/40">{costBasis > 0 ? `10% of your ${money(costBasis)} acquisition price${selectedMinimum?.acquisitionSource === "auction" ? " (auction)" : ""}` : `10% of the ${selectedRarity} Marketplace floor price`}</p>
                   <p>Total paid by borrower: <strong>{money(breakdown.gross)}</strong></p>
                   <p>Fantasy Arena fee: <strong className="text-amber-200">{money(breakdown.fee)}</strong></p>
                   <p>You receive: <strong className="text-emerald-300">{money(breakdown.ownerReceives)}</strong></p>
@@ -400,7 +423,7 @@ export function LoanMarketPanel({
       </Dialog>
 
       <Dialog open={!!confirmingLoan} onOpenChange={(open) => !open && setConfirmingLoan(null)}>
-        <DialogContent className="border-white/10 bg-[#070b18] text-white">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto border-white/10 bg-[#070b18] text-white">
           <DialogHeader>
             <DialogTitle>Confirm Loan</DialogTitle>
             <DialogDescription className="text-slate-400">
@@ -409,6 +432,7 @@ export function LoanMarketPanel({
           </DialogHeader>
           {confirmingLoan ? (
             <div className="space-y-4 py-3">
+              <RecentPlayerPerformance cardId={Number(loanCard(confirmingLoan).id)} />
               <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-black/30 p-4">
                 <img
                   src={loanImage(confirmingLoan)}
@@ -418,6 +442,7 @@ export function LoanMarketPanel({
                 <div className="min-w-0">
                   <p className="truncate text-xl font-black">{loanPlayerName(confirmingLoan)}</p>
                   <p className="text-sm text-white/45">{confirmingLoan.team || "Club"} • {confirmingLoan.position || "Player"}</p>
+                  <p className="mt-1 text-xs font-bold text-violet-200">Lender club: {loanOwnerName(confirmingLoan)}</p>
                   <p className="mt-2 font-black text-emerald-300">{money(loanTotal(confirmingLoan))}</p>
                 </div>
               </div>
@@ -491,7 +516,7 @@ function LoanMarketRow({
           <div className="min-w-0">
             <p className="truncate text-lg font-black">{loanPlayerName(loan)}</p>
             <p className="truncate text-xs text-white/50">{loan.team || "Club"} • {loan.position || "Player"}</p>
-            <p className="truncate text-[11px] text-white/35">Lender: {loanOwnerName(loan)}</p>
+            <p className="truncate text-[11px] text-white/35">Lender club: {loanOwnerName(loan)}</p>
           </div>
         </div>
 

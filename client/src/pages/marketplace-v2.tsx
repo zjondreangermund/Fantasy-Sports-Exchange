@@ -12,6 +12,7 @@ import { LiveHero, LivePageShell, LiveStatCard } from "../components/layout/Live
 import CardShowcase from "../components/CardShowcase";
 import CardPlayerImage from "../components/CardPlayerImage";
 import CardProfileModal from "../components/cards/CardProfileModal";
+import RecentPlayerPerformance from "../components/cards/RecentPlayerPerformance";
 import { LoanMarketPanel } from "../components/marketplace/LoanMarketPanel";
 import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { cardMatchesSearch } from "../lib/search";
@@ -39,11 +40,11 @@ type MarketMode = "buy" | "loan";
 
 const rarityOrder: Record<string, number> = { common: 0, rare: 1, unique: 2, epic: 3, legendary: 4 };
 const rarityGlow: Record<string, string> = {
-  common: "rgba(148,163,184,.22)",
-  rare: "rgba(59,130,246,.36)",
-  epic: "rgba(168,85,247,.42)",
-  unique: "rgba(236,72,153,.42)",
-  legendary: "rgba(251,191,36,.48)",
+  common: "rgba(226,232,240,.34)",
+  rare: "rgba(59,130,246,.52)",
+  unique: "rgba(192,132,252,.56)",
+  epic: "rgba(251,59,74,.58)",
+  legendary: "rgba(251,191,36,.62)",
 };
 
 function initialMarketMode(): MarketMode {
@@ -343,11 +344,12 @@ export default function MarketplaceV2Page() {
       </section>
 
       <Dialog open={!!buying} onOpenChange={(open) => !open && setBuying(null)}>
-        <DialogContent className="border-white/10 bg-[#070b18] text-white shadow-[0_30px_100px_rgba(0,0,0,.75)]">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto border-white/10 bg-[#070b18] text-white shadow-[0_30px_100px_rgba(0,0,0,.75)]">
           <DialogHeader><DialogTitle>Confirm Purchase</DialogTitle></DialogHeader>
           {buying ? (
             <div className="py-4">
               <div className="mb-4 flex justify-center"><CardShowcase card={buying} size="sm" /></div>
+              <RecentPlayerPerformance cardId={Number(buying.id)} />
               <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
                 <p>Buy <strong>{buying.player?.name}</strong> for <strong className="text-emerald-300">{money(cardPrice(buying))}</strong>?</p>
                 <p className="mt-1 text-sm text-slate-400">Seller: {ownerName(buying)}</p>
@@ -439,7 +441,6 @@ function MarketRow({
         <div className="flex min-w-0 items-center gap-3 text-left">
           <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-white/15 bg-black/35">
             <CardPlayerImage card={card} alt={fantasy.name} className="h-full w-full object-cover" />
-            <div title="Actual Fantasy Arena card level" className="absolute left-1 top-1 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black">LEVEL {Math.max(1, Number(card.level || 1))}</div>
           </div>
           <div className="min-w-0">
             <p className="truncate text-lg font-black">{fantasy.name}</p>

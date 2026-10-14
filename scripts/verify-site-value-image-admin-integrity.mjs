@@ -104,7 +104,7 @@ for (const [label, source] of [["collection card API", cardApi], ["shared market
 }
 includes(premiumCard, "data.stats?.arenaGameweekPoints ?? player.totalPoints", "Profile loading must never overwrite Arena card points with external FPL totals.");
 includes(stableCard, "maximumFractionDigits: 4", "Card points must preserve the same scoring precision as leaderboards.");
-includes(stableCard, '<StatChip label="LEVEL" value={level}', "Card value chips must show actual Fantasy Arena level, not invented external overall values.");
+if (stableCard.includes('<StatChip label="LEVEL"') || read("client/src/components/cards/CardProfileModal.tsx").includes('<MiniStat label="Level"')) throw new Error("Player levels must not appear on cards or player profiles.");
 includes(cardAdapter, "Card form is calculated only from recorded Fantasy Arena match scores", "Displayed card form must come from Fantasy Arena matches.");
 includes(cardApi, "'marketplace_sale'", "Card sale history must recognize actual Fantasy Arena marketplace sales.");
 includes(cardApi, "ownershipManagerCount", "Player ownership must use Fantasy Arena managers, not FPL ownership.");
@@ -140,7 +140,7 @@ includes(rules, "prizePoolRate: 0.9", "User-created tournaments must allocate 90
 includes(economy, "competition.platformFeeRate ??", "Official tournament zero-percent fees must not be replaced by a truthy fallback.");
 
 includes(view, "(display-mode: standalone)", "Installed mobile apps must be detected independently of ordinary browsers.");
-includes(view, 'if (isInstalledMobileApp()) return "desktop";', "Installed mobile apps must default to the desktop website layout on each fresh session.");
+includes(view, 'const effectiveMode: SiteViewMode = "mobile";', "Browser/PWA traffic must use the normal device-width responsive viewport.");
 includes(view, 'APP_SESSION_VIEW_STORAGE_KEY = "fantasy_arena_app_session_view"', "Installed app view overrides must be session-scoped so Desktop remains the next-launch default.");
 includes(view, "window.sessionStorage.setItem(APP_SESSION_VIEW_STORAGE_KEY, mode)", "Installed app view changes must use session storage.");
 includes(view, "SITE_VIEW_STORAGE_KEY", "The desktop/mobile preference must persist in ordinary browsers.");
@@ -148,7 +148,8 @@ includes(view, "const DESKTOP_VIEWPORT = `width=${DESKTOP_VIEWPORT_WIDTH}, minim
 assert.ok(!view.includes("deviceWidth / DESKTOP_VIEWPORT_WIDTH") && !view.includes("initialScale.toFixed"), "Desktop app mode must not manually downscale the page into a blurry raster.");
 includes(view, "clearQueryViewOverride();", "The view toggle must clear stale query overrides so Mobile view can be restored.");
 includes(view, "window.location.reload()", "Desktop/mobile switching must reload the layout viewport for deterministic Android WebView behavior.");
-includes(app, "Switch to desktop site view", "Managers must be able to toggle between desktop and mobile views.");
+assert.ok(!app.includes("Switch to desktop site view") && !app.includes("Switch to mobile site view"), "The retired browser desktop/mobile view toggle must not be rendered.");
+assert.ok(!app.includes("MobileNavDock"), "The retired browser mobile navigation dock must not be mounted.");
 includes(app, "<InstallAppButton />", "Signed-in web users must retain an Install App option until the app is installed.");
 includes(installApp, "beforeinstallprompt", "Install App must use the browser installation flow when available.");
 includes(installApp, "if (isInstalledMobileApp()) return null", "Install App option must disappear inside an installed app.");

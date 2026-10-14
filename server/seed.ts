@@ -45,6 +45,8 @@ const marketplaceCards = [
 ];
 
 async function ensureMarketplaceListings(players: any[]) {
+  // Production marketplace must contain only listings deliberately created by users.
+  if (process.env.ENABLE_DEMO_MARKETPLACE !== "true") return;
   const existingListings = await storage.getMarketplaceListings();
   if (existingListings.length > 0) {
     console.log(`Marketplace already has ${existingListings.length} listings`);
@@ -118,7 +120,7 @@ export async function seedDatabase() {
 export async function seedCompetitions() {
   const existing = await storage.getCompetitions();
 
-  console.log("Ensuring common tournaments exist for GW27+ ...");
+  console.log("Ensuring FREE Rare Card Cups exist for GW27+ ...");
   const now = new Date();
 
   const endOfCurrentWeek = new Date(now);
@@ -131,6 +133,25 @@ export async function seedCompetitions() {
 
   const baseGameWeek = 27;
   const weeksToSeed = 4;
+  for (const competition of existing as any[]) {
+    const legacyFreeCup = String(competition?.tier || "").toLowerCase() === "common"
+      && Number(competition?.entryFee || 0) === 0
+      && String(competition?.prizeCardRarity || "").toLowerCase() === "rare"
+      && /^Common Tournament - GW\d+$/i.test(String(competition?.name || ""));
+    if (!legacyFreeCup) continue;
+    const gameWeek = Number(competition.gameWeek || 0);
+    await storage.updateCompetition(Number(competition.id), {
+      name: `FREE Rare Card Cup - GW${gameWeek}`,
+      prizeType: "goods",
+      prizeDescription: "Rare Player Card",
+      prizeKey: "free-rare-card",
+    } as any);
+    competition.name = `FREE Rare Card Cup - GW${gameWeek}`;
+    competition.prizeType = "goods";
+    competition.prizeDescription = "Rare Player Card";
+    competition.prizeKey = "free-rare-card";
+  }
+
   const existingByWeek = new Set(existing.filter((c: any) => String(c.tier || "").toLowerCase() === "common").map((c: any) => Number(c.gameWeek)));
 
   let createdCount = 0;
@@ -147,7 +168,7 @@ export async function seedCompetitions() {
     endDate.setHours(23, 59, 59, 999);
 
     await storage.createCompetition({
-      name: `Common Tournament - GW${gw}`,
+      name: `FREE Rare Card Cup - GW${gw}`,
       tier: "common",
       entryFee: 0,
       status: "open",
@@ -155,12 +176,15 @@ export async function seedCompetitions() {
       startDate,
       endDate,
       prizeCardRarity: "rare",
+      prizeType: "goods",
+      prizeDescription: "Rare Player Card",
+      prizeKey: "free-rare-card",
     } as any);
     createdCount++;
   }
 
-  if (createdCount === 0) console.log("Common tournaments GW27-GW30 already present");
-  else console.log(`Seeded ${createdCount} missing common tournaments (GW27-GW30)`);
+  if (createdCount === 0) console.log("FREE Rare Card Cups GW27-GW30 already present");
+  else console.log(`Seeded ${createdCount} missing FREE Rare Card Cups (GW27-GW30)`);
 }
 
 export async function seedDemoUsers() {

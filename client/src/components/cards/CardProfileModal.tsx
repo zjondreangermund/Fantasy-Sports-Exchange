@@ -160,37 +160,45 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
   const position = data.player?.position || card.player?.position || "N/A";
   const outsidePremierLeague = data.player?.premierLeagueStatus === "outside-premier-league"
     || String(data.player?.league || card.player?.league || "").toLowerCase() === "outside premier league";
-  const identityVerified = data.source !== "card-fallback";
-  const verifiedImage = identityVerified ? data.player?.imageUrl || undefined : undefined;
+  const originalPlayer = (card.player as any) || {};
+  const profileVerified = data.source !== "card-fallback";
+  const existingVerified = Boolean(originalPlayer.identityVerified)
+    || ["fpl", "api-football", "fpl+api-football", "api-football-current-squad"].includes(String(originalPlayer.identitySource || "").toLowerCase());
+  const identityVerified = profileVerified || existingVerified;
+  const verifiedImage = profileVerified ? data.player?.imageUrl || undefined : undefined;
+  const retainedImages = Array.from(new Set([
+    originalPlayer.verifiedImageUrl, originalPlayer.imageUrl, originalPlayer.image_url,
+    originalPlayer.image, originalPlayer.photoUrl, originalPlayer.photo,
+    originalPlayer.cutoutUrl, originalPlayer.headshotUrl, originalPlayer.officialPortraitUrl,
+    ...(Array.isArray(originalPlayer.imageCandidates) ? originalPlayer.imageCandidates : []),
+    verifiedImage,
+  ].filter(Boolean))) as string[];
+  const retainedPrimary = retainedImages[0] || verifiedImage;
   const profileCard = {
     ...card,
     totalPoints: data.stats.totalPoints,
     player: {
-      ...(card.player as any),
+      ...originalPlayer,
       ...data.player,
       name: displayName,
       team,
       position,
-      imageUrl: verifiedImage,
-      verifiedImageUrl: verifiedImage,
+      imageUrl: retainedPrimary,
+      verifiedImageUrl: retainedPrimary,
+      imageCandidates: retainedImages,
       identityVerified,
-      identitySource: identityVerified ? (data.source === "api-football" ? "api-football" : "fpl") : "unverified-card-data",
+      identitySource: profileVerified ? (data.source === "api-football" ? "api-football" : "fpl") : originalPlayer.identitySource || "unverified-card-data",
       totalPoints: data.stats.totalPoints,
-      photo: null,
-      photoUrl: null,
-      image: null,
-      image_url: null,
-      officialPortraitUrl: null,
-      headshotUrl: null,
-      cutoutUrl: null,
-      code: identityVerified ? (card.player as any)?.code : null,
+      code: identityVerified ? originalPlayer.code : null,
     },
   } as PlayerCardWithPlayer;
   const fantasyCard = toFantasyCardData(profileCard, { imageWidth: 900 });
-  const xp = statNumber((card as any).xp);
-  const level = statNumber((card as any).level || 1);
   const serial = (card as any).serialNumber || (card as any).serial || (card as any).serialId || "Minted";
-  const totalPointsLabel = data.source === "fpl-live" ? "FPL Points" : data.source === "api-football" ? "Arena Score" : "Points";
+  const currentGameweekArenaPoints = Number((card as any).currentGameweekPoints ?? (card.player as any)?.currentGameweekPoints ?? 0);
+  const totalPointsLabel = "Arena GW Points";
+  const arenaPointsDisplay = identityVerified && Number.isFinite(currentGameweekArenaPoints)
+    ? currentGameweekArenaPoints.toLocaleString(undefined, { maximumFractionDigits: 4 })
+    : "—";
 
   const modal = (
     <div
@@ -229,8 +237,6 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <MiniStat label="Level" value={level || 1} />
-                <MiniStat label="XP" value={xp} />
                 <MiniStat label="Serial" value={serial} />
                 <MiniStat label="Rarity" value={String(card.rarity || "common").toUpperCase()} />
               </div>
@@ -254,8 +260,8 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
                 ))}
               </div>
               <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-                <HeroStat icon={<Star className="h-4 w-4" />} label={totalPointsLabel} value={officialStat(data, data.stats.totalPoints)} />
-                <HeroStat icon={<TrendingUp className="h-4 w-4" />} label="Ownership" value={data.stats.selectedBy ? `${data.stats.selectedBy}%` : "—"} />
+                <HeroStat icon={<Star className="h-4 w-4" />} label={totalPointsLabel} value={arenaPointsDisplay} />
+                <HeroStat icon={<TrendingUp className="h-4 w-4" />} label="Arena ownership" value={data.stats.selectedBy ? `${data.stats.selectedBy}%` : "—"} />
                 <HeroStat icon={<Zap className="h-4 w-4" />} label="Last Arena Sale" value={money(data.stats.value)} />
                 <HeroStat icon={<Award className="h-4 w-4" />} label={data.source === "api-football" ? "Avg Rating" : "Bonus"} value={data.source === "api-football" ? officialStat(data, data.stats.averageRating, 1) : officialStat(data, data.stats.bonus)} />
               </div>

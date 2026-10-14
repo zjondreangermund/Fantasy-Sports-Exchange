@@ -3,9 +3,11 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes, requireAuth, isAdmin } from "./routes.js";
 import { registerAdminInsightsRoutes } from "./routes/adminInsights.routes.js";
+import { registerFootballDataRoutes } from "./routes/footballData.routes.js";
 import { registerDepositVerificationRoutes } from "./routes/depositVerification.routes.js";
 import { registerSecurityAdminRoutes } from "./routes/securityAdmin.routes.js";
 import { seedDatabase } from "./seed.js";
+import { removeFantasyTestInventory } from "./services/removeFantasyTestInventory.js";
 import { serveStatic } from "./static.js";
 import { ensureRuntimeSchema } from "./runtime-schema.js";
 import { createServer } from "http";
@@ -76,10 +78,11 @@ if (googleAuthEnabled) {
       const email = profile.emails?.[0]?.value || "";
       const name = profile.displayName || "";
       let user = await storage.getUser(userId);
-      if (!user) { await storage.createUser({ id: userId, email, name, avatarUrl: profile.photos?.[0]?.value }); user = await storage.getUser(userId); }
+      let isNewUser = false;
+      if (!user) { await storage.createUser({ id: userId, email, name, avatarUrl: profile.photos?.[0]?.value }); user = await storage.getUser(userId); isNewUser = true; }
       const wallet = await storage.getWallet(userId);
       if (!wallet) await storage.createWallet({ userId, balance: 0, lockedBalance: 0 } as any);
-      return done(null, { id: userId, name, email, photo: profile.photos?.[0]?.value });
+      return done(null, { id: userId, name, email, photo: profile.photos?.[0]?.value, isNewUser });
     } catch (error) { console.error("Auth error:", error); return done(error as Error); }
   }));
 }
@@ -140,11 +143,23 @@ app.get("/api/image-proxy", async (req, res) => {
   const isApiFootballPlayer = target.protocol === "https:" && target.hostname === "media.api-sports.io" && /^\/football\/players\/\d+\.png$/i.test(target.pathname);
   if (!isPremierLeague && !isApiFootballPlayer) return res.status(403).json({ message: "Host or image path not allowed" });
 
-  const urlsToTry = [target.toString()];
-  const codeMatch = target.pathname.match(/\/players\/(?:\d+x\d+)\/p(\d+)\.(?:png|jpg|jpeg|webp)$/i);
-  if (codeMatch?.[1]) {
+  // CURRENT_PL_PLAYER_PHOTO_FALLBACKS_V2
+  // Prefer the portrait size used by the current PL/FPL experience. A stored
+  // 250x250 URL can 404 even when the same current player has a healthy 110x140
+  // portrait, so canonical current assets are attempted before the raw request.
+  const codeMatch = target.pathname.match(/\/players\/(?:\d+x\d+)\/p?(\d+)\.(?:png|jpg|jpeg|webp)$/i);
+  const urlsToTry: string[] = [];
+  if (codeMatch?.[1] && target.hostname === "resources.premierleague.com") {
     const code = codeMatch[1];
-    for (const size of ["500x500", "250x250", "110x110", "40x40"]) urlsToTry.push(`https://resources.premierleague.com/premierleague/photos/players/${size}/p${code}.png`);
+    for (const size of ["110x140", "500x500", "250x250", "40x40"]) {
+      urlsToTry.push(`https://resources.premierleague.com/premierleague25/photos/players/${size}/${code}.png`);
+    }
+    urlsToTry.push(target.toString());
+    for (const size of ["110x140", "500x500", "250x250", "110x110", "40x40"]) {
+      urlsToTry.push(`https://resources.premierleague.com/premierleague/photos/players/${size}/p${code}.png`);
+    }
+  } else {
+    urlsToTry.push(target.toString());
   }
 
   for (const url of Array.from(new Set(urlsToTry))) {
@@ -195,7 +210,9 @@ app.use((req, res, next) => {
   try { await seedDatabase(); } catch (error) { console.warn("Could not auto-seed player/card data:", error); }
   registerDepositVerificationRoutes(app, { requireAuth, isAdmin });
   await ensureRuntimeSchema();
+  try { await removeFantasyTestInventory(); } catch (error) { console.error("Fantasy test inventory cleanup failed:", error); }
   registerSecurityAdminRoutes(app, { requireAuth, isAdmin });
+  registerFootballDataRoutes(app);
   try { const result = await syncFplPremierLeaguePlayers(); console.log("FPL Premier League player sync complete:", result); } catch (error) { console.warn("Could not sync FPL Premier League players:", error); }
   await registerRoutes(httpServer, app);
   registerAdminInsightsRoutes(app, { requireAuth, isAdmin });

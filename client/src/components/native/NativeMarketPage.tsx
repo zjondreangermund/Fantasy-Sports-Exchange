@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ArrowUpDown, ChevronRight, Clock3, Handshake, Search, ShoppingBag, WalletCards, X } from "lucide-react";
 import CardPlayerImage from "../CardPlayerImage";
+import RecentPlayerPerformance from "../cards/RecentPlayerPerformance";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { apiRequest, queryClient } from "../../lib/queryClient";
@@ -109,6 +110,15 @@ function loanName(loan: LoanListing) {
   return String(loan.player_name || loan.playerName || loan.card?.player?.name || "Player");
 }
 
+// MARKETPLACE_CLUB_IDENTITIES_V1
+function sellerClubName(card: any) {
+  return String(card?.seller_club_name || card?.sellerClubName || "Unnamed Club");
+}
+
+function lenderClubName(loan: LoanListing) {
+  return String(loan?.owner_club_name || loan?.ownerClubName || loan?.owner_name || loan?.ownerName || "Unnamed Club");
+}
+
 export default function NativeMarketPage() {
   const { toast } = useToast();
   const [mode, setMode] = React.useState<MarketMode>(() => initialMarketMode());
@@ -180,7 +190,7 @@ export default function NativeMarketPage() {
       .filter((card: any) => rarity === "all" || String(card.rarity || "common").toLowerCase() === rarity)
       .filter((card: any) => {
         if (!needle) return true;
-        return `${card.player?.name || ""} ${card.player?.team || ""} ${card.player?.position || ""} ${card.rarity || ""}`.toLowerCase().includes(needle);
+        return `${card.player?.name || ""} ${card.player?.team || ""} ${card.player?.position || ""} ${card.rarity || ""} ${sellerClubName(card)}`.toLowerCase().includes(needle);
       })
       .sort((a: any, b: any) => {
         if (sort === "low") return cardPrice(a) - cardPrice(b);
@@ -195,7 +205,7 @@ export default function NativeMarketPage() {
       .filter((loan) => rarity === "all" || String(loan.rarity || loan.card?.rarity || "common").toLowerCase() === rarity)
       .filter((loan) => {
         if (!needle) return true;
-        return `${loanName(loan)} ${loan.team || loan.card?.player?.team || ""} ${loan.position || loan.card?.player?.position || ""} ${loan.owner_name || ""}`.toLowerCase().includes(needle);
+        return `${loanName(loan)} ${loan.team || loan.card?.player?.team || ""} ${loan.position || loan.card?.player?.position || ""} ${lenderClubName(loan)}`.toLowerCase().includes(needle);
       })
       .sort((a, b) => {
         if (sort === "low") return loanTotal(a) - loanTotal(b);
@@ -282,7 +292,7 @@ export default function NativeMarketPage() {
               <div className="relative h-16 w-14 shrink-0 overflow-hidden rounded-xl border bg-slate-900" style={{ borderColor: tone.edge, boxShadow: `0 0 18px ${tone.glow}` }}><CardPlayerImage card={card} alt={card.player?.name || "Player"} className="h-full w-full object-cover object-top" /></div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2"><p className="truncate text-sm font-black text-white">{card.player?.name || "Player"}</p><span className="shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase" style={{ borderColor: tone.edge, color: tone.ink, background: tone.glow, boxShadow: `0 0 10px ${tone.glow}` }}>{String(card.rarity || "common")}</span></div>
-                <p className="mt-1 truncate text-[11px] font-semibold text-slate-500">{card.player?.team || "Premier League"} · {card.player?.position || "—"}</p>
+                <p className="mt-1 truncate text-[11px] font-semibold text-slate-500">{card.player?.team || "Premier League"} · {card.player?.position || "—"}</p><p className="mt-1 truncate text-[9px] font-bold text-violet-200/80">Seller club: {sellerClubName(card)}</p>
                 <div className="mt-1.5 flex items-center gap-3 text-[10px]"><span className="font-black text-cyan-200">GW {points(card)} pts</span>{mine ? <span className="font-black text-violet-200">Your listing</span> : null}</div>
               </div>
               <div className="shrink-0 text-right"><p className="text-sm font-black text-emerald-200">{money(cardPrice(card))}</p><ChevronRight className="ml-auto mt-2 h-4 w-4 text-slate-600" /></div>
@@ -300,7 +310,7 @@ export default function NativeMarketPage() {
             return <button key={Number(loan.id)} type="button" onClick={() => setSelectedLoan(loan)} className="relative flex w-full items-center gap-3 overflow-hidden rounded-2xl border bg-white/[.032] p-2.5 text-left transition active:scale-[.995]" style={{ borderColor: tone.edge, boxShadow: `0 0 22px ${tone.glow}` }}>
               <span className="pointer-events-none absolute inset-y-2 left-0 w-0.5 rounded-full" style={{ background: tone.edge, boxShadow: `0 0 12px ${tone.edge}` }} />
               <div className="relative h-16 w-14 shrink-0 overflow-hidden rounded-xl border bg-slate-900" style={{ borderColor: tone.edge }}><CardPlayerImage card={card} alt={loanName(loan)} className="h-full w-full object-cover object-top" /></div>
-              <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-black">{loanName(loan)}</p><span className="shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase" style={{ borderColor: tone.edge, color: tone.ink, background: tone.glow }}>{String(card.rarity || "rare")}</span></div><p className="mt-1 truncate text-[10px] text-slate-500">{card.player?.team || loan.team || "Premier League"} · {Number(loan.gameweeks || 1)} GW</p><p className="mt-1 text-[9px] font-bold text-cyan-200">{money(loanPricePerGw(loan))} / GW{mine ? " · YOUR LISTING" : ""}</p></div>
+              <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><p className="truncate text-sm font-black">{loanName(loan)}</p><span className="shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase" style={{ borderColor: tone.edge, color: tone.ink, background: tone.glow }}>{String(card.rarity || "rare")}</span></div><p className="mt-1 truncate text-[10px] text-slate-500">{card.player?.team || loan.team || "Premier League"} · {Number(loan.gameweeks || 1)} GW</p><p className="mt-1 truncate text-[9px] font-bold text-violet-200/80">Lender club: {lenderClubName(loan)}</p><p className="mt-1 text-[9px] font-bold text-cyan-200">{money(loanPricePerGw(loan))} / GW{mine ? " · YOUR LISTING" : ""}</p></div>
               <div className="shrink-0 text-right"><p className="text-sm font-black text-emerald-200">{money(loanTotal(loan))}</p><p className="mt-1 text-[8px] font-black uppercase text-slate-600">total</p><ChevronRight className="ml-auto mt-1 h-4 w-4 text-slate-600" /></div>
             </button>;
           })}
@@ -314,11 +324,12 @@ export default function NativeMarketPage() {
 
       {selected ? <div className="fixed inset-0 z-[120] flex items-end bg-black/70 backdrop-blur-sm">
         <button className="absolute inset-0" onClick={() => setSelected(null)} aria-label="Close purchase sheet" />
-        <section className="relative z-10 w-full rounded-t-[2rem] border-t border-white/10 bg-[#0a0d1c] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-4 shadow-[0_-2rem_5rem_rgba(0,0,0,.7)]">
+        <section className="relative z-10 max-h-[90dvh] overflow-y-auto w-full rounded-t-[2rem] border-t border-white/10 bg-[#0a0d1c] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-4 shadow-[0_-2rem_5rem_rgba(0,0,0,.7)]">
           <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
           <button onClick={() => setSelected(null)} className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5"><X className="h-4 w-4" /></button>
-          <div className="flex items-center gap-3 pr-11"><div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-2xl border border-white/10"><CardPlayerImage card={selected} alt={selected.player?.name || "Player"} className="h-full w-full object-cover object-top" /></div><div className="min-w-0"><p className="truncate text-xl font-black">{selected.player?.name || "Player"}</p><p className="mt-1 text-xs text-slate-500">{selected.player?.team || "Premier League"} · {selected.player?.position || "—"}</p><p className="mt-2 text-lg font-black text-emerald-200">{money(selectedPrice)}</p></div></div>
+          <div className="flex items-center gap-3 pr-11"><div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-2xl border border-white/10"><CardPlayerImage card={selected} alt={selected.player?.name || "Player"} className="h-full w-full object-cover object-top" /></div><div className="min-w-0"><p className="truncate text-xl font-black">{selected.player?.name || "Player"}</p><p className="mt-1 text-xs text-slate-500">{selected.player?.team || "Premier League"} · {selected.player?.position || "—"}</p><p className="mt-1 text-[10px] font-bold text-violet-200">Seller club: {sellerClubName(selected)}</p><p className="mt-2 text-lg font-black text-emerald-200">{money(selectedPrice)}</p></div></div>
           <div className="mt-4 grid grid-cols-3 gap-2"><div className="rounded-xl bg-white/[.04] p-2.5 text-center"><p className="text-[9px] uppercase text-slate-600">Rarity</p><p className="mt-1 text-xs font-black uppercase">{String(selected.rarity || "common")}</p></div><div className="rounded-xl bg-white/[.04] p-2.5 text-center"><p className="text-[9px] uppercase text-slate-600">GW points</p><p className="mt-1 text-xs font-black">{points(selected)}</p></div><div className="rounded-xl bg-white/[.04] p-2.5 text-center"><p className="text-[9px] uppercase text-slate-600">After buy</p><p className="mt-1 text-xs font-black">{money(walletBalance - selectedPrice)}</p></div></div>
+          <RecentPlayerPerformance cardId={Number(selected.id)} />
           {selectedIsMine ? <div className="mt-4 rounded-2xl border border-violet-300/15 bg-violet-400/[.07] p-3 text-center text-sm font-black text-violet-100">This is your own marketplace listing. Manage it from My Cards.</div> : <Button onClick={() => buyMutation.mutate(selected)} disabled={buyMutation.isPending || selectedPrice > walletBalance} className="mt-4 h-12 w-full rounded-2xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><ShoppingBag className="mr-2 h-4 w-4" />{selectedPrice > walletBalance ? "Not enough balance" : buyMutation.isPending ? "Buying…" : `Buy for ${money(selectedPrice)}`}</Button>}
           <Link href="/wallet"><button className="mt-3 flex w-full items-center justify-center gap-2 text-xs font-bold text-slate-500"><WalletCards className="h-4 w-4" />Wallet balance {money(walletBalance)}</button></Link>
         </section>
@@ -326,12 +337,13 @@ export default function NativeMarketPage() {
 
       {selectedLoan ? <div className="fixed inset-0 z-[120] flex items-end bg-black/70 backdrop-blur-sm">
         <button className="absolute inset-0" onClick={() => setSelectedLoan(null)} aria-label="Close loan sheet" />
-        <section className="relative z-10 w-full rounded-t-[2rem] border-t border-white/10 bg-[#0a0d1c] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-4 shadow-[0_-2rem_5rem_rgba(0,0,0,.7)]">
+        <section className="relative z-10 max-h-[90dvh] overflow-y-auto w-full rounded-t-[2rem] border-t border-white/10 bg-[#0a0d1c] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-4 shadow-[0_-2rem_5rem_rgba(0,0,0,.7)]">
           <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
           <button onClick={() => setSelectedLoan(null)} className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5"><X className="h-4 w-4" /></button>
-          <div className="flex items-center gap-3 pr-11"><div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-2xl border border-cyan-300/20"><CardPlayerImage card={loanCard(selectedLoan)} alt={loanName(selectedLoan)} className="h-full w-full object-cover object-top" /></div><div className="min-w-0"><p className="truncate text-xl font-black">{loanName(selectedLoan)}</p><p className="mt-1 text-xs text-slate-500">{loanCard(selectedLoan).player?.team || "Premier League"} · {loanCard(selectedLoan).player?.position || "—"}</p><p className="mt-2 text-lg font-black text-emerald-200">{money(selectedLoanTotal)} total</p></div></div>
+          <div className="flex items-center gap-3 pr-11"><div className="relative h-20 w-16 shrink-0 overflow-hidden rounded-2xl border border-cyan-300/20"><CardPlayerImage card={loanCard(selectedLoan)} alt={loanName(selectedLoan)} className="h-full w-full object-cover object-top" /></div><div className="min-w-0"><p className="truncate text-xl font-black">{loanName(selectedLoan)}</p><p className="mt-1 text-xs text-slate-500">{loanCard(selectedLoan).player?.team || "Premier League"} · {loanCard(selectedLoan).player?.position || "—"}</p><p className="mt-1 text-[10px] font-bold text-violet-200">Lender club: {lenderClubName(selectedLoan)}</p><p className="mt-2 text-lg font-black text-emerald-200">{money(selectedLoanTotal)} total</p></div></div>
           <div className="mt-4 grid grid-cols-3 gap-2"><div className="rounded-xl bg-white/[.04] p-2.5 text-center"><p className="text-[9px] uppercase text-slate-600">Duration</p><p className="mt-1 text-xs font-black">{Number(selectedLoan.gameweeks || 1)} GW</p></div><div className="rounded-xl bg-white/[.04] p-2.5 text-center"><p className="text-[9px] uppercase text-slate-600">Per GW</p><p className="mt-1 text-xs font-black">{money(loanPricePerGw(selectedLoan))}</p></div><div className="rounded-xl bg-white/[.04] p-2.5 text-center"><p className="text-[9px] uppercase text-slate-600">After loan</p><p className="mt-1 text-xs font-black">{money(walletBalance - selectedLoanTotal)}</p></div></div>
           <div className="mt-3 rounded-2xl border border-cyan-300/10 bg-cyan-300/[.045] p-3 text-[10px] leading-5 text-cyan-100"><Clock3 className="mr-1 inline h-3.5 w-3.5" />You pay the full loan amount once. The card is temporary and returns automatically to the lender after the agreed gameweeks.</div>
+          <RecentPlayerPerformance cardId={Number(loanCard(selectedLoan).id)} />
           {selectedLoanMine ? <div className="mt-4 rounded-2xl border border-violet-300/15 bg-violet-400/[.07] p-3 text-center text-sm font-black text-violet-100">This is your own loan listing. Manage or cancel it from My Cards.</div> : <Button onClick={() => acceptLoanMutation.mutate(selectedLoan)} disabled={acceptLoanMutation.isPending || selectedLoanTotal > walletBalance} className="mt-4 h-12 w-full rounded-2xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><Handshake className="mr-2 h-4 w-4" />{selectedLoanTotal > walletBalance ? "Not enough balance" : acceptLoanMutation.isPending ? "Accepting…" : `Loan for ${money(selectedLoanTotal)}`}</Button>}
           <Link href="/wallet"><button className="mt-3 flex w-full items-center justify-center gap-2 text-xs font-bold text-slate-500"><WalletCards className="h-4 w-4" />Wallet balance {money(walletBalance)}</button></Link>
         </section>

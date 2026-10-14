@@ -2,16 +2,23 @@ import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { type PlayerCardData } from "./types";
 import { normalizeRarity } from "./cardTheme";
 
+// STABLE_COLLECTION_PORTRAIT_STATE_V1: keep the current working portrait when React receives a new
+// imageCandidates array containing the same URLs. This prevents a failed first
+// provider URL from resetting the card to index 0 on every query/render refresh.
+
+// STARTER_DRAFT_MOBILE_RENDERING_V1: keep tiny cards on Android Chrome off the scaled 3D compositor path.
+
 type Props = {
   player: PlayerCardData;
   selected?: boolean;
   onClick?: () => void;
   showPrice?: boolean;
   showStats?: boolean;
-  size?: "sm" | "md";
+  size?: "xs" | "sm" | "md";
 };
 
 const SIZE = {
+  xs: { width: 96, height: 136, radius: 12 },
   sm: { width: 146, height: 220, radius: 20 },
   md: { width: 170, height: 256, radius: 23 },
 };
@@ -100,8 +107,11 @@ export default function CollectionStableCard({ player, selected = false, onClick
     ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : []),
     "/players/fallback.svg",
   ].filter(Boolean))), [player.id, player.image, player.imageUrl, player.photo, player.imageCandidates]);
+  const imageCandidateKey = imageCandidates.join("\u001f");
   const [imageIndex, setImageIndex] = useState(0);
-  useEffect(() => { setImageIndex(0); }, [player.id, imageCandidates]);
+  const [imageReady, setImageReady] = useState(false);
+  useEffect(() => { setImageIndex(0); setImageReady(false); }, [player.id, imageCandidateKey]);
+  useEffect(() => { setImageReady(false); }, [imageIndex]);
   const image = imageCandidates[imageIndex] || "/players/fallback.svg";
   const team = player.team || player.club || "Fantasy Arena";
   const price = Number(player.price || player.listedPrice || 0);
@@ -116,6 +126,7 @@ export default function CollectionStableCard({ player, selected = false, onClick
   const maxSupply = numberStat(player.maxSupply);
   const serialText = serial > 0 && maxSupply > 0 ? `${serial}/${maxSupply}` : "SERIAL PENDING";
   const scale = dim.width / SIZE.sm.width;
+  const compact = size === "xs";
   const fallback = isFallbackImage(image);
   const rarityLabel = RARITY_NAME[rarity] || rarity.toUpperCase();
 
@@ -127,17 +138,21 @@ export default function CollectionStableCard({ player, selected = false, onClick
     overflow: "hidden",
     border: "1px solid rgba(255,255,255,.86)",
     background: `${palette.edge}, ${palette.slab}`,
-    boxShadow: selected
-      ? `0 0 0 3px #34d399, 0 0 44px ${palette.glow}, 0 22px 52px rgba(0,0,0,.74), inset 0 1px 0 rgba(255,255,255,.98), inset 0 -18px 40px rgba(0,0,0,.50)`
-      : `0 0 34px ${palette.glow}, 0 22px 50px rgba(0,0,0,.74), inset 0 1px 0 rgba(255,255,255,.98), inset 0 -18px 40px rgba(0,0,0,.50)`,
+    boxShadow: compact
+      ? selected
+        ? `0 0 0 2px #34d399, 0 8px 18px rgba(0,0,0,.56), inset 0 1px 0 rgba(255,255,255,.88)`
+        : `0 8px 18px rgba(0,0,0,.52), inset 0 1px 0 rgba(255,255,255,.88)`
+      : selected
+        ? `0 0 0 3px #34d399, 0 0 44px ${palette.glow}, 0 22px 52px rgba(0,0,0,.74), inset 0 1px 0 rgba(255,255,255,.98), inset 0 -18px 40px rgba(0,0,0,.50)`
+        : `0 0 34px ${palette.glow}, 0 22px 50px rgba(0,0,0,.74), inset 0 1px 0 rgba(255,255,255,.98), inset 0 -18px 40px rgba(0,0,0,.50)`,
     color: "white",
-    transform: "translateZ(0)",
+    transform: compact ? "none" : "translateZ(0)",
   };
 
   return (
-    <button type="button" onClick={onClick} className="group relative block touch-manipulation fa-card-lift" style={{ background: "transparent", border: 0, padding: 0, perspective: 900 }}>
-      <span aria-hidden="true" className="absolute -inset-4 rounded-[2rem] opacity-80 blur-2xl transition duration-300 group-hover:opacity-100" style={{ background: `radial-gradient(circle, ${palette.glow}, transparent 64%)` }} />
-      <article style={cardStyle} className="transition duration-300 group-hover:[transform:rotateX(2deg)_rotateY(-2deg)_translateY(-3px)]">
+    <button type="button" onClick={onClick} className={`group relative block touch-manipulation ${compact ? "starter-card-static" : "fa-card-lift"}`} style={{ background: "transparent", border: 0, padding: 0, perspective: compact ? undefined : 900 }}>
+      {!compact ? <span aria-hidden="true" className="absolute -inset-4 rounded-[2rem] opacity-80 blur-2xl transition duration-300 group-hover:opacity-100" style={{ background: `radial-gradient(circle, ${palette.glow}, transparent 64%)` }} /> : null}
+      <article style={cardStyle} className={compact ? "" : "transition duration-300 group-hover:[transform:rotateX(2deg)_rotateY(-2deg)_translateY(-3px)]"}>
         <div style={{ position: "absolute", inset: 3, borderRadius: dim.radius - 3, background: palette.slab, opacity: .985 }} />
         <div style={{ position: "absolute", inset: 5, borderRadius: dim.radius - 6, border: "1px solid rgba(255,255,255,.64)", boxShadow: "inset 0 2px 6px rgba(255,255,255,.70), inset 0 -20px 34px rgba(0,0,0,.44)" }} />
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(116deg, transparent 5%, rgba(255,255,255,.76) 18%, transparent 31%, transparent 54%, rgba(255,255,255,.50) 66%, transparent 80%), radial-gradient(circle at 50% 10%, rgba(255,255,255,.68), transparent 24%)", mixBlendMode: "screen", opacity: .88 }} />
@@ -146,7 +161,8 @@ export default function CollectionStableCard({ player, selected = false, onClick
         {rarity === "unique" ? <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, transparent, rgba(255,0,221,.18), rgba(255,255,255,.22), rgba(107,0,255,.16), transparent)", mixBlendMode: "color-dodge", opacity: .58 }} /> : null}
 
         <div style={{ position: "absolute", left: 14 * scale, right: 14 * scale, top: 17 * scale, height: 122 * scale, borderRadius: 13 * scale, overflow: "hidden", background: "radial-gradient(circle at 50% 8%,rgba(255,255,255,.26),rgba(15,23,42,.62) 42%,rgba(2,6,23,.94))", border: "1px solid rgba(255,255,255,.54)", boxShadow: `inset 0 0 28px rgba(0,0,0,.64), 0 10px 18px rgba(0,0,0,.34), 0 0 20px ${palette.glow}` }}>
-          <img src={image} alt={player.name} loading="lazy" onError={() => setImageIndex((previous) => Math.min(previous + 1, imageCandidates.length - 1))} style={{ width: "100%", height: "100%", objectFit: fallback ? "contain" : "cover", objectPosition: "center top", display: "block", padding: fallback ? `${18 * scale}px ${18 * scale}px 0` : 0, filter: fallback ? "saturate(.94) contrast(1.08) brightness(1.06)" : "saturate(1.12) contrast(1.10) brightness(1.05)", transform: fallback ? "scale(.78)" : "scale(.86)" }} />
+          <img src="/players/fallback.svg" alt="" aria-hidden="true" loading="eager" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", objectPosition: "center top", display: "block", padding: `${18 * scale}px ${18 * scale}px 0`, filter: "saturate(.94) contrast(1.08) brightness(1.06)", transform: "scale(.78)" }} />
+          <img src={image} alt={player.name} loading={compact ? "eager" : "lazy"} decoding="async" onLoad={() => setImageReady(true)} onError={() => { setImageReady(false); setImageIndex((previous) => Math.min(previous + 1, imageCandidates.length - 1)); }} style={{ position: "relative", width: "100%", height: "100%", objectFit: fallback ? "contain" : "cover", objectPosition: "center top", display: "block", padding: fallback ? `${18 * scale}px ${18 * scale}px 0` : 0, filter: fallback ? "saturate(.94) contrast(1.08) brightness(1.06)" : "saturate(1.12) contrast(1.10) brightness(1.05)", transform: fallback ? "scale(.78)" : "scale(.86)", opacity: fallback || imageReady ? 1 : 0, transition: compact ? "none" : "opacity .12s ease" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(255,255,255,.16),transparent 36%,rgba(0,0,0,.34)), radial-gradient(circle at 50% 0%, rgba(255,255,255,.52), transparent 26%)" }} />
         </div>
 
@@ -157,8 +173,7 @@ export default function CollectionStableCard({ player, selected = false, onClick
 
         {showStats ? (
           <div style={{ position: "absolute", left: 11 * scale, right: 11 * scale, bottom: 33 * scale, padding: `${6 * scale}px ${7 * scale}px`, borderRadius: 12 * scale, background: "linear-gradient(180deg, rgba(2,6,23,.84), rgba(2,6,23,.60))", border: "1px solid rgba(255,255,255,.35)", boxShadow: `0 9px 18px rgba(0,0,0,.64), 0 0 16px ${palette.glow}, inset 0 1px 0 rgba(255,255,255,.21)`, textAlign: "center" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 4 * scale }}>
-              <StatChip label="LEVEL" value={level} scale={scale} glow={palette.glow} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 4 * scale }}>
               <StatChip label="PTS" value={points} scale={scale} glow={palette.glow} />
               <StatChip label="FORM" value={form} scale={scale} glow={palette.glow} />
             </div>

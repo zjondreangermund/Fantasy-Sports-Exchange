@@ -119,7 +119,7 @@ export default function NativeCardsPage() {
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-cards>
       <section className="rounded-[1.55rem] border border-white/[.08] bg-gradient-to-br from-[#11162a] via-[#090d19] to-violet-400/[.07] p-4">
-        <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.22em] text-violet-200/70">Club collection</p><h2 className="mt-1 text-2xl font-black">Own. Buy. Sell. Loan.</h2><p className="mt-1 text-xs leading-5 text-slate-400">Tap any card to manage it directly. Sale and loan fees use the same live rules as the full website.</p></div><div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-300/10 text-violet-200"><Sparkles className="h-5 w-5" /></div></div>
+        <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.22em] text-violet-200/70">Club collection</p><h2 className="mt-1 text-2xl font-black">Own. Buy. Sell. Loan.</h2><p className="mt-1 text-xs leading-5 text-slate-400">Tap any card to buy, sell or loan. PTS and GW scores come from the player’s real Premier League match performance; sale and loan fees use the same live rules as the full website.</p></div><div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-300/10 text-violet-200"><Sparkles className="h-5 w-5" /></div></div>
         <div className="mt-4 grid grid-cols-4 gap-1.5"><Stat label="Cards" value={String(cards.length)} /><Stat label="For sale" value={String(cards.filter((card) => card.forSale).length)} /><Stat label="Loans" value={String(activeLoanCount)} /><Stat label="GW PTS" value={cards.reduce((total, card) => total + gameweekPoints(card), 0).toFixed(1)} /></div>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Link href="/marketplace?mode=buy" className="flex items-center justify-between rounded-2xl border border-emerald-300/15 bg-emerald-300/[.07] px-3 py-2.5 text-[10px] font-black text-emerald-100"><span className="flex items-center gap-1.5"><ShoppingBag className="h-4 w-4" />Buy cards</span><ChevronRight className="h-4 w-4" /></Link>
@@ -159,7 +159,6 @@ export default function NativeCardsPage() {
                     aria-label={`Open ${card.player?.name || "player"} card stats`}
                     data-native-card-stats
                   >
-                    <MiniStat label="LVL" value={String(cardLevel(card))} />
                     <MiniStat label="PTS" value={compactStat(totalPoints(card), 1)} />
                     <MiniStat label="FORM" value={compactStat(cardForm(card), 1)} />
                   </button>
