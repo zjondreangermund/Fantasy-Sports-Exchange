@@ -10,6 +10,7 @@ import { seedDatabase } from "./seed.js";
 import { removeFantasyTestInventory } from "./services/removeFantasyTestInventory.js";
 import { archiveConfirmedTestTournaments } from "./services/archiveConfirmedTestTournaments.js";
 import { registerOnboardingAuditRoutes } from "./routes/onboardingAudit.routes.js";
+import { redirectLegacyHostname } from "./services/canonicalHostname.js";
 import { resetConfirmedTestingBalances, getPlatformFinance } from "./services/platformFinance.js";
 import { registerPlatformFinanceRoutes } from "./routes/platformFinance.routes.js";
 import { serveStatic } from "./static.js";
@@ -46,6 +47,9 @@ declare module "http" {
 
 app.set("trust proxy", 1);
 app.use((req, res, next) => {
+  if (redirectLegacyHostname(process.env.NODE_ENV === "production", req.method, req.hostname, req.path)) {
+    return res.redirect(308, `https://${CANONICAL_HOST}${req.originalUrl}`);
+  }
   if (process.env.NODE_ENV === "production" && req.hostname.toLowerCase() === `www.${CANONICAL_HOST}`) {
     return res.redirect(308, `https://${CANONICAL_HOST}${req.originalUrl}`);
   }
