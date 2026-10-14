@@ -8,6 +8,8 @@ import { registerDepositVerificationRoutes } from "./routes/depositVerification.
 import { registerSecurityAdminRoutes } from "./routes/securityAdmin.routes.js";
 import { seedDatabase } from "./seed.js";
 import { removeFantasyTestInventory } from "./services/removeFantasyTestInventory.js";
+import { resetConfirmedTestingBalances, getPlatformFinance } from "./services/platformFinance.js";
+import { registerPlatformFinanceRoutes } from "./routes/platformFinance.routes.js";
 import { serveStatic } from "./static.js";
 import { ensureRuntimeSchema } from "./runtime-schema.js";
 import { createServer } from "http";
@@ -210,6 +212,9 @@ app.use((req, res, next) => {
   try { await seedDatabase(); } catch (error) { console.warn("Could not auto-seed player/card data:", error); }
   registerDepositVerificationRoutes(app, { requireAuth, isAdmin });
   await ensureRuntimeSchema();
+  await resetConfirmedTestingBalances();
+  console.log('[live-platform-finance]', await getPlatformFinance());
+  registerPlatformFinanceRoutes(app, { requireAuth, isAdmin });
   try { await removeFantasyTestInventory(); } catch (error) { console.error("Fantasy test inventory cleanup failed:", error); }
   registerSecurityAdminRoutes(app, { requireAuth, isAdmin });
   registerFootballDataRoutes(app);

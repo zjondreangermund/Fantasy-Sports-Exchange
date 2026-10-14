@@ -1,0 +1,49 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+
+let reset = false;
+let wallet = { user_id: 'manager', balance: 5520, locked_balance: 200 };
+const postings = [];
+const queries = [];
+const execute = async query => {
+  const text = query.text;
+  queries.push(text);
+  if (text.includes('select id from app.platform_finance_baseline')) return { rows: reset ? [{ id: 'reset' }] : [] };
+  if (text.includes('select reset_at')) return { rows: [{ reset_at: new Date() }] };
+  if (text.includes('select id from app.auctions') || text.includes('select id from app.withdrawal_requests')) return { rows: [] };
+  if (text.includes('select user_id, balance')) return { rows: [{ ...wallet }] };
+  if (text.includes('balance = balance + locked_balance')) { wallet.balance += wallet.locked_balance; wallet.locked_balance = 0; }
+  if (text.includes('insert into app.platform_finance_baseline')) reset = true;
+  if (text.includes('as "cashPrizeCosts"')) return { rows: [{ revenue: 0, cashPrizeCosts: 500 }] };
+  if (text.includes('group by pc.rarity')) return { rows: [{ rarity: 'rare', count: 3 }] };
+  if (text.includes('sum(balance)')) return { rows: [{ available: wallet.balance, locked: wallet.locked_balance }] };
+  return { rows: [] };
+};
+const exported = {};
+const sandbox = { exports: exported, process: { env: {} }, console: { log() {} }, require: name => {
+  if (name === 'drizzle-orm') return { sql: (parts, ...values) => ({ text: parts.join('?'), values }) };
+  if (name === '../db.js') return { db: { execute, transaction: async fn => fn({ execute }) } };
+  if (name === './walletPosting.js') return { toPostingMoney: n => Math.round(Number(n)*100)/100, postWalletAmountExactlyOnce: async (_tx, input) => { postings.push(input); wallet.balance += input.amount; } };
+  if (name.includes('card-economy')) return { getMarketplaceFloorPrice: rarity => rarity === 'rare' ? 20 : 0 };
+  if (name.includes('auctionEscrow')) return { cancelAuctionWithEscrowRecovery: async () => {} };
+  if (name.includes('withdrawalPayout')) return { reviewWithdrawal: async () => {} };
+  throw new Error(name);
+} };
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('server/services/platformFinance.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, sandbox);
+await exported.resetConfirmedTestingBalances();
+assert.equal(wallet.balance, 0);
+assert.equal(wallet.locked_balance, 0);
+assert.equal(postings[0].amount, -5720);
+wallet.balance = 500;
+await exported.resetConfirmedTestingBalances();
+assert.equal(wallet.balance, 500, 'A restart must preserve future cash prize credits');
+assert.equal(postings.length, 1, 'Testing reset must execute once');
+const finance = await exported.getPlatformFinance();
+assert.equal(finance.cardPrizeCosts, 60);
+assert.equal(finance.cashPrizeCosts, 500);
+assert.equal(finance.netResult, -560);
+assert.equal(finance.walletAvailable, 500);
+assert.ok(queries.every(q => !/delete from app\.(player_cards|transactions)/i.test(q)));
+console.log('Testing reset, locked balances, replay protection, Rare base costs and cash prize accounting passed.');

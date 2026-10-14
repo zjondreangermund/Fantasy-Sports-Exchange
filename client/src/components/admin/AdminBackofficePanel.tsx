@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import AdminTournamentManager from "./AdminTournamentManager";
+import PlatformFinancePanel from "./PlatformFinancePanel";
 
 const money = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 
@@ -11,6 +12,7 @@ export default function AdminBackofficePanel() {
 
   return (
     <div className="space-y-4">
+      <PlatformFinancePanel />
       <AdminTournamentManager />
 
       <Card className="border-white/10 bg-white/[0.06] p-4 text-white backdrop-blur-xl">
@@ -31,12 +33,6 @@ export default function AdminBackofficePanel() {
             ["Auctions live", overview.auctionsLive],
             ["Competitions live", overview.competitionsLive],
             ["Tournament entries", overview.tournamentEntries],
-            ["Entry payments", `N$${money.format(overview.tournamentEntryAmount || 0)}`],
-            ["Tournament pools", `N$${money.format(overview.tournamentPrizePools || 0)}`],
-            ["Wallet balances", `N$${money.format(overview.walletBalances || 0)}`],
-            ["Gross volume", `N$${money.format(overview.grossMarketplaceVolume || 0)}`],
-            ["Platform fees", `N$${money.format(overview.platformFees || 0)}`],
-            ["Tournament fees", `N$${money.format(overview.tournamentFees || 0)}`],
             ["Withdrawals pending", overview.withdrawalsPending],
           ].map(([label, value]) => (
             <Card key={String(label)} className="border-white/10 bg-black/25 p-3 text-white">
