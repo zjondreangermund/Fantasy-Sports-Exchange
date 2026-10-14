@@ -117,74 +117,17 @@ export async function seedDatabase() {
   await ensureMarketplaceListings(createdPlayers);
 }
 
+/**
+ * LEGACY_GW27_SEED_DISABLED: The former "FREE Rare Card Cup" GW27–GW30
+ * seeder created future tournaments with status=open irrespective of the
+ * 2026/27 fixture calendar. Never create or rename tournament rows here.
+ * Only sync-official-tournaments.mjs and sync-free-card-tournaments.mjs may
+ * schedule official future cups; both preserve entries and admin overrides.
+ *
+ * Retain this no-op export for any old tooling, but do not call it on boot.
+ */
 export async function seedCompetitions() {
-  const existing = await storage.getCompetitions();
-
-  console.log("Ensuring FREE Rare Card Cups exist for GW27+ ...");
-  const now = new Date();
-
-  const endOfCurrentWeek = new Date(now);
-  endOfCurrentWeek.setDate(endOfCurrentWeek.getDate() + (7 - endOfCurrentWeek.getDay()));
-  endOfCurrentWeek.setHours(23, 59, 59, 999);
-
-  const startOfNextWeek = new Date(endOfCurrentWeek);
-  startOfNextWeek.setDate(startOfNextWeek.getDate() + 1);
-  startOfNextWeek.setHours(0, 0, 0, 0);
-
-  const baseGameWeek = 27;
-  const weeksToSeed = 4;
-  for (const competition of existing as any[]) {
-    const legacyFreeCup = String(competition?.tier || "").toLowerCase() === "common"
-      && Number(competition?.entryFee || 0) === 0
-      && String(competition?.prizeCardRarity || "").toLowerCase() === "rare"
-      && /^Common Tournament - GW\d+$/i.test(String(competition?.name || ""));
-    if (!legacyFreeCup) continue;
-    const gameWeek = Number(competition.gameWeek || 0);
-    await storage.updateCompetition(Number(competition.id), {
-      name: `FREE Rare Card Cup - GW${gameWeek}`,
-      prizeType: "goods",
-      prizeDescription: "Rare Player Card",
-      prizeKey: "free-rare-card",
-    } as any);
-    competition.name = `FREE Rare Card Cup - GW${gameWeek}`;
-    competition.prizeType = "goods";
-    competition.prizeDescription = "Rare Player Card";
-    competition.prizeKey = "free-rare-card";
-  }
-
-  const existingByWeek = new Set(existing.filter((c: any) => String(c.tier || "").toLowerCase() === "common").map((c: any) => Number(c.gameWeek)));
-
-  let createdCount = 0;
-
-  for (let index = 0; index < weeksToSeed; index++) {
-    const gw = baseGameWeek + index;
-    if (existingByWeek.has(gw)) continue;
-
-    const startDate = new Date(startOfNextWeek);
-    startDate.setDate(startDate.getDate() + index * 7);
-
-    const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + 6);
-    endDate.setHours(23, 59, 59, 999);
-
-    await storage.createCompetition({
-      name: `FREE Rare Card Cup - GW${gw}`,
-      tier: "common",
-      entryFee: 0,
-      status: "open",
-      gameWeek: gw,
-      startDate,
-      endDate,
-      prizeCardRarity: "rare",
-      prizeType: "goods",
-      prizeDescription: "Rare Player Card",
-      prizeKey: "free-rare-card",
-    } as any);
-    createdCount++;
-  }
-
-  if (createdCount === 0) console.log("FREE Rare Card Cups GW27-GW30 already present");
-  else console.log(`Seeded ${createdCount} missing FREE Rare Card Cups (GW27-GW30)`);
+  // Intentionally disabled. Real official tournaments are calendar-synced.
 }
 
 export async function seedDemoUsers() {
