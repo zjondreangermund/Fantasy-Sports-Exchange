@@ -4,6 +4,8 @@ import type passport from "passport";
 import { sql } from "drizzle-orm";
 import { getSessionSecret } from "../auth-config.js";
 import { db, pool } from "../db.js";
+import { appUrl } from "../auth-config.js";
+import { webSigninHandoffPage, allowedWebSigninOrigin } from "../services/webSigninHandoff.js";
 
 interface RegisterAuthRoutesDeps {
   isReplit: boolean;
@@ -61,28 +63,29 @@ async function ensureNativeAuthTicketTable() {
       expires_at timestamptz not null
     )
   `);
+  await pool.query(`alter table app.native_auth_tickets add column if not exists purpose text not null default 'native'`);
   await pool.query(`delete from app.native_auth_tickets where expires_at <= now()`);
 }
 
-async function issueNativeAuthTicket(user: any): Promise<string> {
+async function issueNativeAuthTicket(user: any, purpose = 'native'): Promise<string> {
   await ensureNativeAuthTicketTable();
   const ticket = randomBytes(32).toString("base64url");
   const tokenHash = createHash("sha256").update(ticket).digest("hex");
   const expiresAt = new Date(Date.now() + NATIVE_TICKET_TTL_MS);
   await pool.query(
-    `insert into app.native_auth_tickets (token_hash, user_payload, expires_at) values ($1, $2::jsonb, $3)`,
-    [tokenHash, JSON.stringify(user || {}), expiresAt],
+    `insert into app.native_auth_tickets (token_hash, user_payload, expires_at, purpose) values ($1, $2::jsonb, $3, $4)`,
+    [tokenHash, JSON.stringify(user || {}), expiresAt, purpose],
   );
   return ticket;
 }
 
-async function consumeNativeAuthTicket(ticket: string): Promise<any | null> {
+async function consumeNativeAuthTicket(ticket: string, purpose = 'native'): Promise<any | null> {
   if (!/^[A-Za-z0-9_-]{40,80}$/.test(ticket)) return null;
   await ensureNativeAuthTicketTable();
   const tokenHash = createHash("sha256").update(ticket).digest("hex");
   const result = await pool.query(
-    `delete from app.native_auth_tickets where token_hash = $1 and expires_at > now() returning user_payload`,
-    [tokenHash],
+    `delete from app.native_auth_tickets where token_hash = $1 and expires_at > now() and purpose = $2 returning user_payload`,
+    [tokenHash, purpose],
   );
   const payload = result.rows?.[0]?.user_payload;
   if (!payload) return null;
@@ -265,8 +268,41 @@ export async function registerAuthModeRoutes(app: Express, deps: RegisterAuthRou
   app.get(
     "/api/auth/google/callback",
     passport.authenticate("google", { failureRedirect: "/?auth_error=google" }),
-    (_req, res) => res.redirect("/"),
+    async (req: any, res) => {
+      const origin = new URL(appUrl).origin;
+      const requestOrigin = `${req.protocol}://${req.get('host')}`;
+      if (requestOrigin === origin || process.env.NODE_ENV !== 'production') return res.redirect('/');
+      try {
+        if (!allowedWebSigninOrigin(requestOrigin, String(process.env.GOOGLE_CALLBACK_URL || ''), appUrl, origin)) throw new Error('Untrusted callback origin');
+        const ticket = await issueNativeAuthTicket({ user: req.user, targetOrigin: origin }, 'web');
+        const page = webSigninHandoffPage(origin, ticket, randomBytes(24).toString('base64'));
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Referrer-Policy', 'no-referrer');
+        res.setHeader('Content-Security-Policy', page.csp);
+        return res.type('html').send(page.html);
+      } catch (error: any) {
+        console.error('Web sign-in handoff failed:', error?.message || error);
+        return res.redirect(`${origin}/?auth_error=handoff`);
+      }
+    },
   );
+
+  app.post('/api/auth/web/complete', async (req: any, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    const requestOrigin = `${req.protocol}://${req.get('host')}`;
+    if (!allowedWebSigninOrigin(String(req.get('origin') || ''), String(process.env.GOOGLE_CALLBACK_URL || ''), appUrl, requestOrigin)) return res.status(403).send('Invalid sign-in origin');
+    try {
+      const payload = await consumeNativeAuthTicket(String(req.body?.ticket || ''), 'web');
+      if (!payload?.user?.id || payload.targetOrigin !== requestOrigin) return res.redirect('/?auth_error=handoff_expired');
+      await new Promise<void>((resolve, reject) => req.logIn(payload.user, (e: any) => e ? reject(e) : resolve()));
+      await new Promise<void>((resolve, reject) => req.session.save((e: any) => e ? reject(e) : resolve()));
+      return res.redirect(303, '/');
+    } catch (error: any) {
+      console.error('Web sign-in completion failed:', error?.message || error);
+      return res.redirect('/?auth_error=handoff');
+    }
+  });
 
   app.get("/api/auth/native/complete", async (req: any, res) => {
     res.setHeader("Cache-Control", "no-store");

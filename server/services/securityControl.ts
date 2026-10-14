@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../db.js";
+import { allowedWebSigninOrigin } from "./webSigninHandoff.js";
 
 export type SecuritySettings = {
   emergency: {
@@ -67,7 +68,7 @@ const DEFAULT_SETTINGS: SecuritySettings = {
     withdrawalsPaused: false,
     marketplacePaused: false,
     auctionsPaused: false,
-    message: "Fantasy Arena is temporarily restricted while the security team completes checks.",
+    message: "Production preview · Read-only mode. Trading, wallet actions, tournament entries and auction bids are paused until launch controls are opened.",
   },
   rateLimits: {
     apiPerMinute: 240,
@@ -347,6 +348,19 @@ function requestUserId(req: any) {
   return String(req.authUserId || req.user?.claims?.sub || req.user?.id || "");
 }
 
+const DEFAULT_ADMIN_READ_ONLY_EMAIL = "lbcplaya@gmail.com";
+const READ_ONLY_ADMIN_USER_IDS = String(process.env.ADMIN_USER_IDS || "").split(",").map((value) => value.trim()).filter(Boolean);
+const READ_ONLY_ADMIN_EMAILS = String(process.env.ADMIN_EMAILS || DEFAULT_ADMIN_READ_ONLY_EMAIL).split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+
+// ADMIN_READ_ONLY_BYPASS_V1
+// Read-only is a public maintenance control, not an Admin lockout. This check
+// uses the authenticated Passport session only; it does not trust client flags.
+export function isPrivilegedAdminRequest(req: any): boolean {
+  const userId = requestUserId(req);
+  const email = String(req.user?.email || req.user?.claims?.email || "").trim().toLowerCase();
+  return Boolean((userId && READ_ONLY_ADMIN_USER_IDS.includes(userId)) || (email && READ_ONLY_ADMIN_EMAILS.includes(email)));
+}
+
 function requestIp(req: any) {
   return String(req.ip || req.headers?.["x-forwarded-for"] || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
 }
@@ -423,7 +437,7 @@ export const securityHeadersMiddleware: RequestHandler = (_req, res, next) => {
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https: wss:; frame-src 'none'",
+      "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'; connect-src 'self' https: wss:; frame-src 'none'",
     );
   }
   next();
@@ -445,6 +459,7 @@ export const securityOriginGuard: RequestHandler = (req: any, res, next) => {
     try { allowed.add(new URL(value).origin); } catch { /* ignore malformed deployment values */ }
   }
   const requestOrigin = `${req.protocol}://${req.get("host")}`;
+  if (req.path === '/api/auth/web/complete' && allowedWebSigninOrigin(origin, String(process.env.GOOGLE_CALLBACK_URL || ''), String(process.env.APP_URL || ''), requestOrigin)) return next();
   if (origin === requestOrigin || allowed.has(origin)) return next();
 
   void recordSecurityEvent({
@@ -464,7 +479,14 @@ export const securityControlMiddleware: RequestHandler = async (req: any, res, n
   try {
     const record = await getSecuritySettings();
     const settings = record.settings;
-    const blockedBy = emergencyBlock(settings, req);
+    // ADMIN_READ_ONLY_EFFECTIVE_SETTINGS_V1
+    // Admin bypass removes only the global Read-only bit. Dedicated emergency
+    // switches (deposits, withdrawals, marketplace, auctions, auth) remain live.
+    const adminReadOnlyBypass = settings.emergency.readOnly && isPrivilegedAdminRequest(req);
+    const effectiveSettings: SecuritySettings = adminReadOnlyBypass
+      ? { ...settings, emergency: { ...settings.emergency, readOnly: false } }
+      : settings;
+    const blockedBy = emergencyBlock(effectiveSettings, req);
     if (blockedBy) {
       void recordSecurityEvent({
         userId: requestUserId(req) || null,

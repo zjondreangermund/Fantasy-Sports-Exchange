@@ -14,7 +14,12 @@ const fs = require('node:fs');
       const page = await context.newPage();
       const diagnostics = [];
       page.on('pageerror', e => diagnostics.push(e.message));
-      page.on('requestfailed', r => diagnostics.push(r.url() + ' ' + r.failure()?.errorText));
+      page.on('requestfailed', r => {
+        // The chat EventSource is deliberately closed when signup remounts the
+        // main app. That expected cancellation is not a failed signup request.
+        if (new URL(r.url()).pathname === '/community-live/stream' && r.failure()?.errorText === 'net::ERR_ABORTED') return;
+        diagnostics.push(r.url() + ' ' + r.failure()?.errorText);
+      });
       let complete = false, club = '', mintRequests = 0;
       const positions = ['GK', 'DEF', 'MID', 'FWD', 'MID'];
       const labels = ['Goalkeeper', 'Defender', 'Midfielder', 'Forward', 'Wildcard'];
