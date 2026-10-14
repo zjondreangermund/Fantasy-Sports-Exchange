@@ -277,7 +277,7 @@ export async function registerAuthModeRoutes(app: Express, deps: RegisterAuthRou
         const ticket = await issueNativeAuthTicket({ user: req.user, targetOrigin: origin }, 'web');
         const page = webSigninHandoffPage(origin, ticket, randomBytes(24).toString('base64'));
         res.setHeader('Cache-Control', 'no-store');
-        res.setHeader('Referrer-Policy', 'no-referrer');
+        res.setHeader('Referrer-Policy', page.referrerPolicy);
         res.setHeader('Content-Security-Policy', page.csp);
         return res.type('html').send(page.html);
       } catch (error: any) {

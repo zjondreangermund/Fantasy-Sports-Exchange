@@ -16,6 +16,8 @@ assert.equal(exports.allowedWebSigninOrigin(old, callback, app, old), false);
 assert.equal(exports.allowedWebSigninOrigin(old, old + '/wrong', app, app), false);
 assert.equal(exports.allowedWebSigninOrigin(old, callback, app, 'http://playfantasyarena.com'), false);
 const page = exports.webSigninHandoffPage(app, 't'.repeat(43), 'n'.repeat(32));
+assert.equal(page.referrerPolicy, 'strict-origin');
+assert.match(page.html, /name="referrer" content="strict-origin"/);
 assert.match(page.html, /method="post"/);
 assert.match(page.html, /action="https:\/\/playfantasyarena.com\/api\/auth\/web\/complete"/);
 assert.ok(!page.html.includes('?ticket='));

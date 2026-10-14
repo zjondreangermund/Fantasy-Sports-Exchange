@@ -10,6 +10,7 @@ on:
       - 'scripts/onboarding-ui-smoke.cjs'
       - 'scripts/serve-onboarding-fixture.cjs'
       - 'scripts/verify-web-signin-handoff.mjs'
+      - 'scripts/web-signin-browser-smoke.cjs'
       - 'server/routes/auth.routes.ts'
       - 'server/services/webSigninHandoff.ts'
       - '.github/workflows/onboarding-ui-regression.yml'
@@ -37,6 +38,7 @@ jobs:
         env:
           NODE_PATH: /tmp/onboarding-qa/node_modules
         run: |
+          node scripts/web-signin-browser-smoke.cjs
           node scripts/serve-onboarding-fixture.cjs > /tmp/qa-server.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
