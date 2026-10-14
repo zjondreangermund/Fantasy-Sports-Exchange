@@ -58,3 +58,16 @@
     max-width: 6rem !important;
   }
 }
+
+/* At 320px a 96px card needs room for its selection border and padding.
+ * Keep the entire portrait/card inside the choice, rather than overflowing it. */
+@media (max-width: 359px) {
+  [data-onboarding-scroll-root] main section > div:last-child {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    column-gap: 0.5rem !important;
+  }
+
+  [data-onboarding-scroll-root] main section > div:last-child > button {
+    max-width: 6.375rem !important;
+  }
+}

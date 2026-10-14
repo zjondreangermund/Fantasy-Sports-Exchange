@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'client/src/pages/onboarding.tsx'
+      - 'client/src/onboarding-card-clipping-fix.css'
       - 'client/src/components/CardThumbnail.tsx'
       - 'client/src/components/cards/**'
       - 'scripts/onboarding-ui-smoke.cjs'

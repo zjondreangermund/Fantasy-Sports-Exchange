@@ -292,7 +292,10 @@ export default function OnboardingPage() {
                 }
               }}
               onFocus={(event) => {
-                window.setTimeout(() => event.currentTarget.scrollIntoView({ block: "center", inline: "nearest" }), 120);
+                const input = event.currentTarget;
+                window.setTimeout(() => {
+                  if (input.isConnected) input.scrollIntoView({ block: "center", inline: "nearest" });
+                }, 120);
               }}
               maxLength={30}
               className="h-14 touch-manipulation select-text text-center text-lg"

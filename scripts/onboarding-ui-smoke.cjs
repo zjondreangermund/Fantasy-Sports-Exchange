@@ -87,6 +87,7 @@ const fs = require('node:fs');
         await confirm.click();
         await page.getByRole('heading', { name: 'Your Squad is Ready!', exact: true }).waitFor({ timeout: 10000 });
         assert.equal(mintRequests, 1, 'one mint request');
+        assert.deepEqual(diagnostics, [], 'no uncaught input, render or network errors');
         await page.screenshot({ path: `onboarding-ui-results/completed-${width}.png` });
         results.push({ width, passed: true, choices: 15, selected: 5, mintRequests });
       } catch (error) {
