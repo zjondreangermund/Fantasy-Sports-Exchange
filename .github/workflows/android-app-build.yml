@@ -119,6 +119,7 @@ jobs:
           grep -q "webView.destroy()" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "recreate()" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "FantasyArenaNative/1.1.11" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
+          grep -Fq 'APP_BASE_URL = "https://playfantasyarena.com"' android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "addJavascriptInterface" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "installLatestUpdate" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
           grep -q "getPackageArchiveInfo" android/app/src/main/java/com/fantasyfc/app/MainActivity.java
