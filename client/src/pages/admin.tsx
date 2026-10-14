@@ -12,6 +12,8 @@ import AdminBackofficePanel from "../components/admin/AdminBackofficePanel";
 import AdminIntegrityPanel from "../components/admin/AdminIntegrityPanel";
 import AdminTransactionExplorer from "../components/admin/AdminTransactionExplorer";
 import AdminTournamentDirectory from "../components/admin/AdminTournamentDirectory";
+import Gw4PromoAnalyticsCard from "../components/admin/Gw4PromoAnalyticsCard";
+import AdminReferralPanel from "../components/admin/AdminReferralPanel";
 import {
   Activity,
   AlertTriangle,
@@ -60,6 +62,17 @@ type Traffic = {
   activeUsers?: any[];
 };
 
+type SignupFunnel = {
+  hours: number;
+  generatedAt: string;
+  stages: Array<{ key: string; label: string; value: number; rateFromPrevious: number | null }>;
+  authStarted: number;
+  unattributedAccounts: number;
+  sourceBreakdown: Array<{ source: string; signups: number; teamNames: number; starter5: number }>;
+  authErrors: { google: number; configuration: number };
+  auth: { appUrl: string; expectedAppUrl: string; appUrlMatchesExpected: boolean; googleConfigured: boolean; expectedCallbackUrl: string };
+};
+
 function money(value: unknown) {
   const n = Number(value || 0);
   return `N$${Number.isFinite(n) ? n.toFixed(2) : "0.00"}`;
@@ -100,7 +113,7 @@ export default function AdminPage() {
   const [lookupTerm, setLookupTerm] = useState("");
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [cardDialogOpen, setCardDialogOpen] = useState(false);
-  const [workspacePanel, setWorkspacePanel] = useState<"transactions" | "withdrawals" | "backoffice" | "integrity" | "tournaments" | null>(null);
+  const [workspacePanel, setWorkspacePanel] = useState<"transactions" | "withdrawals" | "backoffice" | "integrity" | "tournaments" | "referrals" | null>(null);
 
   useEffect(() => {
     const nextSearch = userSearchInput.trim();
@@ -115,6 +128,7 @@ export default function AdminPage() {
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<AdminStats>({ queryKey: ["/api/admin/stats"] });
   const { data: usersResponse, refetch: refetchUsers } = useQuery<{ users: UserRow[]; total: number }>({ queryKey: ["/api/admin/users?limit=100"] });
   const { data: traffic, refetch: refetchTraffic } = useQuery<Traffic>({ queryKey: ["/api/admin/traffic"] });
+  const { data: signupFunnel, refetch: refetchSignupFunnel } = useQuery<SignupFunnel>({ queryKey: ["/api/admin/signup-funnel?hours=168"], refetchInterval: 60_000 });
   const { refetch: refetchTx } = useQuery<any>({ queryKey: ["/api/admin/transactions?limit=100"] });
   const { data: revenue } = useQuery<any>({ queryKey: ["/api/admin/revenue"] });
   const { data: listings, refetch: refetchListings } = useQuery<any[]>({ queryKey: ["/api/marketplace"] });
@@ -174,19 +188,21 @@ export default function AdminPage() {
     refetchStats();
     refetchUsers();
     refetchTraffic();
+    refetchSignupFunnel();
     refetchTx();
     refetchListings();
     refetchActivity();
   };
 
+  const { data: liveFinance } = useQuery<any>({ queryKey: ['/api/admin/platform-finance'], refetchInterval: 30000 });
   const kpis = [
     { label: "Users", value: stats?.users || usersResponse?.total || users.length, hint: `${stats?.newSignups24h || 0} new 24h`, icon: Users },
     { label: "Cards", value: stats?.cards || 0, hint: "All minted/owned", icon: CreditCard },
-    { label: "Marketplace", value: money(stats?.marketplaceVolume || 0), hint: `${activeListings.length} listings`, icon: ShoppingCart },
-    { label: "Fees", value: money(stats?.marketplaceFees || 0), hint: "Recorded fees", icon: DollarSign },
+    { label: "Marketplace", value: money(activeListings.reduce((sum: number, listing: any) => sum + Number(listing.price || 0), 0)), hint: `${activeListings.length} listings`, icon: ShoppingCart },
+    { label: "Fees", value: money(liveFinance?.revenue || 0), hint: "Since testing reset", icon: DollarSign },
     { label: "Online", value: traffic?.onlineUsersLast10Minutes || 0, hint: `${traffic?.requestsLastHour || 0} req/hour`, icon: Activity },
     { label: "Tournaments", value: stats?.competitions || allCompetitions.length, hint: `${allCompetitions.filter((c) => ["open", "active"].includes(String(c.status))).length} live/open`, icon: Trophy },
-    { label: "Revenue", value: money(revenue?.windows?.lifetime?.total || 0), hint: "All platform fees", icon: Wallet },
+    { label: "Revenue", value: money(liveFinance?.revenue || 0), hint: "Live platform income", icon: Wallet },
     { label: "Errors", value: stats?.errorsLast24h || 0, hint: "Last 24h", icon: AlertTriangle },
   ];
 
@@ -211,6 +227,8 @@ export default function AdminPage() {
           </div>
         </section>
 
+        <Gw4PromoAnalyticsCard />
+
         <section className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
           {statsLoading
             ? Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl bg-white/10" />)
@@ -223,6 +241,51 @@ export default function AdminPage() {
                 </Card>
               ))}
         </section>
+
+        <Card className="border-cyan-300/15 bg-[linear-gradient(135deg,rgba(6,182,212,.09),rgba(15,23,42,.88))] p-4 text-white sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[.16em] text-cyan-200">Signup Funnel · Last 7 days</div>
+              <h2 className="mt-1 text-xl font-black">See where promoted visitors actually stop</h2>
+              <p className="mt-1 text-xs leading-5 text-white/45">Only marketing-attributed new accounts count in the conversion chain. Older or untracked accounts are shown separately so promotions are not credited for signups they did not generate.</p>
+            </div>
+            <Badge className={signupFunnel?.auth?.appUrlMatchesExpected && signupFunnel?.auth?.googleConfigured ? "bg-emerald-500/20 text-emerald-100" : "bg-amber-500/20 text-amber-100"}>
+              {signupFunnel?.auth?.appUrlMatchesExpected && signupFunnel?.auth?.googleConfigured ? "OAuth config looks aligned" : "Check OAuth config"}
+            </Badge>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {(signupFunnel?.stages || []).map((stage) => (
+              <div key={stage.key} className="rounded-2xl border border-white/10 bg-black/25 p-3">
+                <div className="text-2xl font-black">{stage.value}</div>
+                <div className="mt-1 text-[10px] font-black uppercase tracking-[.1em] text-white/45">{stage.label}</div>
+                <div className="mt-1 text-[10px] text-cyan-100/70">{stage.rateFromPrevious == null ? "Starting point" : String(stage.rateFromPrevious) + "% from previous"}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-white/55">
+              <b className="text-white">Google login errors:</b> {Number(signupFunnel?.authErrors?.google || 0)} failed · {Number(signupFunnel?.authErrors?.configuration || 0)} configuration
+            </div>
+            <div className={"rounded-xl border p-3 " + (signupFunnel?.auth?.appUrlMatchesExpected ? "border-emerald-300/15 bg-emerald-400/5 text-emerald-100/75" : "border-amber-300/20 bg-amber-400/8 text-amber-100")}>
+              <b>APP_URL:</b> {signupFunnel?.auth?.appUrl || "Not configured"}<br />
+              <span className="break-all"><b>Expected callback:</b> {signupFunnel?.auth?.expectedCallbackUrl || "Unavailable until APP_URL is configured"}</span>
+            </div>
+          </div>
+          <div className="mt-3 rounded-2xl border border-amber-300/15 bg-amber-300/[.06] p-3 text-xs text-amber-100/80">
+            <b className="text-amber-50">Pre-tracking / unattributed accounts:</b> {Number(signupFunnel?.unattributedAccounts || 0)}. These are deliberately excluded from promotion conversions.
+          </div>
+          <div className="mt-4">
+            <div className="text-[10px] font-black uppercase tracking-[.14em] text-white/40">Completed tracked signups by source</div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {(signupFunnel?.sourceBreakdown || []).length ? (signupFunnel?.sourceBreakdown || []).map((row) => (
+                <div key={row.source} className="rounded-2xl border border-white/10 bg-black/25 p-3">
+                  <div className="flex items-center justify-between gap-2"><span className="font-black capitalize">{row.source}</span><span className="text-xl font-black text-cyan-100">{row.signups}</span></div>
+                  <div className="mt-1 text-[10px] text-white/45">{row.teamNames} team names · {row.starter5} Starter 5 completed</div>
+                </div>
+              )) : <div className="rounded-2xl border border-dashed border-white/10 p-4 text-xs text-white/35 sm:col-span-2 lg:col-span-4">No marketing-attributed signup has completed yet. New completed signups will appear here as TikTok, Facebook, Instagram, direct, personal or another tracked source.</div>}
+            </div>
+          </div>
+        </Card>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="sticky top-0 z-20 flex h-auto w-full flex-wrap justify-start gap-2 rounded-2xl border border-white/10 bg-slate-950/95 p-2 backdrop-blur">
@@ -363,6 +426,7 @@ export default function AdminPage() {
             <WorkspaceLauncher icon={Building2} title="Backoffice management" subtitle="Open tournament management, operational controls and administration tools." onOpen={() => setWorkspacePanel("backoffice")} />
             <WorkspaceLauncher icon={Shield} title="Integrity and security" subtitle="Review risk signals, platform integrity and protected operational checks." onOpen={() => setWorkspacePanel("integrity")} />
             <WorkspaceLauncher icon={Trophy} title="Tournament directory" subtitle={`${allCompetitions.length} tournament(s), grouped by gameweek with entrants, prize and profit detail.`} onOpen={() => setWorkspacePanel("tournaments")} />
+            <WorkspaceLauncher icon={Gift} title="Referral monitoring" subtitle="See every referral, referred manager, reward card, referral code and live link-health status." onOpen={() => setWorkspacePanel("referrals")} />
           </TabsContent>
         </Tabs>
 
@@ -405,13 +469,17 @@ export default function AdminPage() {
           <DialogContent className="max-h-[92dvh] w-[min(96vw,1280px)] max-w-7xl gap-0 overflow-hidden border-white/10 bg-[#080d1f] p-0 text-white">
             <DialogHeader className="border-b border-white/10 px-5 py-4">
               <div className="text-[10px] font-black uppercase tracking-[.18em] text-cyan-200">Admin workspace</div>
-              <DialogTitle className="mt-1 text-xl">{{ transactions: "Transaction explorer", withdrawals: "Withdrawal requests", backoffice: "Backoffice management", integrity: "Integrity and security", tournaments: "Tournament directory" }[workspacePanel || "transactions"]}</DialogTitle>
+              <DialogTitle className="mt-1 text-xl">{{ transactions: "Transaction explorer", withdrawals: "Withdrawal requests", backoffice: "Backoffice management", integrity: "Integrity and security", tournaments: "Tournament directory", referrals: "Referral monitoring" }[workspacePanel || "transactions"]}</DialogTitle>
             </DialogHeader>
             <div className="max-h-[calc(92dvh-88px)] overflow-y-auto overscroll-contain p-4 sm:p-5">
               {workspacePanel === "transactions" ? <AdminTransactionExplorer /> : null}
               {workspacePanel === "backoffice" ? <AdminBackofficePanel /> : null}
               {workspacePanel === "integrity" ? <AdminIntegrityPanel /> : null}
               {workspacePanel === "withdrawals" ? <div className="space-y-2">{asArray(withdrawals).length ? asArray(withdrawals).map((wr) => <div key={wr.id} className="rounded-xl border border-white/10 bg-black/25 p-3"><b>{wr.userName || wr.email || wr.userId}</b><div className="text-xs text-white/45">{money(wr.amount)} • Fee {money(wr.fee)} • Net {money(wr.netAmount)} • {wr.status}</div></div>) : <div className="rounded-xl border border-dashed border-white/15 p-6 text-center text-white/45">No withdrawal requests are available.</div>}</div> : null}
+              {workspacePanel === "referrals" ? <AdminReferralPanel
+                onOpenUser={(userId) => { setWorkspacePanel(null); selectUser(userId); }}
+                onOpenCard={(cardId) => { setWorkspacePanel(null); openCardLookup(cardId); }}
+              /> : null}
               {workspacePanel === "tournaments" ? <AdminTournamentDirectory
                 onOpenUser={(userId) => { setWorkspacePanel(null); selectUser(userId); }}
                 onOpenCard={(cardId) => { setWorkspacePanel(null); openCardLookup(cardId); }}

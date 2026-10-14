@@ -36,6 +36,10 @@ import {
 } from "../shared/schema.js";
 
 import { db } from "./db.js";
+import { createFantasyArenaAdminNotificationOnce, createSignupWelcomeNotificationOnce } from "./services/notifications.js";
+
+// ADMIN_LIVE_OPS_STORAGE_PUSH_V1: every genuine account-creation path alerts the owner exactly once.
+// SIGNUP_WELCOME_NOTIFICATION_V1: DatabaseStorage-created users receive the same exactly-once welcome.
 import { eq, and, or, sql, desc } from "drizzle-orm";
 
 /**
@@ -132,6 +136,19 @@ export class DatabaseStorage implements IStorage {
       name: user.name ?? null,
       avatarUrl: user.avatarUrl ?? null,
     } as any).returning();
+    if (created) {
+      const identity = created.name || created.email || "New Arena manager";
+      await createFantasyArenaAdminNotificationOnce(db, {
+        title: "🚀 New Fantasy Arena signup",
+        message: `${identity} just created a Fantasy Arena account. Open Admin to follow their onboarding and campaign journey.`,
+        dedupeKey: `admin:new-signup:${created.id}`,
+      }).catch((error) => {
+        console.error("Admin signup notification failed:", error);
+      });
+      await createSignupWelcomeNotificationOnce(db, String(created.id || "")).catch((error) => {
+        console.error("New-user welcome notification failed:", error);
+      });
+    }
     return created;
   }
 
@@ -432,7 +449,7 @@ async getPlayerCount(): Promise<number> {
   }
 
   async getCompetitions(): Promise<Competition[]> {
-    return db.select().from(competitions).orderBy(desc(competitions.startDate));
+    return db.select().from(competitions).where(sql`${competitions.name} not like '[TEST]%'`).orderBy(desc(competitions.startDate));
   }
 
   async getCompetition(id: number): Promise<Competition | undefined> {

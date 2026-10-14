@@ -23,8 +23,8 @@ requireText(adminRoutes, "left join app.user_onboarding", "database Starter 5 co
 requireText(adminRoutes, "appUrlMatchesExpected", "APP_URL diagnostic");
 requireText(adminPage, "Signup Funnel · Last 7 days", "admin signup funnel UI");
 requireText(adminPage, "/api/admin/signup-funnel?hours=168", "admin funnel query");
-requireText(indexHtml, "https://fantasy-sports-exchange-production-d05c.up.railway.app/", "live public metadata URL");
-requireText(capacitor, "https://fantasy-sports-exchange-production-d05c.up.railway.app", "live Capacitor URL");
+requireText(indexHtml, "https://playfantasyarena.com/", "live public metadata URL");
+requireText(capacitor, "https://playfantasyarena.com", "live Capacitor URL");
 
 console.log("Signup funnel observability and live URL alignment verified.");
 await import("./prepare-native-auth-attribution-compat.mjs");

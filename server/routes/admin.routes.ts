@@ -2,6 +2,10 @@ import type { Express } from "express";
 import { db } from "../db.js";
 import { sql } from "drizzle-orm";
 import { registerAdminIntegrityRoutes } from "./adminIntegrity.routes.js";
+import { ensureDepositVerificationSchema } from "../services/depositVerificationSchema.js";
+import { ensureWithdrawalPayoutSchema } from "../services/withdrawalPayoutSchema.js";
+import { getActivePrizeForEntries } from "../services/prizeEngine.js";
+import { registerAdminReferralRoutes } from "./adminReferrals.routes.js";
 
 interface RegisterAdminRoutesDeps {
   requireAuth: any;
@@ -26,24 +30,145 @@ function userIdFrom(req: any) {
 export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps) {
   const { requireAuth, isAdmin, isAdminUser } = deps;
   registerAdminIntegrityRoutes(app, { requireAuth, isAdmin });
+  registerAdminReferralRoutes(app, { requireAuth, isAdmin });
+
+  // SIGNUP_FUNNEL_OBSERVABILITY_V2
+  app.post("/api/marketing/funnel", async (req: any, res) => {
+    try {
+      const allowedEvents = new Set(["landing_view", "start_free_click", "auth_error_google", "auth_error_configuration"]);
+      const event = String(req.body?.event || "").trim().slice(0, 64);
+      if (!allowedEvents.has(event)) return res.status(400).json({ message: "Unsupported marketing event" });
+      const visitorId = String(req.body?.visitorId || "").trim().replace(/[^a-zA-Z0-9._:-]/g, "").slice(0, 96);
+      if (!visitorId) return res.status(400).json({ message: "Missing visitor identifier" });
+      const meta = {
+        event,
+        visitorId,
+        path: String(req.body?.path || "/").slice(0, 160),
+        source: String(req.body?.source || "direct").slice(0, 300),
+        campaign: String(req.body?.campaign || "").slice(0, 160),
+        medium: String(req.body?.medium || "").slice(0, 80),
+        content: String(req.body?.content || "").slice(0, 160),
+        userAgent: String(req.headers["user-agent"] || "").slice(0, 300),
+      };
+      await db.execute(sql`insert into app.audit_logs (user_id, action, meta) values (null, 'marketing.funnel', ${JSON.stringify(meta)}::jsonb)`);
+      return res.status(202).json({ ok: true });
+    } catch (error) {
+      console.warn("Marketing funnel event failed:", error);
+      return res.status(202).json({ ok: false });
+    }
+  });
 
   app.get("/api/admin/check", requireAuth, async (req: any, res) => {
     const allowed = await isAdminUser(req);
     res.json({ isAdmin: allowed });
   });
 
-  app.post("/api/audit/client-event", requireAuth, async (req: any, res) => {
+  // SIGNUP_SOURCE_ATTRIBUTION_ADMIN_V3
+  app.get("/api/admin/signup-funnel", requireAuth, isAdmin, async (req: any, res) => {
     try {
-      const userId = userIdFrom(req);
-      const body = req.body || {};
-      await db.execute(sql`
-        insert into app.audit_logs (user_id, action, meta)
-        values (${userId || null}, 'client.route_view', ${JSON.stringify({ path: body.path || req.path, title: body.title || '', event: body.event || 'route_view', ts: body.ts || new Date().toISOString(), userAgent: req.headers['user-agent'] || '' })}::jsonb)
-      `);
-      return res.json({ ok: true });
-    } catch (error) {
-      console.warn("Client audit event failed:", error);
-      return res.json({ ok: false });
+      const hours = Math.min(24 * 30, Math.max(1, Number(req.query.hours || 168) || 168));
+      const intervalText = `${hours} hours`;
+      const eventRows = rowsOf(await db.execute(sql`
+        select meta->>'event' as event, count(distinct coalesce(nullif(meta->>'visitorId', ''), id::text))::int as count
+        from app.audit_logs
+        where action = 'marketing.funnel' and created_at >= now() - ${intervalText}::interval
+        group by meta->>'event'
+      `));
+      const eventCounts = Object.fromEntries(eventRows.map((row: any) => [String(row.event || ""), Number(row.count || 0)]));
+
+      const authStartedRow = rowsOf(await db.execute(sql`
+        select count(distinct coalesce(nullif(meta->>'visitorId', ''), id::text))::int as count
+        from app.audit_logs
+        where action = 'marketing.auth_started' and created_at >= now() - ${intervalText}::interval
+      `))[0] || {};
+      const authStarted = Number(authStartedRow.count || 0);
+
+      const cohort = rowsOf(await db.execute(sql`
+        with attributed as (
+          select distinct on (user_id) user_id, created_at, meta
+          from app.audit_logs
+          where action = 'marketing.signup_completed'
+            and user_id is not null
+            and created_at >= now() - ${intervalText}::interval
+          order by user_id, created_at asc
+        )
+        select
+          count(*)::int as "accountsCreated",
+          count(*) filter (where nullif(btrim(u.manager_team_name), '') is not null)::int as "teamNamesCreated",
+          count(*) filter (where coalesce(o.completed, false) = true)::int as "starter5Completed"
+        from attributed a
+        join app.users u on u.id = a.user_id
+        left join app.user_onboarding o on o.user_id = u.id
+      `))[0] || {};
+
+      const unattributedRow = rowsOf(await db.execute(sql`
+        select count(*)::int as count
+        from app.users u
+        where u.created_at >= now() - ${intervalText}::interval
+          and not exists (
+            select 1 from app.audit_logs a
+            where a.action = 'marketing.signup_completed' and a.user_id = u.id
+          )
+      `))[0] || {};
+      const unattributedAccounts = Number(unattributedRow.count || 0);
+
+      const sourceRows = rowsOf(await db.execute(sql`
+        with attributed as (
+          select distinct on (user_id) user_id, created_at, meta
+          from app.audit_logs
+          where action = 'marketing.signup_completed'
+            and user_id is not null
+            and created_at >= now() - ${intervalText}::interval
+          order by user_id, created_at asc
+        )
+        select
+          coalesce(nullif(lower(a.meta->>'source'), ''), 'direct') as source,
+          count(*)::int as signups,
+          count(*) filter (where nullif(btrim(u.manager_team_name), '') is not null)::int as "teamNames",
+          count(*) filter (where coalesce(o.completed, false) = true)::int as "starter5"
+        from attributed a
+        join app.users u on u.id = a.user_id
+        left join app.user_onboarding o on o.user_id = u.id
+        group by coalesce(nullif(lower(a.meta->>'source'), ''), 'direct')
+        order by signups desc, source asc
+      `));
+      const sourceBreakdown = sourceRows.map((row: any) => ({
+        source: String(row.source || "direct"),
+        signups: Number(row.signups || 0),
+        teamNames: Number(row.teamNames || 0),
+        starter5: Number(row.starter5 || 0),
+      }));
+
+      const landingViews = Number(eventCounts.landing_view || 0);
+      const startFreeClicks = Number(eventCounts.start_free_click || 0);
+      const accountsCreated = Number(cohort.accountsCreated || 0);
+      const teamNamesCreated = Number(cohort.teamNamesCreated || 0);
+      const starter5Completed = Number(cohort.starter5Completed || 0);
+      const rate = (value: number, base: number) => base > 0 ? Math.round((value / base) * 1000) / 10 : null;
+      const stages = [
+        { key: "landing", label: "Landing visitors", value: landingViews, rateFromPrevious: null },
+        { key: "start", label: "Start Free taps", value: startFreeClicks, rateFromPrevious: rate(startFreeClicks, landingViews) },
+        { key: "auth", label: "Google login started", value: authStarted, rateFromPrevious: rate(authStarted, startFreeClicks) },
+        { key: "account", label: "Tracked new accounts", value: accountsCreated, rateFromPrevious: rate(accountsCreated, authStarted) },
+        { key: "team", label: "Team names created", value: teamNamesCreated, rateFromPrevious: rate(teamNamesCreated, accountsCreated) },
+        { key: "starter", label: "Starter 5 completed", value: starter5Completed, rateFromPrevious: rate(starter5Completed, teamNamesCreated) },
+      ];
+      const configuredAppUrl = String(process.env.APP_URL || "").replace(/\/$/, "");
+      return res.json({
+        hours, generatedAt: new Date().toISOString(), stages, events: eventCounts, authStarted, sourceBreakdown, unattributedAccounts,
+        cohort: { accountsCreated, teamNamesCreated, starter5Completed },
+        authErrors: { google: Number(eventCounts.auth_error_google || 0), configuration: Number(eventCounts.auth_error_configuration || 0) },
+        auth: {
+          appUrl: configuredAppUrl,
+          expectedAppUrl: "https://playfantasyarena.com",
+          appUrlMatchesExpected: configuredAppUrl === "https://playfantasyarena.com",
+          googleConfigured: Boolean(String(process.env.GOOGLE_CLIENT_ID || "").trim() && String(process.env.GOOGLE_CLIENT_SECRET || "").trim()),
+          expectedCallbackUrl: configuredAppUrl ? `${configuredAppUrl}/api/auth/google/callback` : "",
+        },
+      });
+    } catch (error: any) {
+      console.error("Failed to fetch signup funnel:", error);
+      return res.status(500).json({ message: error?.message || "Failed to fetch signup funnel" });
     }
   });
 
@@ -104,6 +229,8 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
   app.get("/api/admin/tournament-financials", requireAuth, isAdmin, async (req: any, res) => {
     try {
       res.setHeader("Cache-Control", "private, no-store, max-age=0");
+      // TOURNAMENT_BANK_RECONCILIATION_V1
+      await Promise.all([ensureDepositVerificationSchema(), ensureWithdrawalPayoutSchema()]);
       const requestedGameWeek = Number(req.query.gameWeek || 0);
       const requestedTier = String(req.query.tier || "").trim().toLowerCase();
       const requestedStatus = String(req.query.status || "").trim().toLowerCase();
@@ -141,6 +268,16 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
         order by c.game_week desc, c.created_at desc nulls last, c.id desc
       `));
 
+      const sharedLadderEntries = new Map<string, number>();
+      for (const row of rawRows) {
+        const prizeKey = String(row.prizeKey || "").toLowerCase();
+        const prizeType = String(row.prizeType || "goods").toLowerCase();
+        const officialLadder = !row.createdByUserId && Number(row.entryFee || 0) > 0 && prizeType !== "cash_pool" && (!prizeKey || prizeKey === "ladder");
+        if (!officialLadder) continue;
+        const key = `${Number(row.gameWeek || 0)}:${String(row.tier || "common").toLowerCase()}`;
+        sharedLadderEntries.set(key, (sharedLadderEntries.get(key) || 0) + Number(row.entryCount || 0));
+      }
+
       const tournaments = rawRows.map((row) => {
         const entryCount = Number(row.entryCount || 0);
         const entryFee = toMoney(row.entryFee || 0);
@@ -155,6 +292,31 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
           : prizeKey.startsWith("free-") || entryFee === 0
             ? "free-cup"
             : "prize-vault";
+        const status = String(row.status || "").toLowerCase();
+        const ladderKey = `${Number(row.gameWeek || 0)}:${String(row.tier || "common").toLowerCase()}`;
+        const sharedEntryCount = category === "prize-vault" ? Number(sharedLadderEntries.get(ladderKey) || entryCount) : entryCount;
+        const ladderState = category === "prize-vault" ? getActivePrizeForEntries(row.tier, sharedEntryCount) : null;
+        const activeLadderPrize = ladderState?.activePrize || null;
+        const underMinimumCashFallback = category === "prize-vault" && sharedEntryCount > 0 && !activeLadderPrize;
+        const projectedWinnerCashFallback = underMinimumCashFallback ? toMoney((grossEntryAmount - refundTotal) * 0.8) : 0;
+        const projectedPlatformRevenue = status === "completed"
+          ? 0
+          : underMinimumCashFallback
+            ? toMoney((grossEntryAmount - refundTotal) * 0.2)
+            : category === "user-cash"
+              ? toMoney((grossEntryAmount - refundTotal) * Number(row.platformFeeRate || 0))
+              : category === "prize-vault" && activeLadderPrize
+                ? toMoney(Math.max(0, (grossEntryAmount - refundTotal) - Number(activeLadderPrize.value || 0)))
+                : 0;
+        const projectedPrizeReserve = status === "completed"
+          ? toMoney(Math.max(prizePool - cashPayouts, 0))
+          : underMinimumCashFallback
+            ? projectedWinnerCashFallback
+            : category === "user-cash"
+              ? toMoney((grossEntryAmount - refundTotal) * (1 - Number(row.platformFeeRate || 0)))
+              : category === "prize-vault" && activeLadderPrize
+                ? toMoney(activeLadderPrize.value || 0)
+                : 0;
         return {
           ...row,
           id: Number(row.id || 0),
@@ -174,6 +336,13 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
           cashPayouts,
           outstandingPrizePool: toMoney(Math.max(prizePool - cashPayouts, 0)),
           awardedCards: Number(row.awardedCards || 0),
+          sharedEntryCount,
+          activePrizeTitle: activeLadderPrize?.title || null,
+          activePrizeValue: toMoney(activeLadderPrize?.value || 0),
+          underMinimumCashFallback,
+          projectedWinnerCashFallback,
+          projectedPlatformRevenue,
+          projectedPrizeReserve,
           category,
         };
       }).filter((row) => (!requestedGameWeek || row.gameWeek === requestedGameWeek)
@@ -193,14 +362,55 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
         prizePools: toMoney(totals.prizePools + row.prizePool),
         cashPayouts: toMoney(totals.cashPayouts + row.cashPayouts),
         outstandingPrizePools: toMoney(totals.outstandingPrizePools + row.outstandingPrizePool),
+        projectedPrizeReserves: toMoney(totals.projectedPrizeReserves + row.projectedPrizeReserve),
+        projectedPlatformRevenue: toMoney(totals.projectedPlatformRevenue + row.projectedPlatformRevenue),
+        underMinimumFallbackTournaments: totals.underMinimumFallbackTournaments + (row.underMinimumCashFallback ? 1 : 0),
         reconciliationDifferences: totals.reconciliationDifferences + (row.entryAmountDifference !== 0 ? 1 : 0),
       }), {
         tournaments: 0, entries: 0, paidEntries: 0, freeEntries: 0, grossEntryAmount: 0,
         refunds: 0, netCollected: 0, platformFees: 0, prizePools: 0, cashPayouts: 0,
-        outstandingPrizePools: 0, reconciliationDifferences: 0,
+        outstandingPrizePools: 0, projectedPrizeReserves: 0, projectedPlatformRevenue: 0, underMinimumFallbackTournaments: 0, reconciliationDifferences: 0,
       });
 
-      return res.json({ updatedAt: new Date().toISOString(), summary, tournaments, source: "Fantasy Arena competition entries and wallet records" });
+      const bankRow = rowsOf(await db.execute(sql`
+        select
+          (select coalesce(sum(gross_amount), 0)::float from app.deposit_verifications where status = 'approved') as "approvedDepositsGross",
+          (select coalesce(sum(fee_amount), 0)::float from app.deposit_verifications where status = 'approved') as "depositFees",
+          (select coalesce(sum(net_amount), 0)::float from app.deposit_verifications where status = 'approved') as "walletDepositCredits",
+          (select coalesce(sum(net_amount), 0)::float from app.withdrawal_requests where status::text = 'paid') as "paidWithdrawalsNet",
+          (select coalesce(sum(amount), 0)::float from app.withdrawal_requests where status::text in ('pending', 'approved', 'failed')) as "pendingWithdrawalHolds",
+          (select coalesce(sum(balance), 0)::float from app.wallets) as "walletAvailableLiability",
+          (select coalesce(sum(locked_balance), 0)::float from app.wallets) as "walletLockedLiability",
+          (select coalesce(sum(case when status::text = 'completed' and (source_type = 'marketplace_sale' or type::text in ('marketplace_sale', 'sale')) then greatest(coalesce(fee_amount, 0), 0) else 0 end), 0)::float from app.transactions) as "marketplaceFees"
+      `))[0] || {};
+      const approvedDepositsGross = toMoney(bankRow.approvedDepositsGross);
+      const paidWithdrawalsNet = toMoney(bankRow.paidWithdrawalsNet);
+      const expectedBankCash = toMoney(approvedDepositsGross - paidWithdrawalsNet);
+      const walletAvailableLiability = toMoney(bankRow.walletAvailableLiability);
+      const walletLockedLiability = toMoney(bankRow.walletLockedLiability);
+      const walletLiability = toMoney(walletAvailableLiability + walletLockedLiability);
+      const tournamentPrizeReserve = toMoney(summary.projectedPrizeReserves || 0);
+      const minimumRequiredBankReserve = toMoney(walletLiability + tournamentPrizeReserve);
+      const bankReconciliation = {
+        approvedDepositsGross,
+        walletDepositCredits: toMoney(bankRow.walletDepositCredits),
+        depositFees: toMoney(bankRow.depositFees),
+        paidWithdrawalsNet,
+        pendingWithdrawalHolds: toMoney(bankRow.pendingWithdrawalHolds),
+        expectedBankCash,
+        walletAvailableLiability,
+        walletLockedLiability,
+        walletLiability,
+        tournamentPrizeReserve,
+        minimumRequiredBankReserve,
+        reserveHeadroom: toMoney(expectedBankCash - minimumRequiredBankReserve),
+        recordedPlatformRevenue: toMoney(Number(bankRow.depositFees || 0) + Number(bankRow.marketplaceFees || 0) + Number(summary.platformFees || 0)),
+        projectedTournamentPlatformRevenue: toMoney(summary.projectedPlatformRevenue || 0),
+        marketplaceFees: toMoney(bankRow.marketplaceFees),
+        note: "Expected bank cash = approved external deposits minus withdrawals marked paid. It excludes bank charges, manual off-platform transfers and physical-prize purchases not recorded in Fantasy Arena.",
+      };
+
+      return res.json({ updatedAt: new Date().toISOString(), summary, bankReconciliation, tournaments, source: "Fantasy Arena competition entries, verified external deposits, withdrawals and wallet records" });
     } catch (error: any) {
       console.error("Failed to fetch admin tournament financials:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch tournament financials" });

@@ -109,9 +109,7 @@ export default function CollectionStableCard({ player, selected = false, onClick
   ].filter(Boolean))), [player.id, player.image, player.imageUrl, player.photo, player.imageCandidates]);
   const imageCandidateKey = imageCandidates.join("\u001f");
   const [imageIndex, setImageIndex] = useState(0);
-  const [imageReady, setImageReady] = useState(false);
-  useEffect(() => { setImageIndex(0); setImageReady(false); }, [player.id, imageCandidateKey]);
-  useEffect(() => { setImageReady(false); }, [imageIndex]);
+  useEffect(() => { setImageIndex(0); }, [player.id, imageCandidateKey]);
   const image = imageCandidates[imageIndex] || "/players/fallback.svg";
   const team = player.team || player.club || "Fantasy Arena";
   const price = Number(player.price || player.listedPrice || 0);
@@ -162,7 +160,7 @@ export default function CollectionStableCard({ player, selected = false, onClick
 
         <div style={{ position: "absolute", left: 14 * scale, right: 14 * scale, top: 17 * scale, height: 122 * scale, borderRadius: 13 * scale, overflow: "hidden", background: "radial-gradient(circle at 50% 8%,rgba(255,255,255,.26),rgba(15,23,42,.62) 42%,rgba(2,6,23,.94))", border: "1px solid rgba(255,255,255,.54)", boxShadow: `inset 0 0 28px rgba(0,0,0,.64), 0 10px 18px rgba(0,0,0,.34), 0 0 20px ${palette.glow}` }}>
           <img src="/players/fallback.svg" alt="" aria-hidden="true" loading="eager" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", objectPosition: "center top", display: "block", padding: `${18 * scale}px ${18 * scale}px 0`, filter: "saturate(.94) contrast(1.08) brightness(1.06)", transform: "scale(.78)" }} />
-          <img src={image} alt={player.name} loading={compact ? "eager" : "lazy"} decoding="async" onLoad={() => setImageReady(true)} onError={() => { setImageReady(false); setImageIndex((previous) => Math.min(previous + 1, imageCandidates.length - 1)); }} style={{ position: "relative", width: "100%", height: "100%", objectFit: fallback ? "contain" : "cover", objectPosition: "center top", display: "block", padding: fallback ? `${18 * scale}px ${18 * scale}px 0` : 0, filter: fallback ? "saturate(.94) contrast(1.08) brightness(1.06)" : "saturate(1.12) contrast(1.10) brightness(1.05)", transform: fallback ? "scale(.78)" : "scale(.86)", opacity: fallback || imageReady ? 1 : 0, transition: compact ? "none" : "opacity .12s ease" }} />
+          <img src={image} alt={player.name} loading={compact ? "eager" : "lazy"} decoding="async" onError={() => { setImageIndex((previous) => Math.min(previous + 1, imageCandidates.length - 1)); }} style={{ position: "relative", width: "100%", height: "100%", objectFit: fallback ? "contain" : "cover", objectPosition: "center top", display: "block", padding: fallback ? `${18 * scale}px ${18 * scale}px 0` : 0, filter: fallback ? "saturate(.94) contrast(1.08) brightness(1.06)" : "saturate(1.12) contrast(1.10) brightness(1.05)", transform: fallback ? "scale(.78)" : "scale(.86)", opacity: 1, transition: compact ? "none" : "opacity .12s ease" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(255,255,255,.16),transparent 36%,rgba(0,0,0,.34)), radial-gradient(circle at 50% 0%, rgba(255,255,255,.52), transparent 26%)" }} />
         </div>
 

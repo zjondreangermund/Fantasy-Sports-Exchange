@@ -5,10 +5,12 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import CardThumbnail from "../components/CardThumbnail";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
-import { Package, ChevronRight, Check, Sparkles, Shield, Swords, Zap, Target, Flame } from "lucide-react";
+import { Package, ChevronRight, Check, Sparkles, Shield, Swords, Zap, Target, Flame, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
 import { Skeleton } from "../components/ui/skeleton";
 import { useLocation } from "wouter";
+import { clearPostSignupTarget, getPostSignupTarget } from "../lib/gw4-promo";
+import { useAuth } from "../hooks/use-auth";
 
 type OnboardingStep = "teamName" | "packs" | "select" | "done";
 
@@ -21,6 +23,8 @@ const packColors = [
   "from-red-600/30 to-red-900/50",
 ];
 const defaultPackLabels = ["Goalkeepers", "Defenders", "Midfielders", "Forwards", "Wildcards"];
+// STARTER_DRAFT_MOBILE_RENDERING_V1: stable native-size cards and explicit incomplete-selection CTA on mobile.
+// STARTER_DRAFT_PLAYER_DETAILS_V2: card artwork owns the player name; the label below shows current club and canonical position.
 const onboardingShell = "fixed inset-0 z-[200] flex h-[100dvh] w-full overflow-y-auto overscroll-y-contain touch-pan-y bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,.12),transparent_32%),linear-gradient(180deg,#050814,#02040d)] text-foreground backdrop-blur-2xl [-webkit-overflow-scrolling:touch]";
 
 type OnboardingConfig = {
@@ -41,7 +45,9 @@ function readableTeamNameError(error: unknown) {
 }
 
 export default function OnboardingPage() {
+  // NATIVE_LOGOUT_SIGNUP_POLISH_V1: conversion-critical signup stays branded, centered and recoverable on every phone.
   const [, setLocation] = useLocation();
+  const { logout, isLoggingOut } = useAuth();
   const [step, setStep] = useState<OnboardingStep>("teamName");
   const [teamName, setTeamName] = useState("");
   const [teamNameError, setTeamNameError] = useState("");
@@ -49,6 +55,9 @@ export default function OnboardingPage() {
   const teamNameInputRef = useRef<HTMLInputElement>(null);
   const [revealedPacks, setRevealedPacks] = useState<Set<number>>(new Set([0, 1, 2, 3, 4]));
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<number>>(new Set());
+  // STARTER_CONFIRM_SINGLE_TAP_V1: lock the first valid tap immediately so slow mobile/network responses never encourage repeat taps.
+  const [confirmStatus, setConfirmStatus] = useState<"idle" | "submitting" | "error">("idle");
+  const confirmInFlightRef = useRef(false);
 
   const { data: onboardingConfig } = useQuery<OnboardingConfig>({ queryKey: ["/api/onboarding/config"] });
   const resolvedTeamNameMinLength = Math.max(2, Number(onboardingConfig?.teamNameMinLength || 3));
@@ -166,15 +175,40 @@ export default function OnboardingPage() {
   };
 
   const handleConfirm = useCallback(() => {
+    if (confirmInFlightRef.current || chooseMutation.isPending) return;
     const ids = Array.from(selectedPlayerIds);
     if (ids.length !== 5) return;
+
+    confirmInFlightRef.current = true;
+    setConfirmStatus("submitting");
+
     chooseMutation.mutate(ids, {
       onSuccess: () => {
         setStep("done");
         refetch();
+        const target = getPostSignupTarget();
+        if (target) {
+          queryClient.setQueryData(["/api/onboarding/status"], { completed: true });
+          window.setTimeout(() => {
+            clearPostSignupTarget();
+            setLocation(target);
+          }, 250);
+        }
+      },
+      onError: async (error) => {
+        try {
+          const refreshed = await refetch();
+          if (refreshed.data?.completed) {
+            setStep("done");
+            return;
+          }
+        } catch {}
+        console.error("Starter Draft confirmation failed:", error);
+        confirmInFlightRef.current = false;
+        setConfirmStatus("error");
       },
     });
-  }, [selectedPlayerIds, chooseMutation, refetch]);
+  }, [selectedPlayerIds, chooseMutation, refetch, setLocation]);
 
   const handleContinueAfterTeamName = async () => {
     const normalizedName = teamName.trim().replace(/\s+/g, " ");
@@ -216,8 +250,16 @@ export default function OnboardingPage() {
     if (onboardingConfig?.requireTeamName === false) return null;
     return (
       <div data-onboarding-team-name className={`${onboardingShell} flex-col items-center justify-start px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] sm:justify-center sm:p-8`}>
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="my-auto w-full max-w-md space-y-6 rounded-[2rem] border border-white/10 bg-black/45 p-6 text-center shadow-2xl backdrop-blur-xl sm:p-8">
-          <div className="space-y-2"><Sparkles className="mx-auto h-12 w-12 text-primary" /><h1 className="text-3xl font-bold text-foreground sm:text-4xl">Welcome to Fantasy Arena</h1><p className="text-muted-foreground">Create your unique manager team name, then choose 5 starter common cards.</p></div>
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="my-auto w-full max-w-md space-y-6 rounded-[2rem] border border-fuchsia-300/15 bg-[#070914]/88 p-5 text-center shadow-[0_24px_80px_rgba(0,0,0,.55),0_0_48px_rgba(168,85,247,.08)] backdrop-blur-xl sm:p-8">
+          <div className="flex items-center justify-between gap-3 text-left">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <img src="/brand/fantasy-arena-logo.jpg" alt="Fantasy Arena" className="h-11 w-11 shrink-0 rounded-2xl border border-fuchsia-300/20 object-cover shadow-[0_0_20px_rgba(168,85,247,.16)]" />
+              <div className="min-w-0"><p className="truncate text-[10px] font-black uppercase tracking-[.2em] text-fuchsia-200/80">Fantasy Arena</p><p className="mt-0.5 text-[9px] font-bold uppercase tracking-[.12em] text-cyan-200/50">Free starter setup · Step 1 of 2</p></div>
+            </div>
+            <button type="button" onClick={() => logout()} disabled={isLoggingOut} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[.035] px-2.5 text-[10px] font-bold text-white/55" aria-label="Sign out"><LogOut className="h-3.5 w-3.5" /><span className="hidden sm:inline">Sign out</span></button>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/[.055]"><div className="h-full w-1/2 rounded-full bg-gradient-to-r from-fuchsia-400 to-cyan-300" /></div>
+          <div className="space-y-2"><Sparkles className="mx-auto h-10 w-10 text-cyan-200" /><h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">Create Your Club</h1><p className="text-sm leading-6 text-white/50">Choose your unique club name. Next, pick 5 <strong className="text-white/80">FREE Common starter cards</strong> — one from each position group.</p><div className="flex flex-wrap justify-center gap-1.5 pt-1"><span className="rounded-full border border-emerald-300/15 bg-emerald-300/[.06] px-2 py-1 text-[9px] font-black uppercase tracking-[.12em] text-emerald-200">No payment</span><span className="rounded-full border border-cyan-300/15 bg-cyan-300/[.06] px-2 py-1 text-[9px] font-black uppercase tracking-[.12em] text-cyan-100">5 free cards</span><span className="rounded-full border border-fuchsia-300/15 bg-fuchsia-300/[.06] px-2 py-1 text-[9px] font-black uppercase tracking-[.12em] text-fuchsia-100">Premier League</span></div></div>
           <form
             className="space-y-4"
             onSubmit={(event) => {
@@ -280,7 +322,7 @@ export default function OnboardingPage() {
   }
 
   if (isLoading || !onboardingData) {
-    return <div className={`${onboardingShell} items-center justify-center p-8`}><div className="flex flex-col items-center gap-4"><Skeleton className="h-8 w-64" /><div className="flex gap-4">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-52 w-36 rounded-md" />)}</div></div></div>;
+    return <div className={`${onboardingShell} items-center justify-center p-8`}><div className="flex flex-col items-center gap-4"><Skeleton className="h-8 w-64" /><div className="flex max-w-full flex-wrap justify-center gap-4">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-52 w-36 rounded-md" />)}</div></div></div>;
   }
 
   if (step === "select") {
@@ -293,18 +335,21 @@ export default function OnboardingPage() {
         <header className="sticky top-0 z-40 w-full shrink-0 border-b border-white/10 bg-[#030611]/94 px-3 py-3 shadow-[0_10px_35px_rgba(0,0,0,.32)] backdrop-blur-xl sm:px-6">
           <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-200/80"><Sparkles className="h-3 w-3" />Starter Draft</div>
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-200/80"><Sparkles className="h-3 w-3" />Starter Draft · Step 2 of 2</div>
               <h1 className="mt-0.5 truncate text-lg font-black text-white sm:text-2xl">Choose Your Starter 5</h1>
               <p className="mt-0.5 text-[11px] text-white/45 sm:text-xs">Pick one card from each group.</p>
             </div>
-            <div className="shrink-0 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-center">
-              <div className="text-[9px] font-black uppercase tracking-[0.14em] text-white/45">Selected</div>
-              <div className="text-xl font-black leading-none text-cyan-200">{selectedCount}<span className="text-sm text-white/35">/{requiredSelections}</span></div>
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-center">
+                <div className="text-[9px] font-black uppercase tracking-[0.14em] text-white/45">Selected</div>
+                <div className="text-xl font-black leading-none text-cyan-200">{selectedCount}<span className="text-sm text-white/35">/{requiredSelections}</span></div>
+              </div>
+              <button type="button" onClick={() => logout()} disabled={isLoggingOut} className="grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-white/[.035] text-white/50" aria-label="Sign out of signup"><LogOut className="h-4 w-4" /></button>
             </div>
           </div>
         </header>
 
-        <main className="w-full max-w-5xl px-2.5 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] pt-3 sm:px-5 sm:pt-5">
+        <main className="w-full max-w-5xl px-2.5 pb-5 pt-3 sm:px-5 sm:pt-5">
           <div className="space-y-3 sm:space-y-4">
             {packs.map((pack, packIndex) => {
               const PackIcon = packIcons[packIndex] || Zap;
@@ -320,7 +365,7 @@ export default function OnboardingPage() {
                     <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-black uppercase tracking-[0.12em] ${hasSelectionInPack ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-200" : "border-white/10 bg-white/[0.04] text-white/35"}`}>{hasSelectionInPack ? "Picked" : "1 required"}</span>
                   </div>
 
-                  <div className="mx-auto grid w-full max-w-[330px] grid-cols-3 items-start gap-1.5 px-1.5 py-2 sm:max-w-[390px] sm:gap-3 sm:px-3 sm:py-3">
+                  <div className="mx-auto grid w-full max-w-[330px] grid-cols-3 items-start justify-items-center gap-1 px-1 py-2 sm:max-w-[390px] sm:gap-3 sm:px-3 sm:py-3">
                     {pack.map((card, cardIndex) => {
                       const isSelected = selectedPlayerIds.has(card.playerId);
                       return (
@@ -330,12 +375,15 @@ export default function OnboardingPage() {
                           onClick={() => toggleSelect(card.playerId, packIndex)}
                           aria-pressed={isSelected}
                           aria-label={`Select ${card.player?.name || `card ${cardIndex + 1}`} for ${packLabels[packIndex] || `pack ${packIndex + 1}`}`}
-                          className={`relative flex h-auto min-h-0 min-w-0 self-start flex-col items-center justify-start overflow-hidden rounded-xl border px-0.5 pb-2 pt-1.5 text-center outline-none transition active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-cyan-300 ${isSelected ? "border-cyan-300/65 bg-cyan-300/[0.11] shadow-[0_0_24px_rgba(34,211,238,.16)]" : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.04]"}`}
+                          className={`relative flex h-auto min-h-0 min-w-0 self-start flex-col items-center justify-start overflow-visible rounded-xl border px-0.5 pb-2 pt-1.5 text-center outline-none transition active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-cyan-300 ${isSelected ? "border-cyan-300/65 bg-cyan-300/[0.11] shadow-[0_0_18px_rgba(34,211,238,.14)]" : "border-white/8 bg-black/20 hover:border-white/20 hover:bg-white/[0.04]"}`}
                         >
                           <span className="absolute left-1 top-1 z-20 grid h-5 w-5 place-items-center rounded-full border border-white/15 bg-slate-950/90 text-[9px] font-black text-white/65">{cardIndex + 1}</span>
                           {isSelected ? <span className="absolute right-1 top-1 z-20 grid h-6 w-6 place-items-center rounded-full bg-cyan-300 text-slate-950 shadow-lg"><Check className="h-3.5 w-3.5" /></span> : null}
-                          <CardThumbnail card={card} size="xs" selected={isSelected} selectable />
-                          <span className="mt-1 block w-full truncate px-1 text-[9px] font-black leading-tight text-white/85 sm:text-[10px]">{card.player?.name || "Player"}</span>
+                          <CardThumbnail card={card} size="xs" selected={isSelected} selectable showStats={false} showMeta={false} />
+                          <div className="mt-1.5 flex min-h-[48px] w-full flex-col items-center justify-start px-1 text-center">
+                            <span title={String(card.player?.team || "Premier League")} className="block max-h-[24px] w-full overflow-hidden text-center text-[9px] font-black uppercase leading-3 text-white/90 sm:text-[10px]">{card.player?.team || "Premier League"}</span>
+                            <span className="mt-1 rounded-full border border-cyan-200/20 bg-cyan-300/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-[0.08em] text-cyan-100 sm:text-[9px]">{String(card.player?.position || "N/A").toUpperCase()}</span>
+                          </div>
                         </button>
                       );
                     })}
@@ -346,13 +394,17 @@ export default function OnboardingPage() {
           </div>
         </main>
 
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#030611]/96 px-3 pb-[calc(.75rem+env(safe-area-inset-bottom,0px))] pt-2.5 shadow-[0_-18px_50px_rgba(0,0,0,.45)] backdrop-blur-xl sm:px-6">
+        <div className="relative z-30 w-full shrink-0 border-t border-white/10 bg-[#030611]/96 px-3 pb-[calc(.75rem+env(safe-area-inset-bottom,0px))] pt-2.5 shadow-[0_-12px_36px_rgba(0,0,0,.30)] backdrop-blur-xl sm:px-6">
           <div className="mx-auto flex w-full max-w-5xl items-center gap-3">
             <div className="min-w-0 flex-1">
               <div className="text-xs font-black text-white">{remaining === 0 ? "Starter 5 ready" : `${remaining} pick${remaining === 1 ? "" : "s"} left`}</div>
               <div className="hidden text-[10px] text-white/40 sm:block">Your permanent serials are assigned only after confirmation.</div>
             </div>
-            <Button onClick={handleConfirm} disabled={selectedCount !== requiredSelections || chooseMutation.isPending} size="lg" className="h-11 shrink-0 rounded-xl bg-cyan-300 px-4 text-sm font-black text-slate-950 hover:bg-cyan-200 sm:min-w-[240px] sm:text-base">{chooseMutation.isPending ? "Minting..." : <>Confirm & Mint <Check className="ml-1.5 h-4 w-4" /></>}</Button>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <Button onClick={handleConfirm} disabled={selectedCount !== requiredSelections || chooseMutation.isPending || confirmStatus === "submitting"} aria-busy={confirmStatus === "submitting"} size="lg" className="h-11 min-w-[138px] shrink-0 touch-manipulation rounded-xl border border-cyan-200/30 bg-cyan-300 px-4 text-sm font-black text-slate-950 hover:bg-cyan-200 disabled:border-white/10 disabled:bg-white/[0.06] disabled:text-white/35 disabled:opacity-100 sm:min-w-[240px] sm:text-base">{confirmStatus === "submitting" || chooseMutation.isPending ? <><span className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-950/30 border-t-slate-950" />Minting your 5...</> : selectedCount !== requiredSelections ? <>Select {remaining} more</> : <>Confirm & Mint <Check className="ml-1.5 h-4 w-4" /></>}</Button>
+              {confirmStatus === "submitting" ? <span role="status" aria-live="polite" className="text-[10px] font-semibold text-cyan-100/80">Securing your cards — one tap is enough.</span> : null}
+              {confirmStatus === "error" ? <span role="alert" className="max-w-[240px] text-right text-[10px] font-semibold text-rose-300">Couldn’t finish the mint. Tap Confirm & Mint once to retry.</span> : null}
+            </div>
           </div>
         </div>
       </div>

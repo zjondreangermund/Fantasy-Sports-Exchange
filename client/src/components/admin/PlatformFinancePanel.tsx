@@ -7,6 +7,7 @@ const money = (amount: number) => `${amount < 0 ? '-' : ''}N$${Math.abs(amount |
 export default function PlatformFinancePanel() {
   const { data, isLoading, isError } = useQuery<any>({ queryKey: ['/api/admin/platform-finance'], refetchInterval: 30000 });
   const { data: entries = [] } = useQuery<any[]>({ queryKey: ['/api/admin/free-cup-prize-entries'] });
+  const { data: qaStatus } = useQuery<{ enabled: boolean }>({ queryKey: ['/api/admin/onboarding-audit/status'] });
   const [entryId, setEntryId] = useState('');
   const [amount, setAmount] = useState('');
   const [key, setKey] = useState(() => crypto.randomUUID());
@@ -36,6 +37,7 @@ export default function PlatformFinancePanel() {
       <p className="text-xs text-slate-400">{data.awards.map((a: any) => `${a.count} ${a.rarity} card${a.count === 1 ? '' : 's'} × ${money(a.basePrice)}`).join(' · ') || 'No awarded cards yet'}</p>
       <p className="text-xs text-slate-500">Card base values are tracked reward costs, not bank payments. Deposits belong to players and are not platform income.</p>
     </> : null}
+    {qaStatus?.enabled ? <form method="post" action="/api/admin/onboarding-audit/start" className="border-t border-white/10 pt-4"><button className="rounded-xl border border-cyan-300/30 px-4 py-3 text-sm font-bold">Start temporary onboarding test</button><p className="mt-2 text-xs text-slate-400">Creates a zero-balance test club. Finish the test to remove its account and cards and return to Admin.</p></form> : null}
     <form className="space-y-3 border-t border-white/10 pt-4" onSubmit={event => { event.preventDefault(); if (!award.isPending) award.mutate(); }}>
       <h4 className="font-bold">Award a surprise cash prize</h4>
       <label className="block text-xs text-slate-300">Free cup entrant<select required value={entryId} disabled={award.isPending} onChange={event => { setEntryId(event.target.value); setKey(crypto.randomUUID()); setMessage(''); }} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-900 p-3 text-white"><option value="">Choose a completed free cup entrant</option>{entries.map(entry => <option key={entry.id} value={entry.id}>{entry.club} · {entry.competition} · #{entry.rank || '—'}</option>)}</select></label>

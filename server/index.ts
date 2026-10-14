@@ -8,6 +8,8 @@ import { registerDepositVerificationRoutes } from "./routes/depositVerification.
 import { registerSecurityAdminRoutes } from "./routes/securityAdmin.routes.js";
 import { seedDatabase } from "./seed.js";
 import { removeFantasyTestInventory } from "./services/removeFantasyTestInventory.js";
+import { archiveConfirmedTestTournaments } from "./services/archiveConfirmedTestTournaments.js";
+import { registerOnboardingAuditRoutes } from "./routes/onboardingAudit.routes.js";
 import { resetConfirmedTestingBalances, getPlatformFinance } from "./services/platformFinance.js";
 import { registerPlatformFinanceRoutes } from "./routes/platformFinance.routes.js";
 import { serveStatic } from "./static.js";
@@ -73,7 +75,7 @@ passport.deserializeUser((user: any, done) => done(null, user));
 for (const warning of authStartupWarnings) console.warn(`[auth] ${warning}`);
 
 if (googleAuthEnabled) {
-  passport.use(new GoogleStrategy({ clientID: googleClientId, clientSecret: googleClientSecret, callbackURL: `${appUrl}/api/auth/google/callback` }, async (_accessToken, _refreshToken, profile, done) => {
+  passport.use(new GoogleStrategy({ clientID: googleClientId, clientSecret: googleClientSecret, callbackURL: String(process.env.GOOGLE_CALLBACK_URL || `${appUrl}/api/auth/google/callback`) }, async (_accessToken, _refreshToken, profile, done) => {
     try {
       const { storage } = await import("./storage.js");
       const userId = profile.id;
@@ -214,9 +216,11 @@ app.use((req, res, next) => {
   await ensureRuntimeSchema();
   try {
     await resetConfirmedTestingBalances();
+    await archiveConfirmedTestTournaments();
     console.log('[live-platform-finance]', await getPlatformFinance());
   } catch (error) { console.error('[confirmed-testing-reset] Failed; transaction rolled back:', error); }
   registerPlatformFinanceRoutes(app, { requireAuth, isAdmin });
+  registerOnboardingAuditRoutes(app, { requireAuth, isAdmin });
   try { await removeFantasyTestInventory(); } catch (error) { console.error("Fantasy test inventory cleanup failed:", error); }
   registerSecurityAdminRoutes(app, { requireAuth, isAdmin });
   registerFootballDataRoutes(app);

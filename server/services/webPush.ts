@@ -26,7 +26,7 @@ function normalizeSubject(value: unknown): string {
   const subject = String(value || "").trim();
   if (/^(mailto:|https:\/\/)/i.test(subject)) return subject;
   if (subject.includes("@")) return `mailto:${subject}`;
-  return "https://fantasy-sports-exchange-production-d05c.up.railway.app";
+  return "https://playfantasyarena.com";
 }
 
 let vapidConfigPromise: Promise<VapidConfig> | null = null;
