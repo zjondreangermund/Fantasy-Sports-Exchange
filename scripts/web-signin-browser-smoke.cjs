@@ -20,7 +20,7 @@ assert.match(authSource, /setHeader\('Referrer-Policy', page.referrerPolicy\)/);
 assert.equal(page.referrerPolicy, 'strict-origin');
 
 (async () => {
-  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  const browser = await chromium.launch({ headless: true });
   try {
     for (const width of [390, 1280]) {
       for (const broken of [true, false]) {
@@ -42,7 +42,7 @@ assert.equal(page.referrerPolicy, 'strict-origin');
             const allowed = handoff.allowedWebSigninOrigin(headers.origin, callback, app, app);
             const valid = new URLSearchParams(req.postData() || '').get('ticket') === fixtureTicket;
             if (!allowed || !valid) return route.fulfill({ status: 403, contentType: 'text/html', body: '<h1>Request origin is not allowed</h1>' });
-            return route.fulfill({ status: 303, headers: { location: '/', 'set-cookie': 'fixture_session=authenticated; Path=/; Secure; HttpOnly; SameSite=Lax' }, body: '' });
+            return route.fulfill({ status: 303, headers: { location: app + '/', 'set-cookie': 'fixture_session=authenticated; Path=/; Secure; HttpOnly; SameSite=Lax' }, body: '' });
           }
           if (url.origin === app && url.pathname === '/') {
             const signedIn = (await req.allHeaders()).cookie?.includes('fixture_session=authenticated');
@@ -50,17 +50,26 @@ assert.equal(page.referrerPolicy, 'strict-origin');
           }
           return route.fulfill({ status: 404, body: 'No external requests allowed' });
         });
+        const completion = tab.waitForResponse(response => response.url() === app + '/api/auth/web/complete');
         await tab.goto(callback + '?code=fixture-only&state=fixture-only');
-        await tab.getByRole('heading', { name: broken ? 'Request origin is not allowed' : 'Signed in to Fantasy Arena' }).waitFor();
+        const completed = await completion;
+        assert.equal(completed.status(), broken ? 403 : 303);
+        if (broken) await tab.getByRole('heading', { name: 'Request origin is not allowed' }).waitFor();
         assert.equal(submitted.method, 'POST');
         assert.equal(submitted.origin, broken ? 'null' : old);
         if (!broken) {
           assert.equal(submitted.referer, old + '/', 'Callback code and state must never be exposed in Referer');
+          // Playwright routing intercepts only the first URL in a redirect
+          // chain. Verify the redirect response, then open its fixture target
+          // separately so no mock host ever requires a real DNS/network call.
+          assert.equal(completed.headers().location, app + '/');
+          await tab.goto(app + '/');
+          await tab.getByRole('heading', { name: 'Signed in to Fantasy Arena' }).waitFor();
           assert.equal(tab.url(), app + '/');
           await tab.reload();
           await tab.getByRole('heading', { name: 'Signed in to Fantasy Arena' }).waitFor();
         }
-        console.log(`${width}px: ${broken ? 'old origin-null rejection reproduced' : 'fixed cross-domain POST and retained app session passed'}`);
+        console.log(`${width}px: ${broken ? 'old origin-null rejection reproduced' : 'fixed cross-domain POST, redirect response and retained app session passed'}`);
         await context.close();
       }
     }
