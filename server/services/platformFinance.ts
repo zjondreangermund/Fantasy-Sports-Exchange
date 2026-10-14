@@ -57,8 +57,8 @@ export async function getPlatformFinance() {
   const baseline = rows(await db.execute(sql`select reset_at from app.platform_finance_baseline where id = ${RESET_KEY}`))[0];
   if (!baseline) throw new Error('Live finance baseline not ready');
   const ledger = rows(await db.execute(sql`select
-    coalesce(sum(case when source_type in ('marketplace_sale','auction_sale','card_loan_income','deposit_verified','competition_entry','user_tournament_entry') then greatest(coalesce(fee_amount,0),0) else 0 end),0)::float as revenue,
-    coalesce(sum(case when source_type in ('free_cup_surprise_prize','tournament_settlement') and amount > 0 then amount else 0 end),0)::float as "cashPrizeCosts"
+    coalesce(sum(case when source_type in ('marketplace_sale','auction_sale','card_loan_income','deposit_verified','competition_entry','user_tournament_entry') or type::text = 'entry_fee' then greatest(coalesce(fee_amount,0),0) else 0 end),0)::float as revenue,
+    coalesce(sum(case when source_type = 'free_cup_surprise_prize' and amount > 0 then amount else 0 end),0)::float as "cashPrizeCosts"
     from app.transactions where status::text = 'completed' and created_at >= ${baseline.reset_at}
   `))[0] || {};
   const awards = rows(await db.execute(sql`select pc.rarity::text as rarity, count(*)::int as count
