@@ -1,0 +1,103 @@
+name: Fantasy Arena desktop and mobile browser smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/browser-onboarding-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  public-browser-smoke:
+    name: Landing and install layouts — 320px through desktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install Chromium and Playwright
+        run: |
+          npm install --prefix /tmp/fantasy-qa --no-audit --no-fund playwright@1.56.1
+          /tmp/fantasy-qa/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Check live public signup entry and installation page
+        env:
+          BASE_URL: https://playfantasyarena.com
+        run: |
+          mkdir -p browser-qa-screenshots
+          node <<'NODE'
+          const { chromium } = require('/tmp/fantasy-qa/node_modules/playwright');
+          const fs = require('fs');
+          (async () => {
+            const errors = [];
+            const browser = await chromium.launch({ headless: true });
+            const sizes = [[320,740],[360,800],[390,844],[414,896],[768,1024],[1280,800],[1440,900]];
+            try {
+              for (const [width,height] of sizes) {
+                const context = await browser.newContext({viewport: {width,height}, isMobile:width<600, hasTouch:width<600, deviceScaleFactor:width<600?2:1});
+                const page = await context.newPage();
+                const load = async (path, label) => {
+                  let response;
+                  for (let attempt=0;attempt<3;attempt++) {
+                    try {
+                      response = await page.goto(process.env.BASE_URL+path, {waitUntil:'domcontentloaded',timeout:40000});
+                      if (response && response.status()<500) break;
+                    } catch(error) { if(attempt===2) throw error; }
+                    await page.waitForTimeout(5000);
+                  }
+                  if (!response || response.status()!==200) throw new Error(label+' HTTP '+(response?.status()||'no response'));
+                  return response;
+                };
+                try {
+                  await load('/', 'landing');
+                  await page.getByTestId('button-get-started').waitFor({state:'visible',timeout:20000});
+                  await page.waitForTimeout(600);
+                  const home = await page.evaluate(() => {
+                    const ids = ['button-login','button-get-started'];
+                    const bounds = ids.map(id=>{
+                      const el = document.querySelector('[data-testid="'+id+'"]');
+                      if(!el) return {id,missing:true};
+                      const r=el.getBoundingClientRect();
+                      return {id,left:r.left,right:r.right,width:r.width,visible:r.width>0&&r.height>0,link:el.closest('a')?.getAttribute('href')};
+                    });
+                    return {viewport:window.innerWidth,scrollWidth:document.documentElement.scrollWidth,buttons:bounds,logoLoaded:[...document.images].some(img=>img.alt.includes('Fantasy Arena')&&img.complete&&img.naturalWidth>0)};
+                  });
+                  if (home.scrollWidth > width+6) errors.push(width+'px landing page horizontal overflow: '+home.scrollWidth);
+                  for(const button of home.buttons) {
+                    if(button.missing||!button.visible||button.left< -2||button.right>width+2)errors.push(width+'px CTA clipped/missing: '+button.id+' '+JSON.stringify(button));
+                    if(!button.link?.startsWith('/api/login'))errors.push(width+'px CTA does not start Google login: '+button.id);
+                  }
+                  if(!home.logoLoaded) errors.push(width+'px landing logo did not load');
+                  await page.screenshot({path:'browser-qa-screenshots/landing-'+width+'.png'});
+                  await load('/install','install');
+                  await page.getByRole('heading',{name:'Install Fantasy Arena'}).waitFor({state:'visible',timeout:20000});
+                  await page.waitForTimeout(300);
+                  const install=await page.evaluate(()=>{
+                    const qr=document.querySelector('img[alt^="QR code linking"]');
+                    const h=document.querySelector('h1')?.getBoundingClientRect();
+                    return {width:window.innerWidth,scrollWidth:document.documentElement.scrollWidth,qrLoaded:!!(qr?.complete&&qr.naturalWidth>0),header:h?{left:h.left,right:h.right}:null};
+                  });
+                  if(install.scrollWidth>width+6)errors.push(width+'px install page horizontal overflow: '+install.scrollWidth);
+                  if(!install.qrLoaded)errors.push(width+'px install QR did not load');
+                  if(!install.header||install.header.left< -2||install.header.right>width+2)errors.push(width+'px install heading clipped');
+                  await page.screenshot({path:'browser-qa-screenshots/install-'+width+'.png'});
+                  console.log('Checked '+width+'px: public entry, clickable Google login links, logo, install page, QR, and overflow');
+                } catch(e){errors.push(width+'px browser failure: '+String(e.message));console.error(e);}
+                await context.close();
+              }
+            } finally {await browser.close();}
+            fs.writeFileSync('browser-qa-screenshots/results.json',JSON.stringify({tested:sizes.map(x=>x[0]),issues:errors},null,2));
+            if(errors.length){console.error('Browser smoke FAILED:\\n'+errors.join('\\n'));process.exitCode=1;}
+            else console.log('PASS — All public landing and install responsive checks passed. Authenticated Google signup, starter-card selection, and real Android keyboard are NOT covered.');
+          })().catch(error=>{console.error(error);process.exitCode=1;});
+          NODE
+
+      - name: Upload phone and desktop screenshots and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fantasy-arena-browser-smoke
+          path: browser-qa-screenshots/
+          if-no-files-found: warn
+          retention-days: 7
