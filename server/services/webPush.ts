@@ -240,7 +240,7 @@ async function markDeliverySent(batch: any[]) {
     await tx.execute(sql`
       update app.notification_push_deliveries
       set status = 'sent', sent_at = now(), last_error = null, updated_at = now()
-      where id = any(${deliveryIds}::bigint[])
+      where id in (select value::bigint from jsonb_array_elements_text(${JSON.stringify(deliveryIds)}::jsonb))
     `);
     await tx.execute(sql`
       update app.web_push_subscriptions
