@@ -295,7 +295,7 @@ export async function processPendingWebPushDeliveries(limit = 25) {
   try {
     const config = await loadVapidConfig();
     webpush.setVapidDetails(config.subject, config.publicKey, config.privateKey);
-    const deliveries = await claimDueDeliveries(limit);
+    const deliveries = await claimDueDeliveries(Math.min(limit, 10));
     let sent = 0;
     let failed = 0;
     for (const batch of groupPushDeliveries(deliveries)) {
@@ -310,7 +310,7 @@ export async function processPendingWebPushDeliveries(limit = 25) {
           url: notificationUrl(delivery.dedupeKey, delivery.notificationId),
           tag: `fantasy-arena-${Number(delivery.notificationId)}`,
           notificationId: Number(delivery.notificationId),
-        }), { TTL: 24 * 60 * 60, urgency: "high" });
+        }), { TTL: 24 * 60 * 60, urgency: "high", timeout: 15_000 });
         await markDeliverySent(batch);
         sent += batch.length;
       } catch (error) {

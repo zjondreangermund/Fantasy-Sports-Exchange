@@ -83,6 +83,7 @@ async function getFirebaseAccessToken(credentials: FirebaseCredentials): Promise
       signer.end();
       const assertion = `${unsigned}.${signer.sign(credentials.privateKey).toString("base64url")}`;
       const response = await fetch("https://oauth2.googleapis.com/token", {
+        signal: AbortSignal.timeout(15_000),
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
@@ -259,6 +260,7 @@ async function sendFcmNotification(credentials: FirebaseCredentials, delivery: a
     `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(credentials.projectId)}/messages:send`,
     {
       method: "POST",
+      signal: AbortSignal.timeout(15_000),
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
@@ -275,6 +277,7 @@ async function sendFcmNotification(credentials: FirebaseCredentials, delivery: a
             notificationId: String(notificationId),
           },
           android: {
+            ttl: "86400s",
             priority: "high",
             notification: {
               channel_id: "fantasy_arena_updates",
@@ -355,7 +358,7 @@ export async function processPendingNativePushDeliveries(limit = 25) {
   processingDeliveries = true;
   try {
     await ensureNotificationsSchema();
-    const deliveries = await claimDueDeliveries(limit);
+    const deliveries = await claimDueDeliveries(Math.min(limit, 10));
     let sent = 0;
     let failed = 0;
     for (const batch of groupPushDeliveries(deliveries)) {
