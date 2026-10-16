@@ -1,3 +1,4 @@
+import { PUSH_QUIET_SECONDS, groupPushDeliveries, pushBatchMessage } from "./pushBatching.js";
 import webpush from "web-push";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
@@ -162,6 +163,7 @@ export async function disableWebPushSubscription(userId: string, endpointValue: 
 
 function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
   const key = String(dedupeKey || "");
+  if (key === "digest") return "/account?tab=inbox";
   if (key.startsWith("booking:")) return "/live-lineup";
   if (/^competition:\d+:entry:\d+:free-card-claim-ready$/.test(key)) {
     const id = Number(notificationId || 0);
@@ -181,18 +183,39 @@ function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
 
 async function claimDueDeliveries(limit: number): Promise<any[]> {
   const result = await db.execute(sql`
-    with due as (
-      select delivery.id
-      from app.notification_push_deliveries delivery
-      join app.web_push_subscriptions subscription on subscription.id = delivery.subscription_id
+    with eligible_subscriptions as (
+      select subscription.id
+      from app.web_push_subscriptions subscription
       where subscription.disabled_at is null
-        and (
-          (delivery.status = 'pending' and delivery.next_attempt_at <= now())
-          or (delivery.status = 'processing' and delivery.updated_at < now() - interval '5 minutes')
+        and (subscription.last_success_at is null or subscription.last_success_at <= now() - (${PUSH_QUIET_SECONDS} * interval '1 second'))
+        and not exists (
+          select 1 from app.notification_push_deliveries busy
+          where busy.subscription_id=subscription.id and busy.status='processing'
+            and busy.updated_at >= now()-interval '5 minutes'
         )
-      order by delivery.next_attempt_at asc, delivery.id asc
-      for update of delivery skip locked
+        and exists (
+          select 1 from app.notification_push_deliveries pending
+          where pending.subscription_id=subscription.id and (
+            (pending.status='pending' and pending.next_attempt_at <= now())
+            or (pending.status='processing' and pending.updated_at < now()-interval '5 minutes')
+          )
+        )
+      order by subscription.last_success_at asc nulls first, subscription.id asc
+      for update of subscription skip locked
       limit ${Math.max(1, Math.min(100, limit))}
+    ), due as (
+      select selected.id
+      from eligible_subscriptions subscription
+      cross join lateral (
+        select delivery.id from app.notification_push_deliveries delivery
+        where delivery.subscription_id=subscription.id and (
+          (delivery.status='pending' and delivery.next_attempt_at <= now())
+          or (delivery.status='processing' and delivery.updated_at < now()-interval '5 minutes')
+        )
+        order by delivery.id asc
+        for update of delivery skip locked
+        limit 100
+      ) selected
     ), claimed as (
       update app.notification_push_deliveries delivery
       set status = 'processing', attempts = delivery.attempts + 1, updated_at = now()
@@ -210,12 +233,14 @@ async function claimDueDeliveries(limit: number): Promise<any[]> {
   return rowsOf(result);
 }
 
-async function markDeliverySent(delivery: any) {
+async function markDeliverySent(batch: any[]) {
+  const delivery = batch[0];
+  const deliveryIds = batch.map(item => Number(item.id));
   await db.transaction(async (tx: any) => {
     await tx.execute(sql`
       update app.notification_push_deliveries
       set status = 'sent', sent_at = now(), last_error = null, updated_at = now()
-      where id = ${Number(delivery.id)}
+      where id = any(${deliveryIds}::bigint[])
     `);
     await tx.execute(sql`
       update app.web_push_subscriptions
@@ -273,7 +298,8 @@ export async function processPendingWebPushDeliveries(limit = 25) {
     const deliveries = await claimDueDeliveries(limit);
     let sent = 0;
     let failed = 0;
-    for (const delivery of deliveries) {
+    for (const batch of groupPushDeliveries(deliveries)) {
+      const delivery = pushBatchMessage(batch);
       try {
         await webpush.sendNotification({
           endpoint: String(delivery.endpoint),
@@ -285,11 +311,11 @@ export async function processPendingWebPushDeliveries(limit = 25) {
           tag: `fantasy-arena-${Number(delivery.notificationId)}`,
           notificationId: Number(delivery.notificationId),
         }), { TTL: 24 * 60 * 60, urgency: "high" });
-        await markDeliverySent(delivery);
-        sent += 1;
+        await markDeliverySent(batch);
+        sent += batch.length;
       } catch (error) {
-        await markDeliveryFailed(delivery, error);
-        failed += 1;
+        for (const item of batch) await markDeliveryFailed(item, error);
+        failed += batch.length;
       }
     }
     return { claimed: deliveries.length, sent, failed };

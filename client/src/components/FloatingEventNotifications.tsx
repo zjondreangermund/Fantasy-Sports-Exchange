@@ -1,3 +1,5 @@
+import { useAuth } from "../hooks/use-auth";
+import { pendingToastEvents, type NotificationToastState } from "../lib/notification-toast-policy";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "../hooks/use-toast";
@@ -27,7 +29,8 @@ type NotificationResponse = {
 export default function FloatingEventNotifications() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const seenIdsRef = React.useRef<Set<number>>(new Set());
+  const { user } = useAuth();
+  const fallbackState = React.useRef<Record<string, NotificationToastState>>({});
 
   const { data } = useQuery<NotificationResponse>({
     queryKey: ["/api/notifications"],
@@ -37,28 +40,30 @@ export default function FloatingEventNotifications() {
       return response.json();
     },
     refetchInterval: 10000,
+    enabled: Boolean(user?.id),
   });
 
   React.useEffect(() => {
-    const importantMessages = (Array.isArray(data?.notifications) ? data.notifications : [])
-      .filter((item) => !item.read && (
-        item.type === "win"
-        || item.type === "runner_up"
-        || Number(item.replacementClaimId || 0) > 0
-        || String(item.dedupeKey || "").startsWith("replacement-claim:")
-        || String(item.dedupeKey || "").startsWith("replacement-reminder:")
-        || (item.notificationKind === "community_mention" && Number(item.communityMessageId || 0) > 0)
-      ))
-      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-
-    const newest = importantMessages.find((item) => !seenIdsRef.current.has(item.id));
-    if (!newest) return;
-
-    seenIdsRef.current.add(newest.id);
+    if (!user?.id) return;
+    const key = `fantasy-arena:notification-popups:${user.id}`;
+    let state = fallbackState.current[key] || { lastShownAt: 0, seenThroughId: 0 };
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || 'null');
+      if (saved && Number.isFinite(saved.lastShownAt) && Number.isFinite(saved.seenThroughId)) state = saved;
+    } catch { /* In-memory pacing still works when storage is unavailable. */ }
+    const events = pendingToastEvents(data?.notifications || [], state, Date.now());
+    if (!events.length) return;
+    const newest = events[0];
+    const grouped = events.length > 1;
+    const next = { lastShownAt: Date.now(), seenThroughId: Number(newest.id) };
+    fallbackState.current[key] = next;
+    try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* private mode */ }
     toast({
-      title: newest.title || "Congratulations from the Fantasy Arena Team",
-      description: newest.message || "You received a tournament reward.",
-      ...(newest.communityMessageId ? {
+      title: grouped ? `${events.length} Fantasy Arena updates` : newest.title || "Fantasy Arena update",
+      description: grouped ? events.slice(0, 3).map(item => item.title).join(" • ") : newest.message,
+      ...(grouped ? {
+        action: <ToastAction altText="Open all notifications" onClick={() => setLocation("/account?tab=inbox")}>Open Inbox</ToastAction>,
+      } : newest.communityMessageId ? {
         action: (
           <ToastAction altText="Open the message mentioning you" onClick={() => {
             void openCommunityMention(newest);
@@ -75,9 +80,11 @@ export default function FloatingEventNotifications() {
             {String(newest.replacementDepartureKind || "") === "real_life_loan" ? "Choose card option" : "Mint replacement"}
           </ToastAction>
         ),
-      } : {}),
+      } : {
+        action: <ToastAction altText="Open notification" onClick={() => setLocation(notificationDestination(newest))}>View</ToastAction>,
+      }),
     });
-  }, [data, toast, setLocation]);
+  }, [data, toast, setLocation, user?.id]);
 
   return null;
 }

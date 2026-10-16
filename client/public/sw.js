@@ -135,7 +135,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(title, {
     body,
     tag,
-    renotify: true,
+    renotify: false,
     icon: "/brand/fantasy-arena-logo.jpg?v=fa-install-2026-09",
     badge: "/brand/fantasy-arena-logo.jpg?v=fa-install-2026-09",
     data: { url, notificationId: Number(payload.notificationId || 0) },

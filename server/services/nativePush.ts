@@ -1,7 +1,8 @@
+import { PUSH_QUIET_SECONDS, groupPushDeliveries, pushBatchMessage } from "./pushBatching.js";
 import { createSign } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
-import { ensureNotificationsSchema } from "./notifications.js";
+import { ensureNotificationsSchema, reconcileRecentTournamentEntryNotifications } from "./notifications.js";
 
 type FirebaseCredentials = {
   projectId: string;
@@ -120,6 +121,11 @@ function normalizeToken(value: unknown): string {
   return token;
 }
 
+function normalizeAppVersion(value: unknown): string | null {
+  const version = String(value || "").trim();
+  return /^\d+\.\d+\.\d+$/.test(version) ? version : null;
+}
+
 export async function getNativePushStatus(userId: string) {
   await ensureNotificationsSchema();
   const credentials = firebaseCredentials();
@@ -134,20 +140,22 @@ export async function getNativePushStatus(userId: string) {
   };
 }
 
-export async function upsertNativePushSubscription(userId: string, tokenValue: unknown, platformValue: unknown) {
+export async function upsertNativePushSubscription(userId: string, tokenValue: unknown, platformValue: unknown, appVersionValue?: unknown) {
   await ensureNotificationsSchema();
   const token = normalizeToken(tokenValue);
   const platform = String(platformValue || "").trim().toLowerCase();
+  const appVersion = normalizeAppVersion(appVersionValue);
   if (platform !== "android") throw new Error("Native push is currently available for the Android app");
   const row = rowsOf(await db.execute(sql`
     insert into app.native_push_subscriptions (
-      user_id, token, platform, failure_count, disabled_at, created_at, updated_at
+      user_id, token, platform, app_version, failure_count, disabled_at, created_at, updated_at
     ) values (
-      ${userId}, ${token}, ${platform}, 0, null, now(), now()
+      ${userId}, ${token}, ${platform}, ${appVersion}, 0, null, now(), now()
     )
     on conflict (token) do update set
       user_id = excluded.user_id,
       platform = excluded.platform,
+      app_version = coalesce(excluded.app_version, native_push_subscriptions.app_version),
       failure_count = 0,
       disabled_at = null,
       updated_at = now()
@@ -171,6 +179,7 @@ export async function disableNativePushSubscription(userId: string, tokenValue: 
 
 function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
   const key = String(dedupeKey || "");
+  if (key === "digest") return "/account?tab=inbox";
   if (key.startsWith("booking:")) return "/live-lineup";
   if (/^competition:\d+:entry:\d+:free-card-claim-ready$/.test(key)) {
     const id = Number(notificationId || 0);
@@ -184,24 +193,47 @@ function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
   }
   if (key.startsWith("replacement-complete:")) return "/collection";
   if (key.startsWith("community-mention:")) return "/community";
+  if (key.startsWith("android-update:")) return "/dashboard?appUpdate=1";
+  if (key.startsWith("native-web-update:")) return "/competitions";
   if (key.startsWith("competition:") || key.startsWith("gameweek:")) return "/my-entries";
   return "/dashboard";
 }
 
 async function claimDueDeliveries(limit: number): Promise<any[]> {
   const result = await db.execute(sql`
-    with due as (
-      select delivery.id
-      from app.notification_native_push_deliveries delivery
-      join app.native_push_subscriptions subscription on subscription.id = delivery.subscription_id
+    with eligible_subscriptions as (
+      select subscription.id
+      from app.native_push_subscriptions subscription
       where subscription.disabled_at is null
-        and (
-          (delivery.status = 'pending' and delivery.next_attempt_at <= now())
-          or (delivery.status = 'processing' and delivery.updated_at < now() - interval '5 minutes')
+        and (subscription.last_success_at is null or subscription.last_success_at <= now() - (${PUSH_QUIET_SECONDS} * interval '1 second'))
+        and not exists (
+          select 1 from app.notification_native_push_deliveries busy
+          where busy.subscription_id=subscription.id and busy.status='processing'
+            and busy.updated_at >= now()-interval '5 minutes'
         )
-      order by delivery.next_attempt_at asc, delivery.id asc
-      for update of delivery skip locked
+        and exists (
+          select 1 from app.notification_native_push_deliveries pending
+          where pending.subscription_id=subscription.id and (
+            (pending.status='pending' and pending.next_attempt_at <= now())
+            or (pending.status='processing' and pending.updated_at < now()-interval '5 minutes')
+          )
+        )
+      order by subscription.last_success_at asc nulls first, subscription.id asc
+      for update of subscription skip locked
       limit ${Math.max(1, Math.min(100, limit))}
+    ), due as (
+      select selected.id
+      from eligible_subscriptions subscription
+      cross join lateral (
+        select delivery.id from app.notification_native_push_deliveries delivery
+        where delivery.subscription_id=subscription.id and (
+          (delivery.status='pending' and delivery.next_attempt_at <= now())
+          or (delivery.status='processing' and delivery.updated_at < now()-interval '5 minutes')
+        )
+        order by delivery.id asc
+        for update of delivery skip locked
+        limit 100
+      ) selected
     ), claimed as (
       update app.notification_native_push_deliveries delivery
       set status = 'processing', attempts = delivery.attempts + 1, updated_at = now()
@@ -261,12 +293,14 @@ async function sendFcmNotification(credentials: FirebaseCredentials, delivery: a
   throw new FcmDeliveryError(`Firebase delivery failed (${response.status})`, response.status, body, invalidToken);
 }
 
-async function markDeliverySent(delivery: any) {
+async function markDeliverySent(batch: any[]) {
+  const delivery = batch[0];
+  const deliveryIds = batch.map(item => Number(item.id));
   await db.transaction(async (tx: any) => {
     await tx.execute(sql`
       update app.notification_native_push_deliveries
       set status = 'sent', sent_at = now(), last_error = null, updated_at = now()
-      where id = ${Number(delivery.id)}
+      where id = any(${deliveryIds}::bigint[])
     `);
     await tx.execute(sql`
       update app.native_push_subscriptions
@@ -324,14 +358,15 @@ export async function processPendingNativePushDeliveries(limit = 25) {
     const deliveries = await claimDueDeliveries(limit);
     let sent = 0;
     let failed = 0;
-    for (const delivery of deliveries) {
+    for (const batch of groupPushDeliveries(deliveries)) {
+      const delivery = pushBatchMessage(batch);
       try {
         await sendFcmNotification(credentials, delivery);
-        await markDeliverySent(delivery);
-        sent += 1;
+        await markDeliverySent(batch);
+        sent += batch.length;
       } catch (error) {
-        await markDeliveryFailed(delivery, error);
-        failed += 1;
+        for (const item of batch) await markDeliveryFailed(item, error);
+        failed += batch.length;
       }
     }
     return { configured: true, claimed: deliveries.length, sent, failed };
@@ -340,12 +375,28 @@ export async function processPendingNativePushDeliveries(limit = 25) {
   }
 }
 
+// TOURNAMENT_ENTRY_NOTIFICATION_RECONCILE_V1: periodically heal any recently committed entry that is
+// missing its personal/admin notification or one of the corresponding delivery jobs
+// before processing pending pushes.
+let lastTournamentEntryReconcileAt = 0;
 let workerTimer: NodeJS.Timeout | null = null;
 
 export function startNativePushDeliveryWorker() {
   if (workerTimer) return;
   const run = () => {
-    void processPendingNativePushDeliveries().catch((error) => {
+    void (async () => {
+      const now = Date.now();
+      if (now - lastTournamentEntryReconcileAt >= 60_000) {
+        lastTournamentEntryReconcileAt = now;
+        try {
+          const repaired = await reconcileRecentTournamentEntryNotifications();
+          if (repaired > 0) console.info(`Repaired ${repaired} tournament entry notification set(s).`);
+        } catch (error) {
+          console.error("Tournament entry notification reconciliation failed:", error);
+        }
+      }
+      await processPendingNativePushDeliveries();
+    })().catch((error) => {
       console.error("Native push delivery worker failed:", error);
     });
   };

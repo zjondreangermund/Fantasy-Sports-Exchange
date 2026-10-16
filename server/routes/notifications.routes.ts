@@ -1,7 +1,8 @@
+import { reportNotificationHealth } from "../services/notificationHealth.js";
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
-import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
+import { createNotificationOnce, enqueueSignupWelcomeDeliveries, ensureNotificationsSchema } from "../services/notifications.js";
 import {
   claimReplacementCard,
   ensurePlayerTransferMonitoringSchema,
@@ -46,7 +47,7 @@ function minutesUntil(value: unknown): number | null {
 async function syncGameweekNotifications(userId: string) {
   const competitions = rowsOf(await db.execute(sql`
     select c.id, c.name, c.status::text as status, c.game_week as "gameWeek",
-      c.start_date as "startDate",
+      c.start_date as "startDate", c.fixture_window_start as "fixtureStart",
       exists (
         select 1 from app.competition_entries ce
         where ce.competition_id = c.id and ce.user_id = ${userId}
@@ -55,7 +56,7 @@ async function syncGameweekNotifications(userId: string) {
     where c.status::text in ('open', 'upcoming', 'active')
       and (
         c.status::text = 'active'
-        or c.start_date between now() - interval '3 days' and now() + interval '30 days'
+        or coalesce(c.fixture_window_start, c.start_date) between now() - interval '3 days' and now() + interval '30 days'
       )
       and (
         coalesce(c.visibility, 'public') = 'public'
@@ -71,7 +72,10 @@ async function syncGameweekNotifications(userId: string) {
   const upcoming = competitions
     .filter((competition) => ["open", "upcoming"].includes(String(competition.status)))
     .filter((competition) => {
-      const minutes = minutesUntil(competition.startDate);
+      // NOTIFICATION_TRUTH_GUARDS_V1:gameweek-clock
+      // start_date is the Tuesday entry-opening date. Start/lock alerts must use the
+      // first eligible Premier League kickoff, otherwise users can be warned days early.
+      const minutes = minutesUntil(competition.fixtureStart || competition.startDate);
       return typeof minutes === "number" && minutes > 0;
     });
 
@@ -79,8 +83,8 @@ async function syncGameweekNotifications(userId: string) {
   if (nextGameweek > 0) {
     const gameweekRows = upcoming.filter((competition) => Number(competition.gameWeek || 0) === nextGameweek);
     const openRows = gameweekRows.filter((competition) => String(competition.status) === "open");
-    const earliest = [...gameweekRows].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())[0];
-    const minutes = minutesUntil(earliest?.startDate);
+    const earliest = [...gameweekRows].sort((a, b) => new Date(a.fixtureStart || a.startDate).getTime() - new Date(b.fixtureStart || b.startDate).getTime())[0];
+    const minutes = minutesUntil(earliest?.fixtureStart || earliest?.startDate);
 
     if (openRows.length) {
       await createNotificationOnce(db, {
@@ -91,12 +95,14 @@ async function syncGameweekNotifications(userId: string) {
       });
     }
 
-    if (typeof minutes === "number" && minutes > 0 && minutes <= 24 * 60) {
+    // PRODUCTION_NOTIFICATION_TIMING_V1: the first 24-hour reminder is explicitly a lineup-lock warning.
+    // The scheduler runs every 15 minutes and createNotificationOnce keeps it exactly-once per gameweek.
+    if (openRows.length && typeof minutes === "number" && minutes > 0 && minutes <= 24 * 60) {
       await createNotificationOnce(db, {
         userId,
-        title: `Gameweek ${nextGameweek} starts soon`,
-        message: `Gameweek ${nextGameweek} starts within 24 hours. Check submitted teams, captains and unused eligible cards in My Teams & Prizes.`,
-        dedupeKey: `gameweek:${nextGameweek}:starts-within-24h`,
+        title: `Gameweek ${nextGameweek} lineup locks within 24 hours`,
+        message: `Gameweek ${nextGameweek} locks within 24 hours. Review your submitted teams and captains, or complete any remaining tournament entries before the deadline.`,
+        dedupeKey: `gameweek:${nextGameweek}:locks-within-24h`,
       });
     }
 
@@ -129,6 +135,95 @@ async function syncGameweekNotifications(userId: string) {
   }
 }
 
+// NATIVE_APP_UPDATE_NOTIFICATION_V1
+const ANDROID_RELEASES_API = "https://api.github.com/repos/zjondreangermund/Fantasy-Sports-Exchange/releases?per_page=20";
+const NATIVE_SCROLL_ROLLOUT_KEY = "native-web-update:full-page-scroll-v1";
+let androidReleaseCache: { checkedAt: number; release: { version: string } | null } | null = null;
+
+function parseNativeVersion(value: unknown): number[] | null {
+  const match = String(value || "").match(/^(\d+)\.(\d+)\.(\d+)$/);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+}
+
+function compareNativeVersions(left: string, right: string) {
+  const a = parseNativeVersion(left);
+  const b = parseNativeVersion(right);
+  if (!a || !b) return 0;
+  for (let index = 0; index < 3; index += 1) {
+    if (a[index] !== b[index]) return a[index] > b[index] ? 1 : -1;
+  }
+  return 0;
+}
+
+async function latestAndroidRelease(): Promise<{ version: string } | null> {
+  if (androidReleaseCache && Date.now() - androidReleaseCache.checkedAt < 30 * 60_000) return androidReleaseCache.release;
+  try {
+    const response = await fetch(ANDROID_RELEASES_API, {
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "Fantasy-Arena-Server" },
+      signal: AbortSignal.timeout(6_000),
+    });
+    if (!response.ok) throw new Error(`GitHub releases returned ${response.status}`);
+    const releases: any[] = await response.json();
+    const candidates = (Array.isArray(releases) ? releases : [])
+      .filter((release) => !release?.draft && !release?.prerelease)
+      .map((release) => {
+        const version = String(release?.tag_name || "").match(/^android-(\d+\.\d+\.\d+)$/i)?.[1];
+        const hasApk = Array.isArray(release?.assets) && release.assets.some((asset: any) => String(asset?.name || "").toLowerCase() === "fantasy-arena-android.apk");
+        return version && hasApk ? { version } : null;
+      })
+      .filter(Boolean) as Array<{ version: string }>;
+    candidates.sort((a, b) => compareNativeVersions(b.version, a.version));
+    const release = candidates[0] || null;
+    androidReleaseCache = { checkedAt: Date.now(), release };
+    return release;
+  } catch (error) {
+    console.error("Android release notification check failed:", error);
+    androidReleaseCache = { checkedAt: Date.now(), release: null };
+    return null;
+  }
+}
+
+async function syncNativeAppUpdateNotifications() {
+  // Update notifications stay OFF until the in-app 1.1.11 updater has been
+  // validated end-to-end. This prevents legacy 1.1.9/1.1.10 users being sent
+  // to the old browser/GitHub download flow.
+  if (String(process.env.NATIVE_APP_UPDATE_NOTIFICATIONS_ENABLED || "").toLowerCase() !== "true") return;
+  await ensureNotificationsSchema();
+  const rows = rowsOf(await db.execute(sql`
+    select user_id as "userId",
+           array_remove(array_agg(distinct app_version), null) as versions
+    from app.native_push_subscriptions
+    group by user_id
+    order by user_id
+    limit 5000
+  `));
+  if (!rows.length) return;
+
+  const rolloutCreated = 0; // Do not replay an obsolete one-time website rollout.
+
+  const release = await latestAndroidRelease();
+  let binaryCreated = 0;
+  if (release) {
+    for (const row of rows) {
+      const userId = String(row.userId || "");
+      const versions = Array.isArray(row.versions) ? row.versions.map(String).filter((value: string) => parseNativeVersion(value)) : [];
+      if (!userId || !versions.length) continue;
+      if (!versions.some((version: string) => compareNativeVersions(version, release.version) < 0)) continue;
+      const notification = await createNotificationOnce(db, {
+        userId,
+        title: `Fantasy Arena ${release.version} update available`,
+        message: "A newer signed Android app is ready. Open Fantasy Arena and tap Update Fantasy Arena. It installs over your current app—no uninstall, sign-up or data reset.",
+        dedupeKey: `android-update:${release.version}`,
+      });
+      if (notification?.id) binaryCreated += 1;
+    }
+  }
+
+  if (rolloutCreated || binaryCreated) {
+    console.log(`[native-update] queued rollout=${rolloutCreated} android=${binaryCreated} latest=${release?.version || "none"}`);
+  }
+}
+
 let subscribedNotificationSyncTimer: NodeJS.Timeout | null = null;
 let subscribedNotificationSyncRunning = false;
 
@@ -137,6 +232,7 @@ async function syncSubscribedUserNotifications() {
   subscribedNotificationSyncRunning = true;
   try {
     await ensureNotificationsSchema();
+    await reportNotificationHealth().catch(error => console.error("Notification health report failed:", error?.message));
     // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1
     // Create/remind pending departure claims and auto-mint only after the
     // 14-day manual claim window expires.
@@ -146,15 +242,12 @@ async function syncSubscribedUserNotifications() {
     await autoReplaceUnlockedDepartures().catch((error) => {
       console.error("Delayed EPL departure replacement sweep failed:", error);
     });
+    // Create Inbox events for every eligible account, even without a push token.
+    // Delivery still requires that user's existing notification subscription.
     const users = rowsOf(await db.execute(sql`
-      select user_id as "userId"
-      from (
-        select user_id from app.web_push_subscriptions where disabled_at is null
-        union
-        select user_id from app.native_push_subscriptions where disabled_at is null
-      ) subscribed_users
-      order by user_id
-      limit 2000
+      select id as "userId" from app.users
+      where coalesce(is_banned,false)=false and id not like 'qa-onboarding-%'
+      order by id
     `));
     for (const user of users) {
       const userId = String(user.userId || "");
@@ -165,6 +258,7 @@ async function syncSubscribedUserNotifications() {
         console.error("Failed to prepare scheduled push notifications for a subscribed user:", error);
       }
     }
+    await syncNativeAppUpdateNotifications();
     await processPendingWebPushDeliveries();
     await processPendingNativePushDeliveries();
   } finally {
@@ -213,6 +307,9 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
     try {
       const userId = String(req.authUserId || "");
       const subscription = await upsertWebPushSubscription(userId, req.body?.subscription, req.get?.("user-agent"));
+      // SIGNUP_WELCOME_NOTIFICATION_V1: a just-created account may have received its Inbox welcome before this device subscribed.
+      // Queue that existing welcome for this newly registered PWA/web device without creating a second Inbox row.
+      await enqueueSignupWelcomeDeliveries(db, userId);
       await createNotificationOnce(db, {
         userId,
         title: "Fantasy Arena notifications enabled",
@@ -243,7 +340,9 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
   app.post("/api/push/native-subscription", requireAuth, async (req: any, res) => {
     try {
       const userId = String(req.authUserId || "");
-      const subscription = await upsertNativePushSubscription(userId, req.body?.token, req.body?.platform);
+      const subscription = await upsertNativePushSubscription(userId, req.body?.token, req.body?.platform, req.body?.appVersion);
+      // SIGNUP_WELCOME_NOTIFICATION_V1: queue the existing signup welcome for the newly registered Android device.
+      await enqueueSignupWelcomeDeliveries(db, userId);
       await createNotificationOnce(db, {
         userId,
         title: "Fantasy Arena notifications enabled",
@@ -313,6 +412,7 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
          )
         left join app.players source_player on source_player.id=pr.source_player_id
         where n.user_id = ${userId}
+          and coalesce(n.dedupe_key, '') not like '%self-test%'
         order by n.created_at desc nulls last, n.id desc
         limit 100
       `));
