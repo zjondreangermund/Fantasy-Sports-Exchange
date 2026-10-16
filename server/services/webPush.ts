@@ -1,3 +1,4 @@
+import { reportNotificationHealth } from "./notificationHealth.js";
 import { PUSH_QUIET_SECONDS, groupPushDeliveries, pushBatchMessage } from "./pushBatching.js";
 import webpush from "web-push";
 import { sql } from "drizzle-orm";
@@ -309,7 +310,7 @@ export async function processPendingWebPushDeliveries(limit = 25) {
           body: String(delivery.message || "You have a new Fantasy Arena notification."),
           url: notificationUrl(delivery.dedupeKey, delivery.notificationId),
           tag: `fantasy-arena-${Number(delivery.notificationId)}`,
-          notificationId: Number(delivery.notificationId),
+          notificationId: delivery.dedupeKey === "digest" ? 0 : Number(delivery.notificationId),
         }), { TTL: 24 * 60 * 60, urgency: "high", timeout: 15_000 });
         await markDeliverySent(batch);
         sent += batch.length;
@@ -318,6 +319,7 @@ export async function processPendingWebPushDeliveries(limit = 25) {
         failed += batch.length;
       }
     }
+    if (deliveries.length) await reportNotificationHealth(true).catch(error => console.warn("Push health report unavailable:", error?.message));
     return { claimed: deliveries.length, sent, failed };
   } finally {
     processingDeliveries = false;

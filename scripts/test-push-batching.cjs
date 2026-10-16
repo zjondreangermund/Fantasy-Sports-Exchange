@@ -63,6 +63,7 @@ async function main() {
           if (name === 'drizzle-orm') return orm;
           if (name.endsWith('/db.js')) return { db };
           if (name.includes('pushBatching')) return batching;
+          if (name.includes('notificationHealth')) return { reportNotificationHealth: async () => {} };
           if (name.includes('notifications.js')) return { ensureNotificationsSchema: async () => {}, reconcileRecentTournamentEntryNotifications: async () => 0 };
           if (name === 'web-push') return { setVapidDetails() {}, sendNotification: send };
           throw new Error('Unexpected test import: ' + name);
@@ -94,7 +95,7 @@ async function main() {
       await pool.query(`update app.${deliveries} set next_attempt_at=now()`);
       const other = {};
       vm.runInNewContext(source + '\nexports.claim = claimDueDeliveries;', { exports: other, process: { env }, console, Buffer, Date, URL, URLSearchParams, setTimeout, setInterval,
-        require: name => name === 'drizzle-orm' ? orm : name.endsWith('/db.js') ? { db } : name.includes('pushBatching') ? batching : name === 'node:crypto' ? crypto : {} });
+        require: name => name === 'drizzle-orm' ? orm : name.endsWith('/db.js') ? { db } : name.includes('pushBatching') ? batching : name.includes('notificationHealth') ? { reportNotificationHealth: async () => {} } : name === 'node:crypto' ? crypto : {} });
       const claims = await Promise.all([worker.claim(25), other.claim(25)]);
       assert.equal(claims.flat().length, 2, 'Concurrent workers do not double-claim a subscription');
       assert.equal(claims.filter(rows => rows.length > 0).length, 1);

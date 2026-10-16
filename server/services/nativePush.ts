@@ -1,3 +1,4 @@
+import { reportNotificationHealth } from "./notificationHealth.js";
 import { PUSH_QUIET_SECONDS, groupPushDeliveries, pushBatchMessage } from "./pushBatching.js";
 import { createSign } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -274,7 +275,7 @@ async function sendFcmNotification(credentials: FirebaseCredentials, delivery: a
           },
           data: {
             url,
-            notificationId: String(notificationId),
+            notificationId: delivery.dedupeKey === "digest" ? "0" : String(notificationId),
           },
           android: {
             ttl: "86400s",
@@ -372,6 +373,7 @@ export async function processPendingNativePushDeliveries(limit = 25) {
         failed += batch.length;
       }
     }
+    if (deliveries.length) await reportNotificationHealth(true).catch(error => console.warn("Push health report unavailable:", error?.message));
     return { configured: true, claimed: deliveries.length, sent, failed };
   } finally {
     processingDeliveries = false;

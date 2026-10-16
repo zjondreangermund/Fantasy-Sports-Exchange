@@ -2,8 +2,8 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
 
 let lastReport = 0;
-export async function reportNotificationHealth() {
-  if (Date.now() - lastReport < 60 * 60_000) return;
+export async function reportNotificationHealth(force = false) {
+  if (!force && Date.now() - lastReport < 60 * 60_000) return;
   const result = await db.execute(sql`
     select
       (select count(*)::int from app.notifications where created_at >= now()-interval '24 hours') as "created24h",
