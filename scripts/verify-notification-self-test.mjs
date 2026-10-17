@@ -37,12 +37,14 @@ need(control, 'platform: "android"', "Android FCM token registration");
 need(control, "disableMutation.mutate();", "notification disable action");
 
 // Tournament timing contract: once when entries open, 24h lock warning, 2h lock
-// warning, then live notification for managers who actually entered.
+// warning, then a single entries-closed / good-luck alert to participants at kickoff.
 need(routes, "entries are open", "entries-open reminder");
 need(adminLive, "PRODUCTION_NOTIFICATION_TIMING_V1", "24-hour lineup-lock policy patch");
 need(adminLive, "locks-within-24h", "24-hour lineup-lock dedupe");
 need(routes, "locks-within-2h", "two-hour lineup-lock reminder");
-need(routes, "entered-teams-live", "entered-team live notification");
+need(routes, "GAMEWEEK_ENTRY_CLOSED_GOOD_LUCK_V1", "old duplicate live alert suppression");
+need(fs.readFileSync("server/services/notifications.ts", "utf8"), "entries-closed-good-luck", "once-per-gameweek good-luck notification");
+need(fs.readFileSync("server/services/scoreUpdater.ts", "utf8"), "await notifyGameweekEntriesClosed(fixtures, now)", "first-kickoff notification dispatcher");
 
 // Admin operational notifications must cover both account-creation paths and every
 // committed tournament entry. Matching dedupe keys prevent duplicate admin pushes.
@@ -75,4 +77,4 @@ if (onboarding.includes('className="fixed inset-x-0 bottom-0 z-50 border-t borde
 }
 fs.writeFileSync(onboardingPath, onboarding);
 
-console.log("Production notifications verified: real events only, admin signup/entry alerts, entries-open + 24h/2h lock reminders, live/result delivery preserved, and no notification test lab.");
+console.log("Production notifications verified: real events only, admin signup/entry alerts, entries-open + 24h/2h lock reminders, good-luck/result delivery preserved, and no notification test lab.");
