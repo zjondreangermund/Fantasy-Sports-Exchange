@@ -104,6 +104,14 @@ includesAll(economy, [
   "manualSettlement: forceManual",
 ], "Tournament economy route");
 expect(!economy.includes("if (new Date(competition.startDate).getTime() <= Date.now())"), "Join validation must not use the tournament start as the lineup deadline");
+// GW7 17 Oct 2026: FPL deadline is 12:00 CAT; Arena advertises first kickoff at 13:30 CAT.
+const scoreKickoffFirst = scoreUpdater.indexOf("if (kickoffs[0]) return kickoffs[0];");
+const scoreFplFallback = scoreUpdater.indexOf("if (eventDeadline && Number.isFinite(eventDeadline.getTime())) return eventDeadline;", scoreKickoffFirst);
+const joinKickoffFirst = economy.indexOf("if (firstKickoff) return firstKickoff;");
+const joinFplFallback = economy.indexOf("if (eventDeadline && Number.isFinite(eventDeadline.getTime())) return eventDeadline;", joinKickoffFirst);
+expect(scoreKickoffFirst >= 0 && scoreFplFallback > scoreKickoffFirst, "Scoring status must use first PL kickoff before FPL deadline fallback");
+expect(joinKickoffFirst >= 0 && joinFplFallback > joinKickoffFirst, "Atomic entry must use first PL kickoff before FPL deadline fallback");
+expect(scoreUpdater.includes("Repair a cup marked active early by the old FPL deadline"), "Auto-update must restore erroneously activated cups before kickoff");
 
 includesAll(preflight, [
   "competition_prize_awards",
