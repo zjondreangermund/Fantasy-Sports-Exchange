@@ -64,7 +64,7 @@ export async function openCommunityMention(notification: ArenaNotification) {
 export function notificationDestination(notification: ArenaNotification): string {
   const replacementKey = String(notification.dedupeKey || "");
   // Match the native Android and Web Push deep link for the once-per-GW close alert.
-  if (/^gameweek:\\d{4}-\\d{2}:\\d+:entries-closed-good-luck$/.test(replacementKey)) return "/my-entries";
+  if (replacementKey.startsWith("gameweek:") && replacementKey.endsWith(":entries-closed-good-luck")) return "/my-entries";
   if (notification.replacementClaimId || replacementKey.startsWith("replacement-claim:") || replacementKey.startsWith("replacement-reminder:")) {
     const notificationId = Number(notification.id || 0);
     return notificationId > 0
