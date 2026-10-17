@@ -23,6 +23,16 @@ export async function ensureNotificationsSchema(): Promise<void> {
       await db.execute(sql`alter table if exists app.notifications add column if not exists dedupe_key text`);
       await db.execute(sql`create unique index if not exists notifications_user_dedupe_idx on app.notifications (user_id, dedupe_key)`);
       await db.execute(sql`create index if not exists notifications_user_unread_idx on app.notifications (user_id, read, created_at desc)`);
+      // MINT_PUSH_FLOOD_GUARD_V1: store one recent push claim per user and reminder family.
+      // Ordinary Inbox events remain individual and never get dropped.
+      await db.execute(sql`
+        create table if not exists app.notification_push_topic_limits (
+          user_id varchar(255) not null references app.users(id) on delete cascade,
+          topic text not null,
+          last_queued_at timestamptz not null default now(),
+          primary key(user_id, topic)
+        )
+      `);
       // Notification categories are stored here so they exist before scheduled workers start.
       await db.execute(sql`CREATE TABLE IF NOT EXISTS app.arena_alert_preferences(
         user_id varchar(255) primary key references app.users(id) on delete cascade,
@@ -153,6 +163,25 @@ export async function createNotificationOnce(tx: any, input: {
     `);
     const value = Array.isArray(setting?.rows) ? setting.rows[0]?.preference : null;
     queuePush = value === "true" ? true : value === "false" ? false : pushCategory !== "marketing";
+  }
+  // MINT_PUSH_FLOOD_GUARD_V1. A poll, deploy or several cards needing mint
+  // must never turn into a string of identical phone alerts. Preserve every
+  // item in Inbox; limit just optional device pushes to one prompt per 12h.
+  // Mint confirmations and real financial/booking alerts are NOT throttled.
+  const mintPushTopic = dedupeKey.startsWith("card:weekly-ready:") || dedupeKey.startsWith("card:weekly-expiring:")
+    ? "mint-weekly-reminder" :
+    dedupeKey.startsWith("replacement-claim:") || dedupeKey.startsWith("replacement-reminder:")
+      ? "mint-replacement-choice" : null;
+  if (notification?.id && queuePush && mintPushTopic) {
+    const permit = await tx.execute(sql`
+      insert into app.notification_push_topic_limits (user_id,topic,last_queued_at)
+      values (${userId},${mintPushTopic},now())
+      on conflict (user_id,topic) do update
+        set last_queued_at=now()
+        where app.notification_push_topic_limits.last_queued_at <= now()-interval '12 hours'
+      returning user_id
+    `);
+    queuePush = Array.isArray(permit?.rows) && permit.rows.length > 0;
   }
   if (notification?.id && queuePush) {
     await tx.execute(sql`
