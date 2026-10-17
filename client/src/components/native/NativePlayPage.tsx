@@ -387,7 +387,7 @@ export default function NativePlayPage() {
                 <div className="min-w-0"><p className="truncate text-sm font-black">{competition?.name || "Tournament"}</p><p className={`mt-1 text-[10px] font-bold uppercase tracking-[.12em] ${tone.text}`}>GW{competition?.gameWeek || competition?.game_week || "-"} · {String(competition?.tier || "common").toUpperCase()}</p></div>
                 <span className="rounded-full bg-emerald-300/10 px-2.5 py-1 text-[10px] font-black text-emerald-200">ENTERED</span>
               </div>
-              <div className="mt-3 flex items-center justify-between border-t border-white/[.06] pt-2.5 text-xs"><span className="text-slate-500">5 cards locked for this entry</span><Link href="/live-lineup" className="font-black text-cyan-200">View squad</Link></div>
+              <div className="mt-3 flex items-center justify-between border-t border-white/[.06] pt-2.5 text-xs"><span className="text-slate-500">5 cards selected</span><div className="flex gap-3"><Link href="/live-lineup" className="font-black text-cyan-200">View squad</Link>{String(competition?.status || "") === "open" && competition?.entryOpen !== false ? <Link href="/my-entries?nativeFull=1" className="font-black text-fuchsia-200">Edit team</Link> : null}</div></div>
             </div>;
           }) : <NativeEmpty title="You have no tournament entries yet." />}
         </div>
