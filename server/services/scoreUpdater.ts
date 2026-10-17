@@ -18,7 +18,7 @@ import { buildFplPlayerIndex } from "./fplPlayerIdentity.js";
 import { calculatePlayerScore, calculateLineupScore } from "./scoring.js";
 import { loadApiFootballGameweekScoringContext, resolveApiFootballGameweekPlayer, type ApiFootballGameweekScoringContext } from "./apiFootballScoringBridge.js";
 import { diagnoseApiFootballPlayerMatch } from "./apiFootballPlayerDirectory.js";
-import { createNotificationOnce } from "./notifications.js";
+import { createNotificationOnce, notifyGameweekEntriesClosed } from "./notifications.js";
 
 const RARITY_PRESTIGE: Record<string, number> = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };
 const SCORE_REFRESH_INTERVAL_MS = Math.max(
@@ -705,6 +705,15 @@ export class ScoreUpdateService {
       const [bootstrap, fixtures] = await Promise.all([fplApi.bootstrap(), fplApi.fixturesLive()]);
       const currentGameweek = this.currentOrNextGameweek(bootstrap);
       const now = Date.now();
+      // GAMEWEEK_ENTRY_CLOSED_GOOD_LUCK_V1: send one grouped notice to managers
+      // who submitted teams, at actual first kickoff. Keep scoring independent
+      // of notification/push availability and never duplicate on polling/restart.
+      try {
+        const created = await notifyGameweekEntriesClosed(fixtures, now);
+        if (created) console.info(`GW entry-closed good-luck notices queued: ${created}`);
+      } catch (error) {
+        console.error("GW entry-closed notification dispatch failed (retry next poll):", error);
+      }
       const toScore: Array<{ competition: any; final: boolean }> = [];
 
       for (const competition of competitions) {
