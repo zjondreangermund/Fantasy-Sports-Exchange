@@ -390,13 +390,15 @@ export class ScoreUpdateService {
   }
 
   private entryDeadline(competition: any, event: any, fixtures: any[]) {
-    const eventDeadline = event?.deadline_time ? new Date(String(event.deadline_time)) : null;
-    if (eventDeadline && Number.isFinite(eventDeadline.getTime())) return eventDeadline;
+    // Arena entries close at the first Premier League kickoff, not FPL's earlier fantasy deadline.
     const kickoffs = this.fixturesForGameweek(fixtures, Number(competition?.gameWeek || competition?.game_week || 0))
       .map((fixture: any) => fixture?.kickoff_time ? new Date(String(fixture.kickoff_time)) : null)
       .filter((date: Date | null): date is Date => Boolean(date && Number.isFinite(date.getTime())))
       .sort((a: Date, b: Date) => a.getTime() - b.getTime());
     if (kickoffs[0]) return kickoffs[0];
+    // The FPL deadline is only a conservative fallback if fixture data is missing.
+    const eventDeadline = event?.deadline_time ? new Date(String(event.deadline_time)) : null;
+    if (eventDeadline && Number.isFinite(eventDeadline.getTime())) return eventDeadline;
     return new Date(String(competition?.startDate || competition?.start_date || 0));
   }
 
@@ -723,6 +725,19 @@ export class ScoreUpdateService {
           await this.setCompetitionStatus(Number(competition.id), "open");
           status = "open";
           competition.status = "open";
+        }
+        // Repair a cup marked active early by the old FPL deadline (90 minutes before kickoff).
+        // Never reopen manually controlled cups or anything after a fixture has started.
+        if (!manualStatus && status === "active" && now < deadline.getTime()
+          && !this.fixturesForGameweek(fixtures, gameWeek).some((fixture: any) =>
+            fixture?.started || fixture?.finished || fixture?.finished_provisional
+            || (fixture?.kickoff_time && new Date(String(fixture.kickoff_time)).getTime() <= now))) {
+          const restored = rowsOf(await db.execute(sql`
+            UPDATE app.competitions SET status = 'open'
+            WHERE id = ${Number(competition.id)} AND status = 'active' AND admin_status_override IS NULL
+            RETURNING id
+          `));
+          if (restored.length) { status = "open"; competition.status = "open"; }
         }
         if (!manualStatus && status === "open" && now >= deadline.getTime()) {
           status = await this.activateCompetitionAtDeadline(competition);
