@@ -168,6 +168,79 @@ async function unavailablePlayers(bootstrap:any,fixtures:any[]){
     }
   }
 }
+async function missedLineupDeadlines(fixtures:any[]){
+  const now=Date.now();
+  const upcoming=[...new Set((Array.isArray(fixtures)?fixtures:[]).map(f=>Number(f.event)).filter(Number.isInteger))];
+  for(const gw of upcoming){
+    if(gw<1||gw>38)continue;
+    const kickoffs=fixtures.filter(f=>Number(f.event)===gw&&f.kickoff_time)
+      .map(f=>Date.parse(String(f.kickoff_time))).filter(Number.isFinite).sort((a:number,b:number)=>a-b);
+    if(!kickoffs.length||kickoffs[0]-now>30*60_000||kickoffs[0]-now<=0)continue;
+    const current=rows(await db.execute(sql`SELECT count(*)::int AS count FROM app.competitions c
+      WHERE c.game_week=${gw} AND c.status::text='open'
+        AND c.start_date >= now()-interval '21 days' AND c.start_date<=now()`))[0];
+    if(!Number(current?.count))continue;
+    // Warn returning/active managers with recent real entries, not arbitrary new users.
+    const waiting=rows(await db.execute(sql`
+      SELECT DISTINCT old.user_id AS "userId" FROM app.competition_entries old
+      JOIN app.competitions past ON past.id=old.competition_id
+      JOIN app.users u ON u.id=old.user_id
+      WHERE old.joined_at BETWEEN now()-interval '45 days' AND now()-interval '1 day'
+        AND coalesce(u.is_banned,false)=false AND old.user_id NOT LIKE 'test-bot-%'
+        AND past.name NOT LIKE '[TEST]%'
+        AND NOT EXISTS(SELECT 1 FROM app.competition_entries ce
+          JOIN app.competitions current ON current.id=ce.competition_id
+          WHERE ce.user_id=old.user_id AND current.game_week=${gw}
+            AND current.start_date >= now()-interval '21 days')
+      LIMIT 200
+    `));
+    await sendMany(waiting,"tournament",`⏰ GW${gw} closes in 30 minutes`,
+      `You haven't submitted a team for GW${gw} yet. Open Play and enter before the first Premier League match starts. Check all five cards and your captain.`,
+      `gameweek:${gameweekSeason(new Date(kickoffs[0]))}:${gw}:30min-no-entry`);
+  }
+}
+async function operatorHealth(fixtures:any[]){
+  const now=Date.now();
+  const weeks=[...new Set(fixtures.map(f=>Number(f?.event)).filter(n=>Number.isInteger(n)&&n>0&&n<=38))];
+  for(const gw of weeks){
+    const kickoff=fixtures.filter(f=>Number(f.event)===gw&&f.kickoff_time)
+      .map(f=>Date.parse(String(f.kickoff_time))).filter(Number.isFinite).sort((a:number,b:number)=>a-b)[0];
+    if(!kickoff||now<kickoff+10*60_000||now>kickoff+48*3600000)continue;
+    const open=rows(await db.execute(sql`
+      SELECT id FROM app.competitions
+      WHERE game_week=${gw} AND status::text='open'
+        AND admin_status_override IS NULL
+        AND start_date BETWEEN now()-interval '21 days' AND now()
+      LIMIT 5
+    `));
+    if(open.length)await adminAlert("🚨 Gameweek did not lock automatically",
+      `GW${gw} is at least 10 minutes past first Premier League kickoff, but ${open.length} competition(s) remain open. Review entry cutoff and scoring services immediately.`,
+      `gameweek:${gameweekSeason(new Date(kickoff))}:${gw}:still-open-after-kickoff`);
+  }
+  const health=rows(await db.execute(sql`
+    SELECT (SELECT count(*)::int FROM app.notification_native_push_deliveries
+      WHERE status='failed' AND updated_at>now()-interval '1 hour') AS native_failed,
+      (SELECT count(*)::int FROM app.notification_push_deliveries
+      WHERE status='failed' AND updated_at>now()-interval '1 hour') AS web_failed,
+      (SELECT count(*)::int FROM app.notification_native_push_deliveries
+      WHERE status='pending' AND created_at<now()-interval '15 minutes') AS overdue_native
+  `))[0] || {};
+  if(Number(health.native_failed||0)+Number(health.web_failed||0)>2||Number(health.overdue_native||0)>20){
+    const hour=new Date().toISOString().slice(0,13);
+    await adminAlert("🚨 Push notification delivery needs attention",
+      `Last-hour failures: Android ${health.native_failed}, Web ${health.web_failed}; Android jobs overdue 15m: ${health.overdue_native}. Check notification health in Railway.`,
+      `notifications:delivery-errors:${hour}`);
+  }
+  const failed=rows(await db.execute(sql`SELECT count(*)::int AS count FROM app.transactions
+    WHERE status='failed' AND created_at>now()-interval '1 hour'`))[0];
+  if(Number(failed?.count||0)>=3){
+    const hour=new Date().toISOString().slice(0,13);
+    await adminAlert("⚠️ Repeated transaction failures",
+      `${failed.count} failed transactions recorded in the last hour. Check payment and wallet logs; this does not necessarily mean the gateway is down.`,
+      `wallet:multiple-failures:${hour}`);
+  }
+}
+
 async function pendingActions(){
   const expiringLoans=rows(await db.execute(sql`SELECT id, original_owner_id AS "ownerId",
     borrower_user_id AS "borrowerId",expires_at AS "expiresAt",card_id AS "cardId"
@@ -206,6 +279,8 @@ export async function runArenaAttentionScan(){
       ["Prize Vault unlocks",()=>prizeProgress()],
       ["fixture changes",()=>fixtureAndDeadlineChanges(Array.isArray(fixtures)?fixtures:[])],
       ["player availability",()=>unavailablePlayers(bootstrap,Array.isArray(fixtures)?fixtures:[])],
+      ["30-minute unsubmitted entry warnings",()=>missedLineupDeadlines(Array.isArray(fixtures)?fixtures:[])],
+      ["operator health",()=>operatorHealth(Array.isArray(fixtures)?fixtures:[])],
       ["pending actions",()=>pendingActions()],
     ] as const){
       try{await job()}catch(error){console.warn(`[arena-attention] ${name} check failed:`,error);}
