@@ -1,4 +1,5 @@
 import { reportNotificationHealth } from "../services/notificationHealth.js";
+import { getArenaAlertPreferences, setArenaAlertPreferences, ensureArenaAttentionSchema, startArenaAttentionWorker } from "../services/arenaAttention.js";
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
@@ -271,6 +272,46 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
   startWebPushDeliveryWorker();
   startNativePushDeliveryWorker();
   startSubscribedNotificationSync();
+  startArenaAttentionWorker();
+
+
+  // Actionable alerts and card-price watchlists. User preferences are persistent.
+  app.get("/api/notification-preferences", requireAuth, async (req: any, res) => {
+    try { return res.json({ preferences: await getArenaAlertPreferences(String(req.authUserId)) }); }
+    catch(error: any){ return res.status(500).json({message:String(error?.message || "Could not load alert settings")}); }
+  });
+  app.put("/api/notification-preferences", requireAuth, async (req: any, res) => {
+    try { return res.json({ preferences: await setArenaAlertPreferences(String(req.authUserId),req.body?.preferences || {}) }); }
+    catch(error: any){ return res.status(500).json({message:String(error?.message || "Could not update alert settings")}); }
+  });
+  app.get("/api/marketplace/price-watches", requireAuth, async (req: any, res) => {
+    try {
+      await ensureArenaAttentionSchema();
+      const watch=rowsOf(await db.execute(sql`SELECT card_id AS "cardId" FROM app.arena_price_watches WHERE user_id=${String(req.authUserId)} ORDER BY created_at DESC`));
+      return res.json({cards:watch.map(row=>Number(row.cardId))});
+    } catch(error:any){ return res.status(500).json({message:error?.message||"Could not load watches"}); }
+  });
+  app.post("/api/marketplace/price-watches/:cardId",requireAuth,async(req:any,res)=>{
+    try{
+      await ensureArenaAttentionSchema();
+      const userId=String(req.authUserId);
+      const cardId=Number(req.params.cardId);
+      if(!Number.isInteger(cardId)||cardId<=0)return res.status(400).json({message:"Valid card required"});
+      const result=rowsOf(await db.execute(sql`SELECT id FROM app.player_cards WHERE id=${cardId} AND owner_id IS DISTINCT FROM ${userId} LIMIT 1`));
+      if(!result.length)return res.status(404).json({message:"This card cannot be watched"});
+      await db.execute(sql`INSERT INTO app.arena_price_watches(user_id,card_id) VALUES(${userId},${cardId}) ON CONFLICT DO NOTHING`);
+      return res.json({success:true,watched:true,cardId});
+    }catch(error:any){return res.status(500).json({message:error?.message||"Could not watch card"});}
+  });
+  app.delete("/api/marketplace/price-watches/:cardId",requireAuth,async(req:any,res)=>{
+    try{
+      await ensureArenaAttentionSchema();
+      const cardId=Number(req.params.cardId);
+      if(!Number.isInteger(cardId)||cardId<=0)return res.status(400).json({message:"Valid card required"});
+      await db.execute(sql`DELETE FROM app.arena_price_watches WHERE user_id=${String(req.authUserId)} AND card_id=${cardId}`);
+      return res.json({success:true,watched:false,cardId});
+    }catch(error:any){return res.status(500).json({message:error?.message||"Could not remove watch"});}
+  });
 
   app.get("/api/push/status", requireAuth, async (req: any, res) => {
     try {
