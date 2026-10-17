@@ -19,6 +19,22 @@ need(routes, 'c.fixture_window_start as "fixtureStart"', "verified first-kickoff
 need(routes, "competition.fixtureStart || competition.startDate", "kickoff-based gameweek selection");
 need(routes, "earliest?.fixtureStart || earliest?.startDate", "kickoff-based start/lock reminder clock");
 
+const notifier = read("server/services/notifications.ts");
+const scorer = read("server/services/scoreUpdater.ts");
+const notificationClient = read("client/src/lib/notifications.ts");
+need(notifier, "GAMEWEEK_ENTRY_CLOSED_GOOD_LUCK_V1", "gameweek closed notification");
+need(notifier, "firstKickoffByWeek", "first kickoff, not early fantasy deadline");
+need(notifier, "nowMs >= kickoff", "only notify after first match starts");
+need(notifier, "FROM app.competition_entries ce", "entrant-only recipient list");
+need(notifier, "JOIN app.competitions c ON c.id = ce.competition_id", "registered cup linkage");
+need(notifier, "NOT EXISTS (", "already-notified recipients excluded");
+need(notifier, "gameweek:${season}:${gameWeek}:entries-closed-good-luck", "per-season per-week dedupe");
+need(notifier, "createNotificationOnce(db", "persistent Inbox and push delivery jobs");
+need(scorer, "await notifyGameweekEntriesClosed(fixtures, now)", "dispatch at cutoff and crash retry");
+need(routes, "Suppress the old separate 'GW is live' push", "no redundant second live push");
+need(notificationClient, 'replacementKey.endsWith(":entries-closed-good-luck")', "Inbox routes to My Entries");
+
+
 need(economy, "NOTIFICATION_TRUTH_GUARDS_V1:entry-evidence", "exact-entry notification evidence marker");
 need(economy, "ce.id = ${entryId}", "entry ID evidence");
 need(economy, "ce.competition_id = c.id", "competition evidence");
