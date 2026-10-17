@@ -165,3 +165,73 @@ export async function createNotificationOnce(tx: any, input: {
   }
   return notification;
 }
+
+
+/**
+ * GAMEWEEK_ENTRY_CLOSED_GOOD_LUCK_V1
+ * Notify each manager with at least one submitted GW entry after the FIRST PL
+ * kickoff, not after the earlier FPL fantasy deadline. One Inbox/push event per
+ * account per season/GW, irrespective of rarity or number of teams submitted.
+ * Catch up after a short deployment outage, but never announce old weeks late.
+ */
+export async function notifyGameweekEntriesClosed(fixtures: any[], nowMs = Date.now()): Promise<number> {
+  if (!Array.isArray(fixtures) || !fixtures.length) return 0;
+
+  const firstKickoffByWeek = new Map<number, number>();
+  for (const fixture of fixtures) {
+    const week = Number(fixture?.event || 0);
+    const kickoff = new Date(String(fixture?.kickoff_time || "")).getTime();
+    if (!Number.isInteger(week) || week < 1 || week > 38 || !Number.isFinite(kickoff)) continue;
+    const old = firstKickoffByWeek.get(week);
+    if (old === undefined || kickoff < old) firstKickoffByWeek.set(week, kickoff);
+  }
+
+  const eligible = [...firstKickoffByWeek.entries()].filter(([, kickoff]) =>
+    nowMs >= kickoff && nowMs - kickoff <= 6 * 60 * 60 * 1000
+  );
+  if (!eligible.length) return 0;
+  await ensureNotificationsSchema();
+
+  let sent = 0;
+  for (const [gameWeek, kickoff] of eligible) {
+    const cutoff = new Date(kickoff);
+    const seasonStartYear = cutoff.getUTCFullYear() - (cutoff.getUTCMonth() < 6 ? 1 : 0);
+    const season = `${seasonStartYear}-${String((seasonStartYear + 1) % 100).padStart(2, "0")}`;
+    const dedupeKey = `gameweek:${season}:${gameWeek}:entries-closed-good-luck`;
+    // Legacy user-created cups can have NULL season. Limit these by the actual
+    // fixture window so an old GW with the same number is never notified.
+    const earliestCreated = new Date(kickoff - 14 * 86400000);
+    const latestCreated = new Date(kickoff + 7 * 86400000);
+    const result = await db.execute(sql`
+      SELECT ce.user_id AS "userId", COUNT(DISTINCT ce.id)::int AS "teamCount"
+      FROM app.competition_entries ce
+      JOIN app.competitions c ON c.id = ce.competition_id
+      JOIN app.users u ON u.id = ce.user_id
+      WHERE c.game_week = ${gameWeek}
+        AND (c.season = ${season} OR (c.season IS NULL AND c.start_date BETWEEN ${earliestCreated} AND ${latestCreated}))
+        AND c.name NOT LIKE '[TEST]%'
+        AND ce.user_id NOT LIKE 'test-bot-%'
+        AND ce.user_id NOT LIKE 'qa-onboarding-%'
+        AND COALESCE(u.is_banned, false) = false
+        AND NOT EXISTS (
+          SELECT 1 FROM app.notifications n
+          WHERE n.user_id = ce.user_id AND n.dedupe_key = ${dedupeKey}
+        )
+      GROUP BY ce.user_id
+      ORDER BY ce.user_id
+      LIMIT 200
+    `);
+    const recipients = Array.isArray(result?.rows) ? result.rows : [];
+    for (const recipient of recipients) {
+      const teamCount = Number(recipient.teamCount || 0);
+      const notification = await createNotificationOnce(db, {
+        userId: String(recipient.userId || ""),
+        title: `🔒 GW${gameWeek} Entries Closed — Good Luck!`,
+        message: `Gameweek ${gameWeek} entries are now closed. Your ${teamCount} ${teamCount === 1 ? "team is" : "teams are"} locked in. Good luck! ⚽🏆 Follow your live points and leaderboard in My Entries.`,
+        dedupeKey,
+      });
+      if (notification?.id) sent += 1;
+    }
+  }
+  return sent;
+}
