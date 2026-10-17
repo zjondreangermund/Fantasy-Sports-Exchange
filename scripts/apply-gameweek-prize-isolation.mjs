@@ -49,7 +49,8 @@ function replaceSection(source, startToken, endToken, replacement, label, marker
           )
         order by c.game_week asc, c.id asc`,
     "Prize Vault qualifying competition filter",
-    "lower(coalesce(c.prize_key, '')) = 'ladder'",
+    // The runtime now filters confirmed paid official Prize Ladder entries more tightly.
+    "and c.created_by_user_id is null",
   );
   source = replaceOnce(
     source,
