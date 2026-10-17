@@ -59,14 +59,16 @@ function isOfficialPrizeVaultCompetition(competition: any): boolean {
 async function resolveEntryDeadline(gameWeek: number, fallbackStart: unknown): Promise<Date> {
   const [bootstrap, fixtures] = await Promise.all([fplApi.bootstrap(), fplApi.fixturesLive()]);
   const event = (Array.isArray(bootstrap?.events) ? bootstrap.events : []).find((row: any) => Number(row?.id) === Number(gameWeek));
-  const eventDeadline = event?.deadline_time ? new Date(String(event.deadline_time)) : null;
-  if (eventDeadline && Number.isFinite(eventDeadline.getTime())) return eventDeadline;
+  // Use the same first-match kickoff cutoff displayed by GET /api/competitions.
   const firstKickoff = (Array.isArray(fixtures) ? fixtures : [])
     .filter((fixture: any) => Number(fixture?.event) === Number(gameWeek) && fixture?.kickoff_time)
     .map((fixture: any) => new Date(String(fixture.kickoff_time)))
     .filter((date: Date) => Number.isFinite(date.getTime()))
     .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0];
   if (firstKickoff) return firstKickoff;
+  // If the fixture feed is unavailable, use the earlier FPL deadline as a safe fallback.
+  const eventDeadline = event?.deadline_time ? new Date(String(event.deadline_time)) : null;
+  if (eventDeadline && Number.isFinite(eventDeadline.getTime())) return eventDeadline;
   const fallback = new Date(String(fallbackStart || ""));
   if (Number.isFinite(fallback.getTime())) return fallback;
   throw new Error("Unable to verify the Premier League entry deadline");
