@@ -46,6 +46,9 @@ export function registerLineupEditsRoutes(app: Express, deps: { requireAuth: any
       const fallback = Date.parse(String(event?.deadline_time || ""));
       const cutoff = kickoffs[0] ?? fallback;
       if (!Number.isFinite(cutoff)) return res.status(503).json({ message: "Lineup deadline cannot be verified. Try again shortly." });
+      const startMs=Date.parse(String(preview.startDate || ""));
+      if(Number.isFinite(startMs) && Math.abs(cutoff-startMs)>35*86400000)
+        return res.status(409).json({message:"This entry belongs to another gameweek or season; it cannot be changed."});
       if (Date.now() >= cutoff || gwFixtures.some((f: any) => Boolean(f.started || f.finished || f.finished_provisional))) {
         return res.status(409).json({ message: "The first Premier League match has begun. Submitted tournament lineups are final." });
       }
@@ -57,10 +60,11 @@ export function registerLineupEditsRoutes(app: Express, deps: { requireAuth: any
       await ensureNotificationsSchema();
       const result = await db.transaction(async tx => {
         const competition = rows(await tx.execute(sql`
-          SELECT id, tier::text AS tier, status::text AS status, game_week AS "gameWeek"
+          SELECT id, tier::text AS tier, status::text AS status, game_week AS "gameWeek",
+            admin_status_override AS "manualStatus"
           FROM app.competitions WHERE id=${Number(preview.competitionId)} FOR UPDATE
         `))[0];
-        if (!competition || Number(competition.gameWeek) !== gw || String(competition.status) !== "open" || Date.now() >= cutoff) {
+        if (!competition || Number(competition.gameWeek) !== gw || String(competition.status) !== "open" || (competition.manualStatus && String(competition.manualStatus) !== "open") || Date.now() >= cutoff) {
           throw new Error("Entries are locked or the gameweek schedule has changed.");
         }
         const entry = rows(await tx.execute(sql`
