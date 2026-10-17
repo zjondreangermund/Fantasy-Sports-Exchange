@@ -9,11 +9,12 @@ const groups = [
   {key:"prizes",name:"Prize Vault & claims",detail:"Real funded-prize increases and prizes needing action."},
   {key:"marketplace",name:"Marketplace, card loans & price watches",detail:"Watched price changes and expiring loans."},
   {key:"community",name:"Community mentions",detail:"When other managers mention your team."},
+  {key:"mint",name:"Card mint reminders",detail:"Only one combined phone reminder when your weekly reward or multiple replacements are waiting. Pending actions always stay in Inbox."},
   {key:"marketing",name:"Promotional announcements",detail:"Optional general promotions; off by default."},
 ] as const;
 type Group = typeof groups[number]["key"];
 type Prefs = Record<Group, boolean>;
-const defaults:Prefs={tournament:true,players:true,prizes:true,marketplace:true,community:true,marketing:false};
+const defaults:Prefs={tournament:true,players:true,prizes:true,marketplace:true,community:true,mint:true,marketing:false};
 export default function ArenaNotificationPreferences(){
   const {toast}=useToast();
   const {data:pref=defaults,isLoading}=useQuery<Prefs>({
