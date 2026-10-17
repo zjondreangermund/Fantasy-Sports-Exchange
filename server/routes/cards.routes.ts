@@ -13,6 +13,8 @@ import { db } from "../db.js";
 import { auditLogs, transactions } from "../../shared/schema.js";
 import { getMarketplaceFloorPrice, isMarketplaceTradableRarity } from "../../shared/card-economy.js";
 import { autoReplaceUnlockedDepartures } from "../services/departedCardPolicy.js";
+import { ensureArenaAttentionSchema, getArenaAlertPreferences } from "../services/arenaAttention.js";
+import { createNotificationOnce } from "../services/notifications.js";
 
 interface RegisterCardsRoutesDeps {
   requireAuth: any;
@@ -435,8 +437,35 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       if (!isMarketplaceTradableRarity(String(card.rarity))) return res.status(400).json({ message: "Common cards cannot be sold" });
       const floor = getMarketplaceFloorPrice(String(card.rarity));
       if (floor > 0 && price < floor) return res.status(400).json({ message: `Minimum price for ${card.rarity} cards is N$${floor}` });
+      const previousPrice = toMoney(card.price || 0);
+      const wasListed = Boolean(card.forSale);
       await storage.updatePlayerCard(cardId, { forSale: true, price } as any);
-      return res.json({ success: true, cardId, price });
+      if (wasListed && previousPrice !== price) {
+        // Only real changes notify card watchers, and they are opt-in by card.
+        // Never infer an investor price from general card stats.
+        try {
+          await ensureArenaAttentionSchema();
+          const watcherRows = await db.execute(sql`
+            SELECT w.user_id AS "userId"
+            FROM app.arena_price_watches w
+            WHERE w.card_id=${cardId} AND w.user_id <> ${userId}
+          `);
+          const watchers = Array.isArray(watcherRows?.rows) ? watcherRows.rows : [];
+          for (const watcher of watchers) {
+            const recipient=String(watcher.userId || "");
+            if (!recipient) continue;
+            const pref=await getArenaAlertPreferences(recipient);
+            if (!pref.marketplace) continue;
+            await createNotificationOnce(db,{
+              userId:recipient,
+              title:price<previousPrice?"📉 Watched card price dropped":"📈 Watched card price increased",
+              message:`Card #${cardId} asking price changed from N${previousPrice.toFixed(2)} to N${price.toFixed(2)}. Open Marketplace to review before buying.`,
+              dedupeKey:`marketplace:price-change:${cardId}:${previousPrice}:${price}:${Date.now()}`,
+            });
+          }
+        } catch(error){console.warn("Marketplace price watch alert failed",error);}
+      }
+      return res.json({ success: true, cardId, price, priceChanged:wasListed&&previousPrice!==price });
     } catch (error: any) {
       console.error("Failed to list marketplace card:", error);
       return res.status(500).json({ message: error?.message || "Failed to list card" });
