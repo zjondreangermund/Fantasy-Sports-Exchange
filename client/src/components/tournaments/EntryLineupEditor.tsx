@@ -21,7 +21,7 @@ export function EntryLineupEditor({ entry, competition, cards, allEntries, onClo
   const { toast } = useToast();
   const initialIds = idsOf(entry);
   const [slots,setSlots] = useState<number[]>(initialIds.length===5?initialIds:[0,0,0,0,0]);
-  const [captain,setCaptain]=useState(Number(entry.captainId ?? entry.captain_id || 0));
+  const [captain,setCaptain]=useState(Number(entry.captainId ?? entry.captain_id ?? 0));
   const deadline = new Date(String(competition?.submissionClosesAt || competition?.fixtureWindowStart || ""));
   const cutoff = Number.isFinite(deadline.getTime()) ? deadline.getTime() : 0;
   const [now,setNow] = useState(Date.now());
