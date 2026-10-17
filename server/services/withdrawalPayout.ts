@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { MIN_WITHDRAWAL_AMOUNT, WITHDRAWAL_FEE_RATE } from "../../shared/card-economy.js";
 import { ensureWithdrawalPayoutSchema } from "./withdrawalPayoutSchema.js";
+import { createNotificationOnce, ensureNotificationsSchema } from "./notifications.js";
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : Array.isArray(result) ? result : [];
@@ -157,6 +158,7 @@ async function verifySameStatus(tx: any, withdrawal: any, holdTransaction: any, 
 
 export async function submitWithdrawalRequest(input: any) {
   await ensureWithdrawalPayoutSchema();
+  await ensureNotificationsSchema();
   const userId = String(input?.userId || "");
   const amount = toMoney(input?.amount);
   const paymentMethod = normalizePaymentMethod(input?.paymentMethod);
@@ -242,6 +244,7 @@ export async function submitWithdrawalRequest(input: any) {
         idempotencyKey: key,
       })}::jsonb)
     `);
+    await createNotificationOnce(tx,{userId,title:"Withdrawal request received",message:`Your withdrawal of N${amount.toFixed(2)} is pending review. You will be notified of any status change.`,dedupeKey:`withdrawal:${withdrawal.id}:pending`});
     return { withdrawal: withdrawalPayload(withdrawal), duplicate: false };
   });
 }
@@ -283,6 +286,7 @@ export async function reviewWithdrawal(input: {
   failureReason?: unknown;
 }) {
   await ensureWithdrawalPayoutSchema();
+  await ensureNotificationsSchema();
   const withdrawalId = Number(input.withdrawalId);
   const adminId = String(input.adminId || "");
   const nextStatus = String(input.status || "").trim().toLowerCase();
@@ -327,6 +331,7 @@ export async function reviewWithdrawal(input: {
           VALUES (${String(withdrawal.user_id)}, ${currentStatus === "failed" ? "wallet.withdrawal.retry_approved" : "wallet.withdrawal.approved"},
             ${JSON.stringify({ withdrawalId, amount, fee, netAmount, adminId, adminNotes })}::jsonb)
         `);
+        await createNotificationOnce(tx,{userId:String(withdrawal.user_id),title:"Withdrawal approved",message:`Your N$${netAmount.toFixed(2)} withdrawal is approved and awaiting payout.`,dedupeKey:`withdrawal:${withdrawalId}:approved:${currentStatus}`});
         return { withdrawal: withdrawalPayload(updated), duplicate: false };
       }
 
@@ -357,6 +362,7 @@ export async function reviewWithdrawal(input: {
             payoutReference: payoutReference || null, attemptNo,
           })}::jsonb)
         `);
+        await createNotificationOnce(tx,{userId:String(withdrawal.user_id),title:"⚠️ Withdrawal payout failed",message:`Your N$${netAmount.toFixed(2)} payout could not be completed. Check Wallet for next steps.`,dedupeKey:`withdrawal:${withdrawalId}:failed:${attemptNo}`});
         return { withdrawal: withdrawalPayload(updated), duplicate: false };
       }
 
@@ -425,6 +431,7 @@ export async function reviewWithdrawal(input: {
             recoveredFromFailure: currentStatus === "failed",
           })}::jsonb)
         `);
+        await createNotificationOnce(tx,{userId:String(withdrawal.user_id),title:"✅ Withdrawal paid",message:`N$${netAmount.toFixed(2)} was marked paid. Reference: ${payoutReference}.`,dedupeKey:`withdrawal:${withdrawalId}:paid`});
         return { withdrawal: withdrawalPayload(updated), duplicate: false };
       }
 
@@ -462,7 +469,8 @@ export async function reviewWithdrawal(input: {
           adminId, adminNotes, recoveredFromFailure: currentStatus === "failed",
         })}::jsonb)
       `);
-      return { withdrawal: withdrawalPayload(updated), duplicate: false };
+      await createNotificationOnce(tx,{userId:String(withdrawal.user_id),title:"Withdrawal rejected — balance restored",message:`Withdrawal #${withdrawalId} was rejected. N$${amount.toFixed(2)} was returned to your wallet.`,dedupeKey:`withdrawal:${withdrawalId}:rejected`});
+        return { withdrawal: withdrawalPayload(updated), duplicate: false };
     });
   } catch (error: any) {
     const code = String(error?.code || error?.cause?.code || "");
