@@ -65,6 +65,11 @@ export function notificationDestination(notification: ArenaNotification): string
   const replacementKey = String(notification.dedupeKey || "");
   // Match the native Android and Web Push deep link for the once-per-GW close alert.
   if (replacementKey.startsWith("gameweek:") && replacementKey.endsWith(":entries-closed-good-luck")) return "/my-entries";
+  if (replacementKey.startsWith("prize-level:")) return "/prize-vault";
+  if (replacementKey.startsWith("player-availability:") || replacementKey.startsWith("fixture-change:") || replacementKey.startsWith("prize-award:")) return "/my-entries";
+  if (replacementKey.startsWith("withdrawal:")) return "/wallet";
+  if (replacementKey.startsWith("marketplace:price-change:") || replacementKey.startsWith("loan:")) return "/marketplace";
+  if (replacementKey.startsWith("admin:")) return "/admin";
   if (notification.replacementClaimId || replacementKey.startsWith("replacement-claim:") || replacementKey.startsWith("replacement-reminder:")) {
     const notificationId = Number(notification.id || 0);
     return notificationId > 0
