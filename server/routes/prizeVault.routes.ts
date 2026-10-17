@@ -36,9 +36,14 @@ export function registerPrizeVaultRoutes(app: Express) {
             from app.competition_entries ce
             where ce.competition_id = c.id
               and ce.user_id not like 'test-bot-%'
+              and coalesce(ce.entry_fee_paid, 0) > 0
           ) as "entryCount"
         from app.competitions c
         where lower(c.status::text) in ('open', 'active')
+          and coalesce(c.prize_key, '') = 'ladder'
+          and c.created_by_user_id is null
+          and coalesce(c.visibility,'public') = 'public'
+          and coalesce(c.entry_fee,0) > 0
           and c.name not like '[TEST]%'
         order by c.game_week asc, c.id asc
       `);
