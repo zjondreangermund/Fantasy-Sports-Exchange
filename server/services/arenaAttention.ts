@@ -5,10 +5,10 @@ import { getActivePrizeForEntries, RARITIES } from "./prizeEngine.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "./notifications.js";
 
 const rows = (r: any): any[] => Array.isArray(r?.rows) ? r.rows : [];
-type AlertCategory = "tournament" | "players" | "prizes" | "marketplace" | "community" | "marketing";
-export const ALERT_CATEGORIES: AlertCategory[] = ["tournament", "players", "prizes", "marketplace", "community", "marketing"];
+type AlertCategory = "tournament" | "players" | "prizes" | "marketplace" | "community" | "mint" | "marketing";
+export const ALERT_CATEGORIES: AlertCategory[] = ["tournament", "players", "prizes", "marketplace", "community", "mint", "marketing"];
 const DEFAULTS: Record<AlertCategory, boolean> = {
-  tournament:true,players:true,prizes:true,marketplace:true,community:true,marketing:false,
+  tournament:true,players:true,prizes:true,marketplace:true,community:true,mint:true,marketing:false,
 };
 let initialized: Promise<void> | null = null;
 export async function ensureArenaAttentionSchema() {
