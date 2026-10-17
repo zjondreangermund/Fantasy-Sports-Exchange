@@ -35,6 +35,7 @@ type WeeklyRewardStatus = {
   capReached: boolean;
   rewardDay: string;
   claimedThisWeek?: boolean;
+  eligibleFrom?: string | null;
   expiresAt?: string | null;
   card?: WeeklyRewardCard | null;
 };
@@ -60,6 +61,7 @@ export default function WeeklyCommonMintDialog() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const [revealedCard, setRevealedCard] = React.useState<WeeklyRewardCard | null>(null);
+  const [dismissedPromptKey, setDismissedPromptKey] = React.useState("");
 
   const { data: onboarding, isLoading: onboardingLoading } = useQuery<{ completed: boolean }>({
     queryKey: ["/api/onboarding/status"],
@@ -116,8 +118,24 @@ export default function WeeklyCommonMintDialog() {
   if (authLoading || onboardingLoading || !user || onboarding?.completed !== true) return null;
 
   const status = rewardQuery.data;
-  const waitingToMint = Boolean(status?.canClaim && !status.capReached);
+  // WEEKLY_MINT_POPUP_SNOOZE_V1: show an unclaimed weekly reward only once
+  // per claim window on this device. A manager can return and mint later.
+  // Refetching every minute, switching tabs or restarting must NOT force the
+  // popup open again after "Later". The reward and Inbox reminder remain.
+  const windowId = String(status?.eligibleFrom || status?.rewardDay || "");
+  const promptKey = user?.id && windowId ? `fantasy-arena:weekly-mint-prompt:${user.id}:${windowId}` : "";
+  let previouslyDismissed = dismissedPromptKey === promptKey && Boolean(promptKey);
+  if (!previouslyDismissed && promptKey && typeof window !== "undefined") {
+    try { previouslyDismissed = window.localStorage.getItem(promptKey) === "later"; } catch { /* memory-only fallback */ }
+  }
+  const waitingToMint = Boolean(status?.canClaim && !status.capReached && !previouslyDismissed);
   const open = waitingToMint || Boolean(revealedCard);
+  const dismissPrompt = () => {
+    if (revealedCard) { setRevealedCard(null); return; }
+    if (!promptKey) return;
+    setDismissedPromptKey(promptKey);
+    try { window.localStorage.setItem(promptKey, "later"); } catch { /* memory-only fallback */ }
+  };
   if (!open) return null;
 
   const card = revealedCard;
@@ -126,11 +144,10 @@ export default function WeeklyCommonMintDialog() {
   const count = Math.max(0, Number(status?.commonCount || 0));
 
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) dismissPrompt(); }}>
       <DialogContent
         data-weekly-common-mint-dialog
-        className="z-[125] max-h-[92dvh] max-w-lg overflow-y-auto border-cyan-300/30 bg-[#070b16] text-white shadow-2xl [&>button.absolute]:hidden"
-        onEscapeKeyDown={(event) => event.preventDefault()}
+        className="z-[125] max-h-[92dvh] max-w-lg overflow-y-auto border-cyan-300/30 bg-[#070b16] text-white shadow-2xl"
         onPointerDownOutside={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
       >
@@ -192,6 +209,8 @@ export default function WeeklyCommonMintDialog() {
             {claimMutation.isPending ? "Minting your random Common…" : "Mint Random Common Card"}
           </Button>
         )}
+
+        {!player ? <Button type="button" variant="outline" onClick={dismissPrompt} className="mt-2 h-11 w-full border-white/20 bg-white/5 text-white">Later — remind me in Inbox</Button> : null}
 
         {!player ? (
           <p className="text-center text-[11px] leading-5 text-white/40">The card is created only after you press Mint. No automatic background minting.</p>
