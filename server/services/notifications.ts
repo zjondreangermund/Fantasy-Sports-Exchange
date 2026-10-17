@@ -145,6 +145,8 @@ export async function createNotificationOnce(tx: any, input: {
   // Category preferences affect optional device pushes, not the permanent Inbox.
   // Mandatory confirmations, financial/security events and account actions always queue.
   const pushCategory: string | null =
+    dedupeKey.startsWith("card:weekly-ready:") || dedupeKey.startsWith("card:weekly-expiring:") ||
+      dedupeKey.startsWith("replacement-claim:") || dedupeKey.startsWith("replacement-reminder:") ? "mint" :
     dedupeKey.startsWith("prize-ladder:") || dedupeKey.includes(":momentum:") ||
       dedupeKey.includes(":public-settlement-winner") ? "marketing" :
     dedupeKey.startsWith("gameweek:") || dedupeKey.startsWith("fixture-change:") ||
