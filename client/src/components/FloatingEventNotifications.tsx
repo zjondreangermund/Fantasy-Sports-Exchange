@@ -51,7 +51,17 @@ export default function FloatingEventNotifications() {
       const saved = JSON.parse(localStorage.getItem(key) || 'null');
       if (saved && Number.isFinite(saved.lastShownAt) && Number.isFinite(saved.seenThroughId)) state = saved;
     } catch { /* In-memory pacing still works when storage is unavailable. */ }
-    const events = pendingToastEvents(data?.notifications || [], state, Date.now());
+    // MINT_PUSH_FLOOD_GUARD_V1: already-present mint choices have a dedicated
+    // reward/claim experience and Inbox entry. Do not also replay them as
+    // auto-opening toast banners on every poll, tab switch or app restart.
+    const toastEligible = (data?.notifications || []).filter((note) => {
+      const key = String(note.dedupeKey || "");
+      return !key.startsWith("card:weekly-ready:")
+        && !key.startsWith("card:weekly-expiring:")
+        && !key.startsWith("replacement-claim:")
+        && !key.startsWith("replacement-reminder:");
+    });
+    const events = pendingToastEvents(toastEligible, state, Date.now());
     if (!events.length) return;
     const newest = events[0];
     const grouped = events.length > 1;
