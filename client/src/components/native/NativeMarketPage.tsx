@@ -157,6 +157,22 @@ export default function NativeMarketPage() {
     refetchInterval: 20_000,
   });
 
+  const { data: watchesRaw } = useQuery<{cards:number[]}>({
+    queryKey:["/api/marketplace/price-watches"],
+    queryFn:async()=>{const r=await fetch("/api/marketplace/price-watches",{credentials:"include"});return r.ok?r.json():{cards:[]};},
+  });
+  const watchedIds=React.useMemo(()=>new Set(Array.isArray(watchesRaw?.cards)?watchesRaw.cards.map(Number):[]),[watchesRaw]);
+  const togglePriceWatch=useMutation({
+    mutationFn:async(cardId:number)=>{
+      const watched=watchedIds.has(cardId);
+      const response=await fetch(`/api/marketplace/price-watches/${cardId}`,{method:watched?"DELETE":"POST",credentials:"include"});
+      if(!response.ok)throw new Error((await response.json().catch(()=>({})))?.message||"Price watch request failed");
+      return watched;
+    },
+    onSuccess:(watched)=>{queryClient.invalidateQueries({queryKey:["/api/marketplace/price-watches"]});toast({title:watched?"Price watch removed":"Price watch enabled",description:watched?"Alerts disabled for this card.":"You'll receive alerts when its asking price changes."});},
+    onError:(error:any)=>toast({title:"Could not save price watch",description:error.message,variant:"destructive"}),
+  });
+
   const { data: wallet } = useQuery<Wallet>({
     queryKey: ["/api/wallet"],
     queryFn: async () => {
@@ -331,6 +347,7 @@ export default function NativeMarketPage() {
           <div className="mt-4 grid grid-cols-3 gap-2"><div className="rounded-xl bg-white/[.04] p-2.5 text-center"><p className="text-[9px] uppercase text-slate-600">Rarity</p><p className="mt-1 text-xs font-black uppercase">{String(selected.rarity || "common")}</p></div><div className="rounded-xl bg-white/[.04] p-2.5 text-center"><p className="text-[9px] uppercase text-slate-600">GW points</p><p className="mt-1 text-xs font-black">{points(selected)}</p></div><div className="rounded-xl bg-white/[.04] p-2.5 text-center"><p className="text-[9px] uppercase text-slate-600">After buy</p><p className="mt-1 text-xs font-black">{money(walletBalance - selectedPrice)}</p></div></div>
           <RecentPlayerPerformance cardId={Number(selected.id)} />
           {selectedIsMine ? <div className="mt-4 rounded-2xl border border-violet-300/15 bg-violet-400/[.07] p-3 text-center text-sm font-black text-violet-100">This is your own marketplace listing. Manage it from My Cards.</div> : <Button onClick={() => buyMutation.mutate(selected)} disabled={buyMutation.isPending || selectedPrice > walletBalance} className="mt-4 h-12 w-full rounded-2xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><ShoppingBag className="mr-2 h-4 w-4" />{selectedPrice > walletBalance ? "Not enough balance" : buyMutation.isPending ? "Buying…" : `Buy for ${money(selectedPrice)}`}</Button>}
+          {!selectedIsMine ? <Button type="button" variant="outline" onClick={() => togglePriceWatch.mutate(Number(selected.id))} disabled={togglePriceWatch.isPending} className="mt-2 h-10 w-full rounded-xl border-violet-300/30 bg-violet-400/10 text-violet-100">{watchedIds.has(Number(selected.id)) ? "🔔 Stop watching price" : "🔔 Notify me if price changes"}</Button> : null}
           <Link href="/wallet"><button className="mt-3 flex w-full items-center justify-center gap-2 text-xs font-bold text-slate-500"><WalletCards className="h-4 w-4" />Wallet balance {money(walletBalance)}</button></Link>
         </section>
       </div> : null}
