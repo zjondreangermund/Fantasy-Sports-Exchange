@@ -174,13 +174,20 @@ export async function createNotificationOnce(tx: any, input: {
     ? "mint-weekly-reminder" :
     dedupeKey.startsWith("replacement-claim:") || dedupeKey.startsWith("replacement-reminder:")
       ? "mint-replacement-choice" : null;
-  if (notification?.id && queuePush && mintPushTopic) {
+  const livePushTopic = dedupeKey.startsWith("competition:")
+    && /:(?:rank:|goal:|assist:|save-tier:|gk-risk:)/.test(dedupeKey)
+    ? "live-score-updates" : null;
+  const limitedTopic = mintPushTopic || livePushTopic;
+  if (notification?.id && queuePush && limitedTopic) {
+    // One card-mint reminder per 12h or one live-score update per 30 minutes.
+    // Important red cards, payouts, prize claims and security messages bypass this guard.
+    const quietMinutes = mintPushTopic ? 720 : 30;
     const permit = await tx.execute(sql`
       insert into app.notification_push_topic_limits (user_id,topic,last_queued_at)
-      values (${userId},${mintPushTopic},now())
+      values (${userId},${limitedTopic},now())
       on conflict (user_id,topic) do update
         set last_queued_at=now()
-        where app.notification_push_topic_limits.last_queued_at <= now()-interval '12 hours'
+        where app.notification_push_topic_limits.last_queued_at <= now()-(${quietMinutes}*interval '1 minute')
       returning user_id
     `);
     queuePush = Array.isArray(permit?.rows) && permit.rows.length > 0;
