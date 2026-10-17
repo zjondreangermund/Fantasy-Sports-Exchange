@@ -116,12 +116,16 @@ export default function MarketplaceV2Page() {
   const [sortBy, setSortBy] = useState<SortMode>("performance");
   const [selected, setSelected] = useState<PlayerCardWithPlayer | null>(null);
   const [buying, setBuying] = useState<PlayerCardWithPlayer | null>(null);
-  const [watchlist, setWatchlist] = useState<number[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("market_watchlist_card_ids") || "[]");
-    } catch {
-      return [];
-    }
+  // Account-linked watches work across desktop and Android; they can deliver real price-change alerts.
+  const { data: watchlist = [] } = useQuery<number[]>({
+    queryKey: ["/api/marketplace/price-watches"],
+    queryFn: async () => {
+      const response = await fetch("/api/marketplace/price-watches", { credentials: "include" });
+      if (!response.ok) return [];
+      const payload = await response.json();
+      return Array.isArray(payload.cards) ? payload.cards.map(Number) : [];
+    },
+    staleTime: 20_000,
   });
 
   const setMode = (mode: MarketMode) => {
@@ -199,12 +203,16 @@ export default function MarketplaceV2Page() {
   const hotCards = filtered.slice(0, 3);
   const walletBalance = Number(wallet?.balance || 0);
 
-  const toggleWatch = (id: number) => {
-    setWatchlist((previous) => {
-      const next = previous.includes(id) ? previous.filter((value) => value !== id) : [...previous, id];
-      localStorage.setItem("market_watchlist_card_ids", JSON.stringify(next));
-      return next;
-    });
+  const toggleWatch = async (id: number) => {
+    const watched = watchlist.includes(id);
+    try {
+      const response = await fetch(`/api/marketplace/price-watches/${id}`, {
+        method: watched ? "DELETE" : "POST", credentials: "include",
+      });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.message || "Watch update failed");
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace/price-watches"] });
+      toast({ title: watched ? "Price watch removed" : "Price watch enabled", description: watched ? "You will no longer receive price alerts for this card." : "We'll notify you if this listing price changes." });
+    } catch (error: any) { toast({title:"Watch failed",description:error?.message||"Try again",variant:"destructive"}); }
   };
 
   return (
