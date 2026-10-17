@@ -106,7 +106,7 @@ async function prizeProgress(){
     const season=gameweekSeason(new Date(row.opening));
     const id=`prize-level:${season}:GW${gw}:${rarity}`;
     const state=await changed(id,newKey);
-    if(!state.changed)return; // baseline: no old push on first deployment
+    if(!state.changed)continue; // baseline: no old push on first deployment
     const title=prize?`🎁 GW${gw} ${rarity.toUpperCase()} prize upgraded!`:`GW${gw} ${rarity.toUpperCase()} prize level changed`;
     const message=prize?`${prize.title} (N$${prize.value.toLocaleString("en-NA")}) is now the highest unlocked prize, backed by ${entries} confirmed paid entries. Check Prize Vault for details.`:
       "The funded prize level has changed. Open Prize Vault for the updated rules and qualifying entry count.";
