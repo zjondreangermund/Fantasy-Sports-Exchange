@@ -18,7 +18,9 @@ expect(popup.includes('enabled: Boolean(user) && onboarding?.completed === true'
 expect(popup.includes('status?.canClaim && !status.capReached'), "Weekly Common popup must open when a reward can be claimed");
 expect(popup.includes('setRevealedCard(result.card)'), "Successful weekly mint must reveal the minted card");
 expect(popup.includes('<CardPlayerImage'), "Minted weekly card must be visually revealed");
-expect(popup.includes('onEscapeKeyDown={(event) => event.preventDefault()}'), "Weekly mint prompt must not disappear accidentally");
+expect(popup.includes("WEEKLY_MINT_POPUP_SNOOZE_V1"), "Weekly mint prompt must be dismissible and not return every minute");
+expect(popup.includes("Later — remind me in Inbox"), "Managers must be able to mint later without repeat popups");
+expect(popup.includes('eligibleFrom'), "Mint prompt must be limited to one weekly reward window");
 expect(!panel.includes("claimMutation.mutate()"), "Dashboard must not auto-mint the weekly Common card");
 expect(!panel.includes("attemptedDay"), "Old automatic weekly claim guard must be removed");
 expect(panel.includes("The mint popup opens automatically"), "Dashboard must explain the explicit mint flow");
