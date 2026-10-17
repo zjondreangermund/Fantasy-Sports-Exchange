@@ -1,3 +1,4 @@
+import ArenaNotificationPreferences from "../components/notifications/ArenaNotificationPreferences";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card } from "../components/ui/card";
@@ -261,6 +262,7 @@ export default function AccountPage() {
         </TabsContent>
 
         <TabsContent value="inbox" className="mt-4">
+          <ArenaNotificationPreferences />
           <Card className="border-white/10 bg-white/[0.06] p-5 text-white backdrop-blur-xl">
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold">Notifications</h2><Button variant="outline" size="sm" onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending}>Mark all read</Button></div>
             {inboxLoading ? <div className="space-y-3"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div> : inbox?.notifications?.length ? (
