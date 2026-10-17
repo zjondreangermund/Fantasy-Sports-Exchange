@@ -23,6 +23,12 @@ export async function ensureNotificationsSchema(): Promise<void> {
       await db.execute(sql`alter table if exists app.notifications add column if not exists dedupe_key text`);
       await db.execute(sql`create unique index if not exists notifications_user_dedupe_idx on app.notifications (user_id, dedupe_key)`);
       await db.execute(sql`create index if not exists notifications_user_unread_idx on app.notifications (user_id, read, created_at desc)`);
+      // Notification categories are stored here so they exist before scheduled workers start.
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS app.arena_alert_preferences(
+        user_id varchar(255) primary key references app.users(id) on delete cascade,
+        preferences jsonb not null default '{}'::jsonb,
+        updated_at timestamptz not null default now()
+      )`);
       await db.execute(sql`
         create table if not exists app.web_push_config (
           id smallint primary key,
@@ -126,7 +132,29 @@ export async function createNotificationOnce(tx: any, input: {
     returning id, user_id as "userId", type::text as type, title, message, read, created_at as "createdAt"
   `);
   const notification = Array.isArray(result?.rows) ? result.rows[0] || null : null;
-  if (notification?.id) {
+  // Category preferences affect optional device pushes, not the permanent Inbox.
+  // Mandatory confirmations, financial/security events and account actions always queue.
+  const pushCategory: string | null =
+    dedupeKey.startsWith("prize-ladder:") || dedupeKey.includes(":momentum:") ||
+      dedupeKey.includes(":public-settlement-winner") ? "marketing" :
+    dedupeKey.startsWith("gameweek:") || dedupeKey.startsWith("fixture-change:") ||
+      dedupeKey.includes(":decider:") || dedupeKey.includes(":rank:") ||
+      dedupeKey.includes(":goal:") || dedupeKey.includes(":assist:") ||
+      dedupeKey.includes(":save-tier:") ? "tournament" :
+    dedupeKey.startsWith("player-availability:") || dedupeKey.startsWith("booking:") ? "players" :
+    dedupeKey.startsWith("prize-level:") || dedupeKey.startsWith("prize-award:") ? "prizes" :
+    dedupeKey.startsWith("marketplace:price-change:") || dedupeKey.includes(":expires-in-24h") ? "marketplace" :
+    dedupeKey.startsWith("community-mention:") ? "community" : null;
+  let queuePush = true;
+  if(pushCategory){
+    const setting = await tx.execute(sql`
+      SELECT preferences ->> ${pushCategory} AS preference
+      FROM app.arena_alert_preferences WHERE user_id=${userId}
+    `);
+    const value = Array.isArray(setting?.rows) ? setting.rows[0]?.preference : null;
+    queuePush = value === "true" ? true : value === "false" ? false : pushCategory !== "marketing";
+  }
+  if (notification?.id && queuePush) {
     await tx.execute(sql`
       insert into app.notification_push_deliveries (notification_id, subscription_id, status, next_attempt_at, created_at, updated_at)
       select ${Number(notification.id)}, subscription.id, 'pending', now(), now(), now()
