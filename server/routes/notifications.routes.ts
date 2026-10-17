@@ -116,23 +116,10 @@ async function syncGameweekNotifications(userId: string) {
     }
   }
 
-  const activeByGameweek = new Map<number, any[]>();
-  for (const competition of competitions.filter((item) => String(item.status) === "active" && Boolean(item.entered))) {
-    const gameWeek = Number(competition.gameWeek || 0);
-    if (!gameWeek) continue;
-    const current = activeByGameweek.get(gameWeek) || [];
-    current.push(competition);
-    activeByGameweek.set(gameWeek, current);
-  }
+  // GAMEWEEK_ENTRY_CLOSED_GOOD_LUCK_V1: the scoring lifecycle sends one
+  // entries-closed/good-luck notice at actual first kickoff to every entrant.
+  // Suppress the old separate 'GW is live' push here to avoid back-to-back alerts.
 
-  for (const [gameWeek, enteredCompetitions] of activeByGameweek.entries()) {
-    await createNotificationOnce(db, {
-      userId,
-      title: `Gameweek ${gameWeek} is live`,
-      message: `${enteredCompetitions.length} of your tournament ${enteredCompetitions.length === 1 ? "team is" : "teams are"} now live for Gameweek ${gameWeek}. Follow scores and rankings in My Teams & Prizes.`,
-      dedupeKey: `gameweek:${gameWeek}:entered-teams-live`,
-    });
-  }
 }
 
 // NATIVE_APP_UPDATE_NOTIFICATION_V1
