@@ -34,6 +34,25 @@ need(scorer, "await notifyGameweekEntriesClosed(fixtures, now)", "dispatch at cu
 need(routes, "Suppress the old separate 'GW is live' push", "no redundant second live push");
 need(notificationClient, 'replacementKey.endsWith(":entries-closed-good-luck")', "Inbox routes to My Entries");
 
+// MINT_PUSH_FLOOD_GUARD_V1 — across page polling, restarts and multiple eligible cards.
+const mintPopup = read("client/src/components/WeeklyCommonMintDialog.tsx");
+const floatingToasts = read("client/src/components/FloatingEventNotifications.tsx");
+const alertPreferences = read("server/services/arenaAttention.ts");
+need(notifier, "create table if not exists app.notification_push_topic_limits", "durable, per-manager notification burst limiter");
+need(notifier, 'dedupeKey.startsWith("card:weekly-ready:")', "weekly reward phone push family");
+need(notifier, 'dedupeKey.startsWith("replacement-claim:")', "replacement choice phone push family");
+need(notifier, 'const quietMinutes = mintPushTopic ? 720 : 30;', "mint reminders 12h, live scores 30-minute phone quiet period");
+need(notifier, 'limitedTopic', "only repeat-prone phone pushes are throttled");
+need(notifier, 'if (notification?.id && queuePush)', "Inbox notification is created independently of push throttle");
+need(alertPreferences, '"mint"', "user can mute mint phone reminders but not lose Inbox");
+need(mintPopup, "WEEKLY_MINT_POPUP_SNOOZE_V1", "once-per-week dismissible claim modal");
+need(mintPopup, "localStorage.setItem(promptKey, \"later\")", "dismissal remembered across polling and app restart");
+need(mintPopup, "Later — remind me in Inbox", "reward stays claimable after modal is dismissed");
+reject(mintPopup, 'onEscapeKeyDown={(event) => event.preventDefault()}', "forced mint modal");
+need(floatingToasts, 'key.startsWith("replacement-reminder:")', "no repeated old mint toast");
+need(floatingToasts, 'key.startsWith("card:weekly-ready:")', "no repeated weekly reminder toast");
+
+
 
 need(economy, "NOTIFICATION_TRUTH_GUARDS_V1:entry-evidence", "exact-entry notification evidence marker");
 need(economy, "ce.id = ${entryId}", "entry ID evidence");
