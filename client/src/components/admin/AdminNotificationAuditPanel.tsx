@@ -106,6 +106,7 @@ export default function AdminNotificationAuditPanel({onOpenUser}:{onOpenUser?:(i
       <Metric label="Failed device jobs" icon={AlertTriangle} value={summary.data?.failedJobs||0} description="Check affected managers below"/>
       <Metric label="Inbox read" icon={CheckCheck} value={summary.data?.inboxRead||0} description="Marked read inside Fantasy Arena"/>
       <Metric label="Managers with push" icon={Users} value={summary.data?.usersWithPush||0} description={`Of ${safeNumber(summary.data?.accounts)} registered accounts`}/>
+      <Metric label="No active push token" icon={BellOff} value={Math.max(0,safeNumber(summary.data?.accounts)-safeNumber(summary.data?.usersWithPush))} description="Not necessarily opted out; may never have connected"/>
       <Metric label="Android connections" icon={Smartphone} value={summary.data?.androidDevices||0} description="Registered Android push tokens"/>
       <Metric label="Web connections" icon={Activity} value={summary.data?.webDevices||0} description="Registered browser subscriptions"/>
     </div>
@@ -162,7 +163,7 @@ export default function AdminNotificationAuditPanel({onOpenUser}:{onOpenUser?:(i
         {selected(users.data?.users).map((row:Coverage)=><div key={row.userId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/25 p-3">
           <div className="min-w-0"><div className="truncate text-sm font-bold">{row.manager}</div><div className="truncate text-xs text-white/40">{row.email||row.userId}</div><div className="mt-1 text-[11px] text-white/45">Inbox events (7 days): {row.inboxLast7Days} · Last provider send: {fmtTime(row.lastProviderSentAt)}</div></div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <Badge variant="outline" className={row.androidDevices+row.webDevices>0?styleFor("sent"):styleFor("failed")}>{row.androidDevices+row.webDevices>0?`Push registered · ${row.androidDevices} Android / ${row.webDevices} Web`:"No push token"}</Badge>
+            <Badge variant="outline" className={row.androidDevices+row.webDevices>0?styleFor("sent"):styleFor("failed")}>{row.androidDevices+row.webDevices>0?`Push registered · ${row.androidDevices} Android / ${row.webDevices} Web`:row.disabledAndroid+row.disabledWeb>0?"Previously registered · now inactive":"No push token registered"}</Badge>
             {row.mintPref==="false"?<Badge variant="outline" className={styleFor("pending")}>Mint push muted</Badge>:null}
             <Button size="sm" variant="outline" type="button" className="border-white/20 text-white" onClick={()=>inspect(row)}>View sent alerts</Button>
           </div>
