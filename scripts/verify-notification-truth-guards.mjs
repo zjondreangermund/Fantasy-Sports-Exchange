@@ -74,4 +74,21 @@ need(pack, "pack-auction:${auctionId}:settled:${buyerId}", "buy-now settlement d
 need(pack, "pack-auction:${auctionId}:settled:${winnerId}", "auction winner settlement dedupe");
 reject(pack, "INSERT INTO app.notifications (user_id, type, title, message, read, created_at)", "raw pack-auction notification insert");
 
+
+// ADMIN_NOTIFICATION_DELIVERY_AUDIT_V1 — diagnostics must be visible only to admins.
+const adminAudit = read("server/routes/adminNotificationAudit.routes.ts");
+const adminRoutes = read("server/routes/admin.routes.ts");
+const adminPage = read("client/src/pages/admin.tsx");
+const adminAuditPanel = read("client/src/components/admin/AdminNotificationAuditPanel.tsx");
+need(adminRoutes, "registerAdminNotificationAuditRoutes(app, { requireAuth, isAdmin });", "admin notification routes registered with RBAC");
+need(adminAudit, 'app.get("/api/admin/notification-audit/summary", requireAuth, isAdmin', "restricted notification summary");
+need(adminAudit, 'app.get("/api/admin/notification-audit/events", requireAuth, isAdmin', "restricted event details");
+need(adminAudit, 'app.get("/api/admin/notification-audit/users", requireAuth, isAdmin', "restricted push connection status");
+need(adminAudit, "notification_native_push_deliveries", "Android delivery audit");
+need(adminAudit, "notification_push_deliveries", "Web push delivery audit");
+need(adminPage, '<TabsTrigger value="notifications"', "visible admin Notifications tab");
+need(adminPage, "<AdminNotificationAuditPanel", "admin notification panel integrated");
+need(adminAuditPanel, "Provider accepted", "provider-send disclaimer");
+need(adminAuditPanel, "No push token", "user coverage without overriding notification consent");
+
 console.log("Notification truth guards verified: start/lock reminders use first kickoff, entry alerts require the committed entry, ambiguous mentions are suppressed, and reward/auction success alerts are transaction-backed and deduplicated.");
