@@ -6,6 +6,7 @@ import { ensureDepositVerificationSchema } from "../services/depositVerification
 import { ensureWithdrawalPayoutSchema } from "../services/withdrawalPayoutSchema.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
 import { registerAdminReferralRoutes } from "./adminReferrals.routes.js";
+import { registerAdminNotificationAuditRoutes } from "./adminNotificationAudit.routes.js";
 
 interface RegisterAdminRoutesDeps {
   requireAuth: any;
@@ -31,6 +32,7 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
   const { requireAuth, isAdmin, isAdminUser } = deps;
   registerAdminIntegrityRoutes(app, { requireAuth, isAdmin });
   registerAdminReferralRoutes(app, { requireAuth, isAdmin });
+  registerAdminNotificationAuditRoutes(app, { requireAuth, isAdmin });
 
   // SIGNUP_FUNNEL_OBSERVABILITY_V2
   app.post("/api/marketing/funnel", async (req: any, res) => {
