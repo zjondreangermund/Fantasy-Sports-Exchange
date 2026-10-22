@@ -56,236 +56,66 @@ replaceOnce(
 
 const awardAnchor = `        let awardRecord: any = null;
         if (nonCashAwardEnabled && prizeAward) {`;
-const awardBlock = `        let freeCardAward: any = null;
+const awardBlock = `        // FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS
+        // TOURNAMENT_WINNER_MANUAL_MINT_V1: the settlement RECORDS the
+        // reward entitlement. Only a manager pressing Mint creates the card.
+        let freeCardAward: any = null;
         if (freeCardCup) {
-          const winner = ranked[0];
-          const winnerEntryId = Number(winner.id);
-          const winnerUserId = String(winner.userId || "");
-          const lockedWinner = lockedEntries.find((entry: any) => Number(entry.id) === winnerEntryId);
-          const existingPrizeCardId = Number(lockedWinner?.prizeCardId || 0);
-
-          if (existingPrizeCardId > 0) {
-            freeCardAward = rowsOf(await tx.execute(sql\`
-              select pc.id, pc.player_id as "playerId", pc.rarity::text as rarity,
-                     p.name as "playerName", p.team as "playerTeam", p.fpl_id as "fplId"
-              from app.player_cards pc
-              join app.players p on p.id = pc.player_id
-              where pc.id = \${existingPrizeCardId} and pc.owner_id = \${winnerUserId}
-              limit 1
-            \`))[0];
-            if (!freeCardAward) throw new Error("Completed Free Card Cup prize card no longer belongs to the winner");
-          } else {
-            const supplyByRarity: Record<string, number> = { common: 1000, rare: 100, unique: 10, epic: 3, legendary: 1 };
-            const maxSupply = Number(supplyByRarity[prizeCardRarity] || 0);
-            if (maxSupply <= 0) throw new Error("Free Card Cup prize rarity is invalid");
-
-            let livePlayers: any[] = [];
-            let liveTeams: any[] = [];
-            try {
-              const [playersPayload, bootstrap] = await Promise.all([fplApi.getPlayers(), fplApi.bootstrap()]);
-              livePlayers = Array.isArray(playersPayload) ? playersPayload : [];
-              liveTeams = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
-            } catch (error) {
-              console.warn("Live FPL player pool unavailable during Free Card Cup settlement; using the complete local Premier League pool.", error);
-            }
-
-            const currentTeamIds = new Set<number>(liveTeams.map((team: any) => Number(team?.id)).filter((id: number) => Number.isInteger(id) && id > 0));
-            const currentPlayers = livePlayers.filter((player: any) => {
-              const fplId = Number(player?.id);
-              const teamId = Number(player?.team);
-              return Number.isInteger(fplId) && fplId > 0 && (!currentTeamIds.size || currentTeamIds.has(teamId));
-            });
-
-            // Fisher-Yates: every current FPL player has an equal position in the draw.
-            for (let i = currentPlayers.length - 1; i > 0; i -= 1) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [currentPlayers[i], currentPlayers[j]] = [currentPlayers[j], currentPlayers[i]];
-            }
-
-            const teamMap = new Map<number, any>(liveTeams.map((team: any) => [Number(team?.id), team] as [number, any]));
-            const positionMap: Record<number, "GK" | "DEF" | "MID" | "FWD"> = { 1: "GK", 2: "DEF", 3: "MID", 4: "FWD" };
-
-            const tryMintForPlayer = async (candidate: any) => {
-              const fplId = Number(candidate?.id || candidate?.fplId || 0);
-              let playerId = Number(candidate?.localPlayerId || 0);
-              let playerName = String(candidate?.name || "");
-              let playerTeam = String(candidate?.teamName || "");
-
-              if (!playerId && fplId > 0) {
-                await tx.execute(sql\`select pg_advisory_xact_lock(94116, \${fplId})\`);
-                let local = rowsOf(await tx.execute(sql\`
-                  select id, name, team, fpl_id as "fplId"
-                  from app.players
-                  where fpl_id = \${fplId}
-                  order by id
-                  limit 1
-                  for update
-                \`))[0];
-
-                if (!local) {
-                  const teamName = String(teamMap.get(Number(candidate?.team))?.name || "Unknown");
-                  const position = positionMap[Number(candidate?.element_type)] || "MID";
-                  const fullName = (String(candidate?.first_name || "").trim() + " " + String(candidate?.second_name || "").trim()).trim()
-                    || String(candidate?.web_name || "Premier League Player");
-                  const photoUrl = fplApi.playerPhotoUrl(candidate, 250);
-                  const overall = Math.max(55, Math.min(95, Math.round(Number(candidate?.now_cost || 50) + 30)));
-                  local = rowsOf(await tx.execute(sql\`
-                    insert into app.players
-                      (name, team, league, position, nationality, age, overall, image_url, fpl_id, code, photo, web_name,
-                       status, news, now_cost, selected_by_percent, total_points, form, synced_at)
-                    values
-                      (\${fullName}, \${teamName}, 'Premier League', \${position}, 'Unknown', 24, \${overall}, \${photoUrl},
-                       \${fplId}, \${Number(candidate?.code || 0) || null}, \${photoUrl}, \${String(candidate?.web_name || fullName)},
-                       \${String(candidate?.status || "a")}, \${String(candidate?.news || "")}, \${Number(candidate?.now_cost || 0)},
-                       \${Number(candidate?.selected_by_percent || 0)}, \${Number(candidate?.total_points || 0)}, \${Number(candidate?.form || 0)}, now())
-                    returning id, name, team, fpl_id as "fplId"
-                  \`))[0];
-                }
-                playerId = Number(local?.id || 0);
-                playerName = String(local?.name || playerName || "Player");
-                playerTeam = String(local?.team || playerTeam || "Premier League");
-              }
-
-              if (!playerId) return null;
-              await tx.execute(sql\`select pg_advisory_xact_lock(94117, \${playerId})\`);
-              const state = rowsOf(await tx.execute(sql\`
-                select
-                  (select count(*)::int from app.player_cards pc where pc.player_id = \${playerId} and pc.rarity::text = \${prizeCardRarity}) as count,
-                  (select coalesce(max(pc.serial_number), 0)::int from app.player_cards pc where pc.player_id = \${playerId} and pc.rarity::text = \${prizeCardRarity}) as "maxSerial",
-                  exists(select 1 from app.player_cards pc where pc.owner_id = \${winnerUserId} and pc.player_id = \${playerId} and pc.rarity::text = \${prizeCardRarity}) as owned
-              \`))[0];
-              if (Boolean(state?.owned) || Number(state?.count || 0) >= maxSupply) return null;
-
-              const nextSerial = Number(state?.maxSerial || 0) + 1;
-              const initials = String(playerName || "PLAYER")
-                .split(/\\s+/)
-                .filter(Boolean)
-                .map((part: string) => part[0])
-                .join("")
-                .toUpperCase()
-                .slice(0, 3) || "PLY";
-              const serialId = initials + "-" + prizeCardRarity.charAt(0).toUpperCase() + "-" + playerId + "-" + String(nextSerial).padStart(4, "0");
-              const minted = rowsOf(await tx.execute(sql\`
-                insert into app.player_cards
-                  (player_id, owner_id, rarity, serial_id, serial_number, max_supply, level, xp, decisive_score, last_5_scores, for_sale, price, acquired_at)
-                values
-                  (\${playerId}, \${winnerUserId}, \${prizeCardRarity}, \${serialId}, \${nextSerial}, \${maxSupply}, 1, 0, 35, '[0,0,0,0,0]'::jsonb, false, 0, now())
-                returning id, player_id as "playerId", rarity::text as rarity
-              \`))[0];
-              if (!minted) return null;
-              minted.playerName = playerName || "Player";
-              minted.playerTeam = playerTeam || "Premier League";
-              minted.fplId = fplId || null;
-              return minted;
-            };
-
-            // Primary draw: every player in every current Premier League/FPL squad.
-            for (const candidate of currentPlayers) {
-              freeCardAward = await tryMintForPlayer(candidate);
-              if (freeCardAward) break;
-            }
-
-            // Resilient fallback if live FPL is temporarily unavailable or a current row
-            // has not yet been mapped locally. Still draws randomly from the full local EPL pool.
-            if (!freeCardAward) {
-              const localCandidates = rowsOf(await tx.execute(sql\`
-                select p.id as "localPlayerId", p.name, p.team as "teamName", p.fpl_id as "fplId"
-                from app.players p
-                where regexp_replace(lower(coalesce(p.league, '')), '[^a-z0-9]+', '', 'g') in ('premierleague','englishpremierleague','epl')
-                order by random()
-              \`));
-              for (const candidate of localCandidates) {
-                freeCardAward = await tryMintForPlayer(candidate);
-                if (freeCardAward) break;
-              }
-            }
-
-            if (!freeCardAward) throw new Error("No eligible player card is available across the current Premier League player pool for this Free Card Cup reward");
-
-            await tx.execute(sql\`
-              update app.competition_entries
-              set prize_card_id = \${Number(freeCardAward.id)}
-              where id = \${winnerEntryId} and competition_id = \${competitionId}
-            \`);
-          }
-
-          prizeAward = {
-            key: "free-" + String(freeCardAward.rarity || prizeCardRarity) + "-card-" + Number(freeCardAward.id),
-            title: String(freeCardAward.playerName || "Player") + " " + (String(freeCardAward.rarity || prizeCardRarity).charAt(0).toUpperCase() + String(freeCardAward.rarity || prizeCardRarity).slice(1)) + " Card",
-            value: 0,
-            category: "card",
-            cardId: Number(freeCardAward.id),
-            playerId: Number(freeCardAward.playerId),
-            playerTeam: String(freeCardAward.playerTeam || "Premier League"),
-            randomizedAcrossAllCurrentPlayers: true,
-          };
-
-          await tx.execute(sql\`
-            update app.competition_entries
-            set tiebreak_meta = jsonb_set(coalesce(tiebreak_meta, '{}'::jsonb), '{settlement,prizeAward}', \${JSON.stringify(prizeAward)}::jsonb, true)
-            where id = \${winnerEntryId} and competition_id = \${competitionId}
-          \`);
-
-          await createNotificationOnce(tx, {
-            userId: winnerUserId,
-            type: "win",
-            title: "🏆 Congratulations — 1st place Rare card",
-            message: "You won " + competition.name + " with " + toMoney(winner.totalScore).toFixed(1) + " points. Your random RARE card prize is ready. Open this Inbox message and tap Claim prize; exactly one card will be added to your Collection. The random draw uses the full current Premier League player pool across all clubs.",
-            dedupeKey: "competition:" + competitionId + ":entry:" + winnerEntryId + ":free-card-claim-ready",
-          });
-
-          for (let index = 1; index < Math.min(3, ranked.length); index += 1) {
+          for (let index = 0; index < Math.min(3, ranked.length); index += 1) {
             const placed = ranked[index];
             const placedEntryId = Number(placed.id);
             const placedUserId = String(placed.userId || "");
             const placedRank = index + 1;
+            const rarity = index === 0 ? "rare" : "common";
+            const oldEntry = lockedEntries.find((entry: any) => Number(entry.id) === placedEntryId);
+            const existingCardId = Number(oldEntry?.prizeCardId || 0);
             const placedPrize = {
               key: "free-common-card-rank-" + placedRank,
-              title: "Random Common Player Card",
-              value: 0,
-              category: "card",
-              rarity: "common",
-              rank: placedRank,
-              claimPending: true,
+              title: index === 0 ? "Random Rare Player Card" : "Random Common Player Card",
+              value: 0, category: "card", rarity, rank: placedRank,
+              claimPending: existingCardId <= 0,
+              cardId: existingCardId || null,
             };
+            if (index === 0) {
+              prizeAward = placedPrize;
+              freeCardAward = {rarity,cardId:existingCardId||null,claimed:existingCardId>0};
+            }
             await tx.execute(sql\`
               update app.competition_entries
               set tiebreak_meta = jsonb_set(coalesce(tiebreak_meta, '{}'::jsonb), '{settlement,prizeAward}', \${JSON.stringify(placedPrize)}::jsonb, true)
-              where id = \${placedEntryId} and competition_id = \${competitionId} and prize_card_id is null
+              where id = \${placedEntryId} and competition_id = \${competitionId}
             \`);
             await tx.execute(sql\`
               insert into app.competition_prize_awards
                 (competition_id, entry_id, user_id, game_week, rarity, prize_key, prize_title, prize_value, prize_category, status, metadata)
               values
-                (\${competitionId}, \${placedEntryId}, \${placedUserId}, \${Number(competition.gameWeek)}, 'common',
-                 \${String(placedPrize.key)}, \${String(placedPrize.title)}, 0, 'card', 'pending_claim',
-                 \${JSON.stringify({ rank: placedRank, freeCommonCup: true, oneCardOnly: true })}::jsonb)
+                (\${competitionId}, \${placedEntryId}, \${placedUserId}, \${Number(competition.gameWeek)},
+                 \${rarity}, \${String(placedPrize.key)}, \${String(placedPrize.title)}, 0, 'card',
+                 \${existingCardId>0?'claimed':'pending_claim'},
+                 \${JSON.stringify({rank:placedRank,freeCommonCup:true,oneCardOnly:true})}::jsonb)
               on conflict (competition_id, entry_id) do nothing
             \`);
-            await createNotificationOnce(tx, {
-              userId: placedUserId,
-              type: "runner_up",
-              title: "🎉 Congratulations — #" + placedRank + " wins a Common card",
-              message: "You finished #" + placedRank + " in " + competition.name + " with " + toMoney(placed.totalScore).toFixed(1) + " points. Your random COMMON card prize is ready. Open this Inbox message and tap Claim prize; exactly one card will be added to your Collection.",
-              dedupeKey: "competition:" + competitionId + ":entry:" + placedEntryId + ":free-card-claim-ready",
+            await createNotificationOnce(tx,{
+              userId:placedUserId,type:index===0?"win":"runner_up",
+              title:index===0?"🏆 Congratulations — 1st place Rare card":
+                "🎉 Congratulations — #" + placedRank + " wins a Common card",
+              message:"You finished #" + placedRank + " in " + competition.name +
+                " with " + toMoney(placed.totalScore).toFixed(1) +
+                " points. Your winning " + rarity.toUpperCase() +
+                " player card is waiting. Open your Trophy Cabinet and tap Mint to reveal your random Premier League player. This reward is yours even if you mint later.",
+              dedupeKey:"competition:" + competitionId + ":entry:" + placedEntryId + ":free-card-claim-ready",
             });
           }
         }
-
         let awardRecord: any = freeCardAward ? {
           competitionId,
-          entryId: Number(ranked[0]?.id || 0),
-          userId: String(ranked[0]?.userId || ""),
-          gameWeek: Number(competition.gameWeek),
-          rarity: String(freeCardAward.rarity || prizeCardRarity),
-          prizeKey: String(prizeAward?.key || "free-card"),
-          prizeTitle: String(prizeAward?.title || "Player Card"),
-          prizeValue: 0,
-          prizeCategory: "card",
-          status: "awarded",
-          cardId: Number(freeCardAward.id),
-          playerId: Number(freeCardAward.playerId),
-          playerTeam: String(freeCardAward.playerTeam || "Premier League"),
+          entryId:Number(ranked[0].id),userId:String(ranked[0].userId||""),
+          gameWeek:Number(competition.gameWeek),
+          rarity:"rare",prizeKey:String(prizeAward?.key||"free-common-card-rank-1"),
+          prizeTitle:String(prizeAward?.title||"Random Rare Player Card"),
+          prizeValue:0,prizeCategory:"card",
+          status:freeCardAward.claimed?"claimed":"pending_claim",
+          cardId:freeCardAward.cardId,
         } : null;
         if (nonCashAwardEnabled && prizeAward) {`;
 replaceOnce(awardAnchor, awardBlock, "automatic all-player free card award");
