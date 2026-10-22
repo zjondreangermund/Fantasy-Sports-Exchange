@@ -50,6 +50,7 @@ const primaryItems: NavItem[] = [
 const moreItems: Array<NavItem & { description: string }> = [
   { label: "Marketplace", href: "/marketplace", icon: ShoppingBag, description: "Buy & manage cards" },
   { label: "Prize Vault", href: "/prize-vault", icon: Sparkles, description: "Rewards & ladders" },
+  { label: "Trophy Cabinet", href: "/trophy-cabinet", icon: Trophy, description: "Your won and minted prizes" },
   { label: "Wallet", href: "/wallet", icon: WalletCards, description: "Balance & activity" },
   { label: "Premier League", href: "/premier-league", icon: Trophy, description: "Matches & table" },
   { label: "My Club", href: "/account", icon: CircleUserRound, description: "Inbox & referrals" },
@@ -69,6 +70,7 @@ function routeTitle(location: string) {
   if (location.startsWith("/live-lineup") || location.startsWith("/select-squad") || location.startsWith("/my-entries")) return "My Squad";
   if (location.startsWith("/collection")) return "My Cards";
   if (location.startsWith("/marketplace")) return "Marketplace";
+  if (location.startsWith("/trophy-cabinet")) return "Trophy Cabinet";
   if (location.startsWith("/prize-vault")) return "Prize Vault";
   if (location.startsWith("/wallet")) return "Wallet";
   if (location.startsWith("/premier-league") || location.startsWith("/leagues")) return "Match Centre";
@@ -97,6 +99,7 @@ function routeKey(location: string) {
   if (location.startsWith("/live-lineup") || location.startsWith("/select-squad") || location.startsWith("/my-entries")) return "squad";
   if (location.startsWith("/collection")) return "cards";
   if (location.startsWith("/marketplace")) return "market";
+  if (location.startsWith("/trophy-cabinet")) return "club";
   if (location.startsWith("/prize-vault")) return "vault";
   if (location.startsWith("/wallet")) return "wallet";
   if (location.startsWith("/premier-league") || location.startsWith("/leagues")) return "league";
