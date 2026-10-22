@@ -166,15 +166,13 @@ function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
   const key = String(dedupeKey || "");
   if (key === "digest") return "/account?tab=inbox";
   if (key.startsWith("prize-level:")) return "/prize-vault";
-  if (key.startsWith("prize-award:") || key.startsWith("player-availability:") || key.startsWith("fixture-change:")) return "/my-entries";
+  if (key.startsWith("prize-award:")) return "/trophy-cabinet";
+  if (key.startsWith("player-availability:") || key.startsWith("fixture-change:")) return "/my-entries";
   if (key.startsWith("withdrawal:")) return "/wallet";
   if (key.startsWith("marketplace:price-change:") || key.startsWith("loan:")) return "/marketplace";
   if (key.startsWith("admin:")) return "/admin";
   if (key.startsWith("booking:")) return "/live-lineup";
-  if (/^competition:\d+:entry:\d+:free-card-claim-ready$/.test(key)) {
-    const id = Number(notificationId || 0);
-    return id > 0 ? `/account?tab=inbox&notification=${id}` : "/account?tab=inbox";
-  }
+  if (/^competition:\d+:entry:\d+:(free-card-claim-ready|free-card-claimed|cash-congratulations)$/.test(key)) return "/trophy-cabinet";
   const decider = key.match(/^competition:(\d+):decider:/);
   if (decider) return `/competitions?leaderboard=${decider[1]}`;
   if (key.startsWith("replacement-claim:") || key.startsWith("replacement-reminder:")) {
