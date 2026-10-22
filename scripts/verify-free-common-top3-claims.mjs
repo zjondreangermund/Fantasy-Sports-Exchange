@@ -24,8 +24,8 @@ need(server, "${Number(card.id)}::integer", "Prize metadata card ID must have an
 need(server, "Exactly one card was added to your Collection.", "Claim confirmation must state the one-card result.");
 
 need(awards, "FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS", "Top-three settlement patch marker is missing.");
-need(awards, "for (let index = 1; index < Math.min(3, ranked.length); index += 1)", "Second and third prize creation is missing.");
-need(awards, 'title: "Random Common Player Card"', "Second and third must receive Common-card claim rights.");
+need(awards, "for (let index = 0; index < Math.min(3, ranked.length); index += 1)", "All three places must receive a pending prize right.");
+need(awards, 'index === 0 ? "Random Rare Player Card" : "Random Common Player Card"', "1st Rare, 2nd/3rd Common must be awarded as mint entitlements.");
 need(awards, "free-card-claim-ready", "Congratulations claim-ready notification is missing.");
 
 need(entries, "Claim prize card", "My Teams & Prizes must expose a real claim button.");
