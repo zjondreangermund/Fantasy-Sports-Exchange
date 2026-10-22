@@ -36,8 +36,8 @@ need(nativeClub, "selectedPrizeEntryId", "Inbox must recognize claim-ready prize
 need(nativeClub, "Claim prize card", "Inbox prize message must include a direct claim button.");
 need(nativeClub, "requestedNotificationId", "Inbox must auto-open an exact notification deep link.");
 need(notificationClient, "free-card-claim-ready", "Claim-ready Inbox alerts must deep-link to their exact message.");
-need(notificationClient, '/account?tab=inbox&notification=', "In-app prize alerts must open the exact Inbox message containing the claim button.");
-need(nativePush, '/account?tab=inbox&notification=', "Native prize pushes must open the exact Inbox claim message.");
-need(webPush, '/account?tab=inbox&notification=', "Web prize pushes must open the exact Inbox claim message.");
+need(notificationClient, 'return "/trophy-cabinet"', "In-app winning-card alerts must lead to the Trophy Cabinet.");
+need(nativePush, 'return "/trophy-cabinet"', "Android winning-card pushes must open the Trophy Cabinet.");
+need(webPush, 'return "/trophy-cabinet"', "Web winning-card pushes must open the Trophy Cabinet.");
 
 console.log("FREE Common Cup top-three prizes verified: 1st Rare, 2nd/3rd Common, atomic one-card claims and Inbox congratulations.");
