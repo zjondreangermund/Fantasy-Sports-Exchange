@@ -72,12 +72,13 @@ export function registerTrophyCabinetRoutes(app: Express, deps: { requireAuth: a
         if(freeCup || (cardId>0 && !row.vaultAwardId)){
           const rarity=String(row.cardRarity|| (Number(row.rank)===1?"rare":"common")).toLowerCase();
           entries.push({...base,kind:"card",rarity,title:`${rarity.toUpperCase()} Player Card`,
-            status:cardId>0?"minted":"ready_to_mint",cardId:cardId||null,
+            status:cardId>0?"minted":row.vaultStatus==="declined"?"declined":"ready_to_mint",cardId:cardId||null,
             playerName:row.playerName||null,playerTeam:row.playerTeam||null,
             position:row.position||null,imageUrl:row.imageUrl||null,
             serialId:row.serialId||null});
         }
-        if(row.vaultAwardId){
+        // FREE Common Cup has one card award, not an extra physical Prize Vault award.
+        if(row.vaultAwardId && !freeCup){
           entries.push({...base,kind:"vault",title:String(row.vaultTitle||"Prize Vault reward"),
             value:Number(row.vaultValue||0),category:String(row.vaultCategory||"prize"),
             status:String(row.vaultStatus||"pending_claim"),awardId:Number(row.vaultAwardId)});
