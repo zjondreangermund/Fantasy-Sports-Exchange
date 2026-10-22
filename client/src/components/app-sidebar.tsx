@@ -55,6 +55,7 @@ const menuItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard, section: "Main" },
   { title: "Play", href: "/competitions", icon: Trophy, section: "Main" },
   { title: "My Teams & Prizes", href: "/my-entries", icon: ListChecks, section: "Main", showUnread: true },
+  { title: "Trophy Cabinet", href: "/trophy-cabinet", icon: Trophy, section: "Main" },
   { title: "Prize Vault", href: "/prize-vault", icon: Gift, section: "Main" },
   { title: "Collection", href: "/collection", icon: Swords, section: "Main" },
   { title: "Marketplace", href: "/marketplace", icon: ShoppingCart, section: "Main" },
