@@ -66,7 +66,8 @@ export function notificationDestination(notification: ArenaNotification): string
   // Match the native Android and Web Push deep link for the once-per-GW close alert.
   if (replacementKey.startsWith("gameweek:") && replacementKey.endsWith(":entries-closed-good-luck")) return "/my-entries";
   if (replacementKey.startsWith("prize-level:")) return "/prize-vault";
-  if (replacementKey.startsWith("player-availability:") || replacementKey.startsWith("fixture-change:") || replacementKey.startsWith("prize-award:")) return "/my-entries";
+  if (replacementKey.startsWith("prize-award:")) return "/trophy-cabinet";
+  if (replacementKey.startsWith("player-availability:") || replacementKey.startsWith("fixture-change:")) return "/my-entries";
   if (replacementKey.startsWith("withdrawal:")) return "/wallet";
   if (replacementKey.startsWith("marketplace:price-change:") || replacementKey.startsWith("loan:")) return "/marketplace";
   if (replacementKey.startsWith("admin:")) return "/admin";
@@ -77,18 +78,13 @@ export function notificationDestination(notification: ArenaNotification): string
       : "/account?tab=inbox";
   }
   if (replacementKey.startsWith("replacement-complete:")) return "/collection";
-  const prizeClaim = String(notification.dedupeKey || "").match(/^competition:\d+:entry:\d+:free-card-claim-ready$/);
-  if (prizeClaim) {
-    const notificationId = Number(notification.id || 0);
-    return notificationId > 0
-      ? `/account?tab=inbox&notification=${notificationId}`
-      : "/account?tab=inbox";
-  }
+  // Prize claims live in the Trophy Cabinet; the existing Inbox record remains.
+  if (/^competition:\d+:entry:\d+:(free-card-claim-ready|free-card-claimed|cash-congratulations)$/.test(replacementKey)) return "/trophy-cabinet";
   if (String(notification.dedupeKey || "").startsWith("booking:")) return "/live-lineup";
   const decider = String(notification.dedupeKey || "").match(/^competition:(\d+):decider:/);
   if (decider) return `/competitions?leaderboard=${decider[1]}`;
   const subject = `${notification.notificationKind || ""} ${notification.type || ""} ${notification.title || ""} ${notification.message || ""}`.toLocaleLowerCase("en");
-  if (/\b(prize|reward|winner|won|claim|settlement)\b/.test(subject)) return "/my-entries";
+  if (/\b(prize|reward|winner|won|claim|settlement)\b/.test(subject)) return "/trophy-cabinet";
   if (/\b(tournament|competition|gameweek|lineup|leaderboard|cup)\b/.test(subject)) return "/competitions";
   if (/\b(marketplace|listing|listed|sale|sold)\b/.test(subject)) return "/marketplace";
   if (/\b(card|player|collection)\b/.test(subject)) return "/collection";
