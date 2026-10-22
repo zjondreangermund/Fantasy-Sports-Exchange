@@ -78,6 +78,25 @@ export default function WeeklyCommonMintDialog() {
     refetchInterval: 60_000,
   });
 
+  // Tournament wins take priority over the weekly gift. Only ONE mint modal
+  // is shown at a time. Once a manager mints or postpones the tournament card,
+  // their weekly Common prompt can display normally.
+  const { data: trophies } = useQuery<{awards:Array<{entryId:number;kind:string;status:string}>}>({
+    queryKey:["/api/trophy-cabinet"],
+    enabled:Boolean(user)&&onboarding?.completed===true,
+    staleTime:0,
+    refetchInterval:20_000,
+    queryFn:async()=>{
+      const r=await fetch("/api/trophy-cabinet",{credentials:"include"});
+      return r.ok?r.json():{awards:[]};
+    },
+  });
+  const tournamentPromptActive=Boolean((trophies?.awards||[]).some(a=>{
+    if(a.kind!=="card"||a.status!=="ready_to_mint")return false;
+    try{return localStorage.getItem(`fa:won-prize-prompt:${user?.id}:${a.entryId}`)!=="later";}
+    catch{return true;}
+  }));
+
   const claimMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/rewards/daily-login/claim", {});
@@ -128,7 +147,7 @@ export default function WeeklyCommonMintDialog() {
   if (!previouslyDismissed && promptKey && typeof window !== "undefined") {
     try { previouslyDismissed = window.localStorage.getItem(promptKey) === "later"; } catch { /* memory-only fallback */ }
   }
-  const waitingToMint = Boolean(status?.canClaim && !status.capReached && !previouslyDismissed);
+  const waitingToMint = Boolean(status?.canClaim && !status.capReached && !previouslyDismissed && !tournamentPromptActive);
   const open = waitingToMint || Boolean(revealedCard);
   const dismissPrompt = () => {
     if (revealedCard) { setRevealedCard(null); return; }
