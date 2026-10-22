@@ -1,24 +1,105 @@
 import * as React from "react";
-import { useMutation,useQuery } from "@tanstack/react-query";
-import { Gift,Trophy } from "lucide-react";
-import { apiRequest,queryClient } from "../lib/queryClient";
-import { isNativeMobileApp } from "../lib/site-view";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { CheckCircle2, Crown, Gift, Medal, Sparkles, Trophy } from "lucide-react";
+import { apiRequest, queryClient } from "../lib/queryClient";
+import { useAuth } from "../hooks/use-auth";
 import { useToast } from "../hooks/use-toast";
+import CardPlayerImage from "./CardPlayerImage";
 import { Button } from "./ui/button";
-import { Dialog,DialogContent,DialogDescription,DialogHeader,DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 
-function object(value:unknown):Record<string,any>{return value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,any>:{};}
-function id(value:unknown){const n=Number(value||0);return Number.isInteger(n)&&n>0?n:0;}
+/** Tournament prizes are not weekly gifts: present each WON card exactly once
+ * per device until the manager chooses to mint or snooze it. No auto-minting.
+ * This works equally in the browser, installed PWA and native Android shell.
+ */
+type Award = {entryId:number;competitionName:string;gameWeek:number;rank:number;kind:string;rarity?:string;status:string};
+type TrophyData = {awards:Award[]};
+type RevealedCard={id:number;rarity:string;playerName?:string;playerTeam?:string};
+const onceKey=(userId:string,entryId:number)=>`fa:won-prize-prompt:${userId}:${entryId}`;
+const isSnoozed=(key:string)=>{try{return localStorage.getItem(key)==="later";}catch{return false;}};
 
-export default function PendingPrizeClaimPopup(){
-  const { toast }=useToast();
-  const [dismissed,setDismissed]=React.useState<Set<number>>(()=>new Set());
-  const browserOnly=!isNativeMobileApp()&&!(typeof window!=="undefined"&&window.matchMedia?.("(display-mode: standalone)").matches);
-  const {data:entries=[]}=useQuery<any[]>({queryKey:["/api/competitions/my-entries","pending-prize-popup"],enabled:browserOnly,staleTime:0,refetchInterval:15000,queryFn:async()=>{const response=await fetch("/api/competitions/my-entries",{credentials:"include"});if(!response.ok)return[];const body=await response.json();return Array.isArray(body)?body:[];}});
-  const entry=entries.find(row=>{const entryId=id(row?.id);const award=object(object(row?.tiebreakMeta??row?.tiebreak_meta).settlement).prizeAward;return entryId&&!dismissed.has(entryId)&&Boolean(award?.claimPending)&&!id(row?.prizeCardId??row?.prize_card_id);})||null;
-  const award=object(object(entry?.tiebreakMeta??entry?.tiebreak_meta).settlement).prizeAward;
-  const claim=useMutation({mutationFn:async()=>{const response=await apiRequest("POST",`/api/competitions/prizes/${id(entry?.id)}/claim`,{});return response.json();},onSuccess:async(body:any)=>{setDismissed(current=>new Set(current).add(id(entry?.id)));await Promise.all([queryClient.invalidateQueries({queryKey:["/api/competitions/my-entries"]}),queryClient.invalidateQueries({queryKey:["/api/common-card-reward-choices"]}),queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),queryClient.invalidateQueries({queryKey:["/api/notifications"]})]);toast({title:body?.pendingChoice?"One more choice required":"Prize card claimed!",description:body?.pendingChoice?"Your Common collection is full. Choose which card to keep or replace.":body?.card?.playerName?`${body.card.playerName} is now in your Collection.`:"Your prize is now in your Collection."});},onError:(error:any)=>toast({title:"Prize claim failed",description:error?.message||"Your prize remains safe. Please try again.",variant:"destructive"})});
-  if(!browserOnly||!entry)return null;
-  const entryId=id(entry.id);
-  return <Dialog open onOpenChange={open=>{if(!open)setDismissed(current=>new Set(current).add(entryId));}}><DialogContent data-pending-prize-popup className="z-[125] max-w-md border-emerald-300/30 bg-[#07100e] text-white"><DialogHeader><div className="mx-auto grid h-16 w-16 place-items-center rounded-full border border-emerald-200/30 bg-emerald-300/15 shadow-[0_0_35px_rgba(52,211,153,.25)]"><Trophy className="h-8 w-8 text-emerald-200"/></div><DialogTitle className="pt-2 text-center text-2xl font-black">Congratulations — prize waiting!</DialogTitle><DialogDescription className="text-center leading-6 text-emerald-50/70">You finished #{Number(entry.rank||award.rank||0)} and won a {String(award.rarity||"prize").toUpperCase()} card. It has not been minted yet—claim it now so it can be added safely to your Collection.</DialogDescription></DialogHeader><Button onClick={()=>claim.mutate()} disabled={claim.isPending} className="h-12 bg-emerald-300 text-base font-black text-emerald-950 hover:bg-emerald-200"><Gift className="mr-2 h-5 w-5"/>{claim.isPending?"Claiming safely…":"Claim my prize card"}</Button><Button variant="ghost" onClick={()=>setDismissed(current=>new Set(current).add(entryId))} className="text-white/55">Not now — remind me next visit</Button></DialogContent></Dialog>;
+export default function PendingPrizeClaimPopup() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [localDismissed,setLocalDismissed]=React.useState<number[]>([]);
+  const [revealed,setRevealed]=React.useState<RevealedCard|null>(null);
+  const [pendingChoice,setPendingChoice]=React.useState(false);
+  const {data:onboarding}=useQuery<{completed:boolean}>({
+    queryKey:["/api/onboarding/status"],enabled:Boolean(user),staleTime:30_000,
+  });
+  const {data:history}=useQuery<TrophyData>({
+    queryKey:["/api/trophy-cabinet"],enabled:Boolean(user)&&onboarding?.completed===true,
+    staleTime:0,refetchInterval:20_000,refetchOnWindowFocus:true,
+    queryFn:async()=>{
+      const r=await fetch("/api/trophy-cabinet",{credentials:"include"});
+      if(!r.ok)return {awards:[]};
+      return r.json();
+    },
+  });
+  const {data:ownedCards=[]}=useQuery<any[]>({
+    queryKey:["/api/user/cards"],enabled:Boolean(user)&&Boolean(revealed?.id),staleTime:0,
+    queryFn:async()=>{const r=await fetch("/api/user/cards",{credentials:"include"});const data=r.ok?await r.json():[];return Array.isArray(data)?data:Array.isArray(data?.cards)?data.cards:[];},
+  });
+  const userId=String(user?.id||"");
+  const award=(history?.awards||[]).find(a=>{
+    if(a.kind!=="card"||a.status!=="ready_to_mint"||!userId||localDismissed.includes(a.entryId))return false;
+    return !isSnoozed(onceKey(userId,a.entryId));
+  })||null;
+  const dismiss=()=>{
+    if(revealed){setRevealed(null);return;}
+    if(!award)return;
+    setLocalDismissed(prev=>prev.includes(award.entryId)?prev:[...prev,award.entryId]);
+    try{localStorage.setItem(onceKey(userId,award.entryId),"later");}catch{}
+  };
+  const mint=useMutation({
+    mutationFn:async()=>{if(!award)throw new Error("No prize available");const r=await apiRequest("POST",`/api/competitions/prizes/${award.entryId}/claim`,{});return r.json();},
+    onSuccess:async(result:any)=>{
+      if(award)setLocalDismissed(prev=>[...prev,award.entryId]);
+      if(result.pendingChoice)setPendingChoice(true);
+      else if(result.card)setRevealed(result.card);
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey:["/api/trophy-cabinet"]}),
+        queryClient.invalidateQueries({queryKey:["/api/competitions/my-entries"]}),
+        queryClient.invalidateQueries({queryKey:["/api/common-card-reward-choices"]}),
+        queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),
+        queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
+      ]);
+      toast({title:result.pendingChoice?"One more choice required":"🏆 Tournament prize card minted!",
+        description:result.pendingChoice?"Your Common collection is full. Choose whether to keep or replace one eligible card.":result.card?.playerName?`${result.card.playerName} is now in your Collection.`:"Your tournament reward has been recorded."});
+    },
+    onError:(error:any)=>toast({title:"Mint unsuccessful",description:error?.message||"Your reward remains available in the Trophy Cabinet.",variant:"destructive"}),
+  });
+  const open=Boolean(user&&onboarding?.completed&&(award||revealed||pendingChoice));
+  if(!open)return null;
+  const card=ownedCards.find(c=>Number(c.id)===Number(revealed?.id));
+  return <Dialog open={open} onOpenChange={next=>{if(!next){setPendingChoice(false);dismiss();}}}>
+    <DialogContent data-pending-prize-popup className="z-[145] max-h-[90dvh] w-[min(95vw,480px)] overflow-y-auto border-fuchsia-400/35 bg-[radial-gradient(circle_at_50%_0%,rgba(168,85,247,.25),transparent_60%),#060a1b] text-white shadow-[0_0_60px_rgba(168,85,247,.2)]">
+      <DialogHeader className="text-center">
+        <div className="mx-auto grid h-20 w-20 place-items-center rounded-full border border-amber-200/40 bg-amber-300/15 shadow-[0_0_55px_rgba(250,204,21,.3)]"><Trophy className="h-10 w-10 text-amber-200"/></div>
+        <p className="mt-3 text-xs font-black uppercase tracking-[.2em] text-fuchsia-200">Fantasy Arena • Tournament Achievement</p>
+        <DialogTitle className="text-center text-3xl font-black text-white">{revealed?"🏆 Prize card minted!":pendingChoice?"🏆 Prize won — card choice required":"🎉 Congratulations, Manager!"}</DialogTitle>
+        <DialogDescription className="mt-2 text-center text-sm leading-6 text-white/65">
+          {revealed?`Your ${revealed.rarity?.toUpperCase()||""} winning player card is now in your collection and the victory stays in your Trophy Cabinet.`:
+            pendingChoice?"Your Common collection is full. The reward is safe. Make your keep-or-replace decision to complete minting.":
+            `You finished #${award?.rank} in ${award?.competitionName} (GW${award?.gameWeek})! You have won a ${String(award?.rarity||"PRIZE").toUpperCase()} player card. Tap Mint to reveal your random Premier League player.`}
+        </DialogDescription>
+      </DialogHeader>
+      {revealed?<div className="mx-auto w-full max-w-[270px] rounded-3xl border border-cyan-300/35 bg-gradient-to-b from-blue-600/25 to-black/70 p-4 text-center">
+        {card?<div className="h-56 overflow-hidden rounded-2xl border border-white/10"><CardPlayerImage card={card} className="h-full w-full object-contain" alt={revealed.playerName||"Winning card"}/></div>:<div className="grid h-44 place-items-center"><Sparkles className="h-16 w-16 text-cyan-200"/></div>}
+        <p className="mt-3 text-2xl font-black">{revealed.playerName||"Winning card"}</p><p className="text-sm text-white/60">{revealed.playerTeam||""} · {revealed.rarity?.toUpperCase()}</p>
+       </div>:
+       <div className="mx-auto flex max-w-[270px] flex-col items-center justify-center rounded-3xl border border-amber-300/25 bg-gradient-to-b from-amber-400/10 via-fuchsia-400/10 to-blue-500/10 p-5 shadow-[inset_0_0_35px_rgba(232,121,249,.06)]">
+        <Crown className="h-10 w-10 text-amber-200"/><div className="mt-2 text-xs font-black uppercase tracking-[.2em] text-amber-200">Podium place #{award?.rank||"—"}</div>
+        <Gift className="my-5 h-20 w-20 text-cyan-200"/><div className="text-2xl font-black">{String(award?.rarity||"").toUpperCase()} CARD</div><div className="mt-2 text-xs text-white/45">Random eligible Premier League player</div>
+       </div>}
+      {revealed||pendingChoice?<Link href="/trophy-cabinet"><Button className="h-12 w-full bg-gradient-to-r from-amber-400 to-cyan-400 font-black text-slate-950"><Medal className="mr-2 h-5 w-5"/>Open my Trophy Cabinet</Button></Link>:
+       <Button data-mint-tournament-prize type="button" disabled={mint.isPending} onClick={()=>mint.mutate()} className="h-12 w-full bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-base font-black text-white">
+        <Sparkles className="mr-2 h-5 w-5"/>{mint.isPending?"Minting your winning card…":"Mint my winning card"}
+       </Button>}
+      {revealed?<Link href="/collection"><Button variant="outline" className="h-11 w-full border-white/20 text-white"><CheckCircle2 className="mr-2 h-4 w-4"/>View minted card in Collection</Button></Link>:null}
+      {!revealed&&!pendingChoice?<button type="button" onClick={dismiss} className="min-h-11 text-sm font-medium text-white/55">Later — keep this prize in my Trophy Cabinet</button>:null}
+      <p className="text-center text-[11px] text-white/40">Your reward is minted only when you confirm. One tournament prize can only be minted once.</p>
+    </DialogContent>
+  </Dialog>;
 }
