@@ -192,6 +192,8 @@ async function resolveCommonCardChoice(tx:any,userId:string,choiceId:number,acti
   if(String(choice.status)!=="pending")return {alreadyResolved:true,status:String(choice.status),cardId:Number(choice.replacementCardId||0)||null};
   if(action==="keep"){
     await tx.execute(sql`update app.common_card_reward_choices set status='forfeited',resolved_at=now() where id=${choiceId} and status='pending'`);
+    await tx.execute(sql`update app.competition_prize_awards set status='declined',updated_at=now()
+      where entry_id=${Number(choice.entryId)} and user_id=${userId} and prize_category='card' and status='pending_claim'`);
     return {status:"forfeited",keptExisting:true};
   }
   if(action!=="replace"||!Number.isInteger(replaceCardId)||replaceCardId<=0)throw new Error("Choose an eligible Common card to replace");
@@ -223,6 +225,8 @@ async function resolveCommonCardChoice(tx:any,userId:string,choiceId:number,acti
   const entryId=Number(choice.entryId);
   await tx.execute(sql`update app.competition_entries set prize_card_id=${Number(card.id)} where id=${entryId} and prize_card_id is null`);
   await tx.execute(sql`update app.common_card_reward_choices set status='replaced',replacement_card_id=${Number(card.id)},replaced_card_id=${replaceCardId},resolved_at=now() where id=${choiceId} and status='pending'`);
+  await tx.execute(sql`update app.competition_prize_awards set status='claimed',updated_at=now()
+    where entry_id=${entryId} and user_id=${userId} and prize_category='card' and status='pending_claim'`);
   await createNotificationOnce(tx,{userId,type:"runner_up",title:`Common replacement claimed — ${String(candidate.playerName)}`,message:`${String(candidate.playerName)} (${String(candidate.playerTeam)}) replaced one Common card. Your collection remains at ${COMMON_COLLECTION_CAP}, with no duplicate player card.`,dedupeKey:`competition:${Number(choice.competitionId)}:entry:${entryId}:common-cap-replaced`});
   return {status:"replaced",card:{...card,playerName:String(candidate.playerName),playerTeam:String(candidate.playerTeam)}};
 }
@@ -257,6 +261,8 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
       limit 1
     `))[0];
     if (!existing) throw new Error("Claimed prize card is missing from your Collection");
+    await tx.execute(sql`update app.competition_prize_awards set status='claimed',updated_at=now()
+      where entry_id=${entryId} and user_id=${userId} and prize_category='card' and status='pending_claim'`);
     return { ...existing, competitionId: Number(award.competitionId), entryId, rank, replayed: true };
   }
 
@@ -337,6 +343,8 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
           ), true)
     where id=${entryId} and user_id=${userId} and prize_card_id is null
   `);
+  await tx.execute(sql`update app.competition_prize_awards set status='claimed',updated_at=now()
+    where entry_id=${entryId} and user_id=${userId} and prize_category='card' and status='pending_claim'`);
   await createNotificationOnce(tx, {
     userId,
     type: rank === 1 ? "win" : "runner_up",
