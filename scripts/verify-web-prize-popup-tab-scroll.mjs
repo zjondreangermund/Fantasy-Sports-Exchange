@@ -5,11 +5,11 @@ const css=fs.readFileSync("client/src/tab-strip-scroll.css","utf8");
 const main=fs.readFileSync("client/src/main.tsx","utf8");
 function need(source,token,label){if(!source.includes(token))throw new Error(label);}
 need(app,"<PendingPrizeClaimPopup />","Global pending-prize popup is missing");
-need(popup,'(display-mode: standalone)',"Installed-PWA exclusion is missing");
-need(popup,"claimPending","Popup must require a pending prize claim");
-need(popup,"!id(row?.prizeCardId","Already-minted cards must not trigger the popup");
-need(popup,"Claim my prize card","Popup claim action is missing");
-need(popup,"Not now — remind me next visit","Non-destructive dismissal is missing");
+need(popup,'This works equally in the browser, installed PWA and native Android shell.',"Tournament prize popup must support all clients");
+need(popup,'a.status!=="ready_to_mint"',"Only confirmed unminted card prizes may show the modal");
+need(popup,'fa:won-prize-prompt:',"One-time dismissible prompt must not spam players");
+need(popup,"Mint my winning card","Tournament winner must mint deliberately");
+need(popup,"Later — keep this prize in my Trophy Cabinet","Dismissed prizes must remain in trophy history");
 need(css,'[role="tablist"]:not(.grid)',"Scrollable tab selector is missing");
 need(css,"flex-wrap: nowrap !important","Tab strips must not wrap");
 need(css,"overflow-x: auto !important","Horizontal tab scrolling is missing");
