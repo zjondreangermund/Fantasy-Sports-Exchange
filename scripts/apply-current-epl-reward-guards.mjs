@@ -85,9 +85,15 @@ patchFile("scripts/apply-free-card-cup-auto-awards.mjs", (original) => {
   let source = original;
   const leagueLine = "                where regexp_replace(lower(coalesce(p.league, '')), '[^a-z0-9]+', '', 'g') in ('premierleague','englishpremierleague','epl')\n";
   const strictLines = "                  and coalesce(p.fpl_id, 0) > 0\n                  and lower(coalesce(p.status, 'a')) not in ('departed','superseded','unlinked','archived')\n";
-  if (!source.includes("not in ('departed','superseded','unlinked','archived')")) {
-    if (!source.includes(leagueLine)) throw new Error("[current-epl-rewards] Free Cup local fallback anchor missing");
-    source = source.replace(leagueLine, `${leagueLine}${strictLines}`);
+  // Legacy settlement scripts selected players during settlement. Newer
+  // versions record the prize entitlement only; each winner mints separately
+  // via claimFreeCommonCupCard, whose SQL enforces current EPL eligibility.
+  if (source.includes(leagueLine)) {
+    if (!source.includes("not in ('departed','superseded','unlinked','archived')")) {
+      source = source.replace(leagueLine, `${leagueLine}${strictLines}`);
+    }
+  } else if (!source.includes("TOURNAMENT_WINNER_MANUAL_MINT_V1")) {
+    throw new Error("[current-epl-rewards] Neither guarded legacy selector nor verified winner-controlled mint flow exists");
   }
   return source;
 });
