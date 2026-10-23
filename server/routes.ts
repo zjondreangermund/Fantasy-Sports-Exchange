@@ -18,6 +18,7 @@ import { registerTournamentCreatorRoutes } from "./routes/tournamentCreator.rout
 import { registerUserTournamentRoutes } from "./routes/userTournaments.routes.js";
 import { registerLineupEditsRoutes } from "./routes/lineupEdits.routes.js";
 import { registerTrophyCabinetRoutes } from "./routes/trophyCabinet.routes.js";
+import { registerContactCentreRoutes } from "./routes/contactCentre.routes.js";
 import { buildRealFplPointFeed } from "./services/liveFplFeed.js";
 import { enrichPlayerCards } from "./services/playerCardEnrichment.js";
 import { economyConfigPayload, rankCompetitionEntries } from "./services/tournamentRules.js";
@@ -161,6 +162,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerUserTournamentRoutes(app, { requireAuth });
   registerLineupEditsRoutes(app, { requireAuth });
   registerTrophyCabinetRoutes(app, { requireAuth });
+  registerContactCentreRoutes(app, { requireAuth, isAdmin });
 
   app.get("/api/live/point-feed", async (req, res) => {
     try {
