@@ -15,6 +15,7 @@ import AdminTournamentDirectory from "../components/admin/AdminTournamentDirecto
 import Gw4PromoAnalyticsCard from "../components/admin/Gw4PromoAnalyticsCard";
 import AdminReferralPanel from "../components/admin/AdminReferralPanel";
 import AdminNotificationAuditPanel from "../components/admin/AdminNotificationAuditPanel";
+import AdminSupportInboxPanel from "../components/admin/AdminSupportInboxPanel";
 import {
   Activity,
   Bell,
@@ -295,6 +296,7 @@ export default function AdminPage() {
             <TabsTrigger value="cards" className="min-h-11 rounded-full border border-white/15 bg-black/30 px-4 text-white"><CreditCard className="mr-2 h-4 w-4" />Card Lookup</TabsTrigger>
             <TabsTrigger value="activity" className="min-h-11 rounded-full border border-white/15 bg-black/30 px-4 text-white"><Activity className="mr-2 h-4 w-4" />Activity</TabsTrigger>
             <TabsTrigger value="notifications" className="min-h-11 rounded-full border border-white/15 bg-black/30 px-4 text-white"><Bell className="mr-2 h-4 w-4" />Notifications</TabsTrigger>
+            <TabsTrigger value="support" className="min-h-11 rounded-full border border-white/15 bg-black/30 px-4 text-white">✉️ Support Inbox</TabsTrigger>
             <TabsTrigger value="finance" className="min-h-11 rounded-full border border-white/15 bg-black/30 px-4 text-white"><Wallet className="mr-2 h-4 w-4" />Finance</TabsTrigger>
             <TabsTrigger value="ops" className="min-h-11 rounded-full border border-white/15 bg-black/30 px-4 text-white"><Building2 className="mr-2 h-4 w-4" />Ops</TabsTrigger>
           </TabsList>
@@ -421,6 +423,7 @@ export default function AdminPage() {
           </TabsContent>
 
           <TabsContent value="notifications" className="mt-4"><AdminNotificationAuditPanel onOpenUser={selectUser} /></TabsContent>
+          <TabsContent value="support" className="mt-4"><AdminSupportInboxPanel /></TabsContent>
 
           <TabsContent value="finance" className="mt-4 grid gap-4 md:grid-cols-2">
             <WorkspaceLauncher icon={CreditCard} title="Transaction explorer" subtitle="Search payments, transaction timelines and platform fees in a focused popup." onOpen={() => setWorkspacePanel("transactions")} />
