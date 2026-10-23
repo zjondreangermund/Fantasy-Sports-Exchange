@@ -5,7 +5,7 @@ import { CheckCircle2, Mail, MessageSquareText, ShieldCheck, ArrowLeft, Trophy, 
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 
-type ContactInfo={brand:string;website:string;region:string;email:string|null;onlineSupport:boolean;note:string};
+type ContactInfo={brand:string;website:string;region:string;email:string|null;partnersEmail?:string|null;onlineSupport:boolean;note:string};
 const categories=[
   ["general","General enquiry"],["account","Account or sign-in"],["cards","Cards and minting"],
   ["tournament","Gameweeks and tournaments"],["prizes","Prize claims and Trophy Cabinet"],
@@ -58,6 +58,7 @@ export default function ContactPage(){
             </div>
             {data?.email?<a href={`mailto:${data.email}`} className="mt-3 flex min-w-0 items-start gap-3 rounded-2xl border border-cyan-300/15 bg-cyan-300/[.04] p-4 hover:bg-cyan-300/10"><Mail className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200"/><div className="min-w-0"><div className="text-sm font-bold">Verified email support</div><div className="break-all text-sm text-cyan-200">{data.email}</div></div></a>
             :<div className="mt-3 flex items-start gap-3 rounded-2xl border border-white/10 p-4"><Mail className="h-5 w-5 shrink-0 text-white/40"/><p className="text-xs leading-5 text-white/55">Our custom-domain support mailbox is being configured. Please use the form rather than an unverified email address.</p></div>}
+            {data?.partnersEmail?<a href={`mailto:${data.partnersEmail}`} className="mt-3 flex items-start gap-3 rounded-2xl border border-amber-300/15 bg-amber-300/[.04] p-4 hover:bg-amber-300/10"><Mail className="mt-0.5 h-5 w-5 shrink-0 text-amber-200"/><div className="min-w-0"><div className="text-sm font-bold">Sponsorships & partnerships</div><div className="break-all text-sm text-amber-100">{data.partnersEmail}</div></div></a>:null}
             <div className="mt-3 flex items-center gap-3 rounded-xl p-2 text-sm text-white/65"><Globe2 className="h-5 w-5 text-fuchsia-200"/><a className="break-all text-cyan-100 hover:underline" href="https://playfantasyarena.com">playfantasyarena.com</a></div>
             <div className="flex items-center gap-3 rounded-xl p-2 text-sm text-white/65"><MapPin className="h-5 w-5 text-fuchsia-200"/>Namibia · Online support</div>
           </section>
