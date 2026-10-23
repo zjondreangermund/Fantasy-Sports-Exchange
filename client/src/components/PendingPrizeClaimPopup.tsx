@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
  */
 type Award = {entryId:number;competitionName:string;gameWeek:number;rank:number;kind:string;rarity?:string;status:string};
 type TrophyData = {awards:Award[]};
-type RevealedCard={id:number;rarity:string;playerName?:string;playerTeam?:string};
+type RevealedCard={id:number;rarity:string;playerName?:string;playerTeam?:string;replayed?:boolean};
 const onceKey=(userId:string,entryId:number)=>`fa:won-prize-prompt:${userId}:${entryId}`;
 const isSnoozed=(key:string)=>{try{return localStorage.getItem(key)==="later";}catch{return false;}};
 
@@ -75,8 +75,8 @@ export default function PendingPrizeClaimPopup() {
         queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),
         queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
       ]);
-      toast({title:result.pendingChoice?"One more choice required":"🏆 Tournament prize card minted!",
-        description:result.pendingChoice?"Your Common collection is full. Choose whether to keep or replace one eligible card.":result.card?.playerName?`${result.card.playerName} is now in your Collection.`:"Your tournament reward has been recorded."});
+      toast({title:result.pendingChoice?"One more choice required":result.card?.replayed?"Original prize card revealed":"🏆 Tournament prize card minted!",
+        description:result.pendingChoice?"Your Common collection is full. Choose whether to keep or replace one eligible card.":result.card?.playerName?result.card?.replayed?`${result.card.playerName} is your original prize. No extra card was minted.`:`${result.card.playerName} is now in your Collection.`:"Your tournament reward has been recorded."});
     },
     onError:(error:any)=>toast({title:"Mint unsuccessful",description:error?.message||"Your reward remains available in the Trophy Cabinet.",variant:"destructive"}),
   });
@@ -88,9 +88,9 @@ export default function PendingPrizeClaimPopup() {
       <DialogHeader className="text-center">
         <div className="mx-auto grid h-20 w-20 place-items-center rounded-full border border-amber-200/40 bg-amber-300/15 shadow-[0_0_55px_rgba(250,204,21,.3)]"><Trophy className="h-10 w-10 text-amber-200"/></div>
         <p className="mt-3 text-xs font-black uppercase tracking-[.2em] text-fuchsia-200">Fantasy Arena • Tournament Achievement</p>
-        <DialogTitle className="text-center text-3xl font-black text-white">{revealed?"🏆 Prize card minted!":pendingChoice?"🏆 Prize won — card choice required":"🎉 Congratulations, Manager!"}</DialogTitle>
+        <DialogTitle className="text-center text-3xl font-black text-white">{revealed?(revealed.replayed?"🏆 Your original prize card":"🏆 Prize card minted!"):pendingChoice?"🏆 Prize won — card choice required":"🎉 Congratulations, Manager!"}</DialogTitle>
         <DialogDescription className="mt-2 text-center text-sm leading-6 text-white/65">
-          {revealed?`Your ${revealed.rarity?.toUpperCase()||""} winning player card is now in your collection and the victory stays in your Trophy Cabinet.`:
+          {revealed?.replayed?"This is the same card originally awarded for this tournament. No additional card has been minted.":revealed?`Your ${revealed.rarity?.toUpperCase()||""} winning player card is now in your collection and the victory stays in your Trophy Cabinet.`:
             pendingChoice?"Your Common collection is full. The reward is safe. Make your keep-or-replace decision to complete minting.":
             `You finished #${award?.rank} in ${award?.competitionName} (GW${award?.gameWeek})! You have won a ${String(award?.rarity||"PRIZE").toUpperCase()} player card. Tap Mint to reveal your random Premier League player.`}
         </DialogDescription>

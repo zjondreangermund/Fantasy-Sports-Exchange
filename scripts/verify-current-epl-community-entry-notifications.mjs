@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import assert from "node:assert/strict";
 
 await import("./prepare-current-epl-common-patcher.mjs");
 await import("./prepare-admin-referral-current-epl-compat.mjs");
@@ -102,8 +103,12 @@ need(weekly, "NOT IN ('departed', 'superseded', 'unlinked', 'archived')", "runti
 need(adminReferralPatcher, "CURRENT_EPL_ADMIN_REFERRAL_IDEMPOTENCY_V1", "repeat-build referral compatibility");
 need(referralPostguard, '!["departed", "superseded", "unlinked", "archived"].includes(status)', "referral archived-player postguard");
 need(weeklyRefresh, 'import "./apply-current-epl-referral-postguard.mjs";', "referral postguard build ordering");
-need(rewardRepair, "CURRENT_EPL_REWARD_REPAIR_V2", "tournament reward-repair EPL guard");
-need(rewardRepair, "fplId > 0", "reward-repair FPL identity requirement");
+if (rewardRepair.includes("PRIZE_REPAIR_NEVER_MINTS_V1")) {
+  assert.ok(!rewardRepair.includes("storage.createPlayerCard("), "admin reward repair must not mint cards");
+} else {
+  need(rewardRepair, "CURRENT_EPL_REWARD_REPAIR_V2", "tournament reward-repair EPL guard");
+  need(rewardRepair, "fplId > 0", "reward-repair FPL identity requirement");
+}
 // The new Free Cup flow records prize entitlements at settlement instead of
 // minting from a local fallback. Validate its winner-controlled mint selector
 // (including official FPL ID and active Premier League status) at runtime.

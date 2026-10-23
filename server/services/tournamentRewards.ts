@@ -6,15 +6,6 @@ function toMoney(amount: unknown): number {
   return Math.round(value * 100) / 100;
 }
 
-function shuffle<T>(items: T[]): T[] {
-  const result = [...items];
-  for (let i = result.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
-
 export async function getCompetitionRewardIntegrity(competitionId: number) {
   if (!Number.isFinite(competitionId) || competitionId <= 0) {
     throw new Error("Invalid competition id");
@@ -58,6 +49,7 @@ export async function getCompetitionRewardIntegrity(competitionId: number) {
   return { competitionId, competitionName: competition.name, summary, rows };
 }
 
+// PRIZE_REPAIR_NEVER_MINTS_V1: historical rewards are never rerolled by admin repair.
 export async function repairCompetitionRewards(competitionId: number) {
   if (!Number.isFinite(competitionId) || competitionId <= 0) {
     throw new Error("Invalid competition id");
@@ -72,31 +64,8 @@ export async function repairCompetitionRewards(competitionId: number) {
   }
 
   const entries = await storage.getCompetitionEntries(competitionId);
-  const allPlayers = shuffle(await storage.getPlayers());
   const repaired: Array<{ entryId: number; userId: string; oldPrizeCardId: number | null; newPrizeCardId: number }> = [];
   const skipped: Array<{ entryId: number; userId: string; reason: string }> = [];
-
-  const createRepairCard = async (targetUserId: string, rarity: string): Promise<number | null> => {
-    for (const player of allPlayers) {
-      try {
-        const created = await storage.createPlayerCard({
-          playerId: player.id,
-          ownerId: targetUserId,
-          rarity: rarity as any,
-          level: 1,
-          xp: 0,
-          decisiveScore: 35,
-          last5Scores: [0, 0, 0, 0, 0],
-          forSale: false,
-          price: 0,
-        } as any);
-        return created.id;
-      } catch {
-        continue;
-      }
-    }
-    return null;
-  };
 
   for (const entry of entries) {
     const rank = Number(entry.rank || 0);
@@ -106,23 +75,17 @@ export async function repairCompetitionRewards(competitionId: number) {
     const currentCard = prizeCardId > 0 ? await storage.getPlayerCard(prizeCardId) : undefined;
     const currentOwnerMatches = currentCard && String(currentCard.ownerId || "") === String(entry.userId || "");
     if (currentOwnerMatches) continue;
-
-    const rarity = String(
-      currentCard?.rarity || competition.prizeCardRarity || (String(competition.tier || "") === "rare" ? "unique" : "rare"),
-    ).toLowerCase();
-    const newPrizeCardId = await createRepairCard(String(entry.userId || ""), rarity);
-    if (!newPrizeCardId) {
-      skipped.push({ entryId: entry.id, userId: String(entry.userId || ""), reason: "Unable to mint replacement prize card" });
+    // An issued card may have been traded or archived. Repair must never reroll
+    // that award or create another card merely because its owner changed.
+    const historicalCardId = Number(entry.tiebreakMeta?.settlement?.prizeAward?.cardId || 0);
+    if (prizeCardId > 0 || historicalCardId > 0 || entry.tiebreakMeta?.settlement?.prizeAward?.claimed === true) {
+      skipped.push({ entryId: entry.id, userId: String(entry.userId || ""), reason: "Prize already issued; preserve the original card" });
       continue;
     }
 
-    await storage.updateCompetitionEntry(entry.id, { prizeCardId: newPrizeCardId });
-    repaired.push({
-      entryId: entry.id,
-      userId: String(entry.userId || ""),
-      oldPrizeCardId: prizeCardId || null,
-      newPrizeCardId,
-    });
+    // Unissued awards must use the normal transactional claim endpoint.
+    // This admin repair path must never create a second reward card.
+    skipped.push({ entryId: entry.id, userId: String(entry.userId || ""), reason: "No original prize card reference; use the normal prize claim flow" });
   }
 
   return { success: true, competitionId, repairedCount: repaired.length, skippedCount: skipped.length, repaired, skipped };

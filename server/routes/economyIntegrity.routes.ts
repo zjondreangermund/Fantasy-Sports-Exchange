@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { storage } from "../storage.js";
+import { awardedPrizeCardId } from "../services/prizeCardIdentity.js";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex } from "../services/fplPlayerIdentity.js";
 import { loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
@@ -184,12 +185,17 @@ async function resolveCommonCardChoice(tx:any,userId:string,choiceId:number,acti
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`common-cap:${userId}`}))`);
   await ensureCommonCardChoiceSchema(tx);
   const choice=rowsOf(await tx.execute(sql`
-    select x.id,x.status,x.competition_entry_id as "entryId",x.replacement_card_id as "replacementCardId",ce.rank,c.id as "competitionId"
+    select x.id,x.status,x.competition_entry_id as "entryId",x.replacement_card_id as "replacementCardId",ce.rank,ce.prize_card_id as "prizeCardId",ce.tiebreak_meta -> 'settlement' -> 'prizeAward' as "settlementAward",c.id as "competitionId"
     from app.common_card_reward_choices x join app.competition_entries ce on ce.id=x.competition_entry_id join app.competitions c on c.id=ce.competition_id
     where x.id=${choiceId} and x.user_id=${userId} for update of x,ce
   `))[0];
   if(!choice)throw new Error("Common card choice not found");
   if(String(choice.status)!=="pending")return {alreadyResolved:true,status:String(choice.status),cardId:Number(choice.replacementCardId||0)||null};
+  const issuedCardId = awardedPrizeCardId(choice);
+  if (issuedCardId > 0) {
+    await tx.execute(sql`update app.common_card_reward_choices set status='replaced',replacement_card_id=${issuedCardId},resolved_at=now() where id=${choiceId} and status='pending'`);
+    return {alreadyResolved:true,replayed:true,status:"replaced",cardId:issuedCardId};
+  }
   if(action==="keep"){
     await tx.execute(sql`update app.common_card_reward_choices set status='forfeited',resolved_at=now() where id=${choiceId} and status='pending'`);
     await tx.execute(sql`update app.competition_prize_awards set status='declined',updated_at=now()
@@ -225,7 +231,8 @@ async function resolveCommonCardChoice(tx:any,userId:string,choiceId:number,acti
   const entryId=Number(choice.entryId);
   await tx.execute(sql`update app.competition_entries set prize_card_id=${Number(card.id)} where id=${entryId} and prize_card_id is null`);
   await tx.execute(sql`update app.common_card_reward_choices set status='replaced',replacement_card_id=${Number(card.id)},replaced_card_id=${replaceCardId},resolved_at=now() where id=${choiceId} and status='pending'`);
-  await tx.execute(sql`update app.competition_prize_awards set status='claimed',updated_at=now()
+  await tx.execute(sql`update app.competition_prize_awards set status='claimed',
+    metadata=jsonb_set(coalesce(metadata,'{}'::jsonb),'{cardId}',to_jsonb(${Number(card.id)}::integer),true),updated_at=now()
     where entry_id=${entryId} and user_id=${userId} and prize_category='card' and status='pending_claim'`);
   await createNotificationOnce(tx,{userId,type:"runner_up",title:`Common replacement claimed — ${String(candidate.playerName)}`,message:`${String(candidate.playerName)} (${String(candidate.playerTeam)}) replaced one Common card. Your collection remains at ${COMMON_COLLECTION_CAP}, with no duplicate player card.`,dedupeKey:`competition:${Number(choice.competitionId)}:entry:${entryId}:common-cap-replaced`});
   return {status:"replaced",card:{...card,playerName:String(candidate.playerName),playerTeam:String(candidate.playerTeam)}};
@@ -235,6 +242,9 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
   await tx.execute(sql`select pg_advisory_xact_lock(99241, ${entryId})`);
   const award = rowsOf(await tx.execute(sql`
     select ce.id as "entryId", ce.user_id as "userId", ce.rank, ce.prize_card_id as "prizeCardId",
+      ce.tiebreak_meta -> 'settlement' -> 'prizeAward' as "settlementAward",
+      (select pa.metadata from app.competition_prize_awards pa where pa.entry_id=ce.id and pa.user_id=ce.user_id and pa.prize_category='card' limit 1) as "awardMetadata",
+      (select pa.status from app.competition_prize_awards pa where pa.entry_id=ce.id and pa.user_id=ce.user_id and pa.prize_category='card' limit 1) as "awardStatus",
       c.id as "competitionId", c.name as "competitionName", c.status::text as "competitionStatus",
       c.tier::text as tier, coalesce(c.entry_fee,0)::float as "entryFee",
       coalesce(c.prize_key,'') as "prizeKey"
@@ -252,16 +262,21 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
     && rank >= 1 && rank <= 3;
   if (!freeCommonCup) throw new Error("This entry has no FREE Common Cup card prize to claim");
 
-  const existingCardId = Number(award.prizeCardId || 0);
+  const existingCardId = awardedPrizeCardId(award);
   if (existingCardId > 0) {
     const existing = rowsOf(await tx.execute(sql`
-      select pc.id, pc.rarity::text as rarity, p.name as "playerName", p.team as "playerTeam"
+      select pc.id, pc.rarity::text as rarity, pc.owner_id = ${userId} as "inCollection", p.name as "playerName", p.team as "playerTeam"
       from app.player_cards pc join app.players p on p.id=pc.player_id
-      where pc.id=${existingCardId} and pc.owner_id=${userId}
+      where pc.id=${existingCardId}
       limit 1
     `))[0];
-    if (!existing) throw new Error("Claimed prize card is missing from your Collection");
-    await tx.execute(sql`update app.competition_prize_awards set status='claimed',updated_at=now()
+    if (!existing) throw new Error("The original prize card is unavailable; no replacement was minted");
+    // Repair only the missing link from proven historical award metadata.
+    // Never transfer ownership or choose a different player on a repeated claim.
+    await tx.execute(sql`update app.competition_entries set prize_card_id=${existingCardId}
+      where id=${entryId} and user_id=${userId} and prize_card_id is null`);
+    await tx.execute(sql`update app.competition_prize_awards set status='claimed',
+      metadata=jsonb_set(coalesce(metadata,'{}'::jsonb),'{cardId}',to_jsonb(${existingCardId}::integer),true),updated_at=now()
       where entry_id=${entryId} and user_id=${userId} and prize_category='card' and status='pending_claim'`);
     return { ...existing, competitionId: Number(award.competitionId), entryId, rank, replayed: true };
   }
@@ -343,7 +358,8 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
           ), true)
     where id=${entryId} and user_id=${userId} and prize_card_id is null
   `);
-  await tx.execute(sql`update app.competition_prize_awards set status='claimed',updated_at=now()
+  await tx.execute(sql`update app.competition_prize_awards set status='claimed',
+    metadata=jsonb_set(coalesce(metadata,'{}'::jsonb),'{cardId}',to_jsonb(${Number(card.id)}::integer),true),updated_at=now()
     where entry_id=${entryId} and user_id=${userId} and prize_category='card' and status='pending_claim'`);
   await createNotificationOnce(tx, {
     userId,

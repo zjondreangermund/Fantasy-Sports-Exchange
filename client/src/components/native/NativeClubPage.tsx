@@ -131,7 +131,7 @@ export default function NativeClubPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] });
       queryClient.invalidateQueries({ queryKey: ["/api/competitions/my-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/common-card-reward-choices"] });
-      toast({ title: body?.pendingChoice ? "Choose your Common card" : body?.card?.replayed ? "Prize already claimed" : "Prize card claimed!", description: body?.pendingChoice ? "Your collection is full. Keep your 20 cards or select one to replace—no new card has been minted yet." : body?.card?.playerName ? `${body.card.playerName} is now in your Collection.` : "Your card is now in Collection." });
+      toast({ title: body?.pendingChoice ? "Choose your Common card" : body?.card?.replayed ? "Prize already claimed" : "Prize card claimed!", description: body?.pendingChoice ? "Your collection is full. Keep your 20 cards or select one to replace—no new card has been minted yet." : body?.card?.playerName ? body?.card?.replayed ? `${body.card.playerName} is your original prize card. No extra card was added.` : `${body.card.playerName} is now in your Collection.` : "Your card is now in Collection." });
     },
     onError: (error: any) => toast({ title: "Prize claim failed", description: error?.message || "Please try again.", variant: "destructive" }),
   });
