@@ -32,6 +32,7 @@ import { applySiteView, getSiteViewMode, isNativeMobileApp, type SiteViewMode } 
 import { Skeleton } from "./components/ui/skeleton";
 
 import NotFound from "./pages/not-found";
+import AppErrorBoundary from "./components/AppErrorBoundary";
 
 const LandingPage = React.lazy(() => import("./pages/landing"));
 const ContactPage = React.lazy(() => import("./pages/contact"));
@@ -248,10 +249,10 @@ export default function App() {
           <SecurityModeBanner />
           {!nativeApp ? <GuidedHoverHelp /> : null}
           <AppContent />
-          <SignupWelcomePopup />
-          <PendingPrizeClaimPopup />
-          <CommonCardRewardChoiceDialog />
-          <GlobalActionToasts />
+          <AppErrorBoundary scope="SignupWelcomePopup" optional><SignupWelcomePopup /></AppErrorBoundary>
+          <AppErrorBoundary scope="PendingPrizeClaimPopup" optional><PendingPrizeClaimPopup /></AppErrorBoundary>
+          <AppErrorBoundary scope="CommonCardRewardChoiceDialog" optional><CommonCardRewardChoiceDialog /></AppErrorBoundary>
+          <AppErrorBoundary scope="GlobalActionToasts" optional><GlobalActionToasts /></AppErrorBoundary>
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>

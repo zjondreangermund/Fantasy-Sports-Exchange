@@ -8,6 +8,9 @@ const MOBILE_VIEWPORT = "width=device-width, initial-scale=1, minimum-scale=0.25
 
 export function isNativeMobileApp(): boolean {
   if (typeof window === "undefined") return false;
+  // The Android UA is available before Capacitor finishes injecting its bridge.
+  // Keep the runtime stable during boot instead of switching shells mid-render.
+  if (/FantasyArenaNative\//i.test(window.navigator.userAgent || "")) return true;
   const capacitor = (window as any).Capacitor;
   return typeof capacitor?.isNativePlatform === "function"
     ? Boolean(capacitor.isNativePlatform())

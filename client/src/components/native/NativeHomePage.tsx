@@ -37,7 +37,8 @@ export default function NativeHomePage() {
   // Legacy GW27-GW30 cups cannot override the current Premier League calendar.
   const openCups = currentArenaOpenCups(competitions);
   const featured = openCups[0];
-  const latest = notifications?.notifications?.find((row: any) => !row.read) || notifications?.notifications?.[0];
+  const inbox = Array.isArray(notifications?.notifications) ? notifications.notifications.filter(Boolean) : [];
+  const latest = inbox.find((row: any) => !row.read) || inbox[0];
   const lineupScore = lineupCards.reduce((sum, card: any) => sum + Number(card.currentGameweekPoints ?? card.player?.currentGameweekPoints ?? 0), 0);
   const readiness = Math.round(([cards.length >= 5, lineupCards.length === 5, activeEntries.length > 0].filter(Boolean).length / 3) * 100);
 

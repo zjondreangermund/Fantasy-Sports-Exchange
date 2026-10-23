@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import AppErrorBoundary from "./components/AppErrorBoundary";
 import "./index.css";
 import "./premium-shell.css";
 import "./mobile-action-slabs.css";
@@ -27,7 +28,7 @@ if (!rootElement) {
   throw new Error("Root element #root was not found.");
 }
 
-createRoot(rootElement).render(<App />);
+createRoot(rootElement).render(<AppErrorBoundary scope="application"><App /></AppErrorBoundary>);
 
 if ("serviceWorker" in navigator) {
   if (isNativeMobileApp()) {
