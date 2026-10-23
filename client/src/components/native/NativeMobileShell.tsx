@@ -16,6 +16,7 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
+import AppErrorBoundary from "../AppErrorBoundary";
 import UnreadNotificationDot from "../UnreadNotificationDot";
 import NativeAppUpdatePrompt from "./NativeAppUpdatePrompt";
 import NativeRouteBoundary from "./NativeRouteBoundary";
@@ -271,7 +272,7 @@ export default function NativeMobileShell({ children }: NativeMobileShellProps) 
         </div>
       ) : null}
 
-      <NativeAppUpdatePrompt />
+      <AppErrorBoundary scope="native-update-prompt" optional><NativeAppUpdatePrompt /></AppErrorBoundary>
     </div>
   );
 }
