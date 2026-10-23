@@ -15,6 +15,7 @@ function forbidToken(source, token, label) {
 const cancellation = read("server/services/competitionCancellation.ts");
 const freeSync = read("scripts/sync-free-card-tournaments.mjs");
 const freeAwards = read("scripts/apply-free-card-cup-auto-awards.mjs");
+const economy = read("server/routes/economyIntegrity.routes.ts");
 const start = read("start.sh");
 
 requireToken(cancellation, "COMPETITION_CANCEL_REFUND_V2_DYNAMIC_ENUMS", "dynamic enum compatibility marker missing");
@@ -38,14 +39,28 @@ requireToken(freeSync, "for (let gw = currentGw; gw <= 38; gw += 1)", "past dele
 requireToken(freeSync, "Preserved ${preservedEntries} existing FREE Cup entries", "FREE Cup sync does not explicitly preserve entries");
 forbidToken(freeSync, "delete from app.competition_entries", "FREE Cup sync must not delete tournament entries");
 
-requireToken(freeAwards, "FREE_CARD_CUP_AUTO_AWARD_V2_ALL_PLAYERS", "all-player randomized award marker missing");
-requireToken(freeAwards, "Fisher-Yates", "full-player-pool unbiased shuffle missing");
-requireToken(freeAwards, "currentPlayers", "live current Premier League player pool missing");
-requireToken(freeAwards, "order by random()", "randomized full local EPL fallback missing");
-forbidToken(freeAwards, "limit 25", "award draw is still artificially limited to 25 players");
-forbidToken(freeAwards, "::app.rarity", "award mint still assumes app.rarity enum namespace");
-requireToken(freeAwards, "where id = \\${winnerEntryId} and competition_id = \\${competitionId}", "winner prize-card update is not scoped to the selected tournament");
-requireToken(freeAwards, "full current Premier League player pool across all clubs", "winner notification does not state all-club randomization");
+// The official FREE Card Cup now awards an entitlement at settlement and
+// mints exactly one eligible random card only when the winner chooses Mint.
+// Verify the actual claim selector, not the retired settlement-side shuffle.
+if (freeAwards.includes("TOURNAMENT_WINNER_MANUAL_MINT_V1")) {
+  requireToken(freeAwards, "for (let index = 0; index < Math.min(3, ranked.length); index += 1)", "all top-three prize entitlements must be recorded");
+  requireToken(freeAwards, "free-card-claim-ready", "winners must receive their claim-ready notification");
+  requireToken(economy, "async function claimFreeCommonCupCard", "winner-initiated mint endpoint missing");
+  requireToken(economy, "order by random()", "the eligible EPL pool must be randomized");
+  requireToken(economy, "coalesce(p.fpl_id,0) > 0", "only current Premier League players are eligible");
+  requireToken(economy, "not in ('departed','superseded','unlinked','archived')", "departed players must never be minted");
+  requireToken(economy, "and not exists (", "already-owned player/rarity combinations must be excluded");
+  requireToken(economy, "prize_card_id is null", "each prize can only be minted once");
+  requireToken(economy, "pg_advisory_xact_lock(99241", "one-time mint must serialize by entry");
+} else {
+  requireToken(freeAwards, "FREE_CARD_CUP_AUTO_AWARD_V2_ALL_PLAYERS", "legacy full-pool marker missing");
+  requireToken(freeAwards, "Fisher-Yates", "legacy full-player-pool unbiased shuffle missing");
+  requireToken(freeAwards, "currentPlayers", "legacy live Premier League player pool missing");
+  requireToken(freeAwards, "order by random()", "legacy local random EPL fallback missing");
+  requireToken(freeAwards, "full current Premier League player pool across all clubs", "legacy winner notification text missing");
+}
+forbidToken(freeAwards, "limit 25", "award draw is still limited to 25 players");
+forbidToken(freeAwards, "::app.rarity", "award mint assumes the wrong enum namespace");
 
 requireToken(start, "node scripts/sync-free-card-tournaments.mjs", "production startup does not sync FREE Card Cups");
 
