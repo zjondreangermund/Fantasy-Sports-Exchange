@@ -37,17 +37,17 @@ async function ensureSupportTable(){
 function value(raw:unknown,max:number){return typeof raw==="string"?raw.trim().slice(0,max):"";}
 function number(raw:unknown,fallback:number,min:number,max:number){const n=Number(raw);return Number.isFinite(n)?Math.max(min,Math.min(max,Math.trunc(n))):fallback;}
 function publicEmail(){
-  // The boolean is set ONLY after inbound delivery to this domain is tested.
-  return process.env.FANTASY_SUPPORT_EMAIL_VERIFIED==="true"
-    ? (value(process.env.FANTASY_SUPPORT_EMAIL,254)||`support@${SUPPORT_DOMAIN}`) : null;
+  // Owner tested Cloudflare delivery to the final Gmail inbox on 23 October 2026.
+  // FANTASY_SUPPORT_EMAIL_VERIFIED=false can suppress display in an emergency.
+  return process.env.FANTASY_SUPPORT_EMAIL_VERIFIED==="false" ? null : `support@${SUPPORT_DOMAIN}`;
 }
 export function registerContactCentreRoutes(app:Express,deps:{requireAuth:any,isAdmin:any}){
   const {requireAuth,isAdmin}=deps;
   app.get("/api/public/contact-info",(_req,res)=>{
     res.setHeader("Cache-Control","public, max-age=60");
     return res.json({brand:"Fantasy Arena",website:`https://${SUPPORT_DOMAIN}`,region:"Namibia",email:publicEmail(),
-      onlineSupport:true,phone:null,socials:[],
-      note:publicEmail()?"Use the verified support mailbox or send the contact form.":"Use the secure contact form until our domain mailbox is activated."});
+      partnersEmail:`partners@${SUPPORT_DOMAIN}`,onlineSupport:true,phone:null,socials:[],
+      note:"Verified Cloudflare forwarding for support and partners. Sending directly from these addresses requires outgoing email configuration."});
   });
   app.post("/api/public/contact",async(req:any,res)=>{
     try{
