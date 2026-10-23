@@ -8,7 +8,7 @@ let source = fs.readFileSync(file, "utf8");
 
 const MARKER = "FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS";
 if (source.includes(MARKER)) {
-  console.log("[free-card-cups] Verified all-player randomized card awards already applied");
+  console.log("[free-card-cups] Verified winner-controlled top-three prize entitlements already applied");
   process.exit(0);
 }
 
@@ -121,4 +121,4 @@ const awardBlock = `        // FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS
 replaceOnce(awardAnchor, awardBlock, "automatic all-player free card award");
 
 fs.writeFileSync(file, source);
-console.log("[free-card-cups] Applied randomized automatic card rewards across the full current Premier League player pool");
+console.log("[free-card-cups] Applied top-three claim rights: prizes remain pending until each eligible winner mints");
