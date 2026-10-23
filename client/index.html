@@ -65,7 +65,7 @@
     <script>
       (function () {
         // Only the installed Capacitor Android shell uses this fallback.
-        if (!/FantasyArenaNative\\//i.test(navigator.userAgent || "")) return;
+        if (!(navigator.userAgent || "").includes("FantasyArenaNative/")) return;
         var root = document.getElementById("root");
         var recovery = document.getElementById("native-startup-recovery");
         var retry = document.getElementById("native-startup-retry");
