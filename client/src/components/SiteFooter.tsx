@@ -65,7 +65,7 @@ export default function SiteFooter() {
             </div>
           </div>
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/50">
-            A fantasy football platform for collecting Premier League player cards, building lineups, entering skill-based competitions and unlocking real-world rewards.
+            A Namibia-based fantasy football platform for collecting Premier League player cards, building lineups, entering skill-based competitions and unlocking real-world rewards.
           </p>
           <Link href="/contact-us" className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-cyan-200 hover:text-cyan-100">
             <Mail className="h-4 w-4" /> Contact Fantasy Arena Support
@@ -89,7 +89,7 @@ export default function SiteFooter() {
       </div>
 
       <div className="mx-auto mt-8 flex max-w-7xl flex-col gap-3 border-t border-white/10 pt-5 text-xs text-white/35 sm:flex-row sm:items-center sm:justify-between">
-        <span>© 2026 Fantasy Arena. All rights reserved.</span>
+        <span>© 2026 Fantasy Arena · playfantasyarena.com · Namibia. All rights reserved.</span>
         <span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Policies require final Namibian legal review before commercial launch.</span>
       </div>
     </footer>
