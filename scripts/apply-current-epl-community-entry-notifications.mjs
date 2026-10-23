@@ -130,6 +130,7 @@ patchFile("server/routes/referrals.routes.ts", (original) => {
 
 // Reward-repair cards must never be minted from stale league-only rows.
 patchFile("server/services/tournamentRewards.ts", (original) => {
+  if (original.includes("PRIZE_REPAIR_NEVER_MINTS_V1") && !original.includes("storage.createPlayerCard(")) return original;
   let source = original;
   const old = "  const allPlayers = shuffle(await storage.getPlayers());";
   const replacement = `  const allPlayers = shuffle((await storage.getPlayers()).filter((player: any) => {\n    const league = String(player?.league || "").toLowerCase().replace(/[^a-z0-9]+/g, "");\n    const fplId = Number(player?.fplId ?? player?.fpl_id ?? 0);\n    const status = String(player?.status || "a").toLowerCase();\n    return ["premierleague", "englishpremierleague", "epl"].includes(league)\n      && fplId > 0\n      && !["departed", "superseded", "unlinked", "archived"].includes(status);\n  })); // CURRENT_EPL_REWARD_REPAIR_V1`;
