@@ -104,7 +104,17 @@ need(referralPostguard, '!["departed", "superseded", "unlinked", "archived"].inc
 need(weeklyRefresh, 'import "./apply-current-epl-referral-postguard.mjs";', "referral postguard build ordering");
 need(rewardRepair, "CURRENT_EPL_REWARD_REPAIR_V2", "tournament reward-repair EPL guard");
 need(rewardRepair, "fplId > 0", "reward-repair FPL identity requirement");
-need(freeCupAwards, "coalesce(p.fpl_id, 0) > 0", "Free Cup fallback FPL identity requirement");
-need(freeCupAwards, "not in ('departed','superseded','unlinked','archived')", "Free Cup fallback departed-player exclusion");
+// The new Free Cup flow records prize entitlements at settlement instead of
+// minting from a local fallback. Validate its winner-controlled mint selector
+// (including official FPL ID and active Premier League status) at runtime.
+if (freeCupAwards.includes("TOURNAMENT_WINNER_MANUAL_MINT_V1")) {
+  need(economy, "async function claimFreeCommonCupCard", "winner-controlled tournament prize mint");
+  need(economy, "coalesce(p.fpl_id,0) > 0", "Free Cup claim FPL identity requirement");
+  need(economy, "not in ('departed','superseded','unlinked','archived')", "Free Cup claim departed-player exclusion");
+  need(freeCupAwards, "free-card-claim-ready", "settlement records a pending winner reward");
+} else {
+  need(freeCupAwards, "coalesce(p.fpl_id, 0) > 0", "Free Cup fallback FPL identity requirement");
+  need(freeCupAwards, "not in ('departed','superseded','unlinked','archived')", "Free Cup fallback departed-player exclusion");
+}
 
 console.log("Current EPL reward safeguards, hard 24-hour Community Live resets with cache invalidation, mention pushes, stable player portraits, atomic/self-healing tournament entry confirmations plus delivery-job recovery, every-25-entry momentum alerts, settlement winner broadcasts, and admin-only signup/entry push notifications verified.");
