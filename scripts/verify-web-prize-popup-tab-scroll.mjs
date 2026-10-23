@@ -6,7 +6,11 @@ const main=fs.readFileSync("client/src/main.tsx","utf8");
 function need(source,token,label){if(!source.includes(token))throw new Error(label);}
 need(app,"<PendingPrizeClaimPopup />","Global pending-prize popup is missing");
 need(popup,'This works equally in the browser, installed PWA and native Android shell.',"Tournament prize popup must support all clients");
-need(popup,'a.status!=="ready_to_mint"',"Only confirmed unminted card prizes may show the modal");
+const prizePolicy=fs.readFileSync("shared/prize-notification-policy.ts","utf8");
+need(popup,'!shouldPromptPrizeMint(a)',"Prize popup must use the shared GW8 eligibility policy");
+need(prizePolicy,'award.status === "ready_to_mint"',"Only confirmed unminted card prizes may show the modal");
+need(prizePolicy,'PRIZE_NOTIFICATION_START_GAMEWEEK = 8',"Prize prompts must begin at GW8");
+need(prizePolicy,'!award.cardId',"Already-issued prize cards must not prompt another mint");
 need(popup,'fa:won-prize-prompt:',"One-time dismissible prompt must not spam players");
 need(popup,"Mint my winning card","Tournament winner must mint deliberately");
 need(popup,"Later — keep this prize in my Trophy Cabinet","Dismissed prizes must remain in trophy history");
