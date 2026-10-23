@@ -58,6 +58,7 @@ export default function InstallAppButton() {
   const [, refresh] = React.useReducer((value) => value + 1, 0);
   const [installing, setInstalling] = React.useState(false);
   const [promptOpen, setPromptOpen] = React.useState(false);
+  const [anotherDialogOpen, setAnotherDialogOpen] = React.useState(false);
   const isAndroidBrowser = typeof navigator !== "undefined" && /android/i.test(String(navigator.userAgent || ""));
   const installed = isInstalledMobileApp();
 
@@ -77,6 +78,18 @@ export default function InstallAppButton() {
     const timer = window.setTimeout(() => setPromptOpen(true), 1_800);
     return () => window.clearTimeout(timer);
   }, [installed]);
+
+  // Defer the optional install prompt while a reward or other modal owns focus.
+  // A custom overlay outside Radix's modal scope cannot receive pointer events.
+  React.useEffect(() => {
+    const check = () => setAnotherDialogOpen(Boolean(document.querySelector(
+      '[role="dialog"]:not([data-install-app-popup]), [role="alertdialog"]'
+    )));
+    const observer = new MutationObserver(check);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["role"] });
+    check();
+    return () => observer.disconnect();
+  }, []);
 
   if (isInstalledMobileApp()) return null;
 
@@ -135,7 +148,7 @@ export default function InstallAppButton() {
         <span>{installing ? "Installing…" : "Install App"}</span>
       </button>
 
-      {promptOpen ? (
+      {promptOpen && !anotherDialogOpen ? (
         <div className="fixed inset-0 z-[220] flex items-end justify-center bg-black/75 p-3 backdrop-blur-md sm:items-center" role="dialog" aria-modal="true" aria-label="Install Fantasy Arena" data-install-app-popup>
           <button type="button" className="absolute inset-0 cursor-default" onClick={dismissPrompt} aria-label="Close install prompt" />
           <section className="relative z-10 w-full max-w-md overflow-hidden rounded-[1.75rem] border border-cyan-300/25 bg-[#070b18] p-5 text-white shadow-[0_28px_100px_rgba(0,0,0,.72),0_0_50px_rgba(34,211,238,.12)]">
