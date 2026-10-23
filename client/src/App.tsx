@@ -34,6 +34,7 @@ import { Skeleton } from "./components/ui/skeleton";
 import NotFound from "./pages/not-found";
 
 const LandingPage = React.lazy(() => import("./pages/landing"));
+const ContactPage = React.lazy(() => import("./pages/contact"));
 const InstallPage = React.lazy(() => import("./pages/install"));
 const FreeGameweekLandingPage = React.lazy(() => import("./pages/free-gameweek"));
 const LegalCentrePage = React.lazy(() => import("./pages/legal-centre"));
@@ -82,7 +83,7 @@ function RouteFallback() {
 function legalRouteElements() {
   return [
     <Route key="/legal/scoring" path="/legal/scoring" component={ScoringRulesPage} />,
-    ...legalInfoPaths.filter((path) => path !== "/legal/scoring").map((path) => <Route key={path} path={path} component={LegalCentrePage} />),
+    ...legalInfoPaths.filter((path) => path !== "/legal/scoring").map((path) => <Route key={path} path={path} component={path === "/contact" || path === "/contact-us" ? ContactPage : LegalCentrePage} />),
     ...trustInfoPaths.map((path) => <Route key={path} path={path} component={TrustCentrePage} />),
   ];
 }
