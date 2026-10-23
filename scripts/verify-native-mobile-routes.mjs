@@ -34,6 +34,8 @@ const requiredWebsiteRoutes = [
   "/help",
 ];
 
+const additionalFullWebsiteRoutes = ["/my-entries"]; // Native Play opens full site; not a dock tab.
+
 const requiredCompactMappings = [
   "NativeHomePage",
   "NativePlayPage",
@@ -80,9 +82,13 @@ for (const file of fs.readdirSync(nativeDir).filter((name) => name.endsWith(".ts
   const source = fs.readFileSync(path.join(nativeDir, file), "utf8");
   const fullRouteLinks = source.match(/href=(?:\"[^\"]*nativeFull=1[^\"]*\"|\{`[^`]*nativeFull=1[^`]*`\})/g) || [];
   for (const link of fullRouteLinks) {
-    const route = link.match(/\/(?:competitions|live-lineup|collection|marketplace|prize-vault|wallet|premier-league|account|legal\/scoring|help)/)?.[0];
-    if (!route || !requiredWebsiteRoutes.includes(route)) failures.push(`${file} has an unverified nativeFull destination: ${link}`);
+    const route = link.match(/\/(?:competitions|my-entries|live-lineup|collection|marketplace|prize-vault|wallet|premier-league|account|legal\/scoring|help)/)?.[0];
+    if (!route || ![...requiredWebsiteRoutes, ...additionalFullWebsiteRoutes].includes(route)) failures.push(`${file} has an unverified nativeFull destination: ${link}`);
   }
+}
+
+for (const route of additionalFullWebsiteRoutes) {
+  expect(app.includes(`path="${route}"`), `Full website router no longer declares ${route}`);
 }
 
 /* Bottom navigation must reserve real layout height. If it floats over the
