@@ -1,3 +1,4 @@
+import { retireQueuedPrizePrompts } from "./prizeNotificationPolicy.js";
 import { reportNotificationHealth } from "./notificationHealth.js";
 import { PUSH_QUIET_SECONDS, groupPushDeliveries, pushBatchMessage } from "./pushBatching.js";
 import webpush from "web-push";
@@ -186,6 +187,7 @@ function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
 }
 
 async function claimDueDeliveries(limit: number): Promise<any[]> {
+  await retireQueuedPrizePrompts(db, "web");
   const result = await db.execute(sql`
     with eligible_subscriptions as (
       select subscription.id

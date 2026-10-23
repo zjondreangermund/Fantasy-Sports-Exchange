@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { obsoletePrizePromptSql } from "./prizeNotificationPolicy.js";
 
 export type ArenaNotificationType = "win" | "runner_up" | "system";
 
@@ -134,6 +135,13 @@ export async function createNotificationOnce(tx: any, input: {
   const dedupeKey = String(input.dedupeKey || "").trim().slice(0, 240);
   const type: ArenaNotificationType = input.type === "win" || input.type === "runner_up" ? input.type : "system";
   if (!userId || !title || !message || !dedupeKey) return null;
+  // Stop retrospective prize-mint prompts and reminders for already-issued cards.
+  if (/^competition:\d+:entry:\d+:(free-card-claim-ready|free-card-claimed|common-cap-choice|common-cap-replaced)$/.test(dedupeKey)) {
+    const obsolete = await tx.execute(sql`select 1 from
+      (select ${userId}::text as user_id, ${dedupeKey}::text as dedupe_key) n
+      where ${obsoletePrizePromptSql()} limit 1`);
+    if (Array.isArray(obsolete?.rows) && obsolete.rows.length) return null;
+  }
 
   const result = await tx.execute(sql`
     insert into app.notifications (user_id, type, title, message, read, dedupe_key, created_at)
