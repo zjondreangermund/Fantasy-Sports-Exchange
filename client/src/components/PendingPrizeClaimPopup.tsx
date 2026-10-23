@@ -1,4 +1,5 @@
 import * as React from "react";
+import { shouldPromptPrizeMint } from "../../../shared/prize-notification-policy";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { CheckCircle2, Crown, Gift, Medal, Sparkles, Trophy } from "lucide-react";
@@ -44,7 +45,7 @@ export default function PendingPrizeClaimPopup() {
   });
   const userId=String(user?.id||"");
   const award=(Array.isArray(history?.awards)?history.awards:[]).find(a=>{
-    if(a.kind!=="card"||a.status!=="ready_to_mint"||!userId||localDismissed.includes(a.entryId))return false;
+    if(a.kind!=="card"||!shouldPromptPrizeMint(a)||!userId||localDismissed.includes(a.entryId))return false;
     return !isSnoozed(onceKey(userId,a.entryId));
   })||null;
   const dismiss=()=>{

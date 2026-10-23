@@ -19,7 +19,13 @@ export function serveStatic(app: Express) {
     throw new Error(`Could not find the build directory: ${distPath}. Build artifacts missing.`);
   }
 
-  app.use(express.static(distPath));
+  // Native WebView must revalidate the HTML shell after every deployment.
+  // Hashed bundles still use the normal asset path and missing-asset 404 guard.
+  app.use(express.static(distPath, { setHeaders(res, filePath) {
+    if (filePath.endsWith("index.html") || filePath.endsWith("native-startup-recovery.js")) {
+      res.setHeader("Cache-Control", "no-store");
+    }
+  } }));
   app.get("/assets/*assetPath", (req, res, next) => {
     const rel = String(req.params.assetPath || "");
     const absolute = path.resolve(distPath, "assets", rel);
@@ -32,5 +38,5 @@ export function serveStatic(app: Express) {
     return next();
   });
   // FIX: Use named wildcard for Express v5
-  app.get("/*splat", (_req, res) => res.sendFile(path.resolve(distPath, "index.html")));
+  app.get("/*splat", (_req, res) => { res.setHeader("Cache-Control", "no-store"); res.sendFile(path.resolve(distPath, "index.html")); });
 }

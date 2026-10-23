@@ -1,3 +1,4 @@
+import { obsoletePrizePromptSql } from "../services/prizeNotificationPolicy.js";
 import { reportNotificationHealth } from "../services/notificationHealth.js";
 import { getArenaAlertPreferences, setArenaAlertPreferences, ensureArenaAttentionSchema, startArenaAttentionWorker } from "../services/arenaAttention.js";
 import type { Express } from "express";
@@ -441,6 +442,7 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
         left join app.players source_player on source_player.id=pr.source_player_id
         where n.user_id = ${userId}
           and coalesce(n.dedupe_key, '') not like '%self-test%'
+          and not ${obsoletePrizePromptSql()}
         order by n.created_at desc nulls last, n.id desc
         limit 100
       `));
