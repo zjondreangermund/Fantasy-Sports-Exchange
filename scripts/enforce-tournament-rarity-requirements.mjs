@@ -14,7 +14,7 @@ const client = new Client({
 function invalidRuleSql(alias = "stats") {
   return `
     case ${alias}.tier
-      when 'common' then not (${alias}.card_count = 5 and ${alias}.distinct_card_count = 5 and ${alias}.common_count = 5)
+      when 'common' then not (${alias}.card_count = 5 and ${alias}.distinct_card_count = 5)
       when 'rare' then not (${alias}.card_count = 5 and ${alias}.distinct_card_count = 5 and ${alias}.rare_count >= 4 and (${alias}.common_count + ${alias}.rare_count) = 5)
       when 'unique' then not (${alias}.card_count = 5 and ${alias}.distinct_card_count = 5 and ${alias}.unique_count >= 3 and (${alias}.common_count + ${alias}.rare_count + ${alias}.unique_count) = 5)
       when 'epic' then not (${alias}.card_count = 5 and ${alias}.distinct_card_count = 5 and ${alias}.epic_count >= 2 and (${alias}.common_count + ${alias}.rare_count + ${alias}.unique_count + ${alias}.epic_count) = 5)
@@ -85,8 +85,8 @@ try {
 
       case v_tier
         when 'common' then
-          v_valid := v_common_count = 5;
-          v_requirement := '5 Common cards';
+          v_valid := (v_common_count + v_rare_count + v_unique_count + v_epic_count + v_legendary_count) = 5;
+          v_requirement := '5 cards of any rarity';
         when 'rare' then
           v_valid := v_rare_count >= 4 and (v_common_count + v_rare_count) = 5;
           v_requirement := 'at least 4 Rare cards; the fifth may be Common or Rare';
