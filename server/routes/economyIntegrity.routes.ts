@@ -8,6 +8,7 @@ import { buildFplPlayerIndex } from "../services/fplPlayerIdentity.js";
 import { loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 import { loadApiFootballGameweekScoringContext } from "../services/apiFootballScoringBridge.js";
 import { ScoreUpdateService } from "../services/scoreUpdater.js";
+import { runApiFootballSync } from "../services/apiFootballSync.js";
 import { rankCompetitionEntries } from "../services/tournamentRules.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
@@ -739,7 +740,18 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const preview = await storage.getCompetition(competitionId);
       if (!preview) return res.status(404).json({ message: "Tournament not found" });
       if (String(preview.status) !== "completed") {
-        const scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId);
+        let scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId);
+        // A completed fixture can precede its finalized API-Football player statistics.
+        // On manual settlement, retry the provider sync once and rescore; never bypass validation.
+        if (scoring.final && !scoring.complete) {
+          try {
+            const refresh = await runApiFootballSync("completed_stats");
+            console.info(`[settlement] API-Football final-stat refresh for competition ${competitionId}: ${refresh.message}`);
+            scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId);
+          } catch (syncError) {
+            console.warn(`[settlement] provider refresh failed for competition ${competitionId}:`, syncError);
+          }
+        }
         if (scoring.skipped && scoring.reason === "Tournament entries are still open") throw new Error("Tournament entries are still open");
         if (!scoring.final) throw new Error("Gameweek scores are still provisional");
         if (!scoring.complete) {
