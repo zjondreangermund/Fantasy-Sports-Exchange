@@ -700,6 +700,47 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
     }catch(error:any){const message=String(error?.message||"Could not resolve Common card choice");const status=/not found/i.test(message)?404:/choose|cannot|below|available|exhausted/i.test(message)?400:500;if(status===500)console.error("Failed to resolve Common card choice:",error);return res.status(status).json({message});}
   });
 
+
+  // GW_RECOVERY_AUDIT_V1: read-only settlement integrity check (never distributes rewards).
+  app.get("/api/admin/competitions/recovery-audit/:gameWeek", requireAuth, async (req: any, res) => {
+    try {
+      if (!(await isAdminUser(String(req.authUserId || "")))) return res.status(403).json({ message: "Admin access required" });
+      const gameWeek = Number(req.params.gameWeek);
+      if (!Number.isInteger(gameWeek) || gameWeek < 1 || gameWeek > 38) return res.status(400).json({ message: "Invalid gameweek" });
+      const records = rowsOf(await db.execute(sql`
+        select c.id, c.name, c.tier::text as tier, c.status::text as status,
+          (select count(*)::int from app.competition_entries ce where ce.competition_id=c.id) as "entryCount",
+          (select count(*)::int from app.competition_entries ce where ce.competition_id=c.id
+             and (ce.tiebreak_meta -> 'scoring' ->> 'complete' is distinct from 'true'
+               or ce.tiebreak_meta -> 'scoring' ->> 'final' is distinct from 'true'
+               or coalesce((ce.tiebreak_meta -> 'scoring' ->> 'gameWeek')::int,0) <> c.game_week)) as "unverifiedEntries",
+          (select count(*)::int from app.competition_entries ce where ce.competition_id=c.id
+             and ce.payout_posting_key is not null) as "paidEntryCount",
+          (select count(*)::int from app.competition_entries ce where ce.competition_id=c.id
+             and ce.prize_card_id is not null) as "mintedPrizeCount",
+          (select count(*)::int from app.competition_prize_awards a where a.competition_id=c.id) as "prizeAwardCount",
+          (select count(*)::int from app.competition_prize_awards a where a.competition_id=c.id
+             and a.status='pending_claim') as "unclaimedAwardCount",
+          (select count(*)::int from app.card_locks cl where cl.reason='competition'
+             and cl.ref_id=c.id::text and (cl.expires_at is null or cl.expires_at>now())) as "activeCardLocks"
+        from app.competitions c where c.game_week=${gameWeek} order by c.id
+      `));
+      const tournaments = records.map((row: any) => ({
+        ...row,
+        recoveryStatus: row.status === "completed"
+          ? "Completed — preserve existing payouts and prizes; review mismatches before changes"
+          : row.status === "cancelled" ? "Cancelled — do not resettle"
+          : Number(row.unverifiedEntries || 0) > 0 ? "Scoring incomplete — refresh provider before settling"
+          : "Check final fixture coverage before normal settlement",
+      }));
+      return res.json({ gameWeek, readOnly: true, tournaments,
+        notice: "This audit does not update scoring, unlock cards, reopen completed cups or reissue any awards." });
+    } catch (error) {
+      console.error("[gw-recovery-audit] failed:", error);
+      return res.status(500).json({ message: "GW recovery audit unavailable" });
+    }
+  });
+
   app.get("/api/admin/entry-monitor", requireAuth, async (req: any, res) => {
     try {
       if (!(await isAdminUser(String(req.authUserId || "")))) return res.status(403).json({message:"Admin access required"});
