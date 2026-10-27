@@ -34,10 +34,10 @@ export const TOURNAMENT_RARITY_REQUIREMENTS: Record<TournamentRarity, {
   description: string;
 }> = {
   common: {
-    requiredTournamentRarityCards: 5,
-    allowedRarities: ["common"],
-    shortLabel: "5 Common",
-    description: "A Common tournament requires five Common cards.",
+    requiredTournamentRarityCards: 0,
+    allowedRarities: ["common", "rare", "unique", "epic", "legendary"],
+    shortLabel: "Any 5 cards",
+    description: "A Common tournament accepts five cards of any rarity.",
   },
   rare: {
     requiredTournamentRarityCards: 4,
