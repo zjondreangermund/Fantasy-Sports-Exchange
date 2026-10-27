@@ -64,12 +64,26 @@ patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
     "const forceManual = Boolean(req.body?.forceManual",
     "manual settle request flag",
   );
-  source = replaceRequired(
-    source,
-    "        const scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId);",
-    "        const scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId, { forceFinal: forceManual });",
-    "manual settlement scoring call",
-  );
+  // The live code may already include the stats-recovery retry introduced
+  // after this build-time patcher was written. Preserve that retry rather than
+  // failing the build or resetting the settlement scoring flow.
+  if (source.includes("        let scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId);")) {
+    source = source.replace(
+      "        let scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId);",
+      "        let scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId, { forceFinal: forceManual });",
+    );
+    source = source.replace(
+      "            scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId);",
+      "            scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId, { forceFinal: forceManual });",
+    );
+  } else if (!source.includes("        let scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId, { forceFinal: forceManual });")) {
+    source = replaceRequired(
+      source,
+      "        const scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId);",
+      "        const scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId, { forceFinal: forceManual });",
+      "manual settlement scoring call",
+    );
+  }
   source = replaceRequired(
     source,
     "            settledAt: new Date().toISOString(),",
