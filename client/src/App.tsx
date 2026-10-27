@@ -1,3 +1,4 @@
+import DepartureLoginPrompt from "./components/DepartureLoginPrompt";
 import * as React from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
@@ -251,6 +252,7 @@ export default function App() {
           <AppContent />
           <AppErrorBoundary scope="SignupWelcomePopup" optional><SignupWelcomePopup /></AppErrorBoundary>
           <AppErrorBoundary scope="PendingPrizeClaimPopup" optional><PendingPrizeClaimPopup /></AppErrorBoundary>
+          <AppErrorBoundary scope="DepartureLoginPrompt" optional><DepartureLoginPrompt /></AppErrorBoundary>
           <AppErrorBoundary scope="CommonCardRewardChoiceDialog" optional><CommonCardRewardChoiceDialog /></AppErrorBoundary>
           <AppErrorBoundary scope="GlobalActionToasts" optional><GlobalActionToasts /></AppErrorBoundary>
           <Toaster />

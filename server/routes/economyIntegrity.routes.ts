@@ -371,10 +371,31 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
   return { ...card, competitionId: Number(award.competitionId), entryId, rank, replayed: false };
 }
 
+async function notifyEntryAdmins(userId: string, competitionId: number, message: string) {
+  const emails = String(process.env.ADMIN_EMAILS || DEFAULT_ADMIN_EMAIL).split(",").map(x=>x.trim().toLowerCase()).filter(Boolean);
+  const ids = String(process.env.ADMIN_USER_IDS || "").split(",").map(x=>x.trim()).filter(Boolean);
+  const admins = rowsOf(await db.execute(sql`select id from app.users where lower(email) in (select value from jsonb_array_elements_text(${JSON.stringify(emails)}::jsonb)) or id in (select value from jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))`));
+  for (const admin of admins) await createNotificationOnce(db, {userId: String(admin.id), title: "Tournament entry needs attention", message: `User ${userId}, tournament ${competitionId}: ${message}. See Admin → Activity for every attempt.`, dedupeKey: `admin:entry-rejected:${userId}:${competitionId}:${new Date().toISOString().slice(0,10)}`});
+}
+
 export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEconomyIntegrityRoutesDeps) {
   const { requireAuth } = deps;
 
   app.post("/api/competitions/join", requireAuth, async (req: any, res) => {
+    let outcomeMessage = "Entry request completed";
+    const originalJson = res.json.bind(res);
+    res.json = ((body: any) => { outcomeMessage = String(body?.message || outcomeMessage).slice(0, 500); return originalJson(body); }) as any;
+    res.once("finish", () => {
+      const userId = String(req.authUserId || "");
+      const competitionId = Number(req.body?.competitionId) || null;
+      const action = res.statusCode < 400 ? "competition.entry.accepted" : "competition.entry.rejected";
+      const meta = { competitionId, status: res.statusCode, message: outcomeMessage };
+      void db.execute(sql`insert into app.audit_logs(user_id,action,meta) values(${userId},${action},${JSON.stringify(meta)}::jsonb)`)
+        .catch(error => console.error("Entry audit failed", error));
+      if (res.statusCode >= 400 && competitionId) {
+        void notifyEntryAdmins(userId, competitionId, outcomeMessage).catch(error => console.error("Admin entry notice failed", error));
+      }
+    });
     try {
       await ensureCardLockGuard();
       const userId = String(req.authUserId || "");
@@ -382,7 +403,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const cardIds = Array.isArray(req.body?.cardIds)
         ? req.body.cardIds.map(Number).filter((id: number) => Number.isInteger(id) && id > 0)
         : [];
-      const captainId = Number(req.body?.captainId || cardIds[0]);
+      const captainId = Number(req.body?.captainId);
 
       if (!Number.isInteger(competitionId) || competitionId <= 0 || cardIds.length !== 5 || new Set(cardIds).size !== 5) {
         return res.status(400).json({ message: "Tournament ID and exactly 5 different card IDs required" });
@@ -545,6 +566,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         const maxEntries = Number(competition.maxEntries || 0);
         if (maxEntries > 0 && Number(countRow?.count || 0) >= maxEntries) throw new Error("Tournament is full");
 
+        await tx.execute(sql`
+          delete from app.card_locks cl using app.competitions c
+          where cl.reason='competition' and cl.ref_id=c.id::text
+            and c.status::text in ('completed','cancelled')
+            and cl.card_id in (select value::int from jsonb_array_elements_text(${cardIdsJson}::jsonb))
+        `);
         const lockedCard = rowsOf(await tx.execute(sql`
           select card_id as "cardId"
           from app.card_locks
@@ -670,6 +697,22 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const result=await db.transaction(tx=>resolveCommonCardChoice(tx,String(req.authUserId||""),choiceId,String(req.body?.action||"").toLowerCase(),Number(req.body?.replaceCardId||0)));
       return res.json({success:true,...result});
     }catch(error:any){const message=String(error?.message||"Could not resolve Common card choice");const status=/not found/i.test(message)?404:/choose|cannot|below|available|exhausted/i.test(message)?400:500;if(status===500)console.error("Failed to resolve Common card choice:",error);return res.status(status).json({message});}
+  });
+
+  app.get("/api/admin/entry-monitor", requireAuth, async (req: any, res) => {
+    try {
+      if (!(await isAdminUser(String(req.authUserId || "")))) return res.status(403).json({message:"Admin access required"});
+      const [entries, locks] = await Promise.all([
+        db.execute(sql`select ce.id, ce.user_id as "userId", u.email, c.name, c.game_week as "gameWeek", c.status, ce.rank, ce.total_score as "totalScore"
+          from app.competition_entries ce join app.competitions c on c.id=ce.competition_id left join app.users u on u.id=ce.user_id
+          order by ce.joined_at desc, ce.id desc limit 100`),
+        db.execute(sql`select cl.card_id as "cardId", cl.user_id as "userId", u.email, cl.ref_id as "refId", c.name, c.game_week as "gameWeek", c.status, c.end_date as "endDate"
+          from app.card_locks cl left join app.competitions c on c.id::text=cl.ref_id left join app.users u on u.id=cl.user_id
+          where cl.reason='competition' and (cl.expires_at is null or cl.expires_at>now())
+          order by cl.created_at desc limit 100`),
+      ]);
+      return res.json({entries:rowsOf(entries),locks:rowsOf(locks)});
+    } catch(error) {console.error("Entry monitor failed",error);return res.status(500).json({message:"Unable to load entry monitor"});}
   });
 
   app.get("/api/admin/wallet-postings/integrity", requireAuth, async (req: any, res) => {

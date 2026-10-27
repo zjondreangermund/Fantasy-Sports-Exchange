@@ -35,6 +35,7 @@ function replaceBetween(source, startToken, endToken, replacement, label) {
   else if (source.includes(legacySwitchable)) source = source.replace(legacySwitchable, responsiveMode);
   else if (!source.includes(responsiveMode)) throw new Error("[responsive-web] effective viewport mode anchor not found");
 
+  source = source.replace('effectiveMode === "desktop" ? DESKTOP_VIEWPORT : MOBILE_VIEWPORT', 'MOBILE_VIEWPORT');
   write(path, source);
 }
 

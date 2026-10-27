@@ -67,7 +67,7 @@ export function notificationDestination(notification: ArenaNotification): string
   if (replacementKey.startsWith("gameweek:") && replacementKey.endsWith(":entries-closed-good-luck")) return "/my-entries";
   if (replacementKey.startsWith("prize-level:")) return "/prize-vault";
   if (replacementKey.startsWith("prize-award:")) return "/trophy-cabinet";
-  if (replacementKey.startsWith("player-availability:") || replacementKey.startsWith("fixture-change:")) return "/my-entries";
+  if (replacementKey.startsWith("availability-reminder:") || replacementKey.startsWith("player-availability:") || replacementKey.startsWith("fixture-change:")) return "/premier-league";
   if (replacementKey.startsWith("withdrawal:")) return "/wallet";
   if (replacementKey.startsWith("marketplace:price-change:") || replacementKey.startsWith("loan:")) return "/marketplace";
   if (replacementKey.startsWith("admin:")) return "/admin";

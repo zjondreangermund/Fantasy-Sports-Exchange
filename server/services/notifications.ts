@@ -161,7 +161,7 @@ export async function createNotificationOnce(tx: any, input: {
       dedupeKey.includes(":decider:") || dedupeKey.includes(":rank:") ||
       dedupeKey.includes(":goal:") || dedupeKey.includes(":assist:") ||
       dedupeKey.includes(":save-tier:") ? "tournament" :
-    dedupeKey.startsWith("player-availability:") || dedupeKey.startsWith("booking:") ? "players" :
+    dedupeKey.startsWith("availability-reminder:") || dedupeKey.startsWith("player-availability:") || dedupeKey.startsWith("booking:") ? "players" :
     dedupeKey.startsWith("prize-level:") || dedupeKey.startsWith("prize-award:") ? "prizes" :
     dedupeKey.startsWith("marketplace:price-change:") || dedupeKey.includes(":expires-in-24h") ? "marketplace" :
     dedupeKey.startsWith("community-mention:") ? "community" : null;

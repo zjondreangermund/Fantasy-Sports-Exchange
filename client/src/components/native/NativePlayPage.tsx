@@ -1,3 +1,4 @@
+import CaptainRequiredDialog from "../CaptainRequiredDialog";
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -155,6 +156,7 @@ export default function NativePlayPage() {
   const [selectedIds, setSelectedIds] = React.useState<Array<number | null>>([null, null, null, null, null]);
   const [activeSlot, setActiveSlot] = React.useState(0);
   const [captainId, setCaptainId] = React.useState<number | null>(null);
+  const [captainPrompt, setCaptainPrompt] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [pinOpen, setPinOpen] = React.useState(false);
   const [pin, setPin] = React.useState("");
@@ -331,6 +333,7 @@ export default function NativePlayPage() {
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-play>
+      <CaptainRequiredDialog open={captainPrompt} onOpenChange={setCaptainPrompt} cards={selectedCards.filter(Boolean)} onSelect={(id) => { setCaptainId(id); setCaptainPrompt(false); }} />
       <section className={`overflow-hidden rounded-[1.55rem] border ${selectedTone.border} ${selectedTone.soft} bg-gradient-to-br from-violet-400/[.11] via-[#0a0e1c] to-cyan-300/[.06] p-4 ${selectedTone.glow}`}>
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -441,7 +444,7 @@ export default function NativePlayPage() {
           <footer className="absolute inset-x-0 bottom-0 border-t border-white/[.08] bg-[#080b19]/95 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.6rem)] pt-2.5 backdrop-blur-xl">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0"><p className="truncate text-xs font-black">{selectedIds.filter(Boolean).length}/5 selected</p><p className="text-[10px] text-slate-500">{captainId ? "Captain chosen · ready to submit" : complete ? "Choose a captain" : "Complete all five positions"}</p></div>
-              <button onClick={() => joinMutation.mutate()} disabled={!complete || !captainId || joinMutation.isPending} className={`rounded-2xl px-5 py-3 text-xs font-black disabled:cursor-not-allowed disabled:opacity-35 ${toneFor(selected.tier).button}`}>{joinMutation.isPending ? "Submitting…" : Number(selected.entryFee || 0) > 0 ? `Enter · ${money(selected.entryFee)}` : "Enter FREE"}</button>
+              <button onClick={() => { if (!captainId) setCaptainPrompt(true); else joinMutation.mutate(); }} disabled={joinMutation.isPending} className={`rounded-2xl px-5 py-3 text-xs font-black disabled:cursor-not-allowed disabled:opacity-35 ${toneFor(selected.tier).button}`}>{joinMutation.isPending ? "Submitting…" : Number(selected.entryFee || 0) > 0 ? `Enter · ${money(selected.entryFee)}` : "Enter FREE"}</button>
             </div>
           </footer>
         </div>
