@@ -22,16 +22,17 @@ const DialogOverlay = React.forwardRef<
       className
     )}
     {...props}
+    style={{ ...props.style, zIndex: props.style?.zIndex ?? 10000 }}
   />
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { layer?: number }
+>(({ className, children, layer = 10000, ...props }, ref) => (
   <DialogPortal>
-    <DialogOverlay />
+    <DialogOverlay style={{ zIndex: layer }} />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
@@ -39,6 +40,7 @@ const DialogContent = React.forwardRef<
         className
       )}
       {...props}
+      style={{ ...props.style, zIndex: layer + 1 }}
     >
       {children}
       <DialogPrimitive.Close className="absolute right-2 top-2 grid h-10 w-10 place-items-center rounded-xl bg-background/85 opacity-80 ring-offset-background backdrop-blur transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground sm:right-4 sm:top-4 sm:h-8 sm:w-8">

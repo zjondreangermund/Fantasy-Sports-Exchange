@@ -67,7 +67,7 @@ export default function PendingPrizeClaimPopup() {
     mutationFn:async()=>{if(!award)throw new Error("No prize available");const r=await apiRequest("POST",`/api/competitions/prizes/${award.entryId}/claim`,{});return r.json();},
     onSuccess:async(result:any)=>{
       if(award)setLocalDismissed(prev=>[...prev,award.entryId]);
-      if(result.pendingChoice)setPendingChoice(true);
+      if(result.pendingChoice)setPendingChoice(false);
       else if(result.card)setRevealed(result.card);
       await Promise.all([
         queryClient.invalidateQueries({queryKey:["/api/trophy-cabinet"]}),

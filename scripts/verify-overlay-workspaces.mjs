@@ -15,7 +15,7 @@ function requireText(source, expected, message) {
 }
 
 requireText(dialog, "<DialogPortal>", "All shared popups must render in a viewport-level portal.");
-requireText(dialog, "<DialogOverlay />", "All shared popups must provide a dismissible background.");
+requireText(dialog, "<DialogOverlay style={{ zIndex: layer }} />", "All shared popups must provide a dismissible background.");
 requireText(dialog, "fixed left-1/2 top-1/2", "Shared popups must remain centered in the viewport.");
 
 requireText(admin, "setUserDialogOpen(true)", "Selecting an Admin user must open their profile immediately.");

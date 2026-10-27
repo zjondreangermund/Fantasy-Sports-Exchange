@@ -140,6 +140,20 @@ async function fixtureAndDeadlineChanges(fixtures:any[]){
     await adminAlert("📅 Premier League fixture rescheduled",`GW${gw} fixture ${id} moved from ${state.old} to ${newVal}; verify affected competition close times.`,`fixture-change:${id}:${newVal}`);
   }
 }
+async function availabilityReminders(fixtures:any[]) {
+  const now=Date.now();
+  for(const fixture of fixtures) {
+    const kickoff=Date.parse(String(fixture.kickoff_time || ""));
+    const hours=(kickoff-now)/3600000;
+    if(!Number.isFinite(hours)||hours<=0||hours>24||fixture.finished)continue;
+    const window=hours<=2?"2h":"24h";
+    const people=rows(await db.execute(sql`select distinct pc.owner_id as "userId" from app.player_cards pc where pc.owner_id is not null`));
+    // One alert per matchday/window, even when several fixtures kick off together.
+    await sendMany(people,"players",`GW${fixture.event} — check player availability`,
+      "Premier League games are approaching. Check injuries, suspensions and confirmed starting lineups on the Premier League page before choosing your team. Submitted teams remain locked.",
+      `availability-reminder:${new Date(kickoff).toISOString().slice(0,10)}:${window}`);
+  }
+}
 async function unavailablePlayers(bootstrap:any,fixtures:any[]){
   const events=(Array.isArray(bootstrap?.elements)?bootstrap.elements:[]) as any[];
   const changedPlayers=events.filter(e=>["i","s","u"].includes(String(e.status || "").toLowerCase()));
@@ -154,7 +168,7 @@ async function unavailablePlayers(bootstrap:any,fixtures:any[]){
       CROSS JOIN LATERAL jsonb_array_elements_text(ce.lineup_card_ids) selected(card_id)
       JOIN app.player_cards pc ON pc.id=selected.card_id::integer
       JOIN app.players p ON p.id=pc.player_id
-      WHERE c.game_week=${week} AND c.status::text='open' AND p.fpl_id IS NOT NULL
+      WHERE c.game_week=${week} AND c.status::text in ('open','active') AND p.fpl_id IS NOT NULL
         AND c.start_date >= now()-interval '14 days'`));
     for(const a of affected){
       const element=map.get(Number(a.fplId));
@@ -163,7 +177,7 @@ async function unavailablePlayers(bootstrap:any,fixtures:any[]){
       if(!["i","s","u"].includes(st))continue;
       const label=st==="s"?"suspended":st==="i"?"listed as injured":"listed as unavailable";
       await sendMany([a],"players",`🚨 GW${week} lineup warning — ${a.playerName}`,
-        `${a.playerName} is ${label} in the official Premier League data. This player is in your submitted team. Review and edit before first kickoff; a replacement cannot be guaranteed.`,
+        `${a.playerName} is ${label} in the official Premier League data. This player is in your submitted team. Check the Premier League page for updates. Submitted teams remain locked; use this information when selecting future entries.`,
         `player-availability:GW${week}:${Number(a.fplId)}:${st}`);
     }
   }
@@ -278,6 +292,7 @@ export async function runArenaAttentionScan(){
     for(const [name,job] of [
       ["Prize Vault unlocks",()=>prizeProgress()],
       ["fixture changes",()=>fixtureAndDeadlineChanges(Array.isArray(fixtures)?fixtures:[])],
+      ["pre-game availability reminders",()=>availabilityReminders(Array.isArray(fixtures)?fixtures:[])],
       ["player availability",()=>unavailablePlayers(bootstrap,Array.isArray(fixtures)?fixtures:[])],
       ["30-minute unsubmitted entry warnings",()=>missedLineupDeadlines(Array.isArray(fixtures)?fixtures:[])],
       ["operator health",()=>operatorHealth(Array.isArray(fixtures)?fixtures:[])],

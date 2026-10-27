@@ -1,3 +1,4 @@
+import AdminEntryMonitor from "../components/admin/AdminEntryMonitor";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -409,6 +410,7 @@ export default function AdminPage() {
           </TabsContent>
 
           <TabsContent value="activity" className="mt-5">
+            <AdminEntryMonitor />
             <Card className="border-white/10 bg-white/[0.06] p-4 text-white">
               <SectionTitle icon={Activity} title="Detailed activity explorer" subtitle="Search all transactions and audit events by user, action, route, amount or metadata." />
               <div className="mt-4 grid gap-2 md:grid-cols-[1fr_1fr_180px_auto]">

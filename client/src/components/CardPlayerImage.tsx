@@ -14,13 +14,20 @@ function CardPlayerImageBase({ card, alt, className, thumb = true }: CardPlayerI
     () => buildCardImageCandidates(card, { thumb, width: thumb ? 256 : 720, format: "webp" }),
     [card, thumb],
   );
+  const candidateKey = candidates.join("\n");
   const [index, setIndex] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     setIndex(0);
     setIsLoaded(false);
-  }, [card.id, card.player?.imageUrl, (card.player as any)?.apiFootballId]);
+  }, [card.id, candidateKey]);
+
+  useEffect(() => {
+    if (isLoaded || index >= candidates.length - 1) return;
+    const timeout = window.setTimeout(() => setIndex(current => current + 1), 12000);
+    return () => window.clearTimeout(timeout);
+  }, [candidateKey, index, isLoaded, candidates.length]);
 
   const src = candidates[index] || CARD_IMAGE_FALLBACK;
 

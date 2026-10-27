@@ -185,7 +185,7 @@ function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
   if (key === "digest") return "/account?tab=inbox";
   if (key.startsWith("prize-level:")) return "/prize-vault";
   if (key.startsWith("prize-award:")) return "/trophy-cabinet";
-  if (key.startsWith("player-availability:") || key.startsWith("fixture-change:")) return "/my-entries";
+  if (key.startsWith("availability-reminder:") || key.startsWith("player-availability:") || key.startsWith("fixture-change:")) return "/premier-league";
   if (key.startsWith("withdrawal:")) return "/wallet";
   if (key.startsWith("marketplace:price-change:") || key.startsWith("loan:")) return "/marketplace";
   if (key.startsWith("admin:")) return "/admin";

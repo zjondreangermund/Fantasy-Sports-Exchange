@@ -49,7 +49,7 @@ requireText(native, 'premierLeagueStatus === "outside-premier-league"', "Native 
 requireText(native, "selectionEligibility?.eligible === false", "Native tournament picker must respect server-side selection eligibility.");
 
 requireText(rules, 'TOURNAMENT_UTILITY_POSITIONS = ["DEF", "MID", "FWD"]', "Shared rules must define Utility as DEF, MID or FWD.");
-requireText(rules, 'shortLabel: "5 Common"', "Common tournaments must require five Common cards.");
+requireText(rules, 'shortLabel: "Any 5 cards"', "Common tournaments must accept five cards of any rarity.");
 requireText(rules, 'shortLabel: "4 Rare + 1 Common/Rare"', "Rare tournaments must require at least four Rare cards.");
 requireText(rules, 'shortLabel: "3 Unique + 2 lower/Unique"', "Unique tournaments must require at least three Unique cards.");
 requireText(rules, 'shortLabel: "2 Epic + 3 lower/Epic"', "Epic tournaments must require at least two Epic cards.");

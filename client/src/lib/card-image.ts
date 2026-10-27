@@ -1,3 +1,4 @@
+import { toApiUrl } from "./api-base";
 // STRICT_PLAYER_IDENTITY_FIX_V2
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
@@ -55,9 +56,9 @@ export function toSafeImageUrl(url: string): string {
   if (/^https?:\/\/(resources\.premierleague\.com|media\.api-sports\.io)\//i.test(url)) {
     // A strict miss must trigger the image element's next verified candidate;
     // redirecting immediately to the placeholder hides healthy fallback photos.
-    return `/api/image-proxy?url=${encodeURIComponent(url)}&strict=1`;
+    return toApiUrl(`/api/image-proxy?url=${encodeURIComponent(url)}&strict=1`);
   }
-  return url;
+  return toApiUrl(url);
 }
 
 export function isVerifiedPlayerIdentity(
