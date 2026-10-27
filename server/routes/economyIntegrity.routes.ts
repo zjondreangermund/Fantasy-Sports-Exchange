@@ -709,6 +709,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       if (!Number.isInteger(gameWeek) || gameWeek < 1 || gameWeek > 38) return res.status(400).json({ message: "Invalid gameweek" });
       const records = rowsOf(await db.execute(sql`
         select c.id, c.name, c.tier::text as tier, c.status::text as status,
+          c.end_date as "endDate",
           (select count(*)::int from app.competition_entries ce where ce.competition_id=c.id) as "entryCount",
           (select count(*)::int from app.competition_entries ce where ce.competition_id=c.id
              and (ce.tiebreak_meta -> 'scoring' ->> 'complete' is distinct from 'true'
