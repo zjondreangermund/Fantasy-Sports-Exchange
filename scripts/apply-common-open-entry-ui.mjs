@@ -38,7 +38,8 @@ competitions = replaceRequired(
 const genericSummary = '<div className="mt-3 rounded-xl border border-purple-300/20 bg-purple-500/10 p-3 text-xs text-purple-100"><b>{selectedTierCount}/{selectedRequirement.requiredTournamentRarityCards} required {selectedTier} cards selected.</b><div className="mt-1 text-purple-100/65">{selectedRequirement.shortLabel}</div></div>';
 const oldOpenCommonSummary = '<div className="mt-3 rounded-xl border border-purple-300/20 bg-purple-500/10 p-3 text-xs text-purple-100"><b>{selectedTier === "common" ? `${selectedIds.length}/5 eligible cards selected.` : `${selectedTierCount}/${selectedRequirement.requiredTournamentRarityCards} required ${selectedTier} cards selected.`}</b><div className="mt-1 text-purple-100/65">{selectedTier === "common" ? "Any rarity can enter this Common tournament." : selectedRequirement.shortLabel}</div></div>';
 if (competitions.includes(oldOpenCommonSummary)) competitions = competitions.replace(oldOpenCommonSummary, genericSummary);
-if (!competitions.includes(genericSummary)) throw new Error("[rarity-entry] canonical lineup requirement summary is missing");
+const mixedRaritySummary = '<b>{selectedTier === "common" ? `${selectedIds.length}/5 cards selected (any rarity).` : `${selectedTierCount}/${selectedRequirement.requiredTournamentRarityCards} required ${selectedTier} cards selected.`}</b>';
+if (!competitions.includes(genericSummary) && !competitions.includes(mixedRaritySummary)) throw new Error("[rarity-entry] canonical lineup requirement summary is missing");
 fs.writeFileSync(competitionPath, competitions);
 
 // Native tournament builder: apply the same partial and final rule validation as
@@ -98,8 +99,8 @@ fs.writeFileSync(nativePlayPath, nativePlay);
 // Keep published terms aligned with the canonical server rule. A Common cup is
 // Common-only; higher tiers use the progressive mixes already documented here.
 let legal = fs.readFileSync(legalPath, "utf8");
-const commonCanonical = '  "Common: all five cards must be Common.",';
-const oldAnyCommon = '  "Common: any five eligible cards may be used, regardless of rarity.",';
+const commonCanonical = '  "Common: any five eligible cards may be used, regardless of rarity.",';
+const oldAnyCommon = '  "Common: all five cards must be Common.",';
 if (legal.includes(oldAnyCommon)) legal = legal.replace(oldAnyCommon, commonCanonical);
 if (!legal.includes(commonCanonical)) throw new Error("[rarity-entry] published Common rarity rule is missing");
 fs.writeFileSync(legalPath, legal);
@@ -138,4 +139,4 @@ marketplace = replaceRequired(
 );
 fs.writeFileSync(marketplacePath, marketplace);
 
-console.log("[rarity-entry] Tournament rarity composition is guarded in native/full entry pickers; Common is Common-only; marketplace listings glow by rarity.");
+console.log("[rarity-entry] Tournament rarity composition is guarded in native/full entry pickers; Common accepts any rarity; marketplace listings glow by rarity.");
