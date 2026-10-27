@@ -759,7 +759,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
               ? `: ${unresolvedRows.map((row: any) => String(row.name || `card ${row.id}`)).join(", ")}`
               : "";
           }
-          throw new Error(`Final scoring is incomplete for one or more cards${unresolvedLabel}`);
+          return res.status(409).json({ code: "SCORING_NOT_VERIFIED", message: `Settlement blocked: not all player statistics have been verified by API-Football${unresolvedLabel}. A player with zero points is not necessarily missing data. Refresh API-Football completed-fixture statistics and retry. No prizes were issued.`, unresolvedCardIds: unresolvedIds, incompleteCount: unresolvedIds.length, canSettle: false });
         }
       }
 
