@@ -69,6 +69,11 @@ export default function AdminTournamentManager() {
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,
   });
+  const { data: gw8Recovery, isFetching: gw8Auditing, refetch: auditGw8 } = useQuery<any>({
+    queryKey: ["/api/admin/competitions/recovery-audit/8"],
+    enabled: false,
+    staleTime: 0,
+  });
   const financialSummary = financialPayload?.summary || {};
   const financialRows = Array.isArray(financialPayload?.tournaments) ? financialPayload.tournaments : [];
   const visibleFinancialRows = useMemo(() => {
@@ -273,6 +278,14 @@ export default function AdminTournamentManager() {
         </div>
         <div className="flex gap-2"><Link href="/prize-vault"><Button variant="outline" className="rounded-xl border-emerald-300/30 bg-emerald-300/10 text-emerald-100"><Gift className="mr-2 h-4 w-4" />Prize Vault</Button></Link><Button onClick={() => setForm(buildEmptyForm())} className="rounded-xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><Plus className="mr-2 h-4 w-4" />New</Button></div>
       </div>
+
+      <section className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-400/[.04] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><h3 className="font-black text-amber-100">GW8 settlement recovery audit</h3><p className="mt-1 text-xs text-white/60">Read-only verification of final scoring, card locks, recorded payouts and awarded prizes. This does not settle or re-award completed cups.</p></div>
+          <Button type="button" variant="outline" disabled={gw8Auditing} onClick={() => { void auditGw8(); }} className="border-amber-300/30 text-amber-100"><RefreshCw className={`mr-2 h-4 w-4 ${gw8Auditing ? "animate-spin" : ""}`} />{gw8Auditing ? "Checking GW8…" : "Audit GW8"}</Button>
+        </div>
+        {gw8Recovery ? <div className="mt-3 space-y-2">{gw8Recovery.tournaments?.length ? gw8Recovery.tournaments.map((cup: any) => <div key={cup.id} className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><b className="text-white">{cup.name}</b><Badge variant="outline">{cup.status}</Badge></div><div className="mt-2 text-white/65">{cup.entryCount} entries · {cup.unverifiedEntries} unverified snapshots · {cup.activeCardLocks} active card locks · {cup.paidEntryCount} cash payouts · {cup.mintedPrizeCount} minted cards · {cup.prizeAwardCount} award records ({cup.unclaimedAwardCount} pending claims)</div><p className="mt-1 text-amber-100">{cup.recoveryStatus}</p></div>) : <p className="text-sm text-white/60">No GW8 tournaments found.</p>}<p className="text-xs text-white/50">Completed tournaments cannot be safely settled a second time without reconciling original rewards. A zero-point player is not automatically an unverified player.</p></div> : null}
+      </section>
 
       <section className="mt-5 overflow-hidden rounded-2xl border border-cyan-300/20 bg-black/30">
         <div className="flex flex-col gap-3 border-b border-white/10 p-4 lg:flex-row lg:items-center lg:justify-between">
