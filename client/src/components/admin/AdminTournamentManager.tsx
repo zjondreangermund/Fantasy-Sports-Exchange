@@ -204,7 +204,23 @@ export default function AdminTournamentManager() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       toast({ title: "Tournament settled", description: "Tuesday-frozen scores, ranks and prizes are now final." });
     },
-    onError: (error: any) => toast({ title: "Tournament settlement failed", description: error.message, variant: "destructive" }),
+    onError: (error: any) => {
+      const raw = String(error?.message || "Unable to settle tournament");
+      let message = raw;
+      try {
+        const jsonStart = raw.indexOf("{");
+        if (jsonStart >= 0) {
+          const payload = JSON.parse(raw.slice(jsonStart));
+          message = String(payload?.message || raw);
+          if (payload?.code === "SCORING_NOT_VERIFIED") {
+            window.alert("Settlement blocked — not all players have verified final statistics.\n\n" + message + "\n\nThe tournament remains unsettled, and prizes have not been issued by this attempt.");
+            return;
+          }
+        }
+      } catch {}
+      window.alert("Tournament settlement could not finish.\n\n" + message);
+      toast({ title: "Tournament settlement failed", description: message, variant: "destructive" });
+    },
   });
 
   const deleteMutation = useMutation({
