@@ -7,7 +7,7 @@ type Section = { title: string; paragraphs?: string[]; bullets?: string[] };
 type Document = { title: string; intro: string; sections: Section[] };
 
 const rarityEntryRules = [
-  "Common: all five cards must be Common.",
+  "Common: any five eligible cards may be used, regardless of rarity.",
   "Rare: at least four Rare cards; the fifth may be Common or Rare.",
   "Unique: at least three Unique cards; the other two may be Common, Rare or Unique.",
   "Epic: at least two Epic cards; the other three may be Common, Rare, Unique or Epic.",
