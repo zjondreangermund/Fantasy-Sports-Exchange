@@ -121,11 +121,101 @@ function normalizeSearch(value: string) { return String(value || "").toLowerCase
 function normalizeSportsDbEvent(event: any) { const hasScore = event?.intHomeScore !== null && event?.intHomeScore !== undefined && event?.intAwayScore !== null && event?.intAwayScore !== undefined; const rawStatus = String(event?.strStatus || event?.strProgress || "").toUpperCase(); const finished = hasScore || ["FT", "AET", "PEN", "MATCH FINISHED"].includes(rawStatus); return { id: event?.idEvent || `${event?.strHomeTeam}-${event?.strAwayTeam}-${event?.dateEvent}`, date: event?.strTimestamp || `${event?.dateEvent || ""}T${event?.strTime || "15:00:00"}Z`, status: finished ? "FT" : rawStatus || "NS", venue: event?.strVenue || "", homeTeam: { name: event?.strHomeTeam || "TBD", badge: event?.strHomeTeamBadge || "", score: event?.intHomeScore ?? null }, awayTeam: { name: event?.strAwayTeam || "TBD", badge: event?.strAwayTeamBadge || "", score: event?.intAwayScore ?? null } }; }
 async function resolveFplPlayerImage(name: string, team: string) { const [{ fplApi }, { buildFplPlayerIndex }] = await Promise.all([import("./services/fplApi.js"), import("./services/fplPlayerIdentity.js")]); const bootstrap = await fplApi.bootstrap(); const element = buildFplPlayerIndex(bootstrap).resolve({ name, team }); if (!element) return null; return fplApi.playerPhotoUrl(element, 250); }
 
+// MATCHDAY_API_FOOTBALL_DATABASE_FIRST_V1
+// Use synchronized Premier League fixtures, not an unrelated free API which may be empty.
+async function loadSynchronizedMatchdayFixtures() {
+  const { pool } = await import("./db.js");
+  const today = new Date();
+  const season = today.getUTCMonth() >= 6 ? today.getUTCFullYear() : today.getUTCFullYear() - 1;
+  const result = await pool.query(
+    `select api_fixture_id, kickoff_at, status_short, home_score, away_score, venue, raw,
+            home_team_id, away_team_id
+       from app.api_football_fixtures
+       where league_id = $1 and season = $2
+         and (
+           (kickoff_at >= now() - interval '3 hours' and coalesce(status_short, 'NS') in ('NS','TBD'))
+           or (kickoff_at >= now() - interval '2 days' and status_short in ('1H','HT','2H','ET','BT','P','LIVE','INT'))
+         )
+       order by kickoff_at asc limit 30`,
+    [39, season],
+  );
+  const fixtures = result.rows.map((row: any) => {
+    const raw = row.raw || {};
+    const home = raw.teams?.home || {};
+    const away = raw.teams?.away || {};
+    const venue = row.venue || raw.fixture?.venue || {};
+    return {
+      id: Number(row.api_fixture_id),
+      date: row.kickoff_at ? new Date(row.kickoff_at).toISOString() : "",
+      status: String(row.status_short || "NS"),
+      venue: typeof venue === "string" ? venue : String(venue?.name || ""),
+      homeTeam: { name: String(home.name || "Home team"), badge: String(home.logo || ""), score: row.home_score ?? null },
+      awayTeam: { name: String(away.name || "Away team"), badge: String(away.logo || ""), score: row.away_score ?? null },
+    };
+  });
+  const live = new Set(["1H","HT","2H","ET","BT","P","LIVE","INT"]);
+  return {
+    nextFixtures: fixtures.filter((row: any) => !live.has(row.status.toUpperCase())).slice(0, 10),
+    liveGames: fixtures.filter((row: any) => live.has(row.status.toUpperCase())).slice(0, 6),
+  };
+}
+
 app.get("/api/matchday/epl", async (_req, res) => {
-  const result: any = { updatedAt: new Date().toISOString(), source: "TheSportsDB + Guardian RSS", liveGames: [], nextFixtures: [], news: [], fixturesAvailable: false };
-  try { const fixturesRes = await fetch("https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id=4328", { headers: { Accept: "application/json", "User-Agent": "FantasyArena/1.0" } }); if (fixturesRes.ok) { const payload = await fixturesRes.json(); const events = Array.isArray(payload?.events) ? payload.events : []; if (events.length) { result.nextFixtures = events.slice(0, 10).map(normalizeSportsDbEvent); result.fixturesAvailable = true; } } } catch (error) { console.warn("Matchday fixtures unavailable:", error); }
-  try { const newsRes = await fetch("https://www.theguardian.com/football/premierleague/rss", { headers: { Accept: "application/rss+xml,text/xml", "User-Agent": "FantasyArena/1.0" } }); if (newsRes.ok) { const xml = await newsRes.text(); result.news = [...xml.matchAll(/<item>[\s\S]*?<\/item>/g)].slice(0, 6).map((match) => { const item = match[0]; return { title: stripXml(item.match(/<title>([\s\S]*?)<\/title>/)?.[1] || ""), url: stripXml(item.match(/<link>([\s\S]*?)<\/link>/)?.[1] || ""), publishedAt: stripXml(item.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || ""), source: "The Guardian" }; }).filter((item) => item.title); } } catch (error) { console.warn("Matchday news unavailable:", error); }
-  res.setHeader("Cache-Control", "public, max-age=300");
+  const result: any = {
+    updatedAt: new Date().toISOString(), source: "API-Football synced fixtures + Guardian RSS",
+    liveGames: [], nextFixtures: [], news: [], fixturesAvailable: false,
+  };
+  try {
+    const saved = await loadSynchronizedMatchdayFixtures();
+    result.liveGames = saved.liveGames;
+    result.nextFixtures = saved.nextFixtures;
+    result.fixturesAvailable = Boolean(saved.liveGames.length || saved.nextFixtures.length);
+  } catch (error) {
+    console.warn("[matchday] synchronized Premier League fixtures unavailable:", error);
+    result.fixtureMessage = "Stored fixtures could not be loaded. Check the API-Football Sync Centre.";
+  }
+  // Last-resort fallback if the scheduled database sync has not yet populated upcoming matches.
+  if (!result.fixturesAvailable) {
+    try {
+      const fixturesRes = await fetch("https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id=4328", {
+        headers: { Accept: "application/json", "User-Agent": "FantasyArena/1.0" },
+        signal: AbortSignal.timeout(7000),
+      });
+      if (fixturesRes.ok) {
+        const payload: any = await fixturesRes.json();
+        const events = Array.isArray(payload?.events) ? payload.events : [];
+        const future = events.map(normalizeSportsDbEvent)
+          .filter((event: any) => event.date && new Date(event.date).getTime() > Date.now() - 3 * 3600000);
+        if (future.length) {
+          result.nextFixtures = future.slice(0, 10);
+          result.fixturesAvailable = true;
+          result.source = "TheSportsDB fallback + Guardian RSS";
+        }
+      }
+    } catch (error) { console.warn("[matchday] optional fixture fallback unavailable:", error); }
+  }
+  if (!result.fixturesAvailable) {
+    result.fixtureMessage = "No upcoming fixtures have been synchronized yet. Use Live Data → Sync Fixtures to refresh API-Football.";
+  }
+  try {
+    const newsRes = await fetch("https://www.theguardian.com/football/premierleague/rss", {
+      headers: { Accept: "application/rss+xml,text/xml", "User-Agent": "FantasyArena/1.0" },
+      signal: AbortSignal.timeout(7000),
+    });
+    if (newsRes.ok) {
+      const xml = await newsRes.text();
+      result.news = [...xml.matchAll(/<item>[sS]*?</item>/g)].slice(0, 6).map((match) => {
+        const item = match[0];
+        return {
+          title: stripXml(item.match(/<title>([sS]*?)</title>/)?.[1] || ""),
+          url: stripXml(item.match(/<link>([sS]*?)</link>/)?.[1] || ""),
+          publishedAt: stripXml(item.match(/<pubDate>([sS]*?)</pubDate>/)?.[1] || ""),
+          source: "The Guardian",
+        };
+      }).filter((item) => item.title);
+    }
+  } catch (error) { console.warn("[matchday] news unavailable:", error); }
+  res.setHeader("Cache-Control", "private, max-age=60");
   return res.json(result);
 });
 
