@@ -245,7 +245,20 @@ export function registerApiFootballAdminRoutes(app: Express, deps: { requireAuth
       const { leagueId, apiKey, baseUrl } = config();
       if (!apiKey) return res.json({ configured: false, connected: false, leagueId, baseUrl, message: "API_FOOTBALL_KEY is missing", budget: await getBudget() });
       const { payload, rateLimit, diagnostics, budget, cached } = await apiFootballGet("status", {}, CACHE_TTL.status);
-      return res.json({ configured: true, connected: true, leagueId, baseUrl, account: payload?.response || null, rateLimit, budget, cached, diagnostics, checkedAt: new Date().toISOString() });
+      // API-Football /status includes subscription.end when the provider exposes it.
+      // Do not invent a renewal date when the subscription is missing or has no expiry.
+      const providerSubscription = payload?.response?.subscription || null;
+      const providerEnd = providerSubscription?.end;
+      const expiryDate = providerEnd ? new Date(providerEnd) : null;
+      const subscriptionEndsAt = expiryDate && Number.isFinite(expiryDate.getTime()) ? expiryDate.toISOString() : null;
+      const subscription = {
+        plan: providerSubscription?.plan ? String(providerSubscription.plan) : null,
+        active: typeof providerSubscription?.active === "boolean" ? providerSubscription.active : null,
+        endsAt: subscriptionEndsAt,
+        daysRemaining: subscriptionEndsAt ? Math.ceil((Date.parse(subscriptionEndsAt) - Date.now()) / 86400000) : null,
+        dateProvided: Boolean(subscriptionEndsAt),
+      };
+      return res.json({ configured: true, connected: true, leagueId, baseUrl, account: payload?.response || null, subscription, rateLimit, budget, cached, diagnostics, checkedAt: new Date().toISOString() });
     } catch (error: any) {
       return res.status(error?.code === "DAILY_BUDGET_EXHAUSTED" ? 429 : 502).json({ configured: true, connected: false, ...errorResponse(error, "Connection failed") });
     }
