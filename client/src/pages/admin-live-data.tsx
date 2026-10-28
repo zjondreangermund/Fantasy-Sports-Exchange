@@ -90,6 +90,15 @@ export default function AdminLiveDataPage() {
   const remaining = Number(usage.remaining ?? Math.max(0, cap - used));
   const usagePercent = cap ? Math.min(100, Math.round((used / cap) * 100)) : 0;
   const configured = Boolean(summary.configured ?? status.data?.configured);
+  const subscription = status.data?.subscription || {};
+  const subscriptionEndsAt = typeof subscription.endsAt === "string" ? subscription.endsAt : null;
+  const subscriptionEndDate = subscriptionEndsAt ? new Date(subscriptionEndsAt) : null;
+  const hasValidExpiry = Boolean(subscriptionEndDate && Number.isFinite(subscriptionEndDate.getTime()));
+  const expiryDays = hasValidExpiry ? Math.ceil(((subscriptionEndDate as Date).getTime() - Date.now()) / 86400000) : null;
+  const expiryText = hasValidExpiry
+    ? (subscriptionEndDate as Date).toLocaleDateString("en-NA", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Windhoek" })
+    : "Not provided by API-Football";
+
 
   return (
     <main className="min-h-full overflow-x-hidden bg-slate-950 px-3 pb-32 pt-4 text-white sm:px-6 lg:px-8">
@@ -113,6 +122,18 @@ export default function AdminLiveDataPage() {
           <Metric label="Safe requests left" value={remaining} good={remaining > 0} />
           <Metric label="Player images" value={playerImageHealth.data?.healthy ? "Working" : playerImageHealth.isLoading ? "Checking" : "Needs sync"} good={Boolean(playerImageHealth.data?.healthy)} />
         </section>
+
+        <Card className="border-white/10 bg-white/[.06] p-4 text-white">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><h2 className="font-black text-white">API-Football subscription expiry</h2><p className="mt-1 text-xs text-white/50">Your paid subscription end date, separate from daily request resets.</p></div>
+            <Badge variant="outline" className={expiryDays !== null && expiryDays <= 7 ? "border-amber-300/40 text-amber-100" : "border-cyan-300/30 text-cyan-100"}>{subscription.plan || "Plan unavailable"}</Badge>
+          </div>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <span className="text-xl font-black text-white">{status.isLoading ? "Checking subscription…" : expiryText}</span>
+            {expiryDays !== null ? <span className={`text-sm font-semibold ${expiryDays <= 7 ? "text-amber-200" : "text-emerald-200"}`}>{expiryDays < 0 ? "Expired" : expiryDays === 0 ? "Expires today" : `${expiryDays} day${expiryDays === 1 ? "" : "s"} remaining`}</span> : null}
+          </div>
+          <p className="mt-2 text-xs text-white/50">{status.isError ? "Subscription status could not be checked. Refresh the dashboard to retry." : status.data?.cached ? "API-Football account status cached for up to 15 minutes." : "Reported by the API-Football account-status endpoint."} {expiryDays !== null && expiryDays <= 7 ? "Check renewal or extend your plan in the API-Football dashboard." : ""}</p>
+        </Card>
 
         <Card className="border-white/10 bg-white/[.06] p-4 text-white">
           <div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span className="font-bold">Daily API safety budget</span><span className="text-white/45">Resets at 00:00 UTC • database reads use no provider calls</span></div>
