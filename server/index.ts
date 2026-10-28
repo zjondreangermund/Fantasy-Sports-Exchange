@@ -204,12 +204,12 @@ app.get("/api/matchday/epl", async (_req, res) => {
     });
     if (newsRes.ok) {
       const xml = await newsRes.text();
-      result.news = [...xml.matchAll(/<item>[sS]*?</item>/g)].slice(0, 6).map((match) => {
+      result.news = [...xml.matchAll(/<item>[\s\S]*?<\/item>/g)].slice(0, 6).map((match) => {
         const item = match[0];
         return {
-          title: stripXml(item.match(/<title>([sS]*?)</title>/)?.[1] || ""),
-          url: stripXml(item.match(/<link>([sS]*?)</link>/)?.[1] || ""),
-          publishedAt: stripXml(item.match(/<pubDate>([sS]*?)</pubDate>/)?.[1] || ""),
+          title: stripXml(item.match(/<title>([\s\S]*?)<\/title>/)?.[1] || ""),
+          url: stripXml(item.match(/<link>([\s\S]*?)<\/link>/)?.[1] || ""),
+          publishedAt: stripXml(item.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1] || ""),
           source: "The Guardian",
         };
       }).filter((item) => item.title);
