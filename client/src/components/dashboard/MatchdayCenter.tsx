@@ -35,6 +35,7 @@ type MatchdayResponse = {
   liveGames: MatchdayFixture[];
   nextFixtures: MatchdayFixture[];
   news: MatchdayNews[];
+  fixtureMessage?: string;
 };
 
 function formatKickoff(value: string) {
@@ -56,7 +57,7 @@ function statusLabel(status?: string) {
 }
 
 export default function MatchdayCenter() {
-  const { data, isLoading } = useQuery<MatchdayResponse>({
+  const { data, isLoading, isError } = useQuery<MatchdayResponse>({
     queryKey: ["/api/matchday/epl"],
     queryFn: async () => {
       const res = await fetch("/api/matchday/epl", { credentials: "include" });
@@ -106,7 +107,7 @@ export default function MatchdayCenter() {
                 {heroFixture.venue ? <p className="mt-4 text-xs text-white/45">{heroFixture.venue}</p> : null}
               </div>
             ) : (
-              <div className="py-10 text-center text-sm text-white/55">No upcoming Premier League fixture found.</div>
+              <div className="py-10 text-center text-sm text-white/55">{data?.fixtureMessage || (isError ? "Matchday fixtures could not be loaded." : "No upcoming Premier League fixture found.")}</div>
             )}
           </div>
         </div>
@@ -119,7 +120,7 @@ export default function MatchdayCenter() {
             <Link href="/premier-league"><Button size="sm" variant="outline">Full Live Games</Button></Link>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            {fixtures.length ? fixtures.map((fixture) => <FixtureCard key={fixture.id} fixture={fixture} />) : <p className="text-sm text-white/50">Fixtures will appear here when the free API returns the next gameweek.</p>}
+            {fixtures.length ? fixtures.map((fixture) => <FixtureCard key={fixture.id} fixture={fixture} />) : <p className="text-sm text-white/50">{data?.fixtureMessage || (isError ? "Matchday fixtures could not be loaded. Try refreshing the page." : "No upcoming fixtures are stored yet. The API-Football Sync Centre can refresh the current schedule.")}</p>}
           </div>
         </Card>
 
