@@ -1,10 +1,12 @@
 import * as React from "react";
-import { Sparkles } from "lucide-react";
+import { Monitor, Smartphone, Sparkles } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAuth } from "../hooks/use-auth";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+
+const MOBILE_APP_GUIDANCE = "💻 The Fantasy Arena website is designed for desktop viewing. For a better experience on your phone, install the Fantasy Arena app using the Install App button.";
 
 type InboxNotification = {
   id: number;
@@ -56,9 +58,13 @@ export default function SignupWelcomePopup() {
           </div>
           <DialogTitle className="text-2xl font-black">{welcome.title || "🏟️ Welcome to Fantasy Arena!"}</DialogTitle>
           <DialogDescription className="whitespace-pre-line text-sm leading-6 text-white/65">
-            {welcome.message || "Welcome to Fantasy Arena."}
+            {(welcome.message || "Welcome to Fantasy Arena.").replace(MOBILE_APP_GUIDANCE, "").trim()}
           </DialogDescription>
         </DialogHeader>
+        <div className="rounded-xl border border-cyan-300/25 bg-cyan-400/[.07] px-4 py-3" data-welcome-mobile-install-guidance>
+          <div className="flex items-center gap-2 text-sm font-black text-cyan-100"><Monitor className="h-4 w-4" /><Smartphone className="h-4 w-4" /> Desktop website · Mobile app</div>
+          <p className="mt-1 text-sm leading-5 text-white/75">The Fantasy Arena website is designed for desktop viewing. For a better experience on your phone, <strong className="text-white">install the Fantasy Arena app</strong> using the <strong className="text-white">Install App</strong> option.</p>
+        </div>
         <Button
           type="button"
           data-signup-welcome-start
