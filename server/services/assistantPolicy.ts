@@ -1,4 +1,4 @@
-export const ASSISTANT_TOPICS=['visitors','overview','wallet','activity','entries','cards','loans','notifications','support','football','settlement','help'] as const;
+export const ASSISTANT_TOPICS=['visitors','overview','wallet','activity','entries','cards','loans','notifications','support','football','settlement','gameweek','help'] as const;
 export type AssistantTopic=typeof ASSISTANT_TOPICS[number];
 export class AssistantError extends Error { constructor(message:string,public status=400){super(message);} }
 export function scopedAssistantUser(actor:string,admin:boolean,target?:string) {
@@ -8,6 +8,7 @@ export function scopedAssistantUser(actor:string,admin:boolean,target?:string) {
 }
 export function assistantTopics(question:string,previous:unknown=[]):AssistantTopic[] {
   const q=question.toLowerCase();
+  if(/game\s*week|\bgw\s*\d+\b|sync (?:log|history|status)|scoring log/.test(q)&&/log|latest|current|check|status|history|sync|report/.test(q))return ['gameweek'];
   if(/^(how (do i|to)|where (can|do)|what (is|are) the|explain).*?(captain|rarity|rule|score|scoring|fee|join|install|funding)/.test(q))return ['help'];
   const topics:AssistantTopic[]=[];
   if(/conversion|funnel|drop.off|abandon/.test(q))topics.push('visitors');
@@ -17,14 +18,14 @@ export function assistantTopics(question:string,previous:unknown=[]):AssistantTo
   if(/platform overview|site overview|all users|total users|platform revenue|site revenue|total revenue/.test(q))topics.push('overview');
   if(/wallet|balance|deposit|withdraw|payment|transaction|refund|money|funds/.test(q))topics.push('wallet');
   if(/visited|activity|pages|did on|doing on|last seen|what did|online/.test(q)&&!topics.includes('visitors'))topics.push('activity');
-  if(/entr(?:y|ies)|entered|tournament|competition|team|prize|settle/.test(q))topics.push('entries');
+  if(/entr(?:y|ies)|entered|tournament|competition|my teams|submitted team|prize amount|prize rank|settle/.test(q))topics.push('entries');
   if(/cards?|collection|player|marketplace|listed/.test(q))topics.push('cards');
   if(/loans?|borrow/.test(q))topics.push('loans');
   if(/notification|inbox|alerts?/.test(q))topics.push('notifications');
   if(/support ticket|support request|ticket #/.test(q))topics.push('support');
   if(/(?:cannot|can't|cant|unable|failed|trouble|why).*(?:enter|submit|join)/.test(q))topics.push('wallet','entries','cards');
   if(/account overview|everything about.*account|account summary/.test(q))topics.push('wallet','activity','entries','cards','loans','notifications');
-  if(!topics.length&&/^(and\b|what about\b|how about\b|yesterday\b|today\b|last \d|why\b|show more\b)/i.test(question)&&Array.isArray(previous))return [...new Set(previous.filter((t:any)=>ASSISTANT_TOPICS.includes(t)&&t!=='help'))].slice(0,10) as AssistantTopic[];
+  if(!topics.length&&/^(?:(?:and|what about|how about)\s+)?(?:yesterday|today|this (?:week|month)|last \d+ days?|last (?:week|month)|why(?: is that)?|show more)[?!.]*$/i.test(question)&&Array.isArray(previous)){const inherited=[...new Set(previous.filter((t:any)=>ASSISTANT_TOPICS.includes(t)&&t!=='help'))].slice(0,10) as AssistantTopic[];return inherited.length?inherited:['help'];}
   return topics.length?[...new Set(topics)].slice(0,10):['help'];
 }
 export function assistantWindow(question:string,context?:any,now=new Date()) {
@@ -59,4 +60,18 @@ export function assistantUserSearch(question:string,explicit?:string){
     || question.match(/(?:what did|what has|show me what)\s+([a-z0-9_.-]+)\s+(?:do|visit|done|doing)/i)?.[1]
     || question.match(/\b([a-z0-9_.-]+)['’]s\s+(?:wallet|account|entries|activity|balance)/i)?.[1];
   return String(email||quoted||(named&&!['i','me','my','this','that','the','a','an','user','manager','their','his','her'].includes(named.toLowerCase())?named:'')).slice(0,120);
+}
+
+/** Recognize requested operations before domain words can route them to unrelated reports. */
+export function assistantRequestRefusal(question:string){
+  const q=question.toLowerCase().replace(/[’‘]/g,"'").trim().replace(/[.!?]+$/,'');
+  const operation=q.match(/^(?:(?:can|could|will|would) you\s+(?:please\s+)?|please\s+|i (?:want|need) you to\s+)?(enter|submit|join|pick|select|choose|build|create|add|delete|remove|edit|change|update|approve|pay|refund|withdraw|deposit|transfer|mint|send|resend|settle|cancel|buy|sell|loan|borrow|mark)\b/)?.[1];
+  if(operation){
+    if(/mark.*notification.*read|(?:update|change).*support.*status/.test(q))return {answer:'I can help you preview that change, but I cannot apply it from a chat message. Open “Preview an action”, choose the record and review it before confirming.',links:[]};
+    if(/enter|submit|join|pick|select|choose|build/.test(operation)&&/team|lineup|tournament|competition/.test(q))return {answer:'I can’t choose or submit a team for you. Open Play to select your cards and captain, or My Entries to edit an existing team before the gameweek’s first kickoff. No team was submitted or changed.',links:[{label:'Play',href:'/competitions'},{label:'My Entries',href:'/my-entries'}]};
+    return {answer:'I can’t perform that action through the chatbot. Use the relevant page and its normal confirmation controls. No change was made.',links:[]};
+  }
+  if(/^(?:can|could|will|would) you\b/.test(q)&&! /^(?:can|could|will|would) you (?:please )?(?:check|show|tell|find|look|explain|investigate|trace|list|see|count)\b/.test(q))return {answer:'I can’t answer or perform that request with the connected tools. Please ask for a specific recorded account or site report.',links:[]};
+  if(/predict|forecast|(?:will|going to).*(?:win|score|earn)|best (?:team|lineup|investment)|guarantee/.test(q))return {answer:'I can’t reliably predict that. I can check recorded scores and confirmed availability, but they do not establish future results.',links:[]};
+  return null;
 }

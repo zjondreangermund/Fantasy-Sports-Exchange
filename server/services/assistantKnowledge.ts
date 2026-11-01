@@ -24,8 +24,10 @@ export function assistantKnowledge(question:string){
   }
   if(/community|chat|message.*expir/.test(q))answers.push('Community Live messages expire 24 hours after being sent. Editing or replying does not extend the expiry. Expired messages are hidden immediately from server reads and periodically removed from stored and cached history.');
   if(/prize|reward|settle|claim/.test(q)){answers.push('A recorded prize amount or tournament rank alone does not prove that a cash payment or prize claim was completed. Use the tournament state, transaction history and Trophy Cabinet together.');links.push({label:'Trophy Cabinet',href:'/trophy-cabinet'},{label:'Prize Vault',href:'/prize-vault'});}
-  const words=q.match(/[a-z0-9]{3,}/g)?.filter(w=>!['the','how','what','does','can','you','why','are','and','with','that','this'].includes(w))||[];
-  const matches=arenaHelpIndex.map(item=>({...item,score:words.filter(word=>`${item.source} ${item.answer}`.toLowerCase().includes(word)).length})).filter(item=>item.score>=Math.min(2,Math.max(1,words.length))).sort((a,b)=>b.score-a.score).slice(0,3);
-  if(!answers.length)answers.push(...matches.map(item=>item.answer));
+  // Only explicitly authored help may be quoted. Toasts and conditionally rendered UI
+  // strings are not observations about the signed-in account or current gameweek.
+  const words=q.match(/[a-z0-9]{3,}/g)?.filter(w=>!['the','how','what','does','can','you','why','are','and','with','that','this','please','check','latest'].includes(w))||[];
+  const matches=arenaHelpIndex.filter(item=>item.kind==='authored-help').map(item=>({...item,score:words.filter(word=>item.answer.toLowerCase().includes(word)).length})).filter(item=>item.score>=2).sort((a,b)=>b.score-a.score).slice(0,3);
+  if(!answers.length)answers.push(...matches.map(item=>`Site guide: ${item.answer}`));
   return {answers,links,sources:matches.map(item=>item.source)};
 }
