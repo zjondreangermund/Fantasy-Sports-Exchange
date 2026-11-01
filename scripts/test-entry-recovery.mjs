@@ -22,7 +22,8 @@ try {
     assert.equal(candidates.at(-1),'/players/fallback.svg');
     assert.deepEqual(buildCardImageCandidates({player:{imageUrl:'https://unverified.example/wrong.png'}}),['/players/fallback.svg']);
     assert.equal(toSafeImageUrl('/api/image-proxy?url=x'),'https://arena.example/api/image-proxy?url=x');
-    for(const key of ['availability-reminder:2026-10-27:2h','player-availability:GW9:123:i','fixture-change:123']) assert.equal(notificationDestination({dedupeKey:key}),'/premier-league');
+    for(const key of ['availability-reminder:2026-10-27:2h','fixture-change:123']) assert.equal(notificationDestination({dedupeKey:key}),'/premier-league');
+    assert.equal(notificationDestination({dedupeKey:'player-availability:GW9:123:i'}),'/my-entries');
     assert.equal(notificationDestination({dedupeKey:'admin:entry-rejected:user:1:2026-10-27'}),'/admin');
     console.log('Entry recovery: mixed-rarity rules, verified image candidates, native API URLs and reminder deep links passed.');
   `},outfile,bundle:true,platform:"node",format:"esm",define:{'import.meta.env.VITE_API_URL':'"https://arena.example"','import.meta.env':'{}'}});

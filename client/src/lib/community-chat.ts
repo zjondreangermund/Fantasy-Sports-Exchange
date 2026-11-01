@@ -3,6 +3,7 @@ export type CommunityReplyPreview = {
   teamName: string;
   message: string;
   deleted: boolean;
+  createdAt?: string | null;
 };
 
 export type CommunityChatMessage = {
@@ -23,8 +24,8 @@ export type CommunityChatMessage = {
 };
 
 const MAX_SAVED_MESSAGES = 250;
-const MAX_SAVED_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-const CHAT_STORAGE_PREFIX = "fantasy_arena_community_messages_v3:";
+const MAX_SAVED_AGE_MS = 24 * 60 * 60 * 1000;
+const CHAT_STORAGE_PREFIX = "fantasy_arena_community_messages_v5:";
 
 function messageUpdatedAt(message: CommunityChatMessage) {
   return Math.max(
@@ -52,8 +53,12 @@ export function mergeCommunityMessages(
   for (const collection of collections) {
     if (!Array.isArray(collection)) continue;
     for (const candidate of collection) {
-      if (!validMessage(candidate)) continue;
+      if (!validMessage(candidate) || !(Date.parse(candidate.createdAt)>Date.now()-MAX_SAVED_AGE_MS)) continue;
       const message = { ...candidate, id: Number(candidate.id) };
+      if(message.replyTo){
+        const parentCreated=Date.parse(String(message.replyTo.createdAt||""));
+        if(!Number.isFinite(parentCreated)||parentCreated<=Date.now()-MAX_SAVED_AGE_MS)message.replyTo={...message.replyTo,message:"Original message expired",deleted:true};
+      }
       const current = byId.get(message.id);
       if (!current) {
         byId.set(message.id, message);
@@ -87,7 +92,7 @@ export function readCommunityMessageHistory(userId: string): CommunityChatMessag
     return mergeCommunityMessages(raw.filter((item) => {
       if (!validMessage(item)) return false;
       const createdAt = Date.parse(String(item.createdAt || ""));
-      return !createdAt || createdAt >= oldest;
+      return Number.isFinite(createdAt) && createdAt > oldest;
     }));
   } catch {
     return [];

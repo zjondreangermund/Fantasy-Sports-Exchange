@@ -3,6 +3,8 @@ name: CI + Deploy
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -23,6 +25,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Support and Premier League regressions
+        run: npm run test:assistant && node scripts/test-entry-recovery.mjs
 
       - name: Type check
         run: npm run check

@@ -1,3 +1,4 @@
+import { normalizeFootballData } from "../../shared/football-data.js";
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
@@ -619,6 +620,12 @@ async function buildPlayerIntelligence(leagueId: number, season: number, playerI
 }
 
 export function registerFootballDataRoutes(app: Express) {
+  // Normalize fresh, cached and fallback payloads without changing scoring records.
+  app.use("/api/football", (_req, res, next) => {
+    const sendJson=res.json.bind(res);
+    res.json=(payload:any)=>sendJson(normalizeFootballData(payload));
+    next();
+  });
   app.get("/api/football/leagues", (_req, res) => {
     return res.json({ leagues: Object.entries(FOOTBALL_LEAGUES).map(([key, value]) => ({ key, ...value })) });
   });

@@ -1,4 +1,7 @@
 import fs from "node:fs";
+const rollingRetention=fs.readFileSync("server/routes/communityChatV2.routes.ts","utf8").includes("COMMUNITY_ROLLING_RETENTION_V1");
+if(rollingRetention)console.log("Community rolling 24-hour retention is active.");
+if(!rollingRetention){
 
 function patchFile(path, transform) {
   const before = fs.readFileSync(path, "utf8");
@@ -114,3 +117,5 @@ patchFile("client/src/components/FloatingSupportWidget.tsx", (original) => {
 });
 
 console.log("Community Live 24-hour hard reset is ready: the current room clears once on rollout, then every 24 hours across restarts, and browser caches follow the server reset timestamp.");
+
+}

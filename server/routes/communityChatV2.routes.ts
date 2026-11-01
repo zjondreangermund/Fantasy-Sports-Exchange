@@ -1,3 +1,4 @@
+// COMMUNITY_ROLLING_RETENTION_V1: per-message expiry, not a room-wide reset.
 import type { Express, Response } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
@@ -15,7 +16,7 @@ type ChatMessage = {
   avatarUrl: string | null;
   message: string;
   replyToId: number | null;
-  replyTo: null | { id: number; teamName: string; message: string; deleted: boolean };
+  replyTo: null | { id: number; teamName: string; message: string; deleted: boolean; createdAt?: string | null };
   mentions: string[];
   editedAt: string | null;
   deletedAt: string | null;
@@ -113,6 +114,7 @@ function toMessage(row: any, currentUserId: string, admin = false): ChatMessage 
           teamName: String(row?.replyTeamName ?? row?.reply_team_name ?? "Arena Manager"),
           message: replyDeleted ? "Message deleted" : String(row?.replyMessage ?? row?.reply_message ?? "Message unavailable"),
           deleted: replyDeleted,
+          createdAt: iso(row?.replyCreatedAt),
         }
       : null,
     mentions: deletedAt ? [] : mentionsIn(rawMessage),
@@ -184,11 +186,11 @@ function messageSelect(where: any) {
       m.edited_at AS "editedAt", m.deleted_at AS "deletedAt", m.created_at AS "createdAt",
       COALESCE(NULLIF(btrim(u.manager_team_name), ''), NULLIF(btrim(u.name), ''), split_part(COALESCE(u.email, ''), '@', 1), 'Arena Manager') AS "teamName",
       u.avatar_url AS "avatarUrl",
-      pm.message AS "replyMessage", pm.deleted_at AS "replyDeletedAt",
+      pm.created_at AS "replyCreatedAt", pm.message AS "replyMessage", pm.deleted_at AS "replyDeletedAt",
       COALESCE(NULLIF(btrim(pu.manager_team_name), ''), NULLIF(btrim(pu.name), ''), split_part(COALESCE(pu.email, ''), '@', 1), 'Arena Manager') AS "replyTeamName"
-    FROM app.community_chat_messages m
+    FROM (SELECT * FROM app.community_chat_messages WHERE created_at > now()-interval '24 hours') m
     JOIN app.users u ON u.id = m.user_id
-    LEFT JOIN app.community_chat_messages pm ON pm.id = m.reply_to_id
+    LEFT JOIN app.community_chat_messages pm ON pm.id = m.reply_to_id AND pm.created_at > now()-interval '24 hours'
     LEFT JOIN app.users pu ON pu.id = pm.user_id
     ${where}
   `;
@@ -265,6 +267,15 @@ function rejectLanguage(res: any) {
 
 export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV2Deps) {
   const { requireAuth, isAdmin } = deps;
+  const purgeExpired=async()=>{
+    await ensureSchema();await ensureNotificationsSchema();
+    await db.execute(sql`DELETE FROM app.notifications n USING app.community_chat_messages m
+      WHERE m.created_at <= now()-interval '24 hours' AND n.dedupe_key LIKE ('community-mention:' || m.id::text || ':%')`);
+    await db.execute(sql`DELETE FROM app.community_chat_messages WHERE created_at <= now()-interval '24 hours'`);
+  };
+  void purgeExpired().catch(error=>console.warn("Community expiry failed",error));
+  const expiryTimer=setInterval(()=>{void purgeExpired().catch(error=>console.warn("Community expiry failed",error));},60000);
+  expiryTimer.unref();
   void ensureSchema().catch((error) => console.warn("Community Live v2 schema ensure failed:", error));
 
   app.get("/community-live/messages", requireAuth, async (req: any, res) => {
@@ -322,7 +333,7 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
       if (message.length > 280) return res.status(400).json({ message: "Message must be 280 characters or fewer" });
       if (containsBlockedLanguage(message)) return rejectLanguage(res);
       if (replyToId) {
-        const parent = rowsOf(await db.execute(sql`SELECT id FROM app.community_chat_messages WHERE id = ${replyToId} LIMIT 1`))[0];
+        const parent = rowsOf(await db.execute(sql`SELECT id FROM app.community_chat_messages WHERE id = ${replyToId} AND created_at > now()-interval '24 hours' LIMIT 1`))[0];
         if (!parent) return res.status(400).json({ message: "The replied-to message no longer exists" });
       }
       const inserted = rowsOf(await db.execute(sql`
@@ -357,7 +368,7 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
       const updated = rowsOf(await db.execute(sql`
         UPDATE app.community_chat_messages
         SET message = ${message}, edited_at = now()
-        WHERE id = ${messageId} AND user_id = ${userId} AND deleted_at IS NULL
+        WHERE id = ${messageId} AND user_id = ${userId} AND deleted_at IS NULL AND created_at > now()-interval '24 hours'
         RETURNING id
       `))[0];
       if (!updated) return res.status(403).json({ message: "You can edit only your own active messages" });
@@ -384,7 +395,7 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
       const removed = rowsOf(await db.execute(sql`
         UPDATE app.community_chat_messages
         SET message = 'Message deleted', deleted_at = now(), deleted_by = ${userId}
-        WHERE id = ${messageId} AND user_id = ${userId} AND deleted_at IS NULL
+        WHERE id = ${messageId} AND user_id = ${userId} AND deleted_at IS NULL AND created_at > now()-interval '24 hours'
         RETURNING id
       `))[0];
       if (!removed) return res.status(403).json({ message: "You can delete only your own active messages" });
@@ -408,7 +419,7 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
       const removed = rowsOf(await db.execute(sql`
         UPDATE app.community_chat_messages
         SET message = 'Message deleted by moderator', deleted_at = now(), deleted_by = ${adminId}
-        WHERE id = ${messageId} AND deleted_at IS NULL
+        WHERE id = ${messageId} AND deleted_at IS NULL AND created_at > now()-interval '24 hours'
         RETURNING id
       `))[0];
       if (!removed) return res.status(404).json({ message: "Message not found or already deleted" });

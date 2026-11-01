@@ -1,3 +1,4 @@
+import { gameweekHasKickedOff } from "../../shared/availability-notice.js";
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
@@ -49,7 +50,7 @@ export function registerLineupEditsRoutes(app: Express, deps: { requireAuth: any
       const startMs=Date.parse(String(preview.startDate || ""));
       if(Number.isFinite(startMs) && Math.abs(cutoff-startMs)>35*86400000)
         return res.status(409).json({message:"This entry belongs to another gameweek or season; it cannot be changed."});
-      if (Date.now() >= cutoff || gwFixtures.some((f: any) => Boolean(f.started || f.finished || f.finished_provisional))) {
+      if (Date.now() >= cutoff || gameweekHasKickedOff(Array.isArray(fixtures)?fixtures:[],gw)) {
         return res.status(409).json({ message: "The first Premier League match has begun. Submitted tournament lineups are final." });
       }
       const official = buildFplPlayerIndex(bootstrap);

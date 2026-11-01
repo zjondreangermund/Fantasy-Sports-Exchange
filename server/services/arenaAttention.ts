@@ -1,3 +1,4 @@
+import { gameweekHasKickedOff, availabilityReminderCopy, playerAvailabilityCopy } from "../../shared/availability-notice.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { fplApi } from "./fplApi.js";
@@ -136,21 +137,24 @@ async function fixtureAndDeadlineChanges(fixtures:any[]){
       AND c.status::text in ('open','upcoming','active')`));
     const when=new Date(kickoff).toLocaleString("en-NA",{timeZone:"Africa/Windhoek",dateStyle:"medium",timeStyle:"short"});
     await sendMany(people,"tournament",`📅 GW${gw} fixture schedule changed`,
-      `A Premier League fixture has moved to ${when} Namibia time. Check your selected players and updated entry cutoff before kickoff.`,`fixture-change:${id}:${newVal}`);
+      `A Premier League fixture has moved to ${when} Namibia time. ${gameweekHasKickedOff(fixtures,gw)?"The gameweek has already started: teams and captains remain locked, including before later fixtures.":"Review your team before this gameweek’s first kickoff. After that first kickoff, teams and captains stay locked for the rest of the gameweek."}`,`fixture-change:${id}:${newVal}`);
     await adminAlert("📅 Premier League fixture rescheduled",`GW${gw} fixture ${id} moved from ${state.old} to ${newVal}; verify affected competition close times.`,`fixture-change:${id}:${newVal}`);
   }
 }
 async function availabilityReminders(fixtures:any[]) {
   const now=Date.now();
   for(const fixture of fixtures) {
+    const gameweek=Number(fixture?.event);
+    if(!Number.isInteger(gameweek)||gameweek<1||gameweek>38)continue;
     const kickoff=Date.parse(String(fixture.kickoff_time || ""));
     const hours=(kickoff-now)/3600000;
     if(!Number.isFinite(hours)||hours<=0||hours>24||fixture.finished)continue;
     const window=hours<=2?"2h":"24h";
     const people=rows(await db.execute(sql`select distinct pc.owner_id as "userId" from app.player_cards pc where pc.owner_id is not null`));
     // One alert per matchday/window, even when several fixtures kick off together.
-    await sendMany(people,"players",`GW${fixture.event} — check player availability`,
-      "Premier League games are approaching. Check injuries, suspensions and confirmed starting lineups on the Premier League page before choosing your team. Submitted teams remain locked.",
+    const copy=availabilityReminderCopy(gameweekHasKickedOff(fixtures,Number(fixture.event),now));
+    await sendMany(people,"players",`GW${fixture.event} — ${copy.title}`,
+      copy.message,
       `availability-reminder:${new Date(kickoff).toISOString().slice(0,10)}:${window}`);
   }
 }
@@ -177,7 +181,7 @@ async function unavailablePlayers(bootstrap:any,fixtures:any[]){
       if(!["i","s","u"].includes(st))continue;
       const label=st==="s"?"suspended":st==="i"?"listed as injured":"listed as unavailable";
       await sendMany([a],"players",`🚨 GW${week} lineup warning — ${a.playerName}`,
-        `${a.playerName} is ${label} in the official Premier League data. This player is in your submitted team. Check the Premier League page for updates. Submitted teams remain locked; use this information when selecting future entries.`,
+        playerAvailabilityCopy(String(a.playerName),label,gameweekHasKickedOff(fixtures,week,now)),
         `player-availability:GW${week}:${Number(a.fplId)}:${st}`);
     }
   }

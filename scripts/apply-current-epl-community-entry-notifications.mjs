@@ -40,6 +40,7 @@ patchFile("client/src/lib/community-chat.ts", (original) => {
 });
 
 patchFile("server/routes/communityChatV2.routes.ts", (original) => {
+  if(original.includes("COMMUNITY_ROLLING_RETENTION_V1"))return original;
   let source = original;
 
   source = insertAfter(

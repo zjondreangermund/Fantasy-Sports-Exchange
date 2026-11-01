@@ -1,3 +1,4 @@
+import PageActivityTracker from "./components/PageActivityTracker";
 import DepartureLoginPrompt from "./components/DepartureLoginPrompt";
 import * as React from "react";
 import { Switch, Route, useLocation } from "wouter";
@@ -220,7 +221,7 @@ function AuthenticatedApp() {
           {!isInfoRoute && <MatchdayQuickDock />}
           {!isInfoRoute && <MobileNavDock />}
           {!isInfoRoute && <FloatingEventNotifications />}
-          <FloatingSupportWidget />
+
         </div>
       </div>
     </SidebarProvider>
@@ -238,7 +239,7 @@ function AppContent() {
   if (window.location.pathname.replace(/\/$/, "") === "/install") return <React.Suspense fallback={<RouteFallback />}><InstallPage /></React.Suspense>;
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Skeleton className="h-12 w-12 rounded-md" /><Skeleton className="h-4 w-32" /></div></div>;
   if (!user) { const pathname = window.location.pathname || "/"; return <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen"><PublicRouter /></PageScene>; }
-  return <AuthenticatedApp />;
+  return <><AuthenticatedApp /><FloatingSupportWidget /></>;
 }
 
 export default function App() {
@@ -249,6 +250,7 @@ export default function App() {
         <TooltipProvider>
           <SecurityModeBanner />
           {!nativeApp ? <GuidedHoverHelp /> : null}
+          <PageActivityTracker />
           <AppContent />
           <AppErrorBoundary scope="SignupWelcomePopup" optional><SignupWelcomePopup /></AppErrorBoundary>
           <AppErrorBoundary scope="PendingPrizeClaimPopup" optional><PendingPrizeClaimPopup /></AppErrorBoundary>

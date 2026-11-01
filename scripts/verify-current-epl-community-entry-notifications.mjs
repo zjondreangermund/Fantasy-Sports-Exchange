@@ -36,6 +36,14 @@ const collectionProfileCard = read("client/src/components/cards/CollectionProfil
 const cardProfileModal = read("client/src/components/cards/CardProfileModal.tsx");
 
 need(communityClient, "MAX_SAVED_AGE_MS = 24 * 60 * 60 * 1000", "24-hour browser chat cache");
+if(communityServer.includes("COMMUNITY_ROLLING_RETENTION_V1")){
+  need(communityClient,"fantasy_arena_community_messages_v5:","rolling retention cache namespace");
+  need(communityClient,"Date.parse(candidate.createdAt)>Date.now()-MAX_SAVED_AGE_MS","expired cache rejection");
+  need(communityServer,"created_at > now()-interval '24 hours'","read-time expiry");
+  need(communityServer,"WHERE created_at <= now()-interval '24 hours'","expired-only deletion");
+  assert(!communityServer.includes("DELETE FROM app.community_chat_messages`"),"Must not reset unexpired chat messages");
+  need(communityServer,"60000","scheduled rolling cleanup");
+} else {
 need(communityClient, "fantasy_arena_community_messages_v4:", "fresh browser cache namespace for reset rollout");
 need(communityServer, "COMMUNITY_24H_RESET_V3", "24-hour server reset marker");
 need(communityServer, "app.community_chat_maintenance", "persistent chat reset state");
@@ -45,6 +53,7 @@ need(communityServer, "historyResetAt: historyResetAt.toISOString()", "reset tim
 need(communityServer, "Community Live scheduled 24-hour reset failed", "scheduled 24-hour reset");
 need(communityWidget, "COMMUNITY_CLIENT_RESET_V3", "client reset timestamp handling");
 need(communityWidget, "createdAt >= historyResetAt", "stale cached message rejection");
+}
 need(communityServer, "community-mention:", "mention notification dedupe");
 need(communityServer, "await createNotificationOnce(db", "mention notifications remain push-enabled");
 
