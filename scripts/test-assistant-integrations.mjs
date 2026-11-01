@@ -66,7 +66,10 @@ try{
   assert.equal(r.sections.find(s=>s.title==='Gameweek fixture synchronization').rows.length,1);
   assert.equal(r.sections.find(s=>s.title==='Latest provider sync jobs (all gameweeks)').rows[0].status,'failed');
   r=await answer({actorId:'admin',admin:true,question:'Show GW10 log'});assert.match(r.answer,/GW10/);
-  r=await answer({...base,question:'Please check the flibbertigibbet'});assert.match(r.answer,/could not verify/);
+  r=await answer({...base,question:'Please check the flibbertigibbet'});assert.match(r.answer,/can’t answer that reliably/);
+  const beforeReads=(await q("SELECT count(*)::int AS n FROM app.audit_logs WHERE action='assistant.read'"))[0].n;
+  r=await answer({...base,question:'Can you enter a team for me'});assert.match(r.answer,/can’t choose or submit/);assert.equal(r.sections.length,0);
+  assert.equal((await q("SELECT count(*)::int AS n FROM app.audit_logs WHERE action='assistant.read'"))[0].n,beforeReads);
   r=await answer({...base,question:'Why can’t I enter tournament #5?'});
   assert(r.sections.some(s=>s.title==='Entry investigation'));
   r=await answer({...base,question:'Investigate entry #10'});

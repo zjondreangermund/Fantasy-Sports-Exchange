@@ -1,6 +1,6 @@
 import {assistantGameweekLog} from './assistantGameweekLog.js';
 import {investigationContext,investigateEntry,investigateSettlement,footballInvestigation,type AssistantConnections} from './assistantInvestigations.js';
-import {AssistantError,assistantTopics,assistantWindow,assistantUserSearch,scopedAssistantUser} from './assistantPolicy.js';
+import {AssistantError,assistantRequestRefusal,assistantTopics,assistantWindow,assistantUserSearch,scopedAssistantUser} from './assistantPolicy.js';
 import {assistantKnowledge} from './assistantKnowledge.js';
 import {supportWalletSnapshot,type AssistantQuery} from './supportWalletSnapshot.js';
 export type AssistantSection={title:string;rows:any[];note?:string;hasMore?:boolean};
@@ -12,6 +12,9 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
   return async function answer(input:AssistantInput){
     const question=String(input.question||'').trim();
     if(!question||question.length>2000)throw new AssistantError('Enter a question of up to 2,000 characters.');
+    scopedAssistantUser(input.actorId,input.admin,input.userId);
+    const refusal=assistantRequestRefusal(question);
+    if(refusal)return {...refusal,sections:[],topics:[],notes:[],followUps:[],asOf:new Date().toISOString(),scope:'Capability limit'};
     const topics=assistantTopics(question,input.previousTopics),period=assistantWindow(question,input.period);
     const context=investigationContext(question,input.context),followUps:string[]=[];
     let target=scopedAssistantUser(input.actorId,input.admin,input.userId);
@@ -168,7 +171,7 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
     }
     if(topics.includes('help')){
       answers.push(...knowledge.answers);
-      if(!knowledge.answers.length)answers.push('I could not verify an answer from the connected site help. I can investigate wallets, transactions, account activity, tournament entries, owned cards, loans, notifications, and admin visitor/platform reports. Name the feature or select the relevant account; missing data is not treated as zero or as proof of failure.');
+      if(!knowledge.answers.length)answers.push('I can’t answer that reliably with the information and tools connected to me. Please ask about a specific recorded account issue or site feature.');
       add('Help sources',knowledge.sources.map(source=>({source})));
     }
     const hasMore=sections.some(s=>s.hasMore);

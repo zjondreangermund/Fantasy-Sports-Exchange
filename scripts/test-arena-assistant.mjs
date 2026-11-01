@@ -7,7 +7,7 @@ const temp=await mkdtemp(path.join(tmpdir(),'arena-support-'));
 try{
 await build({entryPoints:['server/services/arenaAssistant.ts','server/services/assistantPolicy.ts','server/services/supportWalletSnapshot.ts'],outdir:temp,outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm'});
 const {createArenaAssistant}=await import(path.join(temp,'arenaAssistant.mjs'));
-const {scopedAssistantUser,assistantWindow,assistantTopics,assistantUserSearch,safeActivityPath}=await import(path.join(temp,'assistantPolicy.mjs'));
+const {scopedAssistantUser,assistantWindow,assistantTopics,assistantUserSearch,safeActivityPath,assistantRequestRefusal}=await import(path.join(temp,'assistantPolicy.mjs'));
 const {supportWalletSnapshot}=await import(path.join(temp,'supportWalletSnapshot.mjs'));
 assert.throws(()=>scopedAssistantUser('a',false,'b'),/administrators/);
 assert.equal(scopedAssistantUser('admin',true,'b'),'b');
@@ -24,9 +24,15 @@ assert.equal(assistantWindow('last month',undefined,now).from,'2026-09-30T22:00:
 assert.throws(()=>assistantWindow('2026-02-30',undefined,now),/calendar/);
 assert.throws(()=>assistantWindow('2026-01-01 to 2026-10-31',undefined,now),/90 days/);
 assert.deepEqual(assistantTopics('and yesterday',['wallet']),['wallet']);
+assert.deepEqual(assistantTopics('why is the sky blue',['wallet']),['help']);
+assert.deepEqual(assistantTopics('why?',[]),['help']);
 assert.ok(assistantTopics('Why can’t I enter a tournament?').includes('wallet'));
 assert.deepEqual(assistantTopics('Please check the latest game week log'),['gameweek']);
 assert.deepEqual(assistantTopics('Show GW9 log'),['gameweek']);
+assert.match(assistantRequestRefusal('Can you enter a team for me').answer,/can’t choose or submit/);
+assert.match(assistantRequestRefusal('Please settle tournament #5').answer,/can’t perform/);
+assert.equal(assistantRequestRefusal('Why can’t I enter a tournament?'),null);
+assert.equal(assistantRequestRefusal('Show my entries'),null);
 let calls=[];
 const q=async(sql,params=[])=>{
   calls.push({sql,params});
@@ -47,6 +53,8 @@ await assert.rejects(answer({actorId:'alice',admin:false,question:'homepage visi
 await assert.rejects(answer({actorId:'alice',admin:false,question:'and yesterday',previousTopics:['visitors']}),/administrators/);
 await assert.rejects(answer({actorId:'alice',admin:false,userSearch:'Bob',question:'wallet'}),/administrators/);
 calls=[];
+let refused=await answer({actorId:'alice',admin:false,question:'Can you enter a team for me'});
+assert.match(refused.answer,/can’t choose or submit/);assert.equal(refused.sections.length,0);assert.equal(calls.length,0);
 let result=await answer({actorId:'alice',admin:false,question:'my wallet today'});
 assert.equal(result.account.id,'alice');
 assert.equal(result.sections.find(s=>s.title==='Current wallet').rows[0].balance,12);
