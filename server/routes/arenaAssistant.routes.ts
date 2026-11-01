@@ -1,3 +1,4 @@
+import {registerAssistantSiteTaskRoutes} from './assistantSiteTasks.routes.js';
 import {ASSISTANT_ACTION_SCHEMA,previewAssistantAction,confirmAssistantAction} from '../services/assistantActions.js';
 import {fplApi} from '../services/fplApi.js';
 import {loadPremierAvailability} from './footballData.routes.js';
@@ -26,6 +27,7 @@ function sameOrigin(req:any){
   return allowed.has(origin);
 }
 export function registerArenaAssistantRoutes(app:Express,deps:{requireAuth:any;isAdminUser:(req:any)=>Promise<boolean>}){
+  registerAssistantSiteTaskRoutes(app,{...deps,sameOrigin,withinLimit});
   const answer=createArenaAssistant(async(query,params)=>(await pool.query(query,params)).rows,{fixtures:()=>fplApi.fixturesLive(),availability:loadPremierAvailability});
   const purge=async()=>{await ensurePageActivitySchema();await pool.query("DELETE FROM app.page_activity WHERE created_at < now()-interval '90 days'");
     if((await pool.query("SELECT to_regclass('app.assistant_action_previews') AS present")).rows[0]?.present)await pool.query("DELETE FROM app.assistant_action_previews WHERE expires_at<now()-interval '1 day'");};
