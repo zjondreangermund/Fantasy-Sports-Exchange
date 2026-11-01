@@ -5,6 +5,7 @@ import * as React from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { Monitor, Smartphone } from "lucide-react";
 
 import { Toaster } from "./components/ui/toaster";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -18,21 +19,19 @@ import FloatingEventNotifications from "./components/FloatingEventNotifications"
 import LivePulseDock from "./components/LivePulseDock";
 import MatchdayQuickDock from "./components/MatchdayQuickDock";
 import MarketplaceFloorNotice from "./components/MarketplaceFloorNotice";
+import MobileNavDock from "./components/MobileNavDock";
 import NativeMobileShell from "./components/native/NativeMobileShell";
 import SiteFooter from "./components/SiteFooter";
 import PageScene, { routeToPageSceneVariant } from "./components/PageScene";
 import SecurityModeBanner from "./components/SecurityModeBanner";
 import GuidedHoverHelp from "./components/GuidedHoverHelp";
 import GlobalActionToasts from "./components/GlobalActionToasts";
-import InstallAppButton from "./components/InstallAppButton";
 import CommonCardRewardChoiceDialog from "./components/CommonCardRewardChoiceDialog";
-import WeeklyCommonMintDialog from "./components/WeeklyCommonMintDialog";
-// WEEKLY_COMMON_MINT_POPUP_V1: global authenticated weekly Common mint prompt.
 import PendingPrizeClaimPopup from "./components/PendingPrizeClaimPopup";
 import SignupWelcomePopup from "./components/SignupWelcomePopup";
 import { useAuth } from "./hooks/use-auth";
 import { useScrollRepair } from "./hooks/use-scroll-repair";
-import { isNativeMobileApp } from "./lib/site-view";
+import { applySiteView, getSiteViewMode, isNativeMobileApp, type SiteViewMode } from "./lib/site-view";
 import { Skeleton } from "./components/ui/skeleton";
 
 import NotFound from "./pages/not-found";
@@ -148,6 +147,7 @@ function AuthenticatedRouter() {
         <Route path="/trophy-cabinet" component={TrophyCabinetPage} />
         <Route path="/prize-vault" component={PrizeVaultPage} />
         <Route path="/premier-league" component={PremierLeaguePage} />
+        <Route path="/leagues" component={PremierLeaguePage} />
         {ADMIN_TEST_TOOLS_ENABLED ? <Route path="/card-lab" component={CardLabRoute} /> : null}
         <Route path="/collection" component={CollectionPage} />
         <Route path="/marketplace" component={MarketplacePage} />
@@ -166,6 +166,7 @@ function AuthenticatedRouter() {
 }
 
 function AuthenticatedApp() {
+  const [siteView, setSiteView] = React.useState<SiteViewMode>(() => getSiteViewMode());
   const [location] = useLocation();
   const nativeApp = isNativeMobileApp();
   const isPlayRoute = location.startsWith("/competitions") || location.startsWith("/my-entries") || location.startsWith("/trophy-cabinet") || location.startsWith("/prize-vault") || location.startsWith("/free") || location.startsWith("/play-free");
@@ -205,15 +206,12 @@ function AuthenticatedApp() {
     <SidebarProvider className="h-[100dvh] min-h-0 overflow-hidden" style={style as React.CSSProperties}>
       <div className={`app-shell flex h-full min-h-0 w-full overflow-hidden bg-black ${isPlayRoute ? "play-route-shell" : ""}`}>
         <AppSidebar />
-        <div
-          className={`app-content relative isolate box-border flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${isPlayRoute ? "play-route-content" : ""}`}
-          style={{ paddingTop: "var(--security-banner-offset, 0px)" }}
-        >
+        <div className={`app-content relative isolate flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${isPlayRoute ? "play-route-content" : ""}`}>
           <RouteSceneBackground pathname={location} />
           {!isPlayRoute && !isInfoRoute && <StadiumAmbientLayer teamName={teamName} />}
           <header className="relative z-50 flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/80 p-2">
             <div className="flex min-w-0 items-center gap-2"><SidebarTrigger data-testid="button-sidebar-toggle" className="h-10 w-10 shrink-0 rounded-xl border border-white/15 bg-white/5" /><span className="truncate text-xs font-bold text-white/65">Show / hide menu</span></div>
-            <div className="flex shrink-0 items-center gap-1.5"><InstallAppButton /><ThemeToggle /></div>
+            <div className="flex shrink-0 items-center gap-1.5"><button type="button" onClick={() => setSiteView(applySiteView(siteView === "desktop" ? "mobile" : "desktop"))} aria-label={siteView === "desktop" ? "Switch to mobile site view" : "Switch to desktop site view"} title={siteView === "desktop" ? "Switch to mobile view" : "Switch to desktop view"} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-2 text-[11px] font-bold text-white/75 hover:bg-white/10">{siteView === "desktop" ? <Smartphone className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}<span className="hidden sm:inline">{siteView === "desktop" ? "Mobile view" : "Desktop view"}</span></button><ThemeToggle /></div>
           </header>
           {!isInfoRoute && <LivePulseDock />}
           {showMarketplaceFloors && <MarketplaceFloorNotice />}
@@ -222,6 +220,7 @@ function AuthenticatedApp() {
             {isInfoRoute && <SiteFooter />}
           </main>
           {!isInfoRoute && <MatchdayQuickDock />}
+          {!isInfoRoute && <MobileNavDock />}
           {!isInfoRoute && <FloatingEventNotifications />}
 
         </div>
@@ -238,7 +237,7 @@ function AppContent() {
   const { user, isLoading } = useAuth();
   React.useEffect(()=>{captureCommunityLink();},[]);
   React.useEffect(() => { const params = new URLSearchParams(window.location.search); const ref = String(params.get("ref") || "").trim(); if (ref) localStorage.setItem("fantasy_referral_code", ref); }, []);
-  React.useEffect(() => { if (!user) return; const code = localStorage.getItem("fantasy_referral_code"); if (!code) return; fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) }).then((response) => { /* REFERRAL_CLIENT_RETRY_V1 */ if (response.ok) localStorage.removeItem("fantasy_referral_code"); }).catch(() => {}); }, [user]);
+  React.useEffect(() => { if (!user) return; const code = localStorage.getItem("fantasy_referral_code"); if (!code) return; fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) }).then(() => localStorage.removeItem("fantasy_referral_code")).catch(() => {}); }, [user]);
   if (window.location.pathname.replace(/\/$/, "") === "/install") return <React.Suspense fallback={<RouteFallback />}><InstallPage /></React.Suspense>;
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Skeleton className="h-12 w-12 rounded-md" /><Skeleton className="h-4 w-32" /></div></div>;
   if (!user) { const pathname = window.location.pathname || "/"; return <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen"><PublicRouter /></PageScene>; }
@@ -255,7 +254,6 @@ export default function App() {
           {!nativeApp ? <GuidedHoverHelp /> : null}
           <PageActivityTracker />
           <AppContent />
-          <WeeklyCommonMintDialog />
           <AppErrorBoundary scope="SignupWelcomePopup" optional><SignupWelcomePopup /></AppErrorBoundary>
           <AppErrorBoundary scope="PendingPrizeClaimPopup" optional><PendingPrizeClaimPopup /></AppErrorBoundary>
           <AppErrorBoundary scope="DepartureLoginPrompt" optional><DepartureLoginPrompt /></AppErrorBoundary>
