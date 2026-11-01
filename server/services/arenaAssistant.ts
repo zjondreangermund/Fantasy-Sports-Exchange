@@ -14,6 +14,7 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
     const question=String(input.question||'').trim();
     if(!question||question.length>2000)throw new AssistantError('Enter a question of up to 2,000 characters.');
     scopedAssistantUser(input.actorId,input.admin,input.userId);
+    if(!input.admin&&/admin (?:reports?|logs?|analytics|dashboard|inbox)|all (?:users|wallets|accounts)|(?:other|another) (?:user|account)|platform (?:revenue|profit|totals)|support inbox/i.test(question))throw new AssistantError('Private administrator information is not available in Member Help.',403);
     const task=parseAssistantTask(question,(input.context as any)?.taskDraft);
     if(task){
       if(assistantTaskDefinitions[task.kind].admin&&!input.admin)throw new AssistantError('This task requires administrator access.',403);

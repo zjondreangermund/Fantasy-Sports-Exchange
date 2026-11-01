@@ -1,3 +1,4 @@
+import {assistantAccess} from '../services/assistantAccess.js';
 import {registerAssistantSiteTaskRoutes} from './assistantSiteTasks.routes.js';
 import {ASSISTANT_ACTION_SCHEMA,previewAssistantAction,confirmAssistantAction} from '../services/assistantActions.js';
 import {fplApi} from '../services/fplApi.js';
@@ -49,23 +50,27 @@ export function registerArenaAssistantRoutes(app:Express,deps:{requireAuth:any;i
       return res.status(202).json({ok:true});
     }catch(error){console.warn('Page activity event failed',error);return res.status(503).json({message:'Activity tracking is unavailable.'});}
   });
+  app.get('/api/assistant/access',deps.requireAuth,async(req:any,res)=>{
+    res.setHeader('Cache-Control','private, no-store');
+    try{return res.json({userId:String(req.authUserId||''),isAdmin:await deps.isAdminUser(req)});}catch{return res.status(503).json({message:'Support access could not be verified.'});}
+  });
   let actionSchema:Promise<any>|undefined;
   const prepareActions=()=>actionSchema||=(pool.query(ASSISTANT_ACTION_SCHEMA).catch(error=>{actionSchema=undefined;throw error;}));
   for(const operation of ['preview','confirm'] as const){
-    app.post(`/api/assistant/actions/${operation}`,deps.requireAuth,async(req:any,res)=>{
+    app.post([`/api/assistant/actions/${operation}`,`/api/assistant/:audience/actions/${operation}`],deps.requireAuth,async(req:any,res)=>{
       res.setHeader('Cache-Control','private, no-store');
       let client:any;
       try{
         if(!sameOrigin(req))return res.status(403).json({message:'Invalid request origin.'});
         const actor=String(req.authUserId||'');
         if(!withinLimit(`action:${actor}`,12))return res.status(429).json({message:'Please wait before trying another action.'});
-        const admin=await deps.isAdminUser(req);
+        const {admin,audience}=assistantAccess(req.params?.audience,await deps.isAdminUser(req));
         await prepareActions();
-        if(operation==='preview')return res.json(await previewAssistantAction(async(sql,params)=>(await pool.query(sql,params)).rows,actor,admin,req.body||{}));
+        if(operation==='preview')return res.json(await previewAssistantAction(async(sql,params)=>(await pool.query(sql,params)).rows,actor,admin,req.body||{},audience));
         const token=String(req.body?.token||'');
         if(!safeUuid(token)||req.body?.confirmed!==true)throw new AssistantError('Confirm a valid preview before applying it.');
         client=await pool.connect();await client.query('BEGIN');
-        const result=await confirmAssistantAction(async(sql,params)=>(await client.query(sql,params)).rows,actor,admin,token);
+        const result=await confirmAssistantAction(async(sql,params)=>(await client.query(sql,params)).rows,actor,admin,token,audience);
         await client.query('COMMIT');return res.json(result);
       }catch(error:any){
         if(client)await client.query('ROLLBACK');
@@ -74,15 +79,15 @@ export function registerArenaAssistantRoutes(app:Express,deps:{requireAuth:any;i
       }finally{client?.release();}
     });
   }
-  app.post('/api/assistant/ask',deps.requireAuth,async(req:any,res)=>{
+  app.post(['/api/assistant/ask','/api/assistant/:audience/ask'],deps.requireAuth,async(req:any,res)=>{
     res.setHeader('Cache-Control','private, no-store');
     try{
       if(!sameOrigin(req))return res.status(403).json({message:'Invalid request origin.'});
       const actorId=String(req.authUserId||'');
       if(!withinLimit(`ask:${actorId}`,20))return res.status(429).json({message:'Please wait a moment before asking again.'});
-      const admin=await deps.isAdminUser(req);
+      const {admin,audience}=assistantAccess(req.params?.audience,await deps.isAdminUser(req));
       await ensurePageActivitySchema();
-      return res.json(await answer({actorId,admin,question:req.body?.question,userId:req.body?.userId,userSearch:req.body?.userSearch,previousTopics:req.body?.previousTopics,period:req.body?.period,offset:req.body?.offset,context:req.body?.context}));
+      return res.json({...await answer({actorId,admin,question:req.body?.question,userId:req.body?.userId,userSearch:req.body?.userSearch,previousTopics:req.body?.previousTopics,period:req.body?.period,offset:req.body?.offset,context:req.body?.context}),audience});
     }catch(error:any){
       if(error instanceof AssistantError)return res.status(error.status).json({message:error.message});
       console.error('Assistant lookup failed',error);

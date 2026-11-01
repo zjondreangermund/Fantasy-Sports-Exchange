@@ -1,3 +1,4 @@
+import {assistantAccess} from '../services/assistantAccess.js';
 import type {Express} from 'express';
 import {pool} from '../db.js';
 import {AssistantError,safeUuid} from '../services/assistantPolicy.js';
@@ -9,9 +10,10 @@ export function registerAssistantSiteTaskRoutes(app:Express,deps:{requireAuth:an
   let schema:Promise<any>|undefined;
   const ensure=()=>schema||=pool.query(ASSISTANT_SITE_TASK_SCHEMA).catch(error=>{schema=undefined;throw error;});
   const q=async(sql:string,params?:any[])=>(await pool.query(sql,params)).rows;
-  app.get('/api/assistant/tasks/options',deps.requireAuth,async(req:any,res)=>{
+  app.get(['/api/assistant/tasks/options','/api/assistant/:audience/tasks/options'],deps.requireAuth,async(req:any,res)=>{
     res.setHeader('Cache-Control','private, no-store');
     try{
+      assistantAccess(req.params?.audience,await deps.isAdminUser(req));
       const actor=String(req.authUserId||'');if(!actor)throw new AssistantError('Sign in first.',401);
       if(!deps.withinLimit(`task-options:${actor}`,20))throw new AssistantError('Please wait before requesting more choices.',429);
       const [cards,competitions,entries]=await Promise.all([
@@ -23,18 +25,18 @@ export function registerAssistantSiteTaskRoutes(app:Express,deps:{requireAuth:an
     }catch(error:any){return res.status(error instanceof AssistantError?error.status:503).json({message:error instanceof AssistantError?error.message:'Task choices are unavailable.'});}
   });
   for(const operation of ['preview','confirm'] as const){
-    app.post(`/api/assistant/tasks/${operation}`,deps.requireAuth,async(req:any,res)=>{
+    app.post([`/api/assistant/tasks/${operation}`,`/api/assistant/:audience/tasks/${operation}`],deps.requireAuth,async(req:any,res)=>{
       res.setHeader('Cache-Control','private, no-store');
       try{
         if(!deps.sameOrigin(req))throw new AssistantError('Invalid request origin.',403);
         const actor=String(req.authUserId||'');if(!actor)throw new AssistantError('Sign in first.',401);
         if(req.body?.userId&&req.body.userId!==actor)throw new AssistantError('Site tasks run only for your signed-in account.',403);
         if(!deps.withinLimit(`task:${actor}`,10))throw new AssistantError('Please wait before preparing another task.',429);
-        const admin=await deps.isAdminUser(req);await ensure();
-        if(operation==='preview')return res.json(await previewAssistantSiteTask(q,actor,admin,req.body?.draft));
+        const {admin,audience}=assistantAccess(req.params?.audience,await deps.isAdminUser(req));await ensure();
+        if(operation==='preview')return res.json(await previewAssistantSiteTask(q,actor,admin,req.body?.draft,audience));
         const token=String(req.body?.token||'');if(!safeUuid(token)||req.body?.confirmed!==true)throw new AssistantError('Review and explicitly confirm a valid preview.');
         req.assistantTaskToken=token;
-        return res.json(await confirmAssistantSiteTask(q,actor,admin,token,plan=>dispatchAssistantSiteTask(app,req,plan,[securityOriginGuard,securityControlMiddleware,strictReadOnlyGuard])));
+        return res.json(await confirmAssistantSiteTask(q,actor,admin,token,plan=>dispatchAssistantSiteTask(app,req,plan,[securityOriginGuard,securityControlMiddleware,strictReadOnlyGuard]),audience));
       }catch(error:any){
         if(error instanceof AssistantError)return res.status(error.status).json({message:error.message});
         console.error('Assistant site task failed',error);return res.status(503).json({message:'The outcome could not be confirmed. Check the relevant site page before trying again.'});

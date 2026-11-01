@@ -62,6 +62,7 @@ try{
   const fixtures=[{id:1,event:9,kickoff_time:next,started:false,finished:false}];
   const connections={fixtures:async()=>fixtures,availability:async()=>({asOf:next,sourceUpdatedAt:next,stale:false,injuries:[],confirmedAvailable:[{player:{id:2864,name:'A. Isak'},team:{name:'Liverpool'},fixture:{id:3,date:next},availabilityStatus:'confirmed_starter'}],historicalInjuries:[]})};
   const answer=createArenaAssistant(q,connections),base={actorId:'alice',admin:false};
+  await q("INSERT INTO app.competition_entries(id,user_id,competition_id,lineup_card_ids,captain_id,tiebreak_meta) VALUES(12,'bob',5,'[6]',6,'{}')");
   await assert.rejects(answer({...base,question:'Please check the latest game week log'}),/administrators/);
   let r=await answer({actorId:'admin',admin:true,question:'Please check the latest game week log'});
   assert.match(r.answer,/GW9/);assert(!r.answer.includes('could not be minted'));assert(!r.answer.includes('No Free Card Cups'));
@@ -80,7 +81,7 @@ try{
   assert.equal(checks.find(x=>x.check==='Captain').status,'pass');
   r=await answer({...base,question:'Investigate entry #11'});assert.match(r.answer,/not found in the selected account/);
   r=await answer({...base,question:'Why is tournament #5 not settled?'});assert.match(r.answer,/incomplete/);
-  assert.equal(r.sections.find(s=>s.title==='Missing or provisional scoring').rows.length,4); // zero final points are valid, not missing
+  assert.equal(r.sections.find(s=>s.title==='Missing or provisional scoring').rows.length,4);assert(!JSON.stringify(r.sections).includes('Private'));assert.equal(r.sections.find(s=>s.title==='Settlement evidence').rows[0].entries,1); // zero final points are valid, not missing
   r=await answer({...base,question:'Why is tournament #6 not settled?'});assert.match(r.answer,/No accessible tournament/);
   r=await answer({...base,question:'Trace payment reference “ALICE-REF”'});assert.equal(r.sections.find(s=>s.title==='Payment reference trace').rows.length,1);
   r=await answer({...base,question:'Trace payment reference “BOB-SECRET”'});assert.equal(r.sections.find(s=>s.title==='Payment reference trace').rows.length,0);assert(!JSON.stringify(r).includes('999'));
@@ -107,7 +108,7 @@ try{
   await confirm('alice',false,preview.token);assert.equal((await q('SELECT read FROM app.notifications WHERE id=1'))[0].read,true);
   assert.equal((await confirm('alice',false,preview.token)).replayed,true);
   preview=await previewAssistantAction(q,'admin',true,{kind:'support_status',recordId:7,status:'resolved'});
-  await assert.rejects(confirm('admin',false,preview.token),/Admin/);
+  await assert.rejects(confirm('admin',false,preview.token),/not found|Admin/);
   await q("UPDATE app.support_requests SET status='waiting' WHERE id=7");
   await assert.rejects(confirm('admin',true,preview.token),/changed/);
   assert.equal((await q('SELECT completed_at FROM app.assistant_action_previews WHERE id=$1',[preview.token]))[0].completed_at,null);
@@ -116,6 +117,11 @@ try{
   preview=await previewAssistantAction(q,'alice',false,{kind:'notification_read',recordId:1});
   await q("UPDATE app.assistant_action_previews SET expires_at=now()-interval '1 second' WHERE id=$1",[preview.token]);await assert.rejects(confirm('alice',false,preview.token),/expired/);
   assert.equal((await q("SELECT count(*)::int AS n FROM app.audit_logs WHERE action='assistant.action'"))[0].n,2);
+  const adminToken=await previewAssistantAction(q,'admin',true,{kind:'support_status',recordId:7,status:'waiting'},'admin');
+  await assert.rejects(db.transaction(async tx=>confirmAssistantAction(async(sql,params)=>(await tx.query(sql,params)).rows,'admin',true,adminToken.token,'member')),/not found/);
+  await assert.rejects(previewAssistantAction(q,'admin',true,{kind:'support_status',recordId:7,status:'resolved'},'member'),/administrators/);
+  await q("UPDATE app.assistant_action_previews SET audience='member',completed_at=now() WHERE id=$1",[adminToken.token]);
+  await assert.rejects(db.transaction(async tx=>confirmAssistantAction(async(sql,params)=>(await tx.query(sql,params)).rows,'admin',false,adminToken.token,'member')),/Admin/);
   const {ASSISTANT_SITE_TASK_SCHEMA,previewAssistantSiteTask,confirmAssistantSiteTask}=await import(path.join(temp,'server/services/assistantSiteTasks.mjs'));
   const {dispatchAssistantSiteTask}=await import(path.join(temp,'server/services/assistantSiteDispatcher.mjs'));
   const {parseAssistantTask}=await import(path.join(temp,'shared/assistant-tasks.mjs'));
@@ -136,6 +142,12 @@ try{
   await assert.rejects(previewAssistantSiteTask(q,'alice',false,{kind:'admin_settle',fields:{competitionId:5}}),/administrator/);
   let taskPreview=await previewAssistantSiteTask(q,'alice',false,teamDraft);
   assert.equal(taskPreview.rows[1].entryFee,10);
+  await assert.rejects(confirmAssistantSiteTask(q,'alice',false,taskPreview.token,async()=>({status:200}),'admin'),/administrator/);
+  const adminTask=await previewAssistantSiteTask(q,'admin',true,{kind:'admin_sync',fields:{jobType:'fixtures'}},'admin');
+  await assert.rejects(confirmAssistantSiteTask(q,'admin',true,adminTask.token,async()=>({status:200}),'member'),/not found/);
+  await assert.rejects(previewAssistantSiteTask(q,'admin',true,{kind:'admin_sync',fields:{jobType:'fixtures'}},'member'),/administrator/);
+  await q("UPDATE app.assistant_site_tasks SET audience='member',state='succeeded',result='{\"message\":\"PRIVATE OLD JOB RESULT\"}'::jsonb WHERE id=$1",[adminTask.token]);
+  await assert.rejects(confirmAssistantSiteTask(q,'admin',false,adminTask.token,async()=>({status:200}),'member'),/Administrator/);
   let executions=0;
   const execute=async plan=>{executions++;assert.equal(plan.route,'/api/competitions/join');assert.equal(plan.body.assistantExpectedEntryFee,10);return {status:200,message:'Entry recorded',entryId:20};};
   await assert.rejects(confirmAssistantSiteTask(q,'bob',false,taskPreview.token,execute),/not found/);

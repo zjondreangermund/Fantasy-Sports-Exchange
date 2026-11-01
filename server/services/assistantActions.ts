@@ -1,11 +1,14 @@
+import {assistantAccess,type AssistantAudience} from './assistantAccess.js';
 import {randomUUID} from 'node:crypto';
 import {AssistantError,scopedAssistantUser} from './assistantPolicy.js';
 import type {AssistantQuery} from './supportWalletSnapshot.js';
 export const ASSISTANT_ACTION_SCHEMA=`CREATE TABLE IF NOT EXISTS app.assistant_action_previews (
  id uuid PRIMARY KEY,actor_id text NOT NULL,target_id text NOT NULL,kind text NOT NULL,
  record_id bigint NOT NULL,expected text NOT NULL,desired text NOT NULL,
- expires_at timestamptz NOT NULL DEFAULT now()+interval '10 minutes',completed_at timestamptz)`;
-export async function previewAssistantAction(q:AssistantQuery,actor:string,admin:boolean,body:any){
+ expires_at timestamptz NOT NULL DEFAULT now()+interval '10 minutes',completed_at timestamptz);
+ALTER TABLE app.assistant_action_previews ADD COLUMN IF NOT EXISTS audience text NOT NULL DEFAULT 'member'`;
+export async function previewAssistantAction(q:AssistantQuery,actor:string,admin:boolean,body:any,audience:AssistantAudience=admin?'admin':'member'){
+  admin=assistantAccess(audience,admin).admin;
   const target=scopedAssistantUser(actor,admin,body.userId);
   const kind=String(body.kind),id=Number(body.recordId);
   if(!Number.isSafeInteger(id)||id<1)throw new AssistantError('Provide a valid record number.');
@@ -23,13 +26,16 @@ export async function previewAssistantAction(q:AssistantQuery,actor:string,admin
     expected=String(ticket.status);description=`Change support request #${id} “${ticket.subject}” from ${expected} to ${desired}. This saves the status internally and sends no message.`;
   }else throw new AssistantError('This action is not connected. Use the normal page for payments, balances, entries and settlements.');
   const token=randomUUID();
-  const row=(await q(`INSERT INTO app.assistant_action_previews(id,actor_id,target_id,kind,record_id,expected,desired) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING expires_at AS "expiresAt"`,[token,actor,target,kind,id,expected,desired]))[0];
+  const row=(await q(`INSERT INTO app.assistant_action_previews(id,actor_id,target_id,kind,record_id,expected,desired,audience) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING expires_at AS "expiresAt"`,[token,actor,target,kind,id,expected,desired,audience]))[0];
   return {token,description,expiresAt:row.expiresAt};
 }
 // Caller must use one SQL transaction: row lock, state recheck, write, audit and consume are atomic.
-export async function confirmAssistantAction(q:AssistantQuery,actor:string,admin:boolean,token:string){
-  const preview=(await q(`SELECT *,expires_at>now() AS valid FROM app.assistant_action_previews WHERE id=$1 AND actor_id=$2 FOR UPDATE`,[token,actor]))[0];
+export async function confirmAssistantAction(q:AssistantQuery,actor:string,admin:boolean,token:string,audience:AssistantAudience=admin?'admin':'member'){
+  admin=assistantAccess(audience,admin).admin;
+  const preview=(await q(`SELECT *,expires_at>now() AS valid FROM app.assistant_action_previews WHERE id=$1 AND actor_id=$2 AND audience=$3 FOR UPDATE`,[token,actor,audience]))[0];
   if(!preview)throw new AssistantError('Preview not found for this account.',404);
+  scopedAssistantUser(actor,admin,preview.target_id);
+  if(preview.kind==='support_status'&&!admin)throw new AssistantError('Admin access is required.',403);
   if(preview.completed_at)return {ok:true,replayed:true,message:'This preview was already applied; no second change was made.'};
   if(!preview.valid)throw new AssistantError('This preview expired. Create a fresh preview.',409);
   scopedAssistantUser(actor,admin,preview.target_id);

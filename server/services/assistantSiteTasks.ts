@@ -1,10 +1,12 @@
+import {assistantAccess,type AssistantAudience} from './assistantAccess.js';
 import {randomUUID,createHash} from 'node:crypto';
 import {assistantTaskDefinitions,assistantTaskKind,type AssistantTaskDraft} from '../../shared/assistant-tasks.js';
 import {AssistantError} from './assistantPolicy.js';
 import type {AssistantQuery} from './supportWalletSnapshot.js';
 import type {SiteTaskPlan} from './assistantSiteDispatcher.js';
 import {validateTournamentRarityLineup,TOURNAMENT_REQUIRED_POSITIONS,TOURNAMENT_UTILITY_POSITIONS} from '../../shared/game-rules.js';
-export const ASSISTANT_SITE_TASK_SCHEMA=`CREATE TABLE IF NOT EXISTS app.assistant_site_tasks(id uuid PRIMARY KEY,actor_id text NOT NULL,kind text NOT NULL,fields jsonb NOT NULL,fingerprint text NOT NULL,state text NOT NULL DEFAULT 'preview',result jsonb,created_at timestamptz NOT NULL DEFAULT now(),expires_at timestamptz NOT NULL DEFAULT now()+interval '10 minutes',finished_at timestamptz)`;
+export const ASSISTANT_SITE_TASK_SCHEMA=`CREATE TABLE IF NOT EXISTS app.assistant_site_tasks(id uuid PRIMARY KEY,actor_id text NOT NULL,kind text NOT NULL,fields jsonb NOT NULL,fingerprint text NOT NULL,state text NOT NULL DEFAULT 'preview',result jsonb,created_at timestamptz NOT NULL DEFAULT now(),expires_at timestamptz NOT NULL DEFAULT now()+interval '10 minutes',finished_at timestamptz);
+ALTER TABLE app.assistant_site_tasks ADD COLUMN IF NOT EXISTS audience text NOT NULL DEFAULT 'member'`;
 const id=(v:any)=>{const n=Number(v);if(!Number.isSafeInteger(n)||n<1)throw new AssistantError('Select a valid record number.');return n;};
 export async function prepareAssistantSiteTask(q:AssistantQuery,actor:string,admin:boolean,draft:AssistantTaskDraft){
   if(!actor)throw new AssistantError('Sign in first.',401);
@@ -52,14 +54,19 @@ export async function prepareAssistantSiteTask(q:AssistantQuery,actor:string,adm
   }else throw new AssistantError('Unsupported task.');
   return {plan,rows,description:def.label,fingerprint:createHash('sha256').update(JSON.stringify({plan,snapshot})).digest('hex')};
 }
-export async function previewAssistantSiteTask(q:AssistantQuery,actor:string,admin:boolean,draft:AssistantTaskDraft){
+export async function previewAssistantSiteTask(q:AssistantQuery,actor:string,admin:boolean,draft:AssistantTaskDraft,audience:AssistantAudience=admin?'admin':'member'){
+  admin=assistantAccess(audience,admin).admin;
   const prepared=await prepareAssistantSiteTask(q,actor,admin,draft);const token=randomUUID();
-  const row=(await q(`INSERT INTO app.assistant_site_tasks(id,actor_id,kind,fields,fingerprint) VALUES($1,$2,$3,$4::jsonb,$5) RETURNING expires_at AS "expiresAt"`,[token,actor,draft.kind,JSON.stringify(Object.fromEntries(assistantTaskDefinitions[draft.kind].fields.filter(key=>Object.hasOwn(draft.fields||{},key)).map(key=>[key,draft.fields[key]]))),prepared.fingerprint]))[0];
+  const row=(await q(`INSERT INTO app.assistant_site_tasks(id,actor_id,kind,fields,fingerprint,audience) VALUES($1,$2,$3,$4::jsonb,$5,$6) RETURNING expires_at AS "expiresAt"`,[token,actor,draft.kind,JSON.stringify(Object.fromEntries(assistantTaskDefinitions[draft.kind].fields.filter(key=>Object.hasOwn(draft.fields||{},key)).map(key=>[key,draft.fields[key]]))),prepared.fingerprint,audience]))[0];
   return {token,description:prepared.description,rows:prepared.rows,expiresAt:row.expiresAt,note:'Confirming runs this action for your signed-in account. The site rechecks permissions, eligibility, locks, available funds and kickoff as applicable. A preview does not establish eligibility.'};
 }
-export async function confirmAssistantSiteTask(q:AssistantQuery,actor:string,admin:boolean,token:string,execute:(plan:SiteTaskPlan)=>Promise<any>){
-  const task=(await q('SELECT *,expires_at>now() AS valid FROM app.assistant_site_tasks WHERE id=$1 AND actor_id=$2',[token,actor]))[0];
+export async function confirmAssistantSiteTask(q:AssistantQuery,actor:string,admin:boolean,token:string,execute:(plan:SiteTaskPlan)=>Promise<any>,audience:AssistantAudience=admin?'admin':'member'){
+  admin=assistantAccess(audience,admin).admin;
+  const task=(await q('SELECT *,expires_at>now() AS valid FROM app.assistant_site_tasks WHERE id=$1 AND actor_id=$2 AND audience=$3',[token,actor,audience]))[0];
   if(!task)throw new AssistantError('Your task preview was not found.',404);
+  const storedKind:unknown=task.kind;
+  if(!assistantTaskKind(storedKind))throw new AssistantError('Unsupported task.');
+  if(assistantTaskDefinitions[storedKind].admin&&!admin)throw new AssistantError('Administrator access is required for this task.',403);
   if(task.state!=='preview')return {state:task.state,...(task.result||{message:'This task was already started. Check the relevant site page; it will not run again.'}),replayed:true};
   if(!task.valid)throw new AssistantError('The task preview expired. Prepare it again.',409);
   const prepared=await prepareAssistantSiteTask(q,actor,admin,{kind:task.kind,fields:task.fields});
