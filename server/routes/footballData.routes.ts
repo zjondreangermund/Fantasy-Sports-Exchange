@@ -1,3 +1,4 @@
+import {resolveFixtureAvailability} from "../../shared/fixture-availability.js";
 import { normalizeFootballData } from "../../shared/football-data.js";
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
@@ -108,7 +109,7 @@ async function cachedProvider(
     where cache_key=${key}
     limit 1
   `))[0];
-  if (cached?.payload && cached.fresh) {
+  if (cached?.payload && cached.fresh && Date.now()-new Date(cached.updatedAt).getTime()<ttlSeconds*1000) {
     return { payload: cached.payload, cached: true, stale: false, updatedAt: cached.updatedAt, warning: null };
   }
 
@@ -546,24 +547,28 @@ async function buildPlayerIntelligence(leagueId: number, season: number, playerI
   const teamId = Number(leagueStat?.team?.id || 0);
   const teamName = String(leagueStat?.team?.name || "");
 
-  const [injuryResult, transferResult, nextResult, standingsResult, squadResult] = await Promise.all([
-    cachedProvider("injuries", { player: playerId }, 4 * 60 * 60).catch(() => null),
+  const [injuryResult, transferResult, nextResult, standingsResult, squadResult, liveResult] = await Promise.all([
+    cachedProvider("injuries", { player: playerId }, 5 * 60).catch(() => null),
     cachedProvider("transfers", { player: playerId }, 12 * 60 * 60).catch(() => null),
     teamId ? cachedProvider("fixtures", { team: teamId, next: 3 }, 5 * 60).catch(() => null) : Promise.resolve(null),
     cachedProvider("standings", { league: leagueId, season }, 60 * 60).catch(() => null),
     teamId ? cachedProvider("players/squads", { team: teamId }, 12 * 60 * 60).catch(() => null) : Promise.resolve(null),
+    cachedProvider("fixtures", {live:"all"},30).catch(()=>null),
   ]);
 
-  const injuries = injuryResult ? responseRows(injuryResult.payload) : [];
+  const injuryReports = injuryResult ? responseRows(injuryResult.payload) : [];
   const transfers = transferResult ? responseRows(transferResult.payload) : [];
   const nextFixtures = nextResult ? responseRows(nextResult.payload).map(normalizeFixture) : [];
-  const nextFixture = nextFixtures[0] || null;
+  const currentFixture=liveResult?responseRows(liveResult.payload).find((f:any)=>Number(f?.league?.id)===leagueId&&[Number(f?.teams?.home?.id),Number(f?.teams?.away?.id)].includes(teamId)):null;
+  const nextFixture = currentFixture?normalizeFixture(currentFixture):nextFixtures[0] || null;
   const inCurrentSquad = squadResult ? currentSquadContains(squadResult.payload, playerId) : null;
 
   let lineup: any = null;
+  let announcedLineups:any[]=[];
   if (nextFixture?.id) {
     const lineupResult = await cachedProvider("fixtures/lineups", { fixture: nextFixture.id }, 2 * 60).catch(() => null);
     const lineups = lineupResult ? responseRows(lineupResult.payload) : [];
+    announcedLineups=lineups;
     const teamLineup = lineups.find((row: any) => Number(row?.team?.id || 0) === teamId) || null;
     if (teamLineup) {
       const starters = Array.isArray(teamLineup?.startXI) ? teamLineup.startXI : [];
@@ -582,6 +587,8 @@ async function buildPlayerIntelligence(leagueId: number, season: number, playerI
     }
   }
 
+  const availability=resolveFixtureAvailability(injuryReports,nextFixture?[nextFixture]:[],nextFixture?[{fixtureId:nextFixture.id,lineups:announcedLineups}]:[]);
+  const injuries=availability.injuries;
   const groups = standingsResult?.payload?.response?.[0]?.league?.standings;
   const flatStandings = Array.isArray(groups) ? groups.flatMap((group: any) => Array.isArray(group) ? group : []) : [];
   const standing = flatStandings.find((row: any) => Number(row?.team?.id || 0) === teamId) || null;
@@ -594,9 +601,9 @@ async function buildPlayerIntelligence(leagueId: number, season: number, playerI
     const reason = String(injury?.player?.reason || "Availability issue");
     warnings.push({ level: type.toLowerCase().includes("susp") ? "danger" : "warning", code: "availability", message: `${type}: ${reason}` });
   }
-  if (lineup?.status === "confirmed_bench") warnings.push({ level: "warning", code: "bench", message: "Confirmed on the substitutes bench for the next fixture." });
+  if (lineup?.status === "confirmed_bench") warnings.push({ level: "warning", code: "bench", message: "Confirmed on the substitutes bench for this fixture." });
   if (lineup?.status === "not_in_announced_squad") warnings.push({ level: "danger", code: "not_in_lineup", message: "Lineup is published and the player is not in the announced matchday squad." });
-  if (lineup?.status === "confirmed_starter") warnings.push({ level: "info", code: "starter", message: "Confirmed starter for the next fixture." });
+  if (lineup?.status === "confirmed_starter") warnings.push({ level: "info", code: "starter", message: "Confirmed starter for this fixture." });
 
   return {
     playerId,
@@ -605,6 +612,7 @@ async function buildPlayerIntelligence(leagueId: number, season: number, playerI
     team: leagueStat?.team || null,
     currentSquad: inCurrentSquad,
     injuries,
+    historicalInjuries:availability.historicalInjuries,
     transfers,
     latestTransfer: transfers?.[0]?.transfers?.[0] || transfers?.[0] || null,
     nextFixture,
@@ -754,8 +762,23 @@ export function registerFootballDataRoutes(app: Express) {
       if (team > 0) params.team = team;
       if (player > 0) params.player = player;
       if (date) params.date = date;
-      const result = await cachedProvider("injuries", params, 4 * 60 * 60);
-      return res.json({ league: league.config, season, injuries: responseRows(result.payload), cached: result.cached });
+      const result = await cachedProvider("injuries", params, 5 * 60);
+      // Explicit historical date queries remain historical; the default tab is match-specific.
+      if(date || String(req.query.scope||"")==="history")return res.json({league:league.config,season,injuries:responseRows(result.payload),scope:"history",cached:result.cached});
+      const [next,live]=await Promise.all([
+        cachedProvider("fixtures",{league:league.config.id,season,next:20},120).catch(()=>null),
+        cachedProvider("fixtures",{live:"all"},30).catch(()=>null),
+      ]);
+      const fixtures=[...new Map([...(next?responseRows(next.payload):[]),...(live?responseRows(live.payload):[])].filter((f:any)=>Number(f?.league?.id)===league.config.id).map((f:any)=>[Number(f.fixture.id),f])).values()];
+      const now=Date.now();
+      const nearing=fixtures.filter((f:any)=>{const t=Date.parse(String(f?.fixture?.date||""));return t>=now-4*3600000&&t<=now+90*60000;});
+      const lineups=await Promise.all(nearing.map(async(f:any)=>{
+        const data=await cachedProvider("fixtures/lineups",{fixture:Number(f.fixture.id)},60).catch(()=>null);
+        return {fixtureId:Number(f.fixture.id),lineups:data?responseRows(data.payload):[]};
+      }));
+      const resolved=resolveFixtureAvailability(responseRows(result.payload),fixtures,lineups,now);
+      return res.json({league:league.config,season,...resolved,cached:result.cached,
+        warning:!next&&!live?"Current fixture context is unavailable. Earlier reports are history, not proof of current absence.":null});
     } catch (error: any) {
       return publicError(res, error, "Could not load injuries and suspensions");
     }
