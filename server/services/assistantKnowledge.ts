@@ -18,7 +18,7 @@ export function assistantKnowledge(question:string){
 
     links.push({label:'Scoring rules',href:'/scoring-rules'});
   }
-  if(/injur|availability|suspend|premier/.test(q)){answers.push('Open Premier League → Availability. Clubs expand with a dropdown arrow; each player is shown once per club using the latest provider record. Injury alerts open My Entries. Teams remain locked after the gameweek’s first kickoff.');links.push({label:'Premier League availability',href:'/premier-league'});}
+  if(/injur|availability|suspend|premier/.test(q)){answers.push('Open Premier League → Availability. Clubs expand with a dropdown arrow; each player is shown once per club for the relevant fixture. Confirmed starters/substitutes override older injury flags; earlier reports are labelled separately. Injury alerts open My Entries. Teams remain locked after the gameweek’s first kickoff.');links.push({label:'Premier League availability',href:'/premier-league'});}
   if(/floor|minimum.*(?:listing|card)|entry fee|entry price/.test(q)){
     answers.push(`Current configured marketplace floors: ${Object.entries(MARKETPLACE_FLOOR_BY_RARITY).map(([rarity,amount])=>`${rarity}: N$${amount}`).join(', ')}. Tournament entry fees configured by rarity: ${Object.entries(TOURNAMENT_ENTRY_BY_RARITY).map(([rarity,amount])=>`${rarity}: N$${amount}`).join(', ')}. Always check the displayed tournament/listing price before confirming.`);
   }

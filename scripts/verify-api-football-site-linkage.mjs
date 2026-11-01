@@ -115,7 +115,7 @@ for (const marker of [
   "Player ratings",
   "Recent head-to-head",
   "Standings",
-  "League-wide injuries & suspensions",
+  "Player availability",
   "Top scorers",
   "Top assists",
   "Current squad",
