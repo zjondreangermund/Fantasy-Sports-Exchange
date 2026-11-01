@@ -1,3 +1,4 @@
+import {parseAssistantTask,assistantTaskDefinitions} from '../../shared/assistant-tasks.js';
 import {assistantGameweekLog} from './assistantGameweekLog.js';
 import {investigationContext,investigateEntry,investigateSettlement,footballInvestigation,type AssistantConnections} from './assistantInvestigations.js';
 import {AssistantError,assistantRequestRefusal,assistantTopics,assistantWindow,assistantUserSearch,scopedAssistantUser} from './assistantPolicy.js';
@@ -13,6 +14,13 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
     const question=String(input.question||'').trim();
     if(!question||question.length>2000)throw new AssistantError('Enter a question of up to 2,000 characters.');
     scopedAssistantUser(input.actorId,input.admin,input.userId);
+    const task=parseAssistantTask(question,(input.context as any)?.taskDraft);
+    if(task){
+      if(assistantTaskDefinitions[task.kind].admin&&!input.admin)throw new AssistantError('This task requires administrator access.',403);
+      if(input.userId&&input.userId!==input.actorId)return {answer:'Site tasks run only for your signed-in account. Switch to My account before preparing this task. Administrators cannot submit teams or change profiles on someone else’s behalf.',sections:[],topics:[],asOf:new Date().toISOString()};
+      return {answer:`I can prepare “${assistantTaskDefinitions[task.kind].label}”. Choose the required details below, then review the preview before confirming. Nothing has been submitted or changed yet.`,taskDraft:task,context:{taskDraft:task},sections:[],topics:[],asOf:new Date().toISOString()};
+    }
+    if(/^(?:hi|hello|hey|thanks|thank you)[!. ]*$/i.test(question))return {answer:/thank/i.test(question)?'You’re welcome.':'Hello. I can check recorded site information or help prepare a supported task. What would you like to do?',sections:[],topics:[],asOf:new Date().toISOString()};
     const refusal=assistantRequestRefusal(question);
     if(refusal)return {...refusal,sections:[],topics:[],notes:[],followUps:[],asOf:new Date().toISOString(),scope:'Capability limit'};
     const topics=assistantTopics(question,input.previousTopics),period=assistantWindow(question,input.period);
@@ -57,6 +65,11 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
       const report=await investigateEntry(q,target,context,connections);answers.push(report.answer);sections.push(...report.sections);followUps.push(...report.followUps);
     }
     if(topics.includes('visitors')){
+      const siteTraffic=(await q(`SELECT count(*) FILTER(WHERE event='page_view')::int AS "sitePageViews",count(DISTINCT visitor_id) FILTER(WHERE event='page_view')::int AS "siteBrowserVisitors" FROM app.page_activity WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz`,[period.from,period.to]))[0]||{};
+      add('Site-wide traffic',[siteTraffic],'All recorded routes in the selected period. Browser cookies approximate visitors, not unique people. Heartbeats are excluded from views.');
+      add('Most viewed pages',await q(`SELECT path,count(*)::int AS "pageViews",count(DISTINCT visitor_id)::int AS "browserVisitors" FROM app.page_activity WHERE event='page_view' AND created_at >= $1::timestamptz AND created_at < $2::timestamptz GROUP BY path ORDER BY count(*) DESC,path LIMIT 100`,[period.from,period.to]));
+      answers.push(`Site-wide: ${siteTraffic.sitePageViews||0} recorded page views from ${siteTraffic.siteBrowserVisitors||0} distinct browser visitors in this period.`);
+
       const summary=(await q(`WITH first_seen AS (SELECT visitor_id,min(created_at) AS first_at FROM app.page_activity GROUP BY visitor_id)
         SELECT count(*) FILTER(WHERE a.event='page_view')::int AS "homepageViews",
           count(DISTINCT a.visitor_id) FILTER(WHERE a.event='page_view')::int AS "uniqueHomepageVisitors",

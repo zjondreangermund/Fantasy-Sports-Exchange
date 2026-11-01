@@ -443,6 +443,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         if (!competition) throw new Error("Tournament not found");
         if (Number(competition.gameWeek || 0) !== Number(preview.gameWeek || 0)) throw new Error("Tournament schedule changed; reopen the entry window and try again");
         if (String(competition.status) !== "open") throw new Error("Tournament is not open for entries");
+        if (req.body?.assistantExpectedEntryFee != null && Number(req.body.assistantExpectedEntryFee) !== Number(competition.entryFee)) throw new Error("Entry fee changed; prepare a new team preview");
         if (Date.now() >= entryDeadline.getTime()) throw new Error("Gameweek entries are closed");
 
         await tx.execute(sql`
@@ -639,6 +640,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const message = error?.message || "Failed to join tournament";
       const validationMessages = [
         "Tournament is full",
+        "Entry fee changed; prepare a new team preview",
         "Insufficient balance for entry fee",
         "Tournament is not open for entries",
         "Gameweek entries are closed",

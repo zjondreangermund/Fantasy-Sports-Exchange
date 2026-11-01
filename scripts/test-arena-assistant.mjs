@@ -29,6 +29,8 @@ assert.deepEqual(assistantTopics('why?',[]),['help']);
 assert.ok(assistantTopics('Why can’t I enter a tournament?').includes('wallet'));
 assert.deepEqual(assistantTopics('Please check the latest game week log'),['gameweek']);
 assert.deepEqual(assistantTopics('Show GW9 log'),['gameweek']);
+for(const q of ['Site views for today','Website visits today','Page views today','How many site visitors today?'])assert.ok(assistantTopics(q).includes('visitors'));
+
 assert.match(assistantRequestRefusal('Can you enter a team for me').answer,/can’t choose or submit/);
 assert.match(assistantRequestRefusal('Please settle tournament #5').answer,/can’t perform/);
 assert.equal(assistantRequestRefusal('Why can’t I enter a tournament?'),null);
@@ -54,7 +56,7 @@ await assert.rejects(answer({actorId:'alice',admin:false,question:'and yesterday
 await assert.rejects(answer({actorId:'alice',admin:false,userSearch:'Bob',question:'wallet'}),/administrators/);
 calls=[];
 let refused=await answer({actorId:'alice',admin:false,question:'Can you enter a team for me'});
-assert.match(refused.answer,/can’t choose or submit/);assert.equal(refused.sections.length,0);assert.equal(calls.length,0);
+assert.equal(refused.taskDraft.kind,'team_submit');assert.equal(refused.sections.length,0);assert.equal(calls.length,0);
 let result=await answer({actorId:'alice',admin:false,question:'my wallet today'});
 assert.equal(result.account.id,'alice');
 assert.equal(result.sections.find(s=>s.title==='Current wallet').rows[0].balance,12);

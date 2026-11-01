@@ -21,7 +21,7 @@ Example questions:
 - “Show my entries and missing scoring records.”
 - “What happened to my notification?”
 
-The assistant reads operational evidence. It does not approve deposits, pay withdrawals, change balances, settle competitions, or create/delete account records. Its reads are audited by actor, topic, target account and period. SQL is parameterized and drawn from fixed queries. Bank account numbers, verification tokens, push tokens and credentials are not returned.
+The assistant reads operational evidence and prepares the supported site tasks listed below. It does not approve deposits, pay withdrawals, change balances or create/delete account records. Its reads are audited by actor, topic, target account and period. SQL is parameterized and drawn from fixed queries. Bank account numbers, verification tokens, push tokens and credentials are not returned.
 
 ## Activity and expiry
 
@@ -54,4 +54,16 @@ The `Preview an action` control connects two explicit operations: mark a selecte
 
 Generic UI string scraping is removed. Only explicit `data-assistant-guide` annotations are eligible for indexed guide excerpts, labelled “Site guide”. Conditional toasts, error strings and empty states cannot become claims about current account/gameweek state. Unsupported questions produce an unverified response.
 
-Unsupported operation requests are checked before report routing. Asking the bot to enter/submit a team or settle/pay/change a record returns a direct capability refusal without unrelated account queries. The two connected actions direct users to preview/confirm controls; chat text never executes them. Unverified help questions receive a short “I can’t answer that reliably” response.
+Operation requests are checked before report routing. Supported tasks collect details and require a preview/confirmation; unsupported operations return a direct capability refusal without unrelated account reports. Chat text by itself never executes a change. Unverified help questions receive a short “I can’t answer that reliably” response.
+
+## Site task catalogue
+
+The chatbot can prepare: tournament team submission, lineup/captain edits, prize claims, weekly Common claims, card sale listings/cancellation, price watching/unwatching, marking all inbox items read, alert-category settings, manager team rename, and administrator API sync/settlement. Existing notification-read and support-status previews remain available. `Site views for today`, `Website visits today`, `Page views today` and similar traffic messages now return site-wide recorded page counts alongside separate homepage metrics.
+
+Task messages create a draft rather than falling through to reports. Missing details use explicit controls populated with the signed-in account’s cards and entries. Card order is GK/DEF/MID/FWD/Utility, with an explicit captain. No lineup or captain is guessed. Follow-up field messages can update the draft. The preview identifies the acting account, record IDs, selected player names, captain, and exact entry fee or asking price. Tasks run only for the signed-in account, including for administrators; an inspected account is never impersonated.
+
+Ten-minute database previews are bound to actor and a fingerprint of relevant records. Confirmation rebuilds and verifies the plan, atomically claims the preview, and invokes the exact registered Express middleware/handler with a fixed server-built method/path/body. Security origin, rate/emergency controls and the strict read-only guard run again for the actual action path. The normal route checks ownership, permissions, eligibility, locks, wallet funds, provider identity and first kickoff as applicable. Team entry fees are checked against the preview inside the competition row lock. Settlement uses its existing verified-score and exactly-once wallet posting checks; there is no force-settle task.
+
+A claimed task cannot execute twice, including concurrent confirmations and process failure. A crash after claim or a timeout is an unknown outcome requiring inspection, never an automatic retry. Existing routes retain their own idempotency/duplicate-entry controls. Completed/rejected/unknown receipts are audited. Weekly claims explicitly distinguish already-claimed, capped and not-yet-eligible results from actual minting. This is a supported task catalogue, not arbitrary API/SQL execution. Purchases, payments, wallet corrections, loan contracts, account deletion and other unlisted mutations still require their normal pages and are not silently substituted with reports.
+
+Browser microphone permission is limited to the same origin (`microphone=(self)`); user permission and browser speech-recognition support are still required. No speech transcript auto-confirms a task.

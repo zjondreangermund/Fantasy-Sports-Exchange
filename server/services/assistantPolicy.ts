@@ -7,14 +7,14 @@ export function scopedAssistantUser(actor:string,admin:boolean,target?:string) {
   return admin&&target?target:actor;
 }
 export function assistantTopics(question:string,previous:unknown=[]):AssistantTopic[] {
-  const q=question.toLowerCase();
+  const q=question.toLowerCase().replace(/[’‘]/g,"'");
   if(/game\s*week|\bgw\s*\d+\b|sync (?:log|history|status)|scoring log/.test(q)&&/log|latest|current|check|status|history|sync|report/.test(q))return ['gameweek'];
   if(/^(how (do i|to)|where (can|do)|what (is|are) the|explain).*?(captain|rarity|rule|score|scoring|fee|join|install|funding)/.test(q))return ['help'];
   const topics:AssistantTopic[]=[];
   if(/conversion|funnel|drop.off|abandon/.test(q))topics.push('visitors');
   if(/settlement|settle|missing scores|provisional scores/.test(q))topics.push('settlement');
   if(/injur|availability|starting|starter|line.?up|suspend|football|isak|izak|on the bench|will .{1,60} play|playing/.test(q))topics.push('football');
-  if(/homepage|home page|visitor|traffic|signup|sign.up|new users|registered|who.*online|how many.*online/.test(q))topics.push('visitors');
+  if(/homepage|home page|(?:site|website|page) (?:views?|visits?|traffic|analytics|stats)|how many (?:new )?(?:users|people).*(?:visit|view)|visitors?|traffic|signup|sign.up|new users|registered|who.*online|how many.*online/.test(q))topics.push('visitors');
   if(/platform overview|site overview|all users|total users|platform revenue|site revenue|total revenue/.test(q))topics.push('overview');
   if(/wallet|balance|deposit|withdraw|payment|transaction|refund|money|funds/.test(q))topics.push('wallet');
   if(/visited|activity|pages|did on|doing on|last seen|what did|online/.test(q)&&!topics.includes('visitors'))topics.push('activity');

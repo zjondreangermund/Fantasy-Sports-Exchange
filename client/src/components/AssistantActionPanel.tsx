@@ -15,7 +15,7 @@ export default function AssistantActionPanel({admin,target}:{admin:boolean;targe
     }catch(error){if(sequence!==generation.current)return;setPreview(null);setMessage(error instanceof Error?error.message:'Action unavailable.');}finally{setBusy(false);}
   }
   return <details className="shrink-0 border-t border-white/10 px-3 py-2 text-xs text-white/70"><summary className="cursor-pointer text-cyan-200">Preview an action</summary><div className="mt-2 space-y-2">
-    <p>Account: {target||'your signed-in account'}. Payments, balance corrections, team changes and settlement use their normal pages.</p>
+    <p>Account: {target||'your signed-in account'}. Use the task catalogue for team submission, team edits and administrator settlement. Payments and balance corrections use their normal pages.</p>
     <label className="block">Action<select disabled={busy} aria-label="Assistant action" value={kind} onChange={e=>setKind(e.target.value)} className="mt-1 w-full rounded bg-slate-900 p-2"><option value="notification_read">Mark inbox notification as read</option>{admin?<option value="support_status">Update support request status</option>:null}</select></label>
     <Input disabled={busy} aria-label="Action record number" placeholder={kind==='support_status'?'Support request number':'Notification number'} value={recordId} onChange={e=>setRecordId(e.target.value)} inputMode="numeric"/>
     {kind==='support_status'?<label>Status<select disabled={busy} aria-label="New support status" value={status} onChange={e=>setStatus(e.target.value)} className="ml-2 rounded bg-slate-900 p-2">{['new','in_progress','waiting','resolved'].map(s=><option key={s}>{s}</option>)}</select></label>:null}
