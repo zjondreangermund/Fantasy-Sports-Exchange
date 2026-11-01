@@ -1,3 +1,4 @@
+import { normalizeFootballData, uniqueFootballRows, footballFixtureKey } from "../../shared/football-data.js";
 import type { Express } from "express";
 import { fplApi } from "../services/fplApi.js";
 
@@ -52,7 +53,7 @@ function buildStandingsFromFixtures(fixtures: any[], bootstrap: any) {
     });
   }
 
-  for (const fixture of fixtures) {
+  for (const fixture of uniqueFootballRows(fixtures,footballFixtureKey)) {
     if (!fixture?.finished) continue;
     const home = table.get(Number(fixture.team_h));
     const away = table.get(Number(fixture.team_a));
@@ -100,6 +101,11 @@ function normalizePlayer(player: any, teamById: Map<number, any>) {
 }
 
 export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreUpdater?: any }) {
+  app.use("/api/epl", (_req, res, next) => {
+    const sendJson=res.json.bind(res);
+    res.json=(payload:any)=>sendJson(normalizeFootballData(payload));
+    next();
+  });
   app.post("/api/epl/sync", deps.requireAuth, async (_req: any, res) => {
     try {
       const [bootstrap, fixtures, liveGames, injuries] = await Promise.all([

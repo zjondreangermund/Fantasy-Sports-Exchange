@@ -1,3 +1,4 @@
+import {registerArenaAssistantRoutes} from "./routes/arenaAssistant.routes.js";
 import type { Express } from "express";
 import { type Server } from "http";
 import passport from "passport";
@@ -157,6 +158,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerMarketplaceRoutes(app, { requireAuth });
   registerRetentionRoutes(app, { requireAuth, storage });
   registerAdminRoutes(app, { requireAuth, isAdmin, isAdminUser: isAdminRequest });
+  registerArenaAssistantRoutes(app, {requireAuth,isAdminUser:isAdminRequest});
   registerAuctionsRoutes(app, { requireAuth });
   registerTournamentCreatorRoutes(app, { requireAuth });
   registerUserTournamentRoutes(app, { requireAuth });

@@ -50,7 +50,7 @@ const explanations: Array<[RegExp, string]> = [
   [/ending soon/i, "This auction is close to its closing time. Bids submitted after the deadline are rejected by the server."],
   [/captain/i, "Your captain adds a 10% bonus to the lineup total. The player's own card score is not altered."],
   [/utility/i, "The Utility slot may use any eligible position after selecting a Goalkeeper, Defender, Midfielder and Forward."],
-  [/lineup/i, "A lineup is the five-card team submitted to a tournament. Submitted tournament lineups are final and the cards stay locked until settlement or cancellation."],
+  [/lineup/i, "A lineup is the five-card team submitted to a tournament. Teams and captains can be edited in My Entries before the first Premier League kickoff of the gameweek. After that first kickoff, teams remain locked for the rest of the gameweek."],
   [/rarity/i, "Rarity controls tournament eligibility, supply and marketplace floor rules. It does not multiply football points."],
   [/prize vault/i, "The Prize Vault links tournament entry totals to a rarity-specific reward ladder. Only the highest fully unlocked prize is active."],
   [/marketplace/i, "The Marketplace is where eligible premium cards can be listed and purchased. Common cards remain tournament-only."],
@@ -62,7 +62,7 @@ const explanations: Array<[RegExp, string]> = [
   [/listed/i, "Listed means the card is currently visible for sale on the Marketplace."],
   [/edit lineup/i, "Edit Lineup lets you choose the five cards used as your default active squad. Tournament entries may use their own submitted teams."],
   [/show \/ hide menu|menu/i, "Open or collapse the main navigation sidebar."],
-  [/community live|community/i, "Community Live is the public manager chat. Replies, mentions, edits and deletions are supported, and disrespectful language is blocked."],
+  [/community live|community/i, "Community Live is the public manager chat. Messages expire 24 hours after being sent. Replies, mentions, edits and deletions are supported, and disrespectful language is blocked."],
 ];
 
 function cleanLabel(value: string) {

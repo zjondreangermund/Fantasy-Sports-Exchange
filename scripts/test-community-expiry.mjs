@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+import fs from 'node:fs';
+const compiled=ts.transpileModule(fs.readFileSync('client/src/lib/community-chat.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText;
+const {mergeCommunityMessages}=await import('data:text/javascript;base64,'+Buffer.from(compiled).toString('base64'));
+const row=(id,age)=>({id,userId:'u',message:'text',createdAt:new Date(Date.now()-age).toISOString()});
+assert.deepEqual(mergeCommunityMessages([row(1,86400001),row(2,1000)]).map(r=>r.id),[2]);
+assert.equal(mergeCommunityMessages([{...row(1,86400001),editedAt:new Date().toISOString()}]).length,0);
+assert.equal(mergeCommunityMessages([{...row(1,0),createdAt:'invalid'}]).length,0);
+assert.equal(mergeCommunityMessages([row(1,1000)],[row(1,1000)]).length,1);
+const reply=mergeCommunityMessages([{...row(2,1000),replyTo:{id:1,teamName:'Team',message:'Old private text',deleted:false,createdAt:new Date(Date.now()-86400001).toISOString()}}])[0];
+assert.equal(reply.replyTo.message,'Original message expired');
+console.log('Community expiry checks passed: old, edited, invalid and duplicate records.');

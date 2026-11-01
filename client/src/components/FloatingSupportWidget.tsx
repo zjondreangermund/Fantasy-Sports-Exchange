@@ -1,3 +1,4 @@
+import ArenaAssistantPanel from "./ArenaAssistantPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -34,14 +35,6 @@ import {
 } from "../lib/notifications";
 import { matchesSearch } from "../lib/search";
 
-const quickHelp = [
-  { label: "Fees", keywords: ["fee", "deposit", "withdraw"], answer: "Tournament fees are shown before entry. Marketplace sales charge 8%, deposits below N$200 charge 2%, and Fantasy Arena charges no withdrawal fee." },
-  { label: "Join tournament", keywords: ["join", "pin", "tournament", "competition"], answer: "Open Play, choose a tournament, build a five-card team, select a captain and confirm the entry fee and rarity requirement." },
-  { label: "Lineup rules", keywords: ["lineup", "gk", "def", "mid", "fwd", "captain"], answer: "Every tournament team needs five different players: GK, DEF, MID, FWD and one Utility card. Choose one captain before submitting." },
-  { label: "Funding", keywords: ["funding", "2.0", "multiplier", "vault"], answer: "The funding multiplier is the entry revenue needed before a prize unlocks. At 2.0×, a N$1,000 prize needs N$2,000 of entry revenue." },
-  { label: "Marketplace", keywords: ["sell", "buy", "market", "listing"], answer: "Eligible premium cards can be listed on the Marketplace. Common cards are tournament-only and cannot be sold." },
-  { label: "Rewards", keywords: ["reward", "winner", "prize", "claim"], answer: "After settlement, winners receive a notification. Prize Vault winners complete their claim from My Teams & Prizes." },
-];
 
 type WidgetMode = "community" | "help";
 type CurrentUser = {
@@ -65,11 +58,6 @@ type MarketplaceListing = {
 const lastSeenStorageKey = "fantasy_arena_community_chat_last_seen_v2";
 const seenListingsStorageKey = "fantasy_arena_seen_listing_ids_v2";
 
-function localArenaAnswer(message: string) {
-  const text = message.toLowerCase();
-  const match = quickHelp.find((item) => item.keywords.some((keyword) => text.includes(keyword)));
-  return match?.answer || "Ask about fees, funding, tournament entry, lineup rules, marketplace trading or rewards.";
-}
 
 function formatMessageTime(value: string) {
   const date = new Date(value);
@@ -147,8 +135,6 @@ function MarketplaceListingActivity() {
 export default function FloatingSupportWidget() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<WidgetMode>("community");
-  const [helpInput, setHelpInput] = useState("");
-  const [answer, setAnswer] = useState("Choose a topic or ask how Fantasy Arena works.");
   const [chatInput, setChatInput] = useState("");
   const [chatSearch, setChatSearch] = useState("");
   const [chatError, setChatError] = useState("");
@@ -209,6 +195,16 @@ export default function FloatingSupportWidget() {
     refetchOnWindowFocus: true,
     retry: 2,
   });
+
+  useEffect(()=>{
+    if(!currentUserId)return;
+    const timer=window.setInterval(()=>{
+      queryClient.setQueryData<ChatMessage[]>(chatQueryKey,current=>{
+        const kept=mergeCommunityMessages(current);saveCommunityMessageHistory(currentUserId,kept);return kept;
+      });
+    },30000);
+    return ()=>window.clearInterval(timer);
+  },[currentUserId,chatQueryKey]);
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -466,20 +462,16 @@ export default function FloatingSupportWidget() {
     setMode("community"); setOpen(true);
   };
 
-  const ask = (question: string) => {
-    if (!question.trim()) return;
-    setAnswer(localArenaAnswer(question));
-    setHelpInput("");
-  };
+
 
   return (
     <>
       <MarketplaceListingActivity />
       <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-3 z-[90] sm:bottom-4 sm:right-4">
       {open ? (
-        <Card className="mb-2 flex max-h-[min(76dvh,640px)] w-[min(calc(100vw-1.5rem),410px)] flex-col overflow-hidden border-white/15 bg-slate-950/82 text-white shadow-[0_24px_80px_rgba(0,0,0,.58)] backdrop-blur-2xl sm:mb-3">
+        <Card style={mode === "help" ? {width:"min(calc(100vw - 1.5rem),760px)",height:"min(78dvh,720px)"}:undefined} className="mb-2 flex max-h-[min(76dvh,640px)] w-[min(calc(100vw-1.5rem),410px)] flex-col overflow-hidden border-white/15 bg-slate-950/82 text-white shadow-[0_24px_80px_rgba(0,0,0,.58)] backdrop-blur-2xl sm:mb-3">
           <div className="flex items-center justify-between border-b border-white/10 bg-white/[.035] px-3 py-2.5">
-            <div className="min-w-0"><div className="flex items-center gap-2"><span className="relative flex h-2.5 w-2.5"><span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-55 ${streamConnected ? "bg-emerald-300" : "bg-amber-300"}`} /><span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${streamConnected ? "bg-emerald-400" : "bg-amber-400"}`} /></span><p className="truncate text-sm font-black">{mode === "community" ? "Community Live" : "Arena Help"}</p>{adminCheck?.isAdmin && mode === "community" ? <span className="rounded-full bg-violet-300/15 px-2 py-0.5 text-[9px] font-black text-violet-200">ADMIN</span> : null}</div><p className="mt-0.5 truncate text-[11px] text-white/45">{mode === "community" ? streamConnected ? "Live · messages stay saved" : "Reconnecting · saved messages remain available" : "Fantasy Arena guide"}</p></div>
+            <div className="min-w-0"><div className="flex items-center gap-2"><span className="relative flex h-2.5 w-2.5"><span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-55 ${streamConnected ? "bg-emerald-300" : "bg-amber-300"}`} /><span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${streamConnected ? "bg-emerald-400" : "bg-amber-400"}`} /></span><p className="truncate text-sm font-black">{mode === "community" ? "Community Live" : "Arena Help"}</p>{adminCheck?.isAdmin && mode === "community" ? <span className="rounded-full bg-violet-300/15 px-2 py-0.5 text-[9px] font-black text-violet-200">ADMIN</span> : null}</div><p className="mt-0.5 truncate text-[11px] text-white/45">{mode === "community" ? streamConnected ? "Live · messages expire after 24 hours" : "Reconnecting · 24-hour history" : "Site help and account support"}</p></div>
             <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-white/65 hover:bg-white/10 hover:text-white" onClick={() => setOpen(false)} aria-label="Close floating panel"><X className="h-4 w-4" /></Button>
           </div>
 
@@ -526,7 +518,7 @@ export default function FloatingSupportWidget() {
               </div>
             </div>
           ) : (
-            <div className="space-y-3 overflow-y-auto p-3"><div className="max-h-48 min-h-28 overflow-auto rounded-xl border border-white/10 bg-white/[.045] p-3"><p className="mb-1 text-xs font-semibold text-white/45">Fantasy Arena guide</p><p className="whitespace-pre-wrap text-sm leading-6 text-white/85">{answer}</p></div><div className="grid grid-cols-2 gap-2">{quickHelp.map((item) => <Button key={item.label} size="sm" variant="outline" className="h-9 border-white/10 bg-white/[.035] text-xs text-white hover:bg-white/10" onClick={() => ask(item.label)}>{item.label}</Button>)}</div><div className="flex gap-2"><Input value={helpInput} onChange={(event) => setHelpInput(event.target.value)} placeholder="Ask about funding or fees" maxLength={180} onKeyDown={(event) => event.key === "Enter" && ask(helpInput)} className="border-white/10 bg-white/[.045] text-white" /><Button size="icon" onClick={() => ask(helpInput)} disabled={!helpInput.trim()}><Sparkles className="h-4 w-4" /></Button></div><Link href="/contact-us"><Button variant="outline" className="w-full border-white/10 bg-white/[.035] text-white"><Mail className="mr-2 h-4 w-4" />Contact Support</Button></Link></div>
+            <ArenaAssistantPanel userId={currentUserId} admin={Boolean(adminCheck?.isAdmin)}/>
           )}
         </Card>
       ) : null}
