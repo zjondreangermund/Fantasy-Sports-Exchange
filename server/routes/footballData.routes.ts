@@ -627,6 +627,29 @@ async function buildPlayerIntelligence(leagueId: number, season: number, playerI
   };
 }
 
+// Shared with the authenticated assistant; fixed league and provider paths only.
+export async function loadPremierAvailability() {
+  const season=currentSeason();
+  const result=await cachedProvider("injuries",{league:39,season},300);
+      const [next,live]=await Promise.all([
+        cachedProvider("fixtures",{league:39,season,next:20},120).catch(()=>null),
+        cachedProvider("fixtures",{live:"all"},30).catch(()=>null),
+      ]);
+      const fixtures=[...new Map([...(next?responseRows(next.payload):[]),...(live?responseRows(live.payload):[])].filter((f:any)=>Number(f?.league?.id)===39).map((f:any)=>[Number(f.fixture.id),f])).values()];
+      const now=Date.now();
+      const nearing=fixtures.filter((f:any)=>{const t=Date.parse(String(f?.fixture?.date||""));return t>=now-4*3600000&&t<=now+90*60000;});
+      const lineups=await Promise.all(nearing.map(async(f:any)=>{
+        const data=await cachedProvider("fixtures/lineups",{fixture:Number(f.fixture.id)},60).catch(()=>null);
+        return {fixtureId:Number(f.fixture.id),lineups:data?responseRows(data.payload):[],stale:!data||data.stale,updatedAt:data?.updatedAt};
+      }));
+      const resolved=resolveFixtureAvailability(responseRows(result.payload),fixtures,lineups,now);
+
+  const observations=[result,next,live,...lineups].filter(Boolean) as Array<{updatedAt:any;stale?:boolean}>;
+  return {...resolved,asOf:new Date().toISOString(),sourceUpdatedAt:result.updatedAt,lineupSourceUpdatedAt:lineups.map(row=>({fixtureId:row.fixtureId,updatedAt:row.updatedAt,stale:row.stale})),
+    stale:observations.some(row=>row.stale),
+    warning:!next||!live?"Current fixture context is unavailable; current absence is unknown.":observations.some(row=>row.stale)?"Provider unavailable; saved data may be out of date.":null};
+}
+
 export function registerFootballDataRoutes(app: Express) {
   // Normalize fresh, cached and fallback payloads without changing scoring records.
   app.use("/api/football", (_req, res, next) => {

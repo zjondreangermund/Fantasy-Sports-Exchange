@@ -1,16 +1,18 @@
+import {investigationContext,investigateEntry,investigateSettlement,footballInvestigation,type AssistantConnections} from './assistantInvestigations.js';
 import {AssistantError,assistantTopics,assistantWindow,assistantUserSearch,scopedAssistantUser} from './assistantPolicy.js';
 import {assistantKnowledge} from './assistantKnowledge.js';
 import {supportWalletSnapshot,type AssistantQuery} from './supportWalletSnapshot.js';
 export type AssistantSection={title:string;rows:any[];note?:string;hasMore?:boolean};
-export type AssistantInput={actorId:string;admin:boolean;question:string;userId?:string;userSearch?:string;previousTopics?:unknown;period?:any;offset?:number};
+export type AssistantInput={actorId:string;admin:boolean;question:string;userId?:string;userSearch?:string;previousTopics?:unknown;period?:any;offset?:number;context?:unknown};
 const money=(v:any)=>`N$${Number(v||0).toFixed(2)}`;
 const like=(v:string)=>'%'+v.replace(/[\\%_]/g,'\\$&')+'%';
-export function createArenaAssistant(q:AssistantQuery){
+export function createArenaAssistant(q:AssistantQuery,connections:AssistantConnections={}){
   const exists=async(table:string)=>Boolean((await q('SELECT to_regclass($1) AS present',['app.'+table]))[0]?.present);
   return async function answer(input:AssistantInput){
     const question=String(input.question||'').trim();
     if(!question||question.length>2000)throw new AssistantError('Enter a question of up to 2,000 characters.');
     const topics=assistantTopics(question,input.previousTopics),period=assistantWindow(question,input.period);
+    const context=investigationContext(question,input.context),followUps:string[]=[];
     let target=scopedAssistantUser(input.actorId,input.admin,input.userId);
     if(topics.some(t=>['visitors','overview','support'].includes(t))&&!input.admin)throw new AssistantError('Visitor, platform and support-inbox reports are available to administrators only.',403);
     const search=assistantUserSearch(question,input.userSearch);
@@ -27,7 +29,7 @@ export function createArenaAssistant(q:AssistantQuery){
     const knowledge=assistantKnowledge(question),links=[...knowledge.links];
     const add=(title:string,records:any[],note?:string,paged=false)=>{const hasMore=paged&&records.length>100;sections.push({title,rows:records.slice(0,100),note,hasMore});};
     const optional=async(table:string,title:string,query:string,values:any[])=>{if(await exists(table))add(title,await q(query,values));else notes.push(`${title} are not available on this installation.`);};
-    const accountTopics=topics.some(t=>['wallet','activity','entries','cards','loans','notifications'].includes(t));
+    const accountTopics=topics.some(t=>['wallet','activity','entries','cards','loans','notifications','settlement'].includes(t));
     let account:any;
     if(accountTopics){
       account=(await q('SELECT id,name,manager_team_name AS "teamName",created_at AS "joinedAt",is_banned AS "isBanned" FROM app.users WHERE id=$1',[target]))[0];
@@ -35,6 +37,18 @@ export function createArenaAssistant(q:AssistantQuery){
       if(account.isBanned)answers.push('This account is banned. That restriction can prevent account actions.');
     }
     await q(`INSERT INTO app.audit_logs(user_id,action,meta) VALUES($1,'assistant.read',$2::jsonb)`,[input.actorId,JSON.stringify({topics,targetUserId:accountTopics?target:null,period,offset})]);
+    if(topics.includes('football')){
+      try{const report=await footballInvestigation(connections,context);answers.push(report.answer);sections.push(...report.sections);followUps.push(...report.followUps);}
+      catch{answers.push('Current football availability could not be verified. Try again shortly; older reports are not proof of current absence.');}
+      links.push({label:'Premier League availability',href:'/premier-league'});
+    }
+    if(topics.includes('settlement')){
+      const report=await investigateSettlement(q,target,input.admin,context,connections);answers.push(report.answer);sections.push(...report.sections);followUps.push(...report.followUps);
+      links.push({label:'Tournament records',href:input.admin?'/admin':'/my-entries'});
+    }
+    if(topics.includes('entries')&&(/why|cannot|can't|cant|unable|failed|trouble|investigat|diagnos|blocked/.test(question.toLowerCase())||context.entryId)){
+      const report=await investigateEntry(q,target,context,connections);answers.push(report.answer);sections.push(...report.sections);followUps.push(...report.followUps);
+    }
     if(topics.includes('visitors')){
       const summary=(await q(`WITH first_seen AS (SELECT visitor_id,min(created_at) AS first_at FROM app.page_activity GROUP BY visitor_id)
         SELECT count(*) FILTER(WHERE a.event='page_view')::int AS "homepageViews",
@@ -47,6 +61,23 @@ export function createArenaAssistant(q:AssistantQuery){
       add('Recently active accounts',await q(`SELECT a.user_id AS "userId",u.manager_team_name AS "teamName",u.name,max(a.created_at) AS "lastSeen" FROM app.page_activity a JOIN app.users u ON u.id=a.user_id WHERE a.created_at > now()-interval '2 minutes' GROUP BY a.user_id,u.manager_team_name,u.name ORDER BY "lastSeen" DESC LIMIT 100`),'Current activity, independent of the report period. A recent heartbeat does not prove human attention.');
       add('Older marketing funnel records',await q(`SELECT meta->>'event' AS event,count(*)::int AS events,count(DISTINCT meta->>'visitorId')::int AS "browserVisitors" FROM app.audit_logs WHERE action='marketing.funnel' AND created_at >= $1::timestamptz AND created_at < $2::timestamptz GROUP BY meta->>'event'`,[period.from,period.to]),'Legacy funnel counts are separate and are not added to page tracking totals.');
       answers.push(`Homepage: ${summary.homepageViews||0} page views, ${summary.uniqueHomepageVisitors||0} distinct browser visitors, ${summary.firstSeenHomepageVisitors||0} first seen in the retained tracking history. ${registered} accounts registered in this period. Browser visitors and registrations are different metrics. Page history begins ${since||'when the first tracking event arrives'} and is retained for 90 days; cookies and multiple devices affect visitor counts.`);
+      // Ordered browser cohort: attribution only when the same retained browser later identifies one account.
+      const funnel=(await q(`WITH cohort AS (
+        SELECT visitor_id,min(created_at) AS landed_at FROM app.page_activity
+        WHERE path='/' AND event='page_view' AND created_at >= $1::timestamptz AND created_at < $2::timestamptz GROUP BY visitor_id
+      ), identity AS (
+        SELECT c.visitor_id,c.landed_at,min(a.user_id) AS user_id,count(DISTINCT a.user_id) AS accounts
+        FROM cohort c LEFT JOIN app.page_activity a ON a.visitor_id=c.visitor_id AND a.user_id IS NOT NULL AND a.created_at>=c.landed_at AND a.created_at<$2::timestamptz
+        GROUP BY c.visitor_id,c.landed_at
+      ), linked AS (
+        SELECT i.*,u.created_at AS registered_at FROM identity i LEFT JOIN app.users u ON u.id=i.user_id AND i.accounts=1 AND u.created_at>=i.landed_at AND u.created_at<$2::timestamptz
+      ) SELECT count(*)::int AS "homepageBrowsers",count(*) FILTER(WHERE registered_at IS NOT NULL)::int AS "linkedNewAccounts",
+        count(*) FILTER(WHERE accounts>1)::int AS "sharedBrowserIdentities",
+        count(*) FILTER(WHERE registered_at IS NOT NULL AND EXISTS(SELECT 1 FROM app.competition_entries e WHERE e.user_id=linked.user_id AND e.joined_at>=registered_at AND e.joined_at<$2::timestamptz))::int AS "enteredAfterSignup"
+        FROM linked`,[period.from,period.to]))[0]||{};
+      add('Observed homepage conversion cohort',[{...funnel,unlinkedOrNotRegistered:Math.max(0,Number(funnel.homepageBrowsers||0)-Number(funnel.linkedNewAccounts||0))}], 'Homepage browsers first observed within the selected period, linked to exactly one account on the same browser before period end. Existing accounts and shared browsers are excluded from signup conversion. Unlinked visitors may have registered on another device; this is observed attribution, not proof of abandonment.');
+      if(await exists('user_onboarding'))add('New-account onboarding cohort',await q(`SELECT count(*)::int AS "newAccounts",count(*) FILTER(WHERE o.completed)::int AS "starterSelectionCompletedNow",count(*) FILTER(WHERE EXISTS(SELECT 1 FROM app.competition_entries e WHERE e.user_id=u.id AND e.joined_at>=u.created_at AND e.joined_at<$2::timestamptz))::int AS "enteredByPeriodEnd" FROM app.users u LEFT JOIN app.user_onboarding o ON o.user_id=u.id WHERE u.created_at >= $1::timestamptz AND u.created_at < $2::timestamptz`,[period.from,period.to]),'Starter completion is the current onboarding flag; it has no completion timestamp and cannot establish ordering or historical completion by the period end.');
+      answers.push('Conversion evidence separates linked homepage browsers from all new accounts. Unknown links and untimestamped onboarding flags are labelled; recorded counts cannot explain why someone left.');
       links.push({label:'Admin reports',href:'/admin'});
     }
     if(topics.includes('overview')){
@@ -63,6 +94,13 @@ export function createArenaAssistant(q:AssistantQuery){
       if(Number.isSafeInteger(txId)&&txId>0)add('Requested transaction',await q(`SELECT id,type,amount,status,fee_amount AS "feeAmount",net_amount AS "netAmount",description,external_transaction_id AS "paymentReference",created_at AS "createdAt" FROM app.transactions WHERE user_id=$1 AND id=$2`,[target,txId]),'Exact transaction lookup, independent of date range; limited to this account.');
       await optional('deposit_verifications','Latest deposit reviews',`SELECT id,transaction_id AS "transactionId",gross_amount AS "grossAmount",fee_amount AS "feeAmount",net_amount AS "netAmount",status,created_at AS "createdAt",reviewed_at AS "reviewedAt" FROM app.deposit_verifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[target]);
       add('Latest withdrawal requests',await q(`SELECT id,amount,fee,net_amount AS "netAmount",status,payment_method AS "paymentMethod",release_after AS "releaseAfter",reviewed_at AS "reviewedAt",created_at AS "createdAt" FROM app.withdrawal_requests WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[target]),'Latest requests across all dates. Bank account numbers and verification credentials are omitted.');
+      if(context.paymentReference){
+        const matches=await q(`SELECT id,type,status,amount,fee_amount AS "feeAmount",net_amount AS "netAmount",external_transaction_id AS "paymentReference",source_type AS "sourceType",created_at AS "createdAt" FROM app.transactions WHERE user_id=$1 AND external_transaction_id=$2 ORDER BY created_at DESC LIMIT 100`,[target,context.paymentReference]);
+        add('Payment reference trace',matches,'Exact reference match for the selected account, across all dates. References are not accepted as proof that a bank or provider paid.');
+        if(!matches.length)answers.push('No transaction with that payment reference was found in this account. Confirm the reference and account; no posting can be inferred.');
+        if(await exists('deposit_verifications'))add('Linked payment reviews',await q(`SELECT d.id,d.transaction_id AS "transactionId",d.status,d.gross_amount AS "grossAmount",d.fee_amount AS "feeAmount",d.net_amount AS "netAmount",d.created_at AS "createdAt",d.reviewed_at AS "reviewedAt" FROM app.deposit_verifications d JOIN app.transactions t ON t.id=d.transaction_id AND t.user_id=d.user_id WHERE d.user_id=$1 AND t.external_transaction_id=$2 LIMIT 100`,[target,context.paymentReference]));
+        answers.push(...matches.map(t=>`Transaction #${t.id}: ${t.status}; recorded amount ${money(t.amount)}, fee ${money(t.feeAmount)}, net ${money(t.netAmount)}. ${t.status==='completed'?'Completed is the recorded ledger status; reconciliation below checks the wallet.':'This status does not establish a completed wallet credit. Review the linked request before any correction.'}`));
+      }else if(/missing|not.*(?:show|reflect|arriv)|trace|investigat|why/i.test(question))followUps.push('Trace payment reference “…”');
       const reconciliation=await supportWalletSnapshot(q,target);add('Wallet reconciliation',[reconciliation],'Checks all recorded ledger history and outstanding holds in one database snapshot.');
       if(reconciliation.available)await optional('auction_escrow_holds','Active auction reservations',`SELECT id,auction_id AS "auctionId",amount,hold_transaction_id AS "transactionId",status,created_at AS "createdAt" FROM app.auction_escrow_holds WHERE bidder_user_id=$1 AND status='held' ORDER BY created_at DESC LIMIT 100`,[target]);
       answers.push(wallet?`Available ${money(wallet.balance)}; locked ${money(wallet.lockedBalance)}. ${reconciliation.available?`Reconciliation: ${reconciliation.status}; wallet/ledger difference ${money(reconciliation.totalDelta)}, locked attribution difference ${money(reconciliation.lockedDelta)}.`:'Full reconciliation is unavailable.'}`:'There is no wallet record for this account.');
@@ -102,15 +140,27 @@ export function createArenaAssistant(q:AssistantQuery){
     }
     if(topics.includes('notifications')){
       add('Notifications',await q(`SELECT id,title,message,read,created_at AS "createdAt" FROM app.notifications WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 101 OFFSET $2`,[target,offset]),'Latest inbox records across all dates. An inbox record alone does not prove push delivery.',true);
+      const notificationId=Number(question.match(/notification\s*#?\s*(\d+)/i)?.[1]||0);
+      const diagnosis:Array<Record<string,unknown>>=[];
       for(const [table,title] of [['notification_push_deliveries','Web push job status'],['notification_native_push_deliveries','Android push job status']]){
         // Fixed allowlist; no table name or SQL can come from the question.
         if(await exists(table))add(title,await q(`SELECT d.status,count(*)::int AS count,max(d.sent_at) AS "lastSentAt" FROM app.${table} d JOIN app.notifications n ON n.id=d.notification_id WHERE n.user_id=$1 GROUP BY d.status`,[target]),'Queue/provider status across all dates. Sent means provider acceptance, not proof that a person saw or opened it.');
       }
+      for(const [table,channel] of [['notification_push_deliveries','web'],['notification_native_push_deliveries','android']]){
+        if(await exists(table)){
+          const jobs=await q(`SELECT n.id AS "notificationId",n.read,d.status,d.attempts,d.next_attempt_at AS "nextAttemptAt",d.sent_at AS "sentAt",d.updated_at AS "updatedAt",CASE WHEN d.last_error LIKE '%(401)%' THEN 'provider_authorization' WHEN d.last_error LIKE '%(403)%' THEN 'provider_permission' WHEN d.last_error LIKE '%(404)%' OR d.last_error LIKE '%(410)%' THEN 'subscription_expired' WHEN d.last_error IS NOT NULL THEN 'delivery_error' ELSE NULL END AS "errorCategory" FROM app.${table} d JOIN app.notifications n ON n.id=d.notification_id WHERE n.user_id=$1 AND ($2::bigint=0 OR n.id=$2) ORDER BY d.updated_at DESC LIMIT 100`,[target,notificationId]);
+          diagnosis.push(...jobs.map(row=>({...row,channel,nextStep:row.status==='failed'?'Review notification settings and delivery configuration.':row.status==='pending'?'Queued; check the next attempt time.':row.status==='sent'?'Provider accepted; device display and human attention remain unknown.':'Inspect the recorded job status.'})));
+        }
+      }
+      add('Notification delivery investigation',diagnosis,'Latest 100 jobs per channel, or an exact notification number. Error categories omit raw provider responses and credentials. Read is the inbox flag, not proof of a push being seen.');
+      if(!diagnosis.length)answers.push('No matching push jobs were recorded. An inbox notification can exist without a registered push subscription.');
+      followUps.push('Investigate notification #…');
+      answers.push('To mark an inbox notification as read, open Preview an action below. Review the account and notification number before confirming.');
       answers.push('These are the account’s inbox records. They do not establish that a push was delivered or opened.');links.push({label:'Inbox',href:'/account?tab=inbox'});
     }
     if(topics.includes('support')){
       await optional('support_requests','Support inbox',`SELECT id,category,subject,status,created_at AS "createdAt" FROM app.support_requests ORDER BY created_at DESC LIMIT 100`,[]);
-      answers.push('Latest support request subjects and statuses are below. No request status was changed.');links.push({label:'Admin support inbox',href:'/admin'});
+      answers.push('Latest support request subjects and statuses are below. To update a request status, open Preview an action below, select the support request number and review the proposed status before confirming.');links.push({label:'Admin support inbox',href:'/admin'});
     }
     if(topics.includes('help')){
       answers.push(...knowledge.answers);
@@ -118,6 +168,6 @@ export function createArenaAssistant(q:AssistantQuery){
       add('Help sources',knowledge.sources.map(source=>({source})));
     }
     const hasMore=sections.some(s=>s.hasMore);
-    return {answer:[...new Set(answers)].join('\n\n'),sections,notes,links:[...new Map(links.filter(link=>input.admin||link.href!=='/admin').map(link=>[link.href,link])).values()],account,topics,period,asOf:new Date().toISOString(),nextOffset:hasMore&&offset<10000?offset+100:null,offset,scope:account?`Account ${account.teamName||account.name||account.id}`:'Platform report',limits:'Up to 100 rows per section. Current balances and latest-record sections are labelled separately from period-specific records. Totals and wallet reconciliation use their full stated scope.'};
+    return {context,followUps:[...new Set(followUps)],answer:[...new Set(answers)].join('\n\n'),sections,notes,links:[...new Map(links.filter(link=>input.admin||link.href!=='/admin').map(link=>[link.href,link])).values()],account,topics,period,asOf:new Date().toISOString(),nextOffset:hasMore&&offset<10000?offset+100:null,offset,scope:account?`Account ${account.teamName||account.name||account.id}`:'Platform report',limits:'Up to 100 rows per section. Current balances and latest-record sections are labelled separately from period-specific records. Totals and wallet reconciliation use their full stated scope.'};
   };
 }
