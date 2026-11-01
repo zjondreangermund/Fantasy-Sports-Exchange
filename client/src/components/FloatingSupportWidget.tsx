@@ -1,3 +1,5 @@
+import {createPortal} from "react-dom";
+import "./chat-workspace.css";
 import CommunityMentionComposer from "./CommunityMentionComposer";
 import {communityMentionHandle} from "../../../shared/community-mentions";
 import {takeCommunityIntent,clearCommunityIntent} from "../lib/community-intent";
@@ -138,6 +140,13 @@ function MarketplaceListingActivity() {
 
 export default function FloatingSupportWidget() {
   const [open, setOpen] = useState(false);
+  const panelRef=useRef<HTMLDivElement>(null);
+  const [chatViewport,setChatViewport]=useState(()=>({height:window.visualViewport?.height||window.innerHeight,top:window.visualViewport?.offsetTop||0}));
+  useEffect(()=>{const viewport=window.visualViewport;const resize=()=>setChatViewport({height:viewport?.height||window.innerHeight,top:viewport?.offsetTop||0});window.addEventListener('resize',resize);viewport?.addEventListener('resize',resize);viewport?.addEventListener('scroll',resize);return()=>{window.removeEventListener('resize',resize);viewport?.removeEventListener('resize',resize);viewport?.removeEventListener('scroll',resize);};},[]);
+  useEffect(()=>{if(!open)return;const previousFocus=document.activeElement as HTMLElement|null;const previousOverflow=document.body.style.overflow;document.body.style.overflow='hidden';const frame=requestAnimationFrame(()=>panelRef.current?.querySelector<HTMLButtonElement>('[aria-label="Close floating panel"]')?.focus());
+    const keydown=(event:KeyboardEvent)=>{if(event.defaultPrevented)return;if(event.key==='Escape'){event.preventDefault();setOpen(false);return;}if(event.key==='Tab'){const controls=[...panelRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href],summary,[tabindex="0"]')||[]].filter(element=>element.getClientRects().length);const first=controls[0],last=controls[controls.length-1];if(event.shiftKey&&(document.activeElement===first||!panelRef.current?.contains(document.activeElement))){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(document.activeElement===last||!panelRef.current?.contains(document.activeElement))){event.preventDefault();first?.focus();}}};
+    document.addEventListener('keydown',keydown);return()=>{cancelAnimationFrame(frame);document.removeEventListener('keydown',keydown);document.body.style.overflow=previousOverflow;if(previousFocus?.isConnected)previousFocus.focus();};
+  },[open]);
   const [mode, setMode] = useState<WidgetMode>("community");
   const [chatInput, setChatInput] = useState("");
   const [chatSearch, setChatSearch] = useState("");
@@ -290,7 +299,6 @@ export default function FloatingSupportWidget() {
     () => messages.filter((message) => message.id > lastSeenId && message.userId !== user?.id).length,
     [lastSeenId, messages, user?.id],
   );
-  const latestPreview = messages[messages.length - 1];
   const unreadMentions = useMemo(
     () => (Array.isArray(notificationInbox?.notifications) ? notificationInbox.notifications : [])
       .filter((notification) => !notification.read
@@ -497,15 +505,15 @@ export default function FloatingSupportWidget() {
   return (
     <>
       <MarketplaceListingActivity />
-      <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-3 z-[90] sm:bottom-4 sm:right-4">
-      {open ? (
-        <Card style={mode !== "community" ? {width:"min(calc(100vw - 1.5rem),760px)",height:"min(78dvh,720px)"}:undefined} className="mb-2 flex max-h-[min(76dvh,640px)] w-[min(calc(100vw-1.5rem),410px)] flex-col overflow-hidden border-white/15 bg-slate-950/82 text-white shadow-[0_24px_80px_rgba(0,0,0,.58)] backdrop-blur-2xl sm:mb-3">
-          <div className="flex items-center justify-between border-b border-white/10 bg-white/[.035] px-3 py-2.5">
-            <div className="min-w-0"><div className="flex items-center gap-2"><span className="relative flex h-2.5 w-2.5"><span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-55 ${streamConnected ? "bg-emerald-300" : "bg-amber-300"}`} /><span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${streamConnected ? "bg-emerald-400" : "bg-amber-400"}`} /></span><p className="truncate text-sm font-black">{mode === "community" ? "Community Live" : adminChat ? "Admin Assistant" : "Member Help"}</p>{adminCheck?.isAdmin && mode === "community" ? <span className="rounded-full bg-violet-300/15 px-2 py-0.5 text-[9px] font-black text-violet-200">ADMIN</span> : null}</div><p className="mt-0.5 truncate text-[11px] text-white/45">{mode === "community" ? streamConnected ? "Live · messages expire after 24 hours" : "Reconnecting · 24-hour history" : adminChat ? "Private administrator investigations" : "Private support for your own account"}</p></div>
-            <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-white/65 hover:bg-white/10 hover:text-white" onClick={() => setOpen(false)} aria-label="Close floating panel"><X className="h-4 w-4" /></Button>
+      {open ? createPortal(
+        <div className="arena-chat-overlay" style={{height:chatViewport.height,top:chatViewport.top}} onMouseDown={event=>{if(event.target===event.currentTarget)setOpen(false);}}>
+        <Card ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="arena-chat-title" className={`arena-chat-panel ${mode==='community'?'arena-chat-panel--community':''} flex min-h-0 flex-col overflow-hidden border-white/15 bg-slate-950 text-white shadow-2xl`}>
+          <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-white/[.035] px-3 py-2">
+            <div className="min-w-0"><div className="flex items-center gap-2"><span className="relative flex h-2.5 w-2.5"><span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-55 ${streamConnected ? "bg-emerald-300" : "bg-amber-300"}`} /><span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${streamConnected ? "bg-emerald-400" : "bg-amber-400"}`} /></span><p id="arena-chat-title" className="truncate text-sm font-black">{mode === "community" ? "Community Live" : adminChat ? "Admin Assistant" : "Member Help"}</p>{adminCheck?.isAdmin && mode === "community" ? <span className="rounded-full bg-violet-300/15 px-2 py-0.5 text-[9px] font-black text-violet-200">ADMIN</span> : null}</div><p className="mt-0.5 truncate text-[11px] text-white/45">{mode === "community" ? streamConnected ? "Live · messages expire after 24 hours" : "Reconnecting · 24-hour history" : adminChat ? "Private administrator investigations" : "Private support for your own account"}</p></div>
+            <Button size="icon" variant="ghost" className="h-11 w-11 shrink-0 text-white/65 hover:bg-white/10 hover:text-white" onClick={() => setOpen(false)} aria-label="Close floating panel"><X className="h-4 w-4" /></Button>
           </div>
 
-          <div className={`grid ${adminCheck?.isAdmin?"grid-cols-3":"grid-cols-2"} border-b border-white/10 bg-black/20 p-1.5`}>
+          <div className={`grid ${adminCheck?.isAdmin?"grid-cols-3":"grid-cols-2"} shrink-0 border-b border-white/10 bg-black/20 p-1.5`}>
             <button onClick={() => setMode("community")} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-black transition ${mode === "community" ? "bg-cyan-300/15 text-cyan-200" : "text-white/45 hover:bg-white/5"}`}><Users className="h-3.5 w-3.5" />Community</button>
             <button onClick={() => setMode("help")} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-black transition ${mode === "help" ? "bg-violet-300/15 text-violet-200" : "text-white/45 hover:bg-white/5"}`}><HelpCircle className="h-3.5 w-3.5" />Member Help</button>
             {adminCheck?.isAdmin?<button onClick={()=>setMode("admin-help")} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-black ${adminChat?"bg-violet-300/15 text-violet-200":"text-white/45"}`}><ShieldCheck className="h-3.5 w-3.5"/>Admin Assistant</button>:null}
@@ -513,11 +521,11 @@ export default function FloatingSupportWidget() {
 
           {mode === "community" ? (
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="border-b border-white/10 bg-black/15 px-3 py-2">
+              <div className="shrink-0 border-b border-white/10 bg-black/15 px-3 py-2">
                 <div className="relative"><Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-cyan-200/65" /><Input value={chatSearch} onChange={(event) => setChatSearch(event.target.value)} placeholder="Search messages, managers or @mentions" aria-label="Search Community Live messages" className="h-9 rounded-xl border-white/10 bg-white/[.045] pl-8 pr-9 text-xs text-white placeholder:text-white/40" />{chatSearch ? <button type="button" onClick={() => setChatSearch("")} aria-label="Clear chat search" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-white/60 hover:bg-white/10 hover:text-white"><X className="h-3.5 w-3.5" /></button> : null}</div>
                 {chatSearch.trim() ? <p className="mt-1 text-[10px] font-semibold text-white/55">{visibleMessages.length} matching message{visibleMessages.length === 1 ? "" : "s"}</p> : null}
               </div>
-              <div ref={scrollRef} onScroll={handleChatScroll} className="min-h-[180px] flex-1 space-y-2 overflow-y-auto px-3 py-3 sm:min-h-[300px]">
+              <div ref={scrollRef} onScroll={handleChatScroll} className="arena-chat-messages min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3">
                 {isLoading ? <p className="py-10 text-center text-sm text-white/40">Connecting to the community…</p> : null}
                 {chatLoadFailed ? <div className="flex items-center justify-between gap-2 rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-100"><span>{messages.length ? "Showing saved messages while the connection recovers." : "Could not load Community Live."}</span><button type="button" onClick={() => { void refreshMessages(); }} className="inline-flex shrink-0 items-center gap-1 font-black"><RefreshCw className="h-3.5 w-3.5" />Retry</button></div> : null}
                 {hasOlderMessages && messages.length ? <button type="button" onClick={() => { void loadOlderMessages(); }} disabled={loadingOlderMessages} className="mx-auto flex items-center gap-2 rounded-full border border-white/10 bg-white/[.045] px-3 py-1.5 text-[11px] font-bold text-white/65 hover:bg-white/10 disabled:opacity-55"><RefreshCw className={`h-3.5 w-3.5 ${loadingOlderMessages ? "animate-spin" : ""}`} />{loadingOlderMessages ? "Loading earlier messages…" : "Load earlier messages"}</button> : null}
@@ -541,7 +549,7 @@ export default function FloatingSupportWidget() {
                 })}
               </div>
 
-              <div className="border-t border-white/10 bg-black/25 p-2.5">
+              <div className="shrink-0 border-t border-white/10 bg-black/25 p-2.5">
                 {!followingLatest && unreadCount ? <button type="button" onClick={() => { setFollowingLatest(true); scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }} className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 py-1.5 text-xs font-bold text-cyan-100">{unreadCount} new message{unreadCount === 1 ? "" : "s"} · Jump to latest</button> : null}
                 {replyingTo ? <div className="mb-2 flex items-start justify-between gap-2 rounded-xl border border-cyan-200/15 bg-cyan-300/[.06] px-3 py-2"><div className="min-w-0 text-[10px] text-white/48"><span className="font-black text-cyan-200">Replying to {replyingTo.teamName}</span><p className="mt-0.5 truncate">{replyingTo.message}</p></div><button onClick={() => setReplyingTo(null)} className="text-white/35 hover:text-white"><X className="h-3.5 w-3.5" /></button></div> : null}
                 <div className="flex items-end gap-2"><CommunityMentionComposer value={chatInput} onChange={text=>{setChatInput(text);setChatError('');}} onError={setChatError} onSubmit={submitChat} placeholder={replyingTo?`Reply to ${replyingTo.teamName}…`:'Message the community… type @ or a team name to tag'} /><Button size="icon" className="h-10 w-10 shrink-0 rounded-xl bg-cyan-300 text-slate-950 hover:bg-cyan-200" onClick={submitChat} disabled={!chatInput.trim() || sendMutation.isPending} aria-label="Send community message"><Send className="h-4 w-4" /></Button></div>
@@ -552,12 +560,12 @@ export default function FloatingSupportWidget() {
             <ArenaAssistantPanel key={`${currentUserId}:${adminChat?'admin':'member'}`} userId={currentUserId} admin={adminChat}/>
           )}
         </Card>
+        </div>,document.body
       ) : null}
 
-      {!open && latestMention ? <button type="button" onClick={() => { void openCommunityMention(latestMention); }} className="mb-2 block max-w-[310px] rounded-2xl border border-amber-200/35 bg-slate-950/88 px-3 py-2.5 text-left text-white shadow-xl backdrop-blur-xl transition hover:border-amber-200/60" data-help="Open the exact Community Live message that mentioned you."><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.12em] text-amber-200"><AtSign className="h-3.5 w-3.5" />You were mentioned{unreadMentions.length > 1 ? <span className="rounded-full bg-amber-200 px-1.5 py-0.5 text-[9px] text-slate-950">{unreadMentions.length}</span> : null}</div><p className="mt-1 truncate text-xs text-white/70">{String(latestMention.message || "Open your message")}</p></button> : !open && latestPreview ? <button type="button" onClick={() => { setMode("community"); setOpen(true); }} className="mb-2 block max-w-[290px] rounded-2xl border border-white/12 bg-slate-950/58 px-3 py-2 text-left text-white shadow-xl backdrop-blur-xl transition hover:bg-slate-950/78" data-help="Open Community Live to read and reply to public manager messages."><div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.12em] text-cyan-200"><span className="h-2 w-2 rounded-full bg-emerald-400" />Community Live{unreadCount ? <span className="rounded-full bg-cyan-300 px-1.5 py-0.5 text-[9px] text-slate-950">{unreadCount}</span> : null}</div><p className="mt-1 truncate text-xs text-white/55"><span className="font-bold text-white/72">{latestPreview.teamName}:</span> {latestPreview.message}</p></button> : null}
-
+      {!open?<div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-3 z-[90] sm:bottom-4 sm:right-4" data-chat-launchers>
       <div className="flex justify-end gap-2"><Button size="icon" aria-label="Open Arena help" className="h-10 w-10 rounded-full border border-violet-200/20 bg-violet-500/75 shadow-xl backdrop-blur-xl hover:bg-violet-400 sm:h-11 sm:w-11" onClick={() => { setMode("help"); setOpen(true); }}><HelpCircle className="h-4 w-4" /></Button><Button size="icon" aria-label="Open Community Live" className="relative h-11 w-11 rounded-full border border-cyan-200/25 bg-cyan-400/80 text-slate-950 shadow-xl backdrop-blur-xl hover:bg-cyan-300 sm:h-12 sm:w-12" onClick={() => { if (latestMention && !open) { void openCommunityMention(latestMention); return; } setMode("community"); setOpen((value) => mode === "community" ? !value : true); }}>{open && mode === "community" ? <Bot className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}{(unreadMentions.length || unreadCount) && !(open && mode === "community") ? <span className={`absolute -right-1 -top-1 min-w-5 rounded-full px-1 text-[10px] font-black leading-5 text-white ${unreadMentions.length ? "bg-amber-500" : "bg-rose-500"}`}>{Math.min(99, unreadMentions.length || unreadCount)}</span> : null}</Button></div>
-      </div>
+      </div>:null}
     </>
   );
 }
