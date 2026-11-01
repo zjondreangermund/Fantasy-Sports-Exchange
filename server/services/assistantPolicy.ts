@@ -1,4 +1,4 @@
-export const ASSISTANT_TOPICS=['visitors','overview','wallet','activity','entries','cards','loans','notifications','support','help'] as const;
+export const ASSISTANT_TOPICS=['visitors','overview','wallet','activity','entries','cards','loans','notifications','support','football','settlement','help'] as const;
 export type AssistantTopic=typeof ASSISTANT_TOPICS[number];
 export class AssistantError extends Error { constructor(message:string,public status=400){super(message);} }
 export function scopedAssistantUser(actor:string,admin:boolean,target?:string) {
@@ -10,6 +10,9 @@ export function assistantTopics(question:string,previous:unknown=[]):AssistantTo
   const q=question.toLowerCase();
   if(/^(how (do i|to)|where (can|do)|what (is|are) the|explain).*?(captain|rarity|rule|score|scoring|fee|join|install|funding)/.test(q))return ['help'];
   const topics:AssistantTopic[]=[];
+  if(/conversion|funnel|drop.off|abandon/.test(q))topics.push('visitors');
+  if(/settlement|settle|missing scores|provisional scores/.test(q))topics.push('settlement');
+  if(/injur|availability|starting|starter|line.?up|suspend|football|isak|izak|on the bench|will .{1,60} play|playing/.test(q))topics.push('football');
   if(/homepage|home page|visitor|traffic|signup|sign.up|new users|registered|who.*online|how many.*online/.test(q))topics.push('visitors');
   if(/platform overview|site overview|all users|total users|platform revenue|site revenue|total revenue/.test(q))topics.push('overview');
   if(/wallet|balance|deposit|withdraw|payment|transaction|refund|money|funds/.test(q))topics.push('wallet');
@@ -21,8 +24,8 @@ export function assistantTopics(question:string,previous:unknown=[]):AssistantTo
   if(/support ticket|support request|ticket #/.test(q))topics.push('support');
   if(/(?:cannot|can't|cant|unable|failed|trouble|why).*(?:enter|submit|join)/.test(q))topics.push('wallet','entries','cards');
   if(/account overview|everything about.*account|account summary/.test(q))topics.push('wallet','activity','entries','cards','loans','notifications');
-  if(!topics.length&&/^(and\b|what about\b|how about\b|yesterday\b|today\b|last \d|why\b|show more\b)/i.test(question)&&Array.isArray(previous))return [...new Set(previous.filter((t:any)=>ASSISTANT_TOPICS.includes(t)&&t!=='help'))].slice(0,6) as AssistantTopic[];
-  return topics.length?[...new Set(topics)].slice(0,6):['help'];
+  if(!topics.length&&/^(and\b|what about\b|how about\b|yesterday\b|today\b|last \d|why\b|show more\b)/i.test(question)&&Array.isArray(previous))return [...new Set(previous.filter((t:any)=>ASSISTANT_TOPICS.includes(t)&&t!=='help'))].slice(0,10) as AssistantTopic[];
+  return topics.length?[...new Set(topics)].slice(0,10):['help'];
 }
 export function assistantWindow(question:string,context?:any,now=new Date()) {
   const instant=now.getTime(),day=86400000,offset=7200000,local=new Date(instant+offset);

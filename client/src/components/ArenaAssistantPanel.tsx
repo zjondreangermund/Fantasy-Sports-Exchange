@@ -1,9 +1,10 @@
+import AssistantActionPanel from './AssistantActionPanel';
 import {useEffect,useRef,useState} from 'react';
 import {Link} from 'wouter';
 import {Button} from './ui/button';
 import {Input} from './ui/input';
 type Section={title:string;rows:Array<Record<string,unknown>>;note?:string;hasMore?:boolean};
-type Reply={answer:string;sections:Section[];notes?:string[];links?:Array<{label:string;href:string}>;account?:{id:string;name?:string;teamName?:string};candidates?:Array<{id:string;name?:string;teamName?:string;email?:string}>;topics?:string[];period?:{from:string;to:string};asOf?:string;offset?:number;nextOffset?:number|null;scope?:string;limits?:string};
+type Reply={context?:Record<string,unknown>;followUps?:string[];answer:string;sections:Section[];notes?:string[];links?:Array<{label:string;href:string}>;account?:{id:string;name?:string;teamName?:string};candidates?:Array<{id:string;name?:string;teamName?:string;email?:string}>;topics?:string[];period?:{from:string;to:string};asOf?:string;offset?:number;nextOffset?:number|null;scope?:string;limits?:string};
 type Message={question:string;reply?:Reply;error?:string};
 const labels=(key:string)=>key.replace(/([A-Z])/g,' $1').replace(/_/g,' ');
 const date=(value:string)=>new Date(value).toLocaleString('en-NA',{timeZone:'Africa/Windhoek',dateStyle:'medium',timeStyle:'short'});
@@ -15,16 +16,28 @@ function Evidence({section}:{section:Section}){
 export default function ArenaAssistantPanel({userId,admin}:{userId:string;admin:boolean}){
   const [question,setQuestion]=useState(''),[search,setSearch]=useState(''),[target,setTarget]=useState('');
   const [messages,setMessages]=useState<Message[]>([]),[busy,setBusy]=useState(false);
+  const [listening,setListening]=useState(false),[voiceError,setVoiceError]=useState('');
+  const recognition=useRef<any>(null);
+  useEffect(()=>()=>{recognition.current?.abort();},[]);
+  function voice(){
+    if(listening){recognition.current?.stop();return;}
+    const Speech=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
+    if(!Speech){setVoiceError('Voice input is unavailable in this browser. Type your question below.');return;}
+    const instance=new Speech();recognition.current=instance;instance.lang='en-ZA';instance.interimResults=false;instance.continuous=false;
+    instance.onresult=(event:any)=>{setQuestion(String(event.results[0][0].transcript).slice(0,2000));};
+    instance.onerror=()=>{setVoiceError('Could not capture speech. Check microphone permission or type your question.');};
+    instance.onend=()=>setListening(false);setVoiceError('');setListening(true);try{instance.start();}catch{setListening(false);setVoiceError('Microphone unavailable. Type your question.');}
+  }
   const request=useRef(0),bottom=useRef<HTMLDivElement>(null);
   const previous=[...messages].reverse().find(message=>message.reply?.asOf)?.reply;
-  useEffect(()=>{request.current++;setMessages([]);setTarget('');setSearch('');setBusy(false);},[userId]);
+  useEffect(()=>{request.current++;setMessages([]);setTarget('');setSearch('');setBusy(false);recognition.current?.abort();},[userId]);
   useEffect(()=>{bottom.current?.scrollIntoView({block:'nearest'});},[messages,busy]);
   async function ask(text:string,selected?:string,offset=0,context=previous){
-    if(!text.trim()||busy)return;
+    if(!text.trim()||busy||listening)return;
     const sequence=++request.current;setBusy(true);setQuestion('');
     setMessages(items=>[...items.slice(-9),{question:text}]);
     try{
-      const response=await fetch('/api/assistant/ask',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,userSearch:selected?undefined:search||undefined,userId:selected||target||undefined,previousTopics:context?.topics,period:context?.period,offset})});
+      const response=await fetch('/api/assistant/ask',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text,userSearch:selected?undefined:search||undefined,userId:selected||target||undefined,previousTopics:context?.topics,period:context?.period,context:context?.context,offset})});
       const payload=await response.json();
       if(sequence!==request.current)return;
       if(!response.ok)throw new Error(payload.message||'Unable to verify an answer.');
@@ -34,18 +47,22 @@ export default function ArenaAssistantPanel({userId,admin}:{userId:string;admin:
     }catch(error){if(sequence===request.current)setMessages(items=>items.map((item,index)=>index===items.length-1?{...item,error:error instanceof Error?error.message:'Unable to verify an answer.'}:item));}
     finally{if(sequence===request.current)setBusy(false);}
   }
-  const suggestions=admin?['Homepage visitors today','Platform overview','Wallet balance and locked funds','Account activity yesterday','Tournament entries','Owned cards and active locks']:['My wallet and deposits','Why can’t I enter a tournament?','My loans','My notifications','How do I choose a captain?','How are scoring points calculated?'];
+  const suggestions=admin?['Homepage visitors today','Platform overview','Wallet balance and locked funds','Account activity yesterday','Why is tournament #… not settled?','Is Isak starting?','Conversion funnel today','Investigate notification #…']:['My wallet and deposits','Why can’t I enter a tournament?','My loans','My notifications','How do I choose a captain?','Is Isak starting?'];
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="shrink-0 space-y-2 border-b border-white/10 p-3">
       <p className="text-xs text-white/60">{admin?'Admin investigations':'Your account support'} · {previous?.account?.teamName||previous?.account?.name||target||'Your account'}</p>
-      {admin?<div className="flex gap-2"><Input disabled={busy} value={search} onChange={event=>{setSearch(event.target.value);setTarget('');}} placeholder="Account email, manager name or ID" aria-label="Account to investigate" className="min-w-0 border-white/10 bg-white/5 text-xs text-white"/><Button disabled={busy} size="sm" variant="outline" onClick={()=>{request.current++;setSearch('');setTarget('');setMessages([]);}}>My account</Button></div>:null}
+      {admin?<div className="flex gap-2"><Input disabled={busy} value={search} onChange={event=>{setSearch(event.target.value);setTarget('');setMessages([]);}} placeholder="Account email, manager name or ID" aria-label="Account to investigate" className="min-w-0 border-white/10 bg-white/5 text-xs text-white"/><Button disabled={busy} size="sm" variant="outline" onClick={()=>{request.current++;setSearch('');setTarget('');setMessages([]);}}>My account</Button></div>:null}
       <p className="text-[10px] leading-4 text-white/45">Use “today”, “yesterday”, “this month”, “last 30 days” or YYYY-MM-DD dates. Follow-ups keep the selected account and period.</p>
     </div>
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-      {!messages.length?<><p className="text-sm leading-6 text-white/75">Ask about site features or recorded account activity. I can inspect available records and explain missing evidence. Account changes and payments require their normal approval controls.</p><div className="grid grid-cols-2 gap-2">{suggestions.map(text=><Button key={text} size="sm" variant="outline" className="h-auto whitespace-normal border-white/10 bg-white/5 p-2 text-left text-[11px] text-white" onClick={()=>void ask(text)}>{text}</Button>)}</div></>:null}
-      {messages.map((message,index)=><article key={index} className="space-y-2"><p className="ml-6 rounded-xl bg-violet-400/15 p-3 text-sm text-violet-100">{message.question}</p>{message.error?<p role="alert" className="rounded-xl border border-amber-300/20 p-3 text-xs text-amber-100">{message.error}</p>:null}{message.reply?<div className="space-y-2 rounded-xl border border-white/10 bg-white/[.03] p-3"><p className="whitespace-pre-wrap text-sm leading-6 text-white/85">{message.reply.answer}</p>{message.reply.candidates?.map(candidate=><Button disabled={busy} key={candidate.id} variant="outline" className="h-auto w-full justify-start whitespace-normal border-cyan-300/20 text-left text-xs text-cyan-100" onClick={()=>void ask(message.question,candidate.id,0,message.reply)}>{candidate.teamName||candidate.name||candidate.id} · {candidate.email}</Button>)}{message.reply.period&&message.reply.asOf?<p className="text-[10px] leading-4 text-white/45">{message.reply.scope} · {date(message.reply.period.from)} – {date(message.reply.period.to)} (Namibia). Checked {date(message.reply.asOf)}.<br/>{message.reply.limits}</p>:null}{message.reply.notes?.map(note=><p key={note} className="text-xs text-amber-100">{note}</p>)}{message.reply.sections?.map(section=><Evidence key={section.title} section={section}/>)}{message.reply.nextOffset!=null?<Button disabled={busy} size="sm" variant="outline" onClick={()=>void ask(message.question,message.reply?.account?.id,message.reply!.nextOffset!,message.reply)}>Next 100 records</Button>:null}<div className="flex flex-wrap gap-2">{message.reply.links?.map(link=><Link key={link.href} href={link.href} className="rounded-lg border border-cyan-300/25 px-2 py-1 text-xs text-cyan-200">{link.label}</Link>)}</div></div>:null}</article>)}
+      {!messages.length?<><p className="text-sm leading-6 text-white/75">Ask about site features or recorded account activity. I can inspect available records and explain missing evidence. Account changes and payments require their normal approval controls.</p><div className="grid grid-cols-2 gap-2">{suggestions.map(text=><Button key={text} size="sm" variant="outline" className="h-auto whitespace-normal border-white/10 bg-white/5 p-2 text-left text-[11px] text-white" onClick={()=>text.includes('…')?setQuestion(text):void ask(text)}>{text}</Button>)}</div></>:null}
+      {messages.map((message,index)=><article key={index} className="space-y-2"><p className="ml-6 rounded-xl bg-violet-400/15 p-3 text-sm text-violet-100">{message.question}</p>{message.error?<p role="alert" className="rounded-xl border border-amber-300/20 p-3 text-xs text-amber-100">{message.error}</p>:null}{message.reply?<div className="space-y-2 rounded-xl border border-white/10 bg-white/[.03] p-3"><p className="whitespace-pre-wrap text-sm leading-6 text-white/85">{message.reply.answer}</p>{message.reply.candidates?.map(candidate=><Button disabled={busy} key={candidate.id} variant="outline" className="h-auto w-full justify-start whitespace-normal border-cyan-300/20 text-left text-xs text-cyan-100" onClick={()=>void ask(message.question,candidate.id,0,message.reply)}>{candidate.teamName||candidate.name||candidate.id} · {candidate.email}</Button>)}{message.reply.period&&message.reply.asOf?<p className="text-[10px] leading-4 text-white/45">{message.reply.scope} · {date(message.reply.period.from)} – {date(message.reply.period.to)} (Namibia). Checked {date(message.reply.asOf)}.<br/>{message.reply.limits}</p>:null}{message.reply.notes?.map(note=><p key={note} className="text-xs text-amber-100">{note}</p>)}{message.reply.sections?.map(section=><Evidence key={section.title} section={section}/>)}{message.reply.followUps?.length?<div className="flex flex-wrap gap-2">{message.reply.followUps.map(text=><Button disabled={busy} key={text} size="sm" variant="outline" className="h-auto whitespace-normal text-xs" onClick={()=>setQuestion(text)}>{text}</Button>)}</div>:null}{message.reply.nextOffset!=null?<Button disabled={busy} size="sm" variant="outline" onClick={()=>void ask(message.question,message.reply?.account?.id,message.reply!.nextOffset!,message.reply)}>Next 100 records</Button>:null}<div className="flex flex-wrap gap-2">{message.reply.links?.map(link=><Link key={link.href} href={link.href} className="rounded-lg border border-cyan-300/25 px-2 py-1 text-xs text-cyan-200">{link.label}</Link>)}</div></div>:null}</article>)}
       {busy?<p role="status" className="text-xs text-cyan-100">Checking site records…</p>:null}<div ref={bottom}/>
     </div>
-    <form className="flex shrink-0 gap-2 border-t border-white/10 p-3" onSubmit={event=>{event.preventDefault();void ask(question);}}><Input value={question} onChange={event=>setQuestion(event.target.value)} maxLength={2000} placeholder="Ask a question…" aria-label="Ask Arena support" className="min-w-0 border-white/10 bg-white/5 text-white"/><Button type="submit" disabled={busy||!question.trim()}>Ask</Button></form><Link href="/contact-us" className="shrink-0 px-3 pb-3 text-xs text-cyan-200">Contact Support</Link>
+    {admin&&search&&!target?<p className="px-3 text-xs text-amber-100">Resolve the account search with a question before previewing an account action.</p>:<AssistantActionPanel key={userId} admin={admin} target={target}/>}
+    <p className="px-3 text-[10px] text-white/45">Mic uses your browser’s speech service. Review the transcript before asking.</p>
+    {voiceError?<p role="status" className="px-3 text-xs text-amber-100">{voiceError}</p>:null}
+    {listening?<p role="status" className="px-3 text-xs text-cyan-100">Listening… Tap Stop when finished. Review the transcript before asking.</p>:null}
+    <form className="flex shrink-0 gap-2 border-t border-white/10 p-3" onSubmit={event=>{event.preventDefault();void ask(question);}}><Input value={question} onChange={event=>setQuestion(event.target.value)} maxLength={2000} placeholder="Ask a question…" aria-label="Ask Arena support" className="min-w-0 border-white/10 bg-white/5 text-white"/><Button type="button" variant="outline" aria-label={listening?'Stop microphone':'Dictate question'} title="Optional browser speech recognition; audio may be processed by your browser’s speech provider. Review text before sending." disabled={busy} onClick={voice}>{listening?'Stop':'Mic'}</Button><Button type="submit" disabled={busy||listening||!question.trim()}>Ask</Button></form><Link href="/contact-us" className="shrink-0 px-3 pb-3 text-xs text-cyan-200">Contact Support</Link>
   </div>;
 }

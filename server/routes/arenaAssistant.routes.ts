@@ -1,3 +1,6 @@
+import {ASSISTANT_ACTION_SCHEMA,previewAssistantAction,confirmAssistantAction} from '../services/assistantActions.js';
+import {fplApi} from '../services/fplApi.js';
+import {loadPremierAvailability} from './footballData.routes.js';
 import type {Express} from 'express';
 import {randomUUID} from 'node:crypto';
 import {pool} from '../db.js';
@@ -23,8 +26,9 @@ function sameOrigin(req:any){
   return allowed.has(origin);
 }
 export function registerArenaAssistantRoutes(app:Express,deps:{requireAuth:any;isAdminUser:(req:any)=>Promise<boolean>}){
-  const answer=createArenaAssistant(async(query,params)=>(await pool.query(query,params)).rows);
-  const purge=async()=>{await ensurePageActivitySchema();await pool.query("DELETE FROM app.page_activity WHERE created_at < now()-interval '90 days'");};
+  const answer=createArenaAssistant(async(query,params)=>(await pool.query(query,params)).rows,{fixtures:()=>fplApi.fixturesLive(),availability:loadPremierAvailability});
+  const purge=async()=>{await ensurePageActivitySchema();await pool.query("DELETE FROM app.page_activity WHERE created_at < now()-interval '90 days'");
+    if((await pool.query("SELECT to_regclass('app.assistant_action_previews') AS present")).rows[0]?.present)await pool.query("DELETE FROM app.assistant_action_previews WHERE expires_at<now()-interval '1 day'");};
   void purge().catch(error=>console.warn('Page activity setup failed',error));
   const retention=setInterval(()=>{void purge().catch(error=>console.warn('Page activity cleanup failed',error));},3600000);retention.unref();
   const cleanBuckets=setInterval(()=>{for(const [key,bucket] of buckets)if(bucket.until<Date.now())buckets.delete(key);},60000);cleanBuckets.unref();
@@ -43,6 +47,31 @@ export function registerArenaAssistantRoutes(app:Express,deps:{requireAuth:any;i
       return res.status(202).json({ok:true});
     }catch(error){console.warn('Page activity event failed',error);return res.status(503).json({message:'Activity tracking is unavailable.'});}
   });
+  let actionSchema:Promise<any>|undefined;
+  const prepareActions=()=>actionSchema||=(pool.query(ASSISTANT_ACTION_SCHEMA).catch(error=>{actionSchema=undefined;throw error;}));
+  for(const operation of ['preview','confirm'] as const){
+    app.post(`/api/assistant/actions/${operation}`,deps.requireAuth,async(req:any,res)=>{
+      res.setHeader('Cache-Control','private, no-store');
+      let client:any;
+      try{
+        if(!sameOrigin(req))return res.status(403).json({message:'Invalid request origin.'});
+        const actor=String(req.authUserId||'');
+        if(!withinLimit(`action:${actor}`,12))return res.status(429).json({message:'Please wait before trying another action.'});
+        const admin=await deps.isAdminUser(req);
+        await prepareActions();
+        if(operation==='preview')return res.json(await previewAssistantAction(async(sql,params)=>(await pool.query(sql,params)).rows,actor,admin,req.body||{}));
+        const token=String(req.body?.token||'');
+        if(!safeUuid(token)||req.body?.confirmed!==true)throw new AssistantError('Confirm a valid preview before applying it.');
+        client=await pool.connect();await client.query('BEGIN');
+        const result=await confirmAssistantAction(async(sql,params)=>(await client.query(sql,params)).rows,actor,admin,token);
+        await client.query('COMMIT');return res.json(result);
+      }catch(error:any){
+        if(client)await client.query('ROLLBACK');
+        if(error instanceof AssistantError)return res.status(error.status).json({message:error.message});
+        console.error('Assistant action failed',error);return res.status(503).json({message:'Could not complete the action. Check its current status before retrying.'});
+      }finally{client?.release();}
+    });
+  }
   app.post('/api/assistant/ask',deps.requireAuth,async(req:any,res)=>{
     res.setHeader('Cache-Control','private, no-store');
     try{
@@ -51,7 +80,7 @@ export function registerArenaAssistantRoutes(app:Express,deps:{requireAuth:any;i
       if(!withinLimit(`ask:${actorId}`,20))return res.status(429).json({message:'Please wait a moment before asking again.'});
       const admin=await deps.isAdminUser(req);
       await ensurePageActivitySchema();
-      return res.json(await answer({actorId,admin,question:req.body?.question,userId:req.body?.userId,userSearch:req.body?.userSearch,previousTopics:req.body?.previousTopics,period:req.body?.period,offset:req.body?.offset}));
+      return res.json(await answer({actorId,admin,question:req.body?.question,userId:req.body?.userId,userSearch:req.body?.userSearch,previousTopics:req.body?.previousTopics,period:req.body?.period,offset:req.body?.offset,context:req.body?.context}));
     }catch(error:any){
       if(error instanceof AssistantError)return res.status(error.status).json({message:error.message});
       console.error('Assistant lookup failed',error);
