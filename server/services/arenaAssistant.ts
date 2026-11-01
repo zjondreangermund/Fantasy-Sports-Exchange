@@ -1,3 +1,4 @@
+import {assistantGameweekLog} from './assistantGameweekLog.js';
 import {investigationContext,investigateEntry,investigateSettlement,footballInvestigation,type AssistantConnections} from './assistantInvestigations.js';
 import {AssistantError,assistantTopics,assistantWindow,assistantUserSearch,scopedAssistantUser} from './assistantPolicy.js';
 import {assistantKnowledge} from './assistantKnowledge.js';
@@ -14,7 +15,7 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
     const topics=assistantTopics(question,input.previousTopics),period=assistantWindow(question,input.period);
     const context=investigationContext(question,input.context),followUps:string[]=[];
     let target=scopedAssistantUser(input.actorId,input.admin,input.userId);
-    if(topics.some(t=>['visitors','overview','support'].includes(t))&&!input.admin)throw new AssistantError('Visitor, platform and support-inbox reports are available to administrators only.',403);
+    if(topics.some(t=>['visitors','overview','support','gameweek'].includes(t))&&!input.admin)throw new AssistantError('Visitor, platform, operational logs and support-inbox reports are available to administrators only.',403);
     const search=assistantUserSearch(question,input.userSearch);
     if(search){
       if(!input.admin)throw new AssistantError('Only administrators can search other accounts.',403);
@@ -37,6 +38,9 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
       if(account.isBanned)answers.push('This account is banned. That restriction can prevent account actions.');
     }
     await q(`INSERT INTO app.audit_logs(user_id,action,meta) VALUES($1,'assistant.read',$2::jsonb)`,[input.actorId,JSON.stringify({topics,targetUserId:accountTopics?target:null,period,offset})]);
+    if(topics.includes('gameweek')){
+      const report=await assistantGameweekLog(q,input.admin,question);answers.push(report.answer);sections.push(...report.sections);followUps.push(...report.followUps);links.push({label:'Admin Sync Centre',href:'/admin'});
+    }
     if(topics.includes('football')){
       try{const report=await footballInvestigation(connections,context);answers.push(report.answer);sections.push(...report.sections);followUps.push(...report.followUps);}
       catch{answers.push('Current football availability could not be verified. Try again shortly; older reports are not proof of current absence.');}

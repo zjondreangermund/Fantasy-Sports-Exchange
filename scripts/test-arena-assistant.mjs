@@ -25,6 +25,8 @@ assert.throws(()=>assistantWindow('2026-02-30',undefined,now),/calendar/);
 assert.throws(()=>assistantWindow('2026-01-01 to 2026-10-31',undefined,now),/90 days/);
 assert.deepEqual(assistantTopics('and yesterday',['wallet']),['wallet']);
 assert.ok(assistantTopics('Why can’t I enter a tournament?').includes('wallet'));
+assert.deepEqual(assistantTopics('Please check the latest game week log'),['gameweek']);
+assert.deepEqual(assistantTopics('Show GW9 log'),['gameweek']);
 let calls=[];
 const q=async(sql,params=[])=>{
   calls.push({sql,params});

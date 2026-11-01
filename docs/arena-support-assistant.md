@@ -9,7 +9,7 @@ Signed-in users open Arena Help for server-backed support. Desktop, mobile web a
 - Members can inspect only their own account. Administrators can select another account by ID, email or manager name. Ambiguous names require selection.
 - Questions can combine supported subjects. Follow-ups keep the selected account and date range. Dates support Namibia-time today/yesterday, this/last week, this/last month, last N days, and YYYY-MM-DD ranges, up to 90 days.
 - Long account lists support 100-record pages. Aggregate totals and wallet reconciliation do not sum only the visible page.
-- Help uses canonical scoring/economy/tournament constants and a generated index of public UI explanations. Unsupported questions are reported as unverified. No external LLM subscription or key is required.
+- Help uses canonical scoring/economy/tournament constants and an opt-in index of explicitly authored public help. Unsupported questions are reported as unverified. No external LLM subscription or key is required.
 
 Example questions:
 
@@ -47,3 +47,9 @@ Community Live uses rolling per-message 24-hour expiry. Server reads immediately
 The `Preview an action` control connects two explicit operations: mark a selected account’s inbox notification read, or (admin only) update a support request status. The server stores the proposed operation for ten minutes, bound to its actor/account and expected record state. Confirmation rechecks authorization and state inside one transaction with the change, audit record and consumed preview. Replays are idempotent; expired or changed records require a fresh preview. Support-status updates send no message. Payments, wallet corrections, team edits and settlements remain on their existing pages and controls. No model-generated SQL or arbitrary action names are executed.
 
 `npm run test:assistant` includes PostgreSQL-compatible PGlite integration tests for the connected queries, cross-account isolation, deadline uncertainty, valid zero scores, conversion attribution, action expiry, state conflicts and replay protection. This assistant remains a bounded evidence service: unsupported questions and absent records are labelled unverified rather than answered from guesses.
+
+## Gameweek logs and help grounding
+
+“Please check the latest game week log”, “Show GW9 log” and sync-history questions route to an admin-only operational report. Latest means the live/latest started stored API-Football Premier League round in the current season; if fixture context is unavailable the latest started stored tournament is explicitly labelled as an unverified fallback. Requested weeks are restricted to the current season. Reports include fixture sync dates, current tournament/scoring snapshots, recorded competition operations and latest provider sync jobs. Provider jobs have no gameweek foreign key and are labelled as all-gameweek records. This does not read unrecorded console output or trigger any write or sync.
+
+Generic UI string scraping is removed. Only explicit `data-assistant-guide` annotations are eligible for indexed guide excerpts, labelled “Site guide”. Conditional toasts, error strings and empty states cannot become claims about current account/gameweek state. Unsupported questions produce an unverified response.

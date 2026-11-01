@@ -49,13 +49,25 @@ try{
       ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000001','alice','/play','page_view',now()-interval '19 hours'),
       ('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000002',null,'/','page_view',now()-interval '21 hours');
   `);
+  await db.exec(`CREATE TABLE app.api_football_fixtures(api_fixture_id integer,league_id integer,season integer,round text,kickoff_at timestamptz,status_short text,stats_synced_at timestamptz,updated_at timestamptz default now());
+    CREATE TABLE app.api_football_sync_runs(id integer,job_type text,status text,provider_calls integer,records_processed integer,started_at timestamptz,finished_at timestamptz);
+    INSERT INTO app.api_football_sync_runs VALUES(1,'completed_stats','failed',1,0,now(),now());`);
+  const season=new Date().getUTCFullYear()-(new Date().getUTCMonth()<6?1:0);
+  await db.query(`INSERT INTO app.api_football_fixtures VALUES(100,39,$1,'Regular Season - 9',now()-interval '1 hour','FT',NULL,now()),(101,39,$1,'Regular Season - 10',now()+interval '7 days','NS',NULL,now()),(102,39,$2,'Regular Season - 9',now()-interval '1 year','FT',now(),now())`,[season,season-1]);
   await db.exec(ASSISTANT_ACTION_SCHEMA);
   const q=async(sql,params=[])=>(await db.query(sql,params)).rows;
   const next=new Date(Date.now()+86400000).toISOString();
   const fixtures=[{id:1,event:9,kickoff_time:next,started:false,finished:false}];
   const connections={fixtures:async()=>fixtures,availability:async()=>({asOf:next,sourceUpdatedAt:next,stale:false,injuries:[],confirmedAvailable:[{player:{id:2864,name:'A. Isak'},team:{name:'Liverpool'},fixture:{id:3,date:next},availabilityStatus:'confirmed_starter'}],historicalInjuries:[]})};
   const answer=createArenaAssistant(q,connections),base={actorId:'alice',admin:false};
-  let r=await answer({...base,question:'Why can’t I enter tournament #5?'});
+  await assert.rejects(answer({...base,question:'Please check the latest game week log'}),/administrators/);
+  let r=await answer({actorId:'admin',admin:true,question:'Please check the latest game week log'});
+  assert.match(r.answer,/GW9/);assert(!r.answer.includes('could not be minted'));assert(!r.answer.includes('No Free Card Cups'));
+  assert.equal(r.sections.find(s=>s.title==='Gameweek fixture synchronization').rows.length,1);
+  assert.equal(r.sections.find(s=>s.title==='Latest provider sync jobs (all gameweeks)').rows[0].status,'failed');
+  r=await answer({actorId:'admin',admin:true,question:'Show GW10 log'});assert.match(r.answer,/GW10/);
+  r=await answer({...base,question:'Please check the flibbertigibbet'});assert.match(r.answer,/could not verify/);
+  r=await answer({...base,question:'Why can’t I enter tournament #5?'});
   assert(r.sections.some(s=>s.title==='Entry investigation'));
   r=await answer({...base,question:'Investigate entry #10'});
   let checks=r.sections.find(s=>s.title==='Entry investigation').rows;

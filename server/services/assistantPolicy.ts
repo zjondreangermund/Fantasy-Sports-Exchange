@@ -1,4 +1,4 @@
-export const ASSISTANT_TOPICS=['visitors','overview','wallet','activity','entries','cards','loans','notifications','support','football','settlement','help'] as const;
+export const ASSISTANT_TOPICS=['visitors','overview','wallet','activity','entries','cards','loans','notifications','support','football','settlement','gameweek','help'] as const;
 export type AssistantTopic=typeof ASSISTANT_TOPICS[number];
 export class AssistantError extends Error { constructor(message:string,public status=400){super(message);} }
 export function scopedAssistantUser(actor:string,admin:boolean,target?:string) {
@@ -8,6 +8,7 @@ export function scopedAssistantUser(actor:string,admin:boolean,target?:string) {
 }
 export function assistantTopics(question:string,previous:unknown=[]):AssistantTopic[] {
   const q=question.toLowerCase();
+  if(/game\s*week|\bgw\s*\d+\b|sync (?:log|history|status)|scoring log/.test(q)&&/log|latest|current|check|status|history|sync|report/.test(q))return ['gameweek'];
   if(/^(how (do i|to)|where (can|do)|what (is|are) the|explain).*?(captain|rarity|rule|score|scoring|fee|join|install|funding)/.test(q))return ['help'];
   const topics:AssistantTopic[]=[];
   if(/conversion|funnel|drop.off|abandon/.test(q))topics.push('visitors');
