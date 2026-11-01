@@ -1,3 +1,6 @@
+import CommunityMentionComposer from "./CommunityMentionComposer";
+import {communityMentionHandle} from "../../../shared/community-mentions";
+import {takeCommunityIntent,clearCommunityIntent} from "../lib/community-intent";
 import {useAuth} from '../hooks/use-auth';
 import ArenaAssistantPanel from "./ArenaAssistantPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -26,6 +29,7 @@ import { Input } from "./ui/input";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import {
   mergeCommunityMessages,
+  communityMessagesWithTarget,
   readCommunityMessageHistory,
   saveCommunityMessageHistory,
   type CommunityChatMessage as ChatMessage,
@@ -70,9 +74,7 @@ function mergeMessage(messages: ChatMessage[] | undefined, incoming: ChatMessage
   return mergeCommunityMessages(messages, [incoming]);
 }
 
-function mentionHandle(teamName: string) {
-  return teamName.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 30) || "ArenaManager";
-}
+function mentionHandle(teamName:string){return communityMentionHandle(teamName); }
 
 function errorMessage(error: unknown) {
   const raw = error instanceof Error ? error.message : String(error || "");
@@ -144,6 +146,7 @@ export default function FloatingSupportWidget() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
   const [lastSeenId, setLastSeenId] = useState(() => Number(window.localStorage.getItem(lastSeenStorageKey) || 0) || 0);
+  const [targetMessage,setTargetMessage]=useState<ChatMessage|null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
@@ -165,7 +168,7 @@ export default function FloatingSupportWidget() {
     queryFn:async()=>{try{const response=await fetch('/api/assistant/access',{credentials:'include',cache:'no-store'});if(!response.ok)return {isAdmin:false};const data=await response.json();return {isAdmin:data.userId===currentUserId&&data.isAdmin===true};}catch{return {isAdmin:false};}},
   });
   const adminChat=mode==='admin-help'&&adminCheck?.isAdmin===true;
-  useEffect(()=>{setOpen(false);setMode('community');},[currentUserId]);
+  useEffect(()=>{setOpen(false);setMode('community');setTargetMessage(null);},[currentUserId]);
   useEffect(()=>{if(mode==='admin-help'&&!adminCheck?.isAdmin)setMode('help');},[adminCheck?.isAdmin,mode]);
   const { data: notificationInbox } = useQuery<NotificationCache>({
     queryKey: ["/api/notifications",currentUserId],enabled:Boolean(currentUserId),
@@ -177,7 +180,7 @@ export default function FloatingSupportWidget() {
     refetchInterval: 10_000,
   });
   const {
-    data: messages = [],
+    data: storedMessages = [],
     isLoading,
     isError: chatLoadFailed,
     refetch: refreshMessages,
@@ -205,6 +208,9 @@ export default function FloatingSupportWidget() {
     refetchOnWindowFocus: true,
     retry: 2,
   });
+
+  const messages=useMemo(()=>communityMessagesWithTarget(storedMessages,targetMessage),[storedMessages,targetMessage]);
+  useEffect(()=>{if(!targetMessage)return;const remaining=Date.parse(targetMessage.createdAt)+86400000-Date.now();const timer=window.setTimeout(()=>{setTargetMessage(null);queryClient.setQueryData<ChatMessage[]>(chatQueryKey,current=>mergeCommunityMessages(current));setChatError('This message has expired. Community messages are kept for 24 hours.');},Math.max(0,remaining));return()=>window.clearTimeout(timer);},[targetMessage?.id,targetMessage?.createdAt]);
 
   useEffect(()=>{
     if(!currentUserId)return;
@@ -250,6 +256,7 @@ export default function FloatingSupportWidget() {
           canEdit: Boolean(user?.id && raw.userId === user.id && !raw.deletedAt),
           canDelete: Boolean((adminCheck?.isAdmin || (user?.id && raw.userId === user.id)) && !raw.deletedAt),
         };
+        setTargetMessage(current=>current?.id===incoming.id?incoming:current);
         queryClient.setQueryData<ChatMessage[]>(chatQueryKey, (current) => {
           const merged = mergeMessage(current, incoming);
           saveCommunityMessageHistory(currentUserId, merged);
@@ -309,22 +316,26 @@ export default function FloatingSupportWidget() {
       const messageId = Number((event as CustomEvent<{ messageId?: number }>).detail?.messageId || 0);
       if (!Number.isInteger(messageId) || messageId <= 0) return;
 
+      clearCommunityIntent();
+      setTargetMessage(null);
+      setFollowingLatest(false);
       setMode("community");
       setChatSearch("");
       setHighlightedMessageId(messageId);
       setOpen(true);
 
       const existing = queryClient.getQueryData<ChatMessage[]>(chatQueryKey);
-      if (Array.isArray(existing) && existing.some((message) => message.id === messageId)) return;
+      if (Array.isArray(existing)){const cached=existing.find(message=>message.id===messageId&&Date.parse(message.createdAt)>Date.now()-86400000);if(cached){setTargetMessage(cached);return;}}
 
       try {
         const response = await fetch(`/community-live/messages/${messageId}`, {
           credentials: "include",
           cache: "no-store",
         });
-        if (!response.ok) throw new Error("The mentioned message is no longer available.");
+        if (!response.ok) throw new Error("This message has expired or was removed. Community messages are kept for 24 hours.");
         const payload = await response.json();
         if (payload?.message) {
+          setTargetMessage(payload.message);
           queryClient.setQueryData<ChatMessage[]>(chatQueryKey, (current) => {
             const merged = mergeMessage(current, payload.message);
             saveCommunityMessageHistory(currentUserId, merged);
@@ -339,6 +350,15 @@ export default function FloatingSupportWidget() {
     window.addEventListener(communityMentionOpenEvent, openMention);
     return () => window.removeEventListener(communityMentionOpenEvent, openMention);
   }, [chatQueryKey, currentUserId]);
+
+  useEffect(()=>{
+    if(!currentUserId)return;
+    const consume=async()=>{const intent=takeCommunityIntent();if(!intent)return;setMode('community');setOpen(true);setChatSearch('');
+      if(intent.messageId){void openCommunityMention({communityMessageId:intent.messageId,id:intent.notificationId||undefined});return;}
+      if(intent.notificationId){try{const response=await fetch('/api/notifications',{credentials:'include',cache:'no-store'});if(!response.ok)throw new Error();const payload=await response.json();const notification=payload.notifications?.find((n:any)=>Number(n.id)===intent.notificationId);if(notification?.communityMessageId){void openCommunityMention(notification);return;}setChatError('This mention has expired or is no longer available.');}catch{setChatError('Unable to load the mentioned message. Your Community tab is open.');}}
+    };
+    void consume();window.addEventListener('popstate',consume);window.addEventListener('pushState',consume);return()=>{window.removeEventListener('popstate',consume);window.removeEventListener('pushState',consume);};
+  },[currentUserId]);
 
   useEffect(() => {
     if (!open || mode !== "community" || latestId <= 0 || !followingLatest || !currentUserId) return;
@@ -513,7 +533,7 @@ export default function FloatingSupportWidget() {
                       <div className={`max-w-[90%] rounded-2xl border px-3 py-2 ${highlightedMessageId === message.id ? "border-amber-200/80 bg-amber-300/15 ring-2 ring-amber-200/55" : own ? "border-cyan-200/20 bg-cyan-300/12" : "border-white/10 bg-white/[.055]"} ${message.deletedAt ? "opacity-55" : ""}`}>
                         {message.replyTo ? <button type="button" onClick={() => { void openCommunityMention({ communityMessageId: message.replyTo?.id }); }} className="mb-2 block w-full rounded-xl border-l-2 border-cyan-300/45 bg-black/25 px-2 py-1.5 text-left text-[10px] text-white/48 hover:bg-black/40"><span className="font-black text-cyan-200/70">{message.replyTo.teamName}</span><p className="mt-0.5 line-clamp-2">{message.replyTo.message}</p></button> : null}
                         <div className="mb-1 flex items-center gap-2 text-[10px]"><button type="button" onClick={() => addMention(message)} disabled={own || Boolean(message.deletedAt)} className={`max-w-[180px] truncate font-black ${own ? "text-cyan-200" : "text-white/65 hover:text-cyan-200"}`}>{own ? "You" : message.teamName || "Arena Manager"}</button><span className="text-white/30">{formatMessageTime(message.createdAt)}</span>{message.editedAt ? <span className="text-white/25">edited</span> : null}</div>
-                        {editing ? <div className="space-y-2"><textarea value={editingText} onChange={(event) => setEditingText(event.target.value.slice(0, 280))} rows={3} className="w-full resize-none rounded-xl border border-white/10 bg-black/30 p-2 text-sm text-white outline-none focus:border-cyan-300/40" /><div className="flex justify-end gap-2"><button onClick={() => { setEditingId(null); setEditingText(""); }} className="text-[10px] font-bold text-white/45">Cancel</button><button onClick={() => editMutation.mutate({ id: message.id, message: editingText.trim() })} disabled={!editingText.trim() || editMutation.isPending} className="rounded-lg bg-cyan-300 px-2 py-1 text-[10px] font-black text-slate-950">Save</button></div></div> : <p className={`whitespace-pre-wrap break-words text-sm leading-5 ${message.deletedAt ? "italic text-white/45" : "text-white/90"}`}>{message.message}</p>}
+                        {editing ? <div className="space-y-2"><CommunityMentionComposer value={editingText} onChange={setEditingText} onError={setChatError} sendOnEnter={false} rows={3} placeholder="Edit your community message…" /><div className="flex justify-end gap-2"><button onClick={() => { setEditingId(null); setEditingText(""); }} className="text-[10px] font-bold text-white/45">Cancel</button><button onClick={() => editMutation.mutate({ id: message.id, message: editingText.trim() })} disabled={!editingText.trim() || editMutation.isPending} className="rounded-lg bg-cyan-300 px-2 py-1 text-[10px] font-black text-slate-950">Save</button></div></div> : <p className={`whitespace-pre-wrap break-words text-sm leading-5 ${message.deletedAt ? "italic text-white/45" : "text-white/90"}`}>{message.message}</p>}
                         {!message.deletedAt && !editing ? <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-2 text-[10px] font-black tracking-[.04em]"><button type="button" onClick={() => { setReplyingTo(message); setChatError(""); }} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-white/[.07] px-2 text-white/75 hover:bg-cyan-300/15 hover:text-cyan-200"><Reply className="h-3.5 w-3.5" />Reply</button>{!own ? <button type="button" onClick={() => addMention(message)} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-cyan-300/10 px-2 text-cyan-100 hover:bg-cyan-300/20"><AtSign className="h-3.5 w-3.5" />Mention</button> : null}{canEdit ? <button type="button" onClick={() => { setEditingId(message.id); setEditingText(message.message); }} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-white/[.07] px-2 text-white/75 hover:text-amber-200"><Pencil className="h-3.5 w-3.5" />Edit</button> : null}{canDelete ? <button type="button" onClick={() => window.confirm(adminCheck?.isAdmin && !own ? "Delete this community message as administrator?" : "Delete your message?") && deleteMutation.mutate(message)} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-white/[.07] px-2 text-white/75 hover:text-rose-200"><Trash2 className="h-3.5 w-3.5" />{adminCheck?.isAdmin && !own ? "Admin delete" : "Delete"}</button> : null}</div> : null}
                       </div>
                     </div>
@@ -524,7 +544,7 @@ export default function FloatingSupportWidget() {
               <div className="border-t border-white/10 bg-black/25 p-2.5">
                 {!followingLatest && unreadCount ? <button type="button" onClick={() => { setFollowingLatest(true); scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }} className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 py-1.5 text-xs font-bold text-cyan-100">{unreadCount} new message{unreadCount === 1 ? "" : "s"} · Jump to latest</button> : null}
                 {replyingTo ? <div className="mb-2 flex items-start justify-between gap-2 rounded-xl border border-cyan-200/15 bg-cyan-300/[.06] px-3 py-2"><div className="min-w-0 text-[10px] text-white/48"><span className="font-black text-cyan-200">Replying to {replyingTo.teamName}</span><p className="mt-0.5 truncate">{replyingTo.message}</p></div><button onClick={() => setReplyingTo(null)} className="text-white/35 hover:text-white"><X className="h-3.5 w-3.5" /></button></div> : null}
-                <div className="flex items-end gap-2"><textarea value={chatInput} onChange={(event) => { setChatInput(event.target.value.slice(0, 280)); setChatError(""); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submitChat(); } }} rows={2} maxLength={280} placeholder={replyingTo ? `Reply to ${replyingTo.teamName}…` : "Message the community…"} className="min-h-[42px] flex-1 resize-none rounded-xl border border-white/10 bg-white/[.055] px-3 py-2 text-sm text-white outline-none placeholder:text-white/30 focus:border-cyan-200/35" /><Button size="icon" className="h-10 w-10 shrink-0 rounded-xl bg-cyan-300 text-slate-950 hover:bg-cyan-200" onClick={submitChat} disabled={!chatInput.trim() || sendMutation.isPending} aria-label="Send community message"><Send className="h-4 w-4" /></Button></div>
+                <div className="flex items-end gap-2"><CommunityMentionComposer value={chatInput} onChange={text=>{setChatInput(text);setChatError('');}} onError={setChatError} onSubmit={submitChat} placeholder={replyingTo?`Reply to ${replyingTo.teamName}…`:'Message the community… type @ or a team name to tag'} /><Button size="icon" className="h-10 w-10 shrink-0 rounded-xl bg-cyan-300 text-slate-950 hover:bg-cyan-200" onClick={submitChat} disabled={!chatInput.trim() || sendMutation.isPending} aria-label="Send community message"><Send className="h-4 w-4" /></Button></div>
                 <div className="mt-1 flex items-center justify-between gap-2 px-1"><p className="truncate text-[10px] text-rose-200">{chatError || "Profanity and slurs are automatically blocked."}</p><p className="shrink-0 text-[10px] text-white/25">{chatInput.length}/280</p></div>
               </div>
             </div>

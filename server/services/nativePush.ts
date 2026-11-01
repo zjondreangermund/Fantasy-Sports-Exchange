@@ -1,3 +1,4 @@
+import {communityMentionDestination} from "../../shared/community-mentions.js";
 import { retireQueuedPrizePrompts } from "./prizeNotificationPolicy.js";
 import { reportNotificationHealth } from "./notificationHealth.js";
 import { PUSH_QUIET_SECONDS, groupPushDeliveries, pushBatchMessage } from "./pushBatching.js";
@@ -199,7 +200,7 @@ function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
     return id > 0 ? `/account?tab=inbox&notification=${id}` : "/account?tab=inbox";
   }
   if (key.startsWith("replacement-complete:")) return "/collection";
-  if (key.startsWith("community-mention:")) return "/community";
+  if (key.startsWith("community-mention:")) return communityMentionDestination(key,notificationId);
   if (key.startsWith("android-update:")) return "/dashboard?appUpdate=1";
   if (key.startsWith("native-web-update:")) return "/competitions";
   if (key.startsWith("competition:") || key.startsWith("gameweek:")) return "/my-entries";

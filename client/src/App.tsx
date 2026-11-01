@@ -1,3 +1,4 @@
+import {captureCommunityLink} from "./lib/community-intent";
 import PageActivityTracker from "./components/PageActivityTracker";
 import DepartureLoginPrompt from "./components/DepartureLoginPrompt";
 import * as React from "react";
@@ -234,6 +235,7 @@ function PublicRouter() {
 
 function AppContent() {
   const { user, isLoading } = useAuth();
+  React.useEffect(()=>{captureCommunityLink();},[]);
   React.useEffect(() => { const params = new URLSearchParams(window.location.search); const ref = String(params.get("ref") || "").trim(); if (ref) localStorage.setItem("fantasy_referral_code", ref); }, []);
   React.useEffect(() => { if (!user) return; const code = localStorage.getItem("fantasy_referral_code"); if (!code) return; fetch("/api/referrals/claim", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) }).then(() => localStorage.removeItem("fantasy_referral_code")).catch(() => {}); }, [user]);
   if (window.location.pathname.replace(/\/$/, "") === "/install") return <React.Suspense fallback={<RouteFallback />}><InstallPage /></React.Suspense>;

@@ -1,7 +1,9 @@
+import {extractCommunityMentions} from "../../shared/community-mentions.js";
 // COMMUNITY_ROLLING_RETENTION_V1: per-message expiry, not a room-wide reset.
 import type { Express, Response } from "express";
 import { sql } from "drizzle-orm";
-import { db } from "../db.js";
+import {searchCommunityMentions} from "../services/communityMentions.js";
+import { db, pool } from "../db.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
 
 type CommunityChatV2Deps = {
@@ -74,11 +76,7 @@ function containsBlockedLanguage(value: string) {
   });
 }
 
-function mentionsIn(value: string) {
-  const mentions = new Set<string>();
-  for (const match of value.matchAll(/(?:^|\s)@([a-z0-9_]{2,30})/gi)) mentions.add(match[1]);
-  return Array.from(mentions).slice(0, 12);
-}
+function mentionsIn(value:string){return extractCommunityMentions(value); }
 
 function normalizeMentionHandle(value: unknown) {
   return String(value || "")
@@ -277,6 +275,18 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
   const expiryTimer=setInterval(()=>{void purgeExpired().catch(error=>console.warn("Community expiry failed",error));},60000);
   expiryTimer.unref();
   void ensureSchema().catch((error) => console.warn("Community Live v2 schema ensure failed:", error));
+
+  const mentionSearchLimits=new Map<string,{count:number;until:number}>();
+  app.get('/community-live/mentions',requireAuth,async(req:any,res)=>{
+    res.setHeader('Cache-Control','private, no-store');
+    try{
+      const actor=String(req.authUserId||''),now=Date.now();let bucket=mentionSearchLimits.get(actor);
+      if(!bucket||bucket.until<now){bucket={count:0,until:now+60000};mentionSearchLimits.set(actor,bucket);}
+      if(++bucket.count>60)return res.status(429).json({message:'Please pause briefly before searching more teams.'});
+      if(mentionSearchLimits.size>10000)for(const [key,value] of mentionSearchLimits)if(value.until<now)mentionSearchLimits.delete(key);
+      return res.json({suggestions:await searchCommunityMentions(async(query,params)=>(await pool.query(query,params)).rows,actor,String(req.query.q||''),req.query.prefix==='1')});
+    }catch{return res.status(503).json({message:'Team suggestions are temporarily unavailable.'});}
+  });
 
   app.get("/community-live/messages", requireAuth, async (req: any, res) => {
     try {
