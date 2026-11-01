@@ -5,11 +5,11 @@ export default function AssistantActionPanel({admin,target}:{admin:boolean;targe
   const [kind,setKind]=useState('notification_read'),[recordId,setRecordId]=useState(''),[status,setStatus]=useState('in_progress');
   const [preview,setPreview]=useState<{token:string;description:string;expiresAt:string}|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
   const generation=useRef(0);
-  useEffect(()=>{generation.current++;setPreview(null);setMessage('');},[kind,recordId,status,target]);
+  useEffect(()=>{generation.current++;setPreview(null);setMessage('');},[kind,recordId,status,target,admin]);
   async function act(confirm=false){
     const sequence=generation.current;setBusy(true);setMessage('');
     try{
-      const response=await fetch(`/api/assistant/actions/${confirm?'confirm':'preview'}`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(confirm?{token:preview?.token,confirmed:true}:{kind,recordId:Number(recordId),status,userId:target||undefined})});
+      const response=await fetch(`/api/assistant/${admin?'admin':'member'}/actions/${confirm?'confirm':'preview'}`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(confirm?{token:preview?.token,confirmed:true}:{kind,recordId:Number(recordId),status,userId:target||undefined})});
       const data=await response.json();if(sequence!==generation.current)return;if(!response.ok)throw new Error(data.message||'Unable to complete action.');
       if(confirm){setPreview(null);setMessage(data.message);}else setPreview(data);
     }catch(error){if(sequence!==generation.current)return;setPreview(null);setMessage(error instanceof Error?error.message:'Action unavailable.');}finally{setBusy(false);}

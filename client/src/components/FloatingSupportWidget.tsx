@@ -1,3 +1,4 @@
+import {useAuth} from '../hooks/use-auth';
 import ArenaAssistantPanel from "./ArenaAssistantPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -6,6 +7,7 @@ import {
   AtSign,
   Bot,
   HelpCircle,
+  ShieldCheck,
   Mail,
   MessageCircle,
   Pencil,
@@ -36,7 +38,7 @@ import {
 import { matchesSearch } from "../lib/search";
 
 
-type WidgetMode = "community" | "help";
+type WidgetMode = "community" | "help" | "admin-help";
 type CurrentUser = {
   id?: string;
   managerTeamName?: string | null;
@@ -150,15 +152,23 @@ export default function FloatingSupportWidget() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const preserveScrollHeightRef = useRef<number | null>(null);
 
-  const { data: user } = useQuery<CurrentUser>({ queryKey: ["/api/user"] });
-  const currentUserId = String(user?.id || "");
+  const {user:sessionUser}=useAuth();
+  const currentUserId=String(sessionUser?.id||'');
+  const {data:ownProfile}=useQuery<CurrentUser>({queryKey:['support-profile',currentUserId],enabled:Boolean(currentUserId),queryFn:async()=>{const response=await fetch('/api/user',{credentials:'include',cache:'no-store'});if(!response.ok)return {id:currentUserId};const data=await response.json();return data.id===currentUserId?data:{id:currentUserId};}});
+  const user:CurrentUser|undefined=sessionUser?{...sessionUser,...ownProfile,id:currentUserId}:undefined;
   const chatQueryKey = useMemo(
     () => ["/community-live/messages", currentUserId || "anonymous"] as const,
     [currentUserId],
   );
-  const { data: adminCheck } = useQuery<AdminCheck>({ queryKey: ["/api/admin/check"], retry: false });
+  const { data: adminCheck } = useQuery<AdminCheck>({
+    queryKey: ["/api/assistant/access",currentUserId],enabled:Boolean(currentUserId),retry:false,staleTime:0,refetchInterval:30000,
+    queryFn:async()=>{try{const response=await fetch('/api/assistant/access',{credentials:'include',cache:'no-store'});if(!response.ok)return {isAdmin:false};const data=await response.json();return {isAdmin:data.userId===currentUserId&&data.isAdmin===true};}catch{return {isAdmin:false};}},
+  });
+  const adminChat=mode==='admin-help'&&adminCheck?.isAdmin===true;
+  useEffect(()=>{setOpen(false);setMode('community');},[currentUserId]);
+  useEffect(()=>{if(mode==='admin-help'&&!adminCheck?.isAdmin)setMode('help');},[adminCheck?.isAdmin,mode]);
   const { data: notificationInbox } = useQuery<NotificationCache>({
-    queryKey: ["/api/notifications"],
+    queryKey: ["/api/notifications",currentUserId],enabled:Boolean(currentUserId),
     queryFn: async () => {
       const response = await fetch("/api/notifications", { credentials: "include" });
       if (!response.ok) return { notifications: [], unreadCount: 0 };
@@ -469,15 +479,16 @@ export default function FloatingSupportWidget() {
       <MarketplaceListingActivity />
       <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-3 z-[90] sm:bottom-4 sm:right-4">
       {open ? (
-        <Card style={mode === "help" ? {width:"min(calc(100vw - 1.5rem),760px)",height:"min(78dvh,720px)"}:undefined} className="mb-2 flex max-h-[min(76dvh,640px)] w-[min(calc(100vw-1.5rem),410px)] flex-col overflow-hidden border-white/15 bg-slate-950/82 text-white shadow-[0_24px_80px_rgba(0,0,0,.58)] backdrop-blur-2xl sm:mb-3">
+        <Card style={mode !== "community" ? {width:"min(calc(100vw - 1.5rem),760px)",height:"min(78dvh,720px)"}:undefined} className="mb-2 flex max-h-[min(76dvh,640px)] w-[min(calc(100vw-1.5rem),410px)] flex-col overflow-hidden border-white/15 bg-slate-950/82 text-white shadow-[0_24px_80px_rgba(0,0,0,.58)] backdrop-blur-2xl sm:mb-3">
           <div className="flex items-center justify-between border-b border-white/10 bg-white/[.035] px-3 py-2.5">
-            <div className="min-w-0"><div className="flex items-center gap-2"><span className="relative flex h-2.5 w-2.5"><span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-55 ${streamConnected ? "bg-emerald-300" : "bg-amber-300"}`} /><span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${streamConnected ? "bg-emerald-400" : "bg-amber-400"}`} /></span><p className="truncate text-sm font-black">{mode === "community" ? "Community Live" : "Arena Help"}</p>{adminCheck?.isAdmin && mode === "community" ? <span className="rounded-full bg-violet-300/15 px-2 py-0.5 text-[9px] font-black text-violet-200">ADMIN</span> : null}</div><p className="mt-0.5 truncate text-[11px] text-white/45">{mode === "community" ? streamConnected ? "Live · messages expire after 24 hours" : "Reconnecting · 24-hour history" : "Site help and account support"}</p></div>
+            <div className="min-w-0"><div className="flex items-center gap-2"><span className="relative flex h-2.5 w-2.5"><span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-55 ${streamConnected ? "bg-emerald-300" : "bg-amber-300"}`} /><span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${streamConnected ? "bg-emerald-400" : "bg-amber-400"}`} /></span><p className="truncate text-sm font-black">{mode === "community" ? "Community Live" : adminChat ? "Admin Assistant" : "Member Help"}</p>{adminCheck?.isAdmin && mode === "community" ? <span className="rounded-full bg-violet-300/15 px-2 py-0.5 text-[9px] font-black text-violet-200">ADMIN</span> : null}</div><p className="mt-0.5 truncate text-[11px] text-white/45">{mode === "community" ? streamConnected ? "Live · messages expire after 24 hours" : "Reconnecting · 24-hour history" : adminChat ? "Private administrator investigations" : "Private support for your own account"}</p></div>
             <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-white/65 hover:bg-white/10 hover:text-white" onClick={() => setOpen(false)} aria-label="Close floating panel"><X className="h-4 w-4" /></Button>
           </div>
 
-          <div className="grid grid-cols-2 border-b border-white/10 bg-black/20 p-1.5">
+          <div className={`grid ${adminCheck?.isAdmin?"grid-cols-3":"grid-cols-2"} border-b border-white/10 bg-black/20 p-1.5`}>
             <button onClick={() => setMode("community")} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-black transition ${mode === "community" ? "bg-cyan-300/15 text-cyan-200" : "text-white/45 hover:bg-white/5"}`}><Users className="h-3.5 w-3.5" />Community</button>
-            <button onClick={() => setMode("help")} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-black transition ${mode === "help" ? "bg-violet-300/15 text-violet-200" : "text-white/45 hover:bg-white/5"}`}><HelpCircle className="h-3.5 w-3.5" />Help</button>
+            <button onClick={() => setMode("help")} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-black transition ${mode === "help" ? "bg-violet-300/15 text-violet-200" : "text-white/45 hover:bg-white/5"}`}><HelpCircle className="h-3.5 w-3.5" />Member Help</button>
+            {adminCheck?.isAdmin?<button onClick={()=>setMode("admin-help")} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-black ${adminChat?"bg-violet-300/15 text-violet-200":"text-white/45"}`}><ShieldCheck className="h-3.5 w-3.5"/>Admin Assistant</button>:null}
           </div>
 
           {mode === "community" ? (
@@ -518,7 +529,7 @@ export default function FloatingSupportWidget() {
               </div>
             </div>
           ) : (
-            <ArenaAssistantPanel userId={currentUserId} admin={Boolean(adminCheck?.isAdmin)}/>
+            <ArenaAssistantPanel key={`${currentUserId}:${adminChat?'admin':'member'}`} userId={currentUserId} admin={adminChat}/>
           )}
         </Card>
       ) : null}

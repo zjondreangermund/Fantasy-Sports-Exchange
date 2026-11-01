@@ -4,18 +4,18 @@ import {useEffect,useState} from 'react';
 import {assistantTaskDefinitions,type AssistantTaskDraft} from '../../../shared/assistant-tasks';
 import {Button} from './ui/button';
 import {Input} from './ui/input';
-export default function AssistantSiteTaskPanel({draft}:{draft:AssistantTaskDraft}){
+export default function AssistantSiteTaskPanel({draft,audience}:{draft:AssistantTaskDraft;audience:'member'|'admin'}){
   const queryClient=useQueryClient();
   const [fields,setFields]=useState<Record<string,any>>(draft.fields),[options,setOptions]=useState<any>({cards:[],competitions:[],entries:[]});
   const [preview,setPreview]=useState<any>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[uncertain,setUncertain]=useState(false);
   const def=assistantTaskDefinitions[draft.kind];
   const destination=draft.kind==='team_rename'?'/account':draft.kind==='inbox_read_all'||draft.kind==='alert_preference'?'/account?tab=inbox':draft.kind.startsWith('team_')?'/my-entries':draft.kind.startsWith('admin_')?'/admin':draft.kind.includes('listing')||draft.kind.includes('watch')?'/marketplace':draft.kind==='prize_claim'?'/trophy-cabinet':'/collection';
-  useEffect(()=>{let active=true;fetch('/api/assistant/tasks/options',{credentials:'include'}).then(async r=>{const data=await r.json();if(active){if(r.ok){setOptions(data);if(draft.kind==='team_edit')setFields(f=>{const entry=data.entries?.find((e:any)=>e.id===Number(f.entryId));return entry&&!f.cardIds?{...f,cardIds:entry.cardIds,captainId:f.captainId||entry.captainId}:f;});}else setMessage(data.message||'Choices are unavailable.');}}).catch(()=>{if(active)setMessage('Choices are unavailable. You can use record numbers.');});return()=>{active=false;};},[]);
+  useEffect(()=>{let active=true;fetch(`/api/assistant/${audience}/tasks/options`,{credentials:'include'}).then(async r=>{const data=await r.json();if(active){if(r.ok){setOptions(data);if(draft.kind==='team_edit')setFields(f=>{const entry=data.entries?.find((e:any)=>e.id===Number(f.entryId));return entry&&!f.cardIds?{...f,cardIds:entry.cardIds,captainId:f.captainId||entry.captainId}:f;});}else setMessage(data.message||'Choices are unavailable.');}}).catch(()=>{if(active)setMessage('Choices are unavailable. You can use record numbers.');});return()=>{active=false;};},[]);
   function update(key:string,value:any){setFields(old=>({...old,[key]:value}));setPreview(null);setMessage('');setUncertain(false);}
   async function send(confirm=false){
     setBusy(true);setMessage('');
     try{
-      const r=await fetch(`/api/assistant/tasks/${confirm?'confirm':'preview'}`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(confirm?{token:preview.token,confirmed:true}:{draft:{kind:draft.kind,fields}})});
+      const r=await fetch(`/api/assistant/${audience}/tasks/${confirm?'confirm':'preview'}`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(confirm?{token:preview.token,confirmed:true}:{draft:{kind:draft.kind,fields}})});
       const data=await r.json();if(!r.ok)throw new Error(data.message||'Unable to verify this task.');
       if(confirm){if(data.state==='succeeded')void queryClient.invalidateQueries();setMessage(`${data.state==='succeeded'?'Completed':data.state==='rejected'?'Rejected':'Outcome not confirmed'}: ${data.message}${data.entryId?` Entry #${data.entryId}.`: ''}`);setPreview(null);setUncertain(false);}else{setPreview(data);setUncertain(false);}
     }catch(error){setMessage(confirm?'The outcome is not confirmed. Use Check task outcome or inspect the relevant site page before starting another task.':error instanceof Error?error.message:'Unable to prepare this task.');if(confirm)setUncertain(true);}finally{setBusy(false);}
