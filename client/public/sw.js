@@ -106,6 +106,7 @@ function actionableNotificationPath(value, notificationIdValue) {
   if (!Number.isInteger(notificationId) || notificationId <= 0) return path;
   try {
     const target = new URL(path, self.location.origin);
+    if(target.pathname==='/community'){target.pathname='/dashboard';target.searchParams.set('community','1');target.searchParams.set('notification',String(notificationId));return `${target.pathname}${target.search}${target.hash}`;}
     if (
       target.pathname === "/account"
       && target.searchParams.get("tab") === "inbox"

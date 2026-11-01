@@ -1,3 +1,5 @@
+import {communityMentionDestination} from "../../../shared/community-mentions";
+import {rememberCommunityIntent} from "./community-intent";
 import { queryClient } from "./queryClient";
 
 export type NotificationCache = {
@@ -45,6 +47,7 @@ export async function markNotificationRead(id: number | null | undefined) {
       credentials: "include",
     });
     if (!response.ok) throw new Error("Failed to mark notification as read");
+    void queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
   } catch {
     await queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
   }
@@ -54,6 +57,7 @@ export async function openCommunityMention(notification: ArenaNotification) {
   const messageId = Number(notification.communityMessageId || 0);
   if (!Number.isInteger(messageId) || messageId <= 0) return;
 
+  rememberCommunityIntent({messageId,notificationId:Number(notification.id||0)||null});
   window.dispatchEvent(new CustomEvent(communityMentionOpenEvent, {
     detail: { messageId, notificationId: Number(notification.id || 0) || null },
   }));
@@ -63,6 +67,7 @@ export async function openCommunityMention(notification: ArenaNotification) {
 
 export function notificationDestination(notification: ArenaNotification): string {
   const replacementKey = String(notification.dedupeKey || "");
+  if(notification.communityMessageId||replacementKey.startsWith("community-mention:"))return communityMentionDestination(replacementKey,notification.id,notification.communityMessageId);
   // Match the native Android and Web Push deep link for the once-per-GW close alert.
   if (replacementKey.startsWith("gameweek:") && replacementKey.endsWith(":entries-closed-good-luck")) return "/my-entries";
   if (replacementKey.startsWith("prize-level:")) return "/prize-vault";

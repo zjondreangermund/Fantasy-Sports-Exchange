@@ -110,3 +110,9 @@ export function saveCommunityMessageHistory(userId: string, messages: CommunityC
     // A disabled/full browser storage must not prevent database-backed chat.
   }
 }
+
+// Keep an explicitly opened, unexpired mention visible even beyond the rolling cache cap.
+export function communityMessagesWithTarget(messages:CommunityChatMessage[],target:CommunityChatMessage|null){
+  const pinned=mergeCommunityMessages(target?[target]:[])[0];
+  return pinned&&!messages.some(message=>message.id===pinned.id)?[...messages,pinned].sort((a,b)=>a.id-b.id):messages;
+}
