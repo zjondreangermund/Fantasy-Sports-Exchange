@@ -1,3 +1,4 @@
+import {tournamentPlayerPosition} from "../../shared/tournament-position.js";
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
@@ -228,7 +229,7 @@ export function registerLoanMarketRoutes(app: Express, deps: RegisterLoanMarketR
           ...storedPlayer, ...(canonical || {}),
           name: canonical?.name || apiFootballPlayer?.name || storedPlayer.name,
           team: apiFootballPlayer?.team || canonical?.team || storedPlayer.team,
-          position: apiFootballPlayer?.position || canonical?.position || storedPlayer.position,
+          position: tournamentPlayerPosition(canonical?.position, storedPlayer.position, apiFootballPlayer?.position),
           apiFootballId: apiFootballPlayer?.apiPlayerId || null,
           imageUrl: verifiedImageUrl, verifiedImageUrl, identityVerified, identitySource,
           totalPoints: officialTotalPoints, form: officialForm, overall: officialOverall,

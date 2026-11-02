@@ -1,3 +1,4 @@
+import {tournamentPlayerPosition} from "../../shared/tournament-position.js";
 import type { Express } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { fplApi } from "../services/fplApi.js";
@@ -331,7 +332,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       const apiSnapshot = await getApiFootballPlayerProfileSnapshot({ ...player, ...(canonical || {}) }, apiFootballDirectory).catch(() => null);
 
       if (!matchedElement) {
-        if (apiSnapshot) return res.json({ ...apiSnapshot, stats: { ...apiSnapshot.stats, selectedBy: arenaOwnership, ownershipCount: arenaOwners, ownershipManagerCount: arenaManagers, value: lastSaleValue } });
+        if (apiSnapshot) return res.json({ ...apiSnapshot, player: {...apiSnapshot.player, position: tournamentPlayerPosition(undefined, player.position, apiSnapshot.player.position)}, stats: { ...apiSnapshot.stats, selectedBy: arenaOwnership, ownershipCount: arenaOwners, ownershipManagerCount: arenaManagers, value: lastSaleValue } });
         const outsidePremierLeague = String(player.league || "").toLowerCase() === "outside premier league"
           || String(player.status || "").toLowerCase() === "departed";
         return res.json({
