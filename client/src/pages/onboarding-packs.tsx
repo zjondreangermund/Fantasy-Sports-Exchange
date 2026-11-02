@@ -1,3 +1,4 @@
+import {PopupPortal} from "../components/ui/popup-portal";
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import CardThumbnail from "../components/CardThumbnail";
@@ -171,7 +172,7 @@ export default function OnboardingPacksScene() {
 
         <AnimatePresence>
           {activePack !== null && packs[activePack] && (
-            <motion.div className="fixed inset-0 bg-black/75 flex items-center justify-center p-6 z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActivePack(null)}>
+            <PopupPortal><motion.div className="fixed inset-0 bg-black/75 flex items-center justify-center p-6 z-50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setActivePack(null)}>
               <motion.div className="w-full max-w-5xl rounded-3xl bg-[#0b0f1a] border border-white/10 p-6" initial={{ scale: 0.94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.94, opacity: 0 }} onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4 gap-3">
                   <div>
@@ -200,7 +201,7 @@ export default function OnboardingPacksScene() {
                   </div>
                 </div>
               </motion.div>
-            </motion.div>
+            </motion.div></PopupPortal>
           )}
         </AnimatePresence>
       </div>

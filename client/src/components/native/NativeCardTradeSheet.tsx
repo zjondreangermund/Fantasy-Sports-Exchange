@@ -1,3 +1,4 @@
+import {PopupPortal} from "../ui/popup-portal";
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -190,7 +191,7 @@ export default function NativeCardTradeSheet({
   const validLoan = canLoan && effectiveLoanPrice >= loanFloor && LOAN_DURATIONS_GAMEWEEKS.includes(gameweeks as any);
 
   return (
-    <div className="fixed inset-0 z-[145] flex items-end bg-black/75 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`${card.player?.name || "Card"} trading actions`}>
+    <PopupPortal><div className="fixed inset-0 z-[145] flex items-end bg-black/75 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`${card.player?.name || "Card"} trading actions`}>
       <button className="absolute inset-0" onClick={onClose} aria-label="Close trading actions" />
       <section className="relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-[2rem] border-t border-white/10 bg-[#090d1c] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-4">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
@@ -273,7 +274,7 @@ export default function NativeCardTradeSheet({
           </div>
         )}
       </section>
-    </div>
+    </div></PopupPortal>
   );
 }
 

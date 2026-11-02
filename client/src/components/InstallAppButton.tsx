@@ -1,3 +1,4 @@
+import {PopupPortal} from "./ui/popup-portal";
 import * as React from "react";
 import { Download, Smartphone, X } from "lucide-react";
 import { isInstalledMobileApp } from "../lib/site-view";
@@ -149,7 +150,7 @@ export default function InstallAppButton() {
       </button>
 
       {promptOpen && !anotherDialogOpen ? (
-        <div className="fixed inset-0 z-[220] flex items-end justify-center bg-black/75 p-3 backdrop-blur-md sm:items-center" role="dialog" aria-modal="true" aria-label="Install Fantasy Arena" data-install-app-popup>
+        <PopupPortal><div className="fixed inset-0 z-[220] flex items-end justify-center bg-black/75 p-3 backdrop-blur-md sm:items-center" role="dialog" aria-modal="true" aria-label="Install Fantasy Arena" data-install-app-popup>
           <button type="button" className="absolute inset-0 cursor-default" onClick={dismissPrompt} aria-label="Close install prompt" />
           <section className="relative z-10 w-full max-w-md overflow-hidden rounded-[1.75rem] border border-cyan-300/25 bg-[#070b18] p-5 text-white shadow-[0_28px_100px_rgba(0,0,0,.72),0_0_50px_rgba(34,211,238,.12)]">
             <button type="button" onClick={dismissPrompt} className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/70" aria-label="Close install prompt"><X className="h-4 w-4" /></button>
@@ -163,7 +164,7 @@ export default function InstallAppButton() {
               <button type="button" onClick={install} disabled={installing} className="h-11 rounded-2xl bg-gradient-to-r from-cyan-300 via-sky-300 to-violet-400 px-3 text-sm font-black text-slate-950 shadow-[0_0_30px_rgba(34,211,238,.25)] disabled:opacity-60">{installing ? "Installing…" : "Install App"}</button>
             </div>
           </section>
-        </div>
+        </div></PopupPortal>
       ) : null}
     </>
   );

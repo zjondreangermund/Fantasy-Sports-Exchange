@@ -1,3 +1,4 @@
+import {PopupPortal} from "../ui/popup-portal";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -223,7 +224,7 @@ export default function NativeTournamentLeaderboard({ tournament, onClose }: Pro
   };
 
   return (
-    <div className="fixed inset-0 z-[160] flex flex-col bg-[#050713] text-white" role="dialog" aria-modal="true" aria-label={`${tournament?.name || "Tournament"} leaderboard`} data-native-tournament-leaderboard>
+    <PopupPortal><div className="fixed inset-0 z-[160] flex flex-col bg-[#050713] text-white" role="dialog" aria-modal="true" aria-label={`${tournament?.name || "Tournament"} leaderboard`} data-native-tournament-leaderboard>
       <header className="flex shrink-0 items-center gap-3 border-b border-white/[.08] bg-[#080b19] px-3 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]">
         <button type="button" onClick={back} className="grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-white/5" aria-label={selectedEntry ? "Back to leaderboard" : "Close leaderboard"}>
           <ArrowLeft className="h-5 w-5" />
@@ -358,7 +359,7 @@ export default function NativeTournamentLeaderboard({ tournament, onClose }: Pro
           ) : null}
         </div>
       )}
-    </div>
+    </div></PopupPortal>
   );
 }
 

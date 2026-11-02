@@ -1,3 +1,4 @@
+import {PopupPortal} from "../ui/popup-portal";
 import * as React from "react";
 import { Link, useLocation } from "wouter";
 import {
@@ -234,7 +235,7 @@ export default function NativeMobileShell({ children }: NativeMobileShellProps) 
       </nav>
 
       {moreOpen ? (
-        <div className="absolute inset-0 z-[90] flex items-end bg-black/75 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="More Fantasy Arena features">
+        <PopupPortal><div className="absolute inset-0 z-[90] flex items-end bg-black/75 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="More Fantasy Arena features">
           <button className="absolute inset-0" onClick={() => setMoreOpen(false)} aria-label="Close more menu" />
           <section className="arena-more-sheet relative z-10 max-h-[78dvh] w-full overflow-y-auto rounded-t-[2rem] border-t px-3.5 pb-[calc(env(safe-area-inset-bottom,0px)+1.15rem)] pt-3.5">
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-gradient-to-r from-fuchsia-400/40 to-cyan-300/40" />
@@ -269,7 +270,7 @@ export default function NativeMobileShell({ children }: NativeMobileShellProps) 
               Compact app views use the same live website data and actions.
             </div>
           </section>
-        </div>
+        </div></PopupPortal>
       ) : null}
 
       <AppErrorBoundary scope="native-update-prompt" optional><NativeAppUpdatePrompt /></AppErrorBoundary>

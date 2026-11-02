@@ -1,3 +1,4 @@
+import {usePopupLayer} from "./popup-portal";
 "use client"
 
 import * as React from "react"
@@ -56,13 +57,17 @@ interface SheetContentProps
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, ...props }, ref) => (
+>(({ side = "right", className, children, ...props }, ref) => {
+  const {layer, ref: popupRef} = usePopupLayer(ref);
+  return (
   <SheetPortal>
-    <SheetOverlay />
+    <SheetOverlay style={{zIndex:layer}} />
     <SheetPrimitive.Content
-      ref={ref}
+      ref={popupRef}
       className={cn(sheetVariants({ side }), className)}
       {...props}
+      data-arena-popup
+      style={{...props.style,zIndex:layer+1}}
     >
       {children}
       <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
@@ -71,7 +76,8 @@ const SheetContent = React.forwardRef<
       </SheetPrimitive.Close>
     </SheetPrimitive.Content>
   </SheetPortal>
-))
+)
+})
 SheetContent.displayName = SheetPrimitive.Content.displayName
 
 const SheetHeader = ({

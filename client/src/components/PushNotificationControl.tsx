@@ -1,3 +1,4 @@
+import {PopupPortal} from "./ui/popup-portal";
 import * as React from "react";
 import { Capacitor } from "@capacitor/core";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -403,7 +404,7 @@ export default function PushNotificationControl() {
       </button>
 
       {promptOpen ? (
-        <div className="fixed inset-0 z-[240] flex items-end justify-center bg-black/80 p-3 backdrop-blur-md sm:items-center" role="dialog" aria-modal="true" aria-label="Turn on mobile notifications" data-push-enable-dialog>
+        <PopupPortal><div className="fixed inset-0 z-[240] flex items-end justify-center bg-black/80 p-3 backdrop-blur-md sm:items-center" role="dialog" aria-modal="true" aria-label="Turn on mobile notifications" data-push-enable-dialog>
           <button type="button" className="absolute inset-0 cursor-default" onClick={snoozePrompt} aria-label="Close notification prompt" />
           <section className="pointer-events-auto relative z-10 w-full max-w-md rounded-[1.75rem] border border-cyan-300/25 bg-[#080c18] p-5 text-white shadow-[0_30px_100px_rgba(0,0,0,.7)]">
             <button type="button" onClick={snoozePrompt} className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5" aria-label="Close"><X className="h-4 w-4" /></button>
@@ -415,11 +416,11 @@ export default function PushNotificationControl() {
               <button type="button" onClick={() => enableMutation.mutate()} disabled={enableMutation.isPending} className="h-11 touch-manipulation rounded-2xl bg-cyan-300 text-sm font-black text-slate-950 disabled:opacity-50">{enableMutation.isPending ? "Enabling…" : "Enable alerts"}</button>
             </div>
           </section>
-        </div>
+        </div></PopupPortal>
       ) : null}
 
       {testOpen ? (
-        <div className="fixed inset-0 z-[245] flex items-end justify-center bg-black/85 p-3 backdrop-blur-md sm:items-center" role="dialog" aria-modal="true" aria-label="Test app notifications" data-push-self-test-dialog>
+        <PopupPortal><div className="fixed inset-0 z-[245] flex items-end justify-center bg-black/85 p-3 backdrop-blur-md sm:items-center" role="dialog" aria-modal="true" aria-label="Test app notifications" data-push-self-test-dialog>
           <button type="button" className="absolute inset-0 cursor-default" onClick={() => setTestOpen(false)} aria-label="Close notification test" />
           <section className="pointer-events-auto relative z-10 max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-[1.75rem] border border-cyan-300/25 bg-[#080c18] p-4 text-white shadow-[0_30px_100px_rgba(0,0,0,.74)]">
             <button type="button" onClick={() => setTestOpen(false)} className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5" aria-label="Close"><X className="h-4 w-4" /></button>
@@ -444,7 +445,7 @@ export default function PushNotificationControl() {
               <button type="button" onClick={() => testMutation.mutate(testPreset)} disabled={testMutation.isPending} className="h-11 touch-manipulation rounded-2xl bg-gradient-to-r from-cyan-300 via-sky-300 to-violet-400 text-xs font-black text-slate-950 shadow-[0_0_26px_rgba(34,211,238,.22)] disabled:opacity-50">{testMutation.isPending ? "Scheduling…" : "Send in 12 sec"}</button>
             </div>
           </section>
-        </div>
+        </div></PopupPortal>
       ) : null}
     </>
   );

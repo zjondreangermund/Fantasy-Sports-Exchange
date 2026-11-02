@@ -1747,3 +1747,6 @@
     display: none;
   }
 }
+
+/* A passive onboarding hint must never cover a foreground popup. */
+body:has([data-arena-popup]) [data-guided-help-intro] { display: none; }

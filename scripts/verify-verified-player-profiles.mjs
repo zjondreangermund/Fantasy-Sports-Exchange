@@ -65,13 +65,13 @@ expect(!cards.includes("last10: last10.length ? last10 : lastScoresFallback(card
 expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : player.imageUrl"), "Unverified cards must never inherit stale portraits");
 
 includesAll(modal, [
-  'import { createPortal } from "react-dom"',
+  'import {PopupPortal} from "../ui/popup-portal"',
   'import { useSidebar } from "../ui/sidebar"',
   "setOpen(false)",
   "setOpenMobile(false)",
   'classList.add("card-profile-open")',
   "z-[300]",
-  "createPortal(modal, document.body)",
+  "<PopupPortal><div",
   "No verified match records yet",
   "Zero-value placeholder games have been removed",
   'return "API-Football verified"',

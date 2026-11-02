@@ -1,3 +1,4 @@
+import {PopupPortal} from "../ui/popup-portal";
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -338,7 +339,7 @@ export default function NativeMarketPage() {
 
       <div className="mt-4 flex items-center justify-between rounded-2xl border border-violet-300/10 bg-violet-400/[.055] p-3"><div><p className="text-xs font-black">Selling or lending one of yours?</p><p className="mt-0.5 text-[10px] text-slate-500">Open My Cards, tap the card and choose Sell or Loan.</p></div><Link href="/collection"><Button size="sm" variant="outline" className="border-white/10 bg-white/5 text-white">My Cards</Button></Link></div>
 
-      {selected ? <div className="fixed inset-0 z-[120] flex items-end bg-black/70 backdrop-blur-sm">
+      {selected ? <PopupPortal><div className="fixed inset-0 z-[120] flex items-end bg-black/70 backdrop-blur-sm">
         <button className="absolute inset-0" onClick={() => setSelected(null)} aria-label="Close purchase sheet" />
         <section className="relative z-10 max-h-[90dvh] overflow-y-auto w-full rounded-t-[2rem] border-t border-white/10 bg-[#0a0d1c] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-4 shadow-[0_-2rem_5rem_rgba(0,0,0,.7)]">
           <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
@@ -350,9 +351,9 @@ export default function NativeMarketPage() {
           {!selectedIsMine ? <Button type="button" variant="outline" onClick={() => togglePriceWatch.mutate(Number(selected.id))} disabled={togglePriceWatch.isPending} className="mt-2 h-10 w-full rounded-xl border-violet-300/30 bg-violet-400/10 text-violet-100">{watchedIds.has(Number(selected.id)) ? "🔔 Stop watching price" : "🔔 Notify me if price changes"}</Button> : null}
           <Link href="/wallet"><button className="mt-3 flex w-full items-center justify-center gap-2 text-xs font-bold text-slate-500"><WalletCards className="h-4 w-4" />Wallet balance {money(walletBalance)}</button></Link>
         </section>
-      </div> : null}
+      </div></PopupPortal> : null}
 
-      {selectedLoan ? <div className="fixed inset-0 z-[120] flex items-end bg-black/70 backdrop-blur-sm">
+      {selectedLoan ? <PopupPortal><div className="fixed inset-0 z-[120] flex items-end bg-black/70 backdrop-blur-sm">
         <button className="absolute inset-0" onClick={() => setSelectedLoan(null)} aria-label="Close loan sheet" />
         <section className="relative z-10 max-h-[90dvh] overflow-y-auto w-full rounded-t-[2rem] border-t border-white/10 bg-[#0a0d1c] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1.25rem)] pt-4 shadow-[0_-2rem_5rem_rgba(0,0,0,.7)]">
           <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
@@ -364,7 +365,7 @@ export default function NativeMarketPage() {
           {selectedLoanMine ? <div className="mt-4 rounded-2xl border border-violet-300/15 bg-violet-400/[.07] p-3 text-center text-sm font-black text-violet-100">This is your own loan listing. Manage or cancel it from My Cards.</div> : <Button onClick={() => acceptLoanMutation.mutate(selectedLoan)} disabled={acceptLoanMutation.isPending || selectedLoanTotal > walletBalance} className="mt-4 h-12 w-full rounded-2xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><Handshake className="mr-2 h-4 w-4" />{selectedLoanTotal > walletBalance ? "Not enough balance" : acceptLoanMutation.isPending ? "Accepting…" : `Loan for ${money(selectedLoanTotal)}`}</Button>}
           <Link href="/wallet"><button className="mt-3 flex w-full items-center justify-center gap-2 text-xs font-bold text-slate-500"><WalletCards className="h-4 w-4" />Wallet balance {money(walletBalance)}</button></Link>
         </section>
-      </div> : null}
+      </div></PopupPortal> : null}
     </div>
   );
 }
