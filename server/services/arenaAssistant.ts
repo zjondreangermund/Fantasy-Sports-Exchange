@@ -1,3 +1,5 @@
+import {marketFilter,searchAssistantMarket,assistantTradeHistory} from './assistantCommerce.js';
+import {featureHelp} from '../../shared/assistant-features.js';
 import {parseAssistantTask,assistantTaskDefinitions} from '../../shared/assistant-tasks.js';
 import {assistantGameweekLog} from './assistantGameweekLog.js';
 import {investigationContext,investigateEntry,investigateSettlement,footballInvestigation,type AssistantConnections} from './assistantInvestigations.js';
@@ -25,7 +27,7 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
     const refusal=assistantRequestRefusal(question);
     if(refusal)return {...refusal,sections:[],topics:[],notes:[],followUps:[],asOf:new Date().toISOString(),scope:'Capability limit'};
     const topics=assistantTopics(question,input.previousTopics),period=assistantWindow(question,input.period);
-    const context=investigationContext(question,input.context),followUps:string[]=[];
+    const context:any=investigationContext(question,input.context),followUps:string[]=[];
     let target=scopedAssistantUser(input.actorId,input.admin,input.userId);
     if(topics.some(t=>['visitors','overview','support','gameweek'].includes(t))&&!input.admin)throw new AssistantError('Visitor, platform, operational logs and support-inbox reports are available to administrators only.',403);
     const search=assistantUserSearch(question,input.userSearch);
@@ -42,7 +44,7 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
     const knowledge=assistantKnowledge(question),links=[...knowledge.links];
     const add=(title:string,records:any[],note?:string,paged=false)=>{const hasMore=paged&&records.length>100;sections.push({title,rows:records.slice(0,100),note,hasMore});};
     const optional=async(table:string,title:string,query:string,values:any[])=>{if(await exists(table))add(title,await q(query,values));else notes.push(`${title} are not available on this installation.`);};
-    const accountTopics=topics.some(t=>['wallet','activity','entries','cards','loans','notifications','settlement'].includes(t));
+    const accountTopics=topics.some(t=>['wallet','activity','entries','cards','loans','notifications','settlement','trades','profile','rewards','auctions'].includes(t));
     let account:any;
     if(accountTopics){
       account=(await q('SELECT id,name,manager_team_name AS "teamName",created_at AS "joinedAt",is_banned AS "isBanned" FROM app.users WHERE id=$1',[target]))[0];
@@ -53,8 +55,34 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
     if(topics.includes('gameweek')){
       const report=await assistantGameweekLog(q,input.admin,question);answers.push(report.answer);sections.push(...report.sections);followUps.push(...report.followUps);links.push({label:'Admin Sync Centre',href:'/admin'});
     }
+    if(topics.includes('market')){
+      const filter=marketFilter(question,(input.context as any)?.marketplace);context.marketplace=filter;
+      const report=await searchAssistantMarket(q,filter,offset,target);answers.push(report.answer);sections.push(...report.sections);links.push(...report.links);followUps.push('Only Rare cards','Under N$100');
+    }
+    if(topics.includes('trades')){
+      const report=await assistantTradeHistory(q,target,question,period,offset);answers.push(report.answer);sections.push(...report.sections);links.push({label:'Wallet transactions',href:'/wallet'});
+    }
+    if(topics.includes('tournaments')){
+      const rows=await q(`SELECT c.id,c.name,c.tier,c.status,c.game_week AS "gameweek",c.entry_fee AS "entryFee",c.start_date AS "startDate" FROM app.competitions c WHERE coalesce(c.visibility,'public')='public' AND c.name NOT LIKE '[TEST]%' AND c.status::text IN ('open','active') ORDER BY c.game_week,c.id LIMIT 101 OFFSET $1`,[offset]);
+      add('Current public tournaments',rows,'Recorded open/active status is not proof that entry is still allowed. The first-kickoff guard is rechecked at submission.',true);
+      answers.push(rows.length?'These public tournaments are recorded as open or active. Open Play to check the current deadline, select five eligible cards and a captain, then review the entry fee.':'No public tournaments are currently recorded as open or active. Check Play again for the next gameweek.');links.push({label:'Open Play',href:'/competitions'});
+    }
+    if(topics.includes('profile')){add('Account profile',account?[{name:account.name,teamName:account.teamName,joinedAt:account.joinedAt}]:[]);answers.push('Your recorded profile is below. Ask to rename your manager team to prepare a reviewed change.');links.push({label:'Account',href:'/account'});}
+    if(topics.includes('auctions')){
+      if(await exists('auctions')){
+        const rows=await q(`SELECT a.id,p.name AS player,p.team,pc.rarity,a.start_price AS "startPrice",a.buy_now_price AS "buyNowPrice",a.ends_at AS "endsAt",(SELECT max(b.amount) FROM app.auction_bids b WHERE b.auction_id=a.id) AS "highestBid" FROM app.auctions a JOIN app.player_cards pc ON pc.id=a.card_id JOIN app.players p ON p.id=pc.player_id WHERE a.status='live' AND a.starts_at<=now() AND a.ends_at>now() ORDER BY a.ends_at,a.id LIMIT 101 OFFSET $1`,[offset]);add('Live card auctions',rows,'Current public auction snapshot; not a bid reservation.',true);
+        add('Your auction bids',await q(`SELECT b.id,b.auction_id AS "auctionId",b.amount,b.created_at AS "createdAt",a.status FROM app.auction_bids b JOIN app.auctions a ON a.id=b.auction_id WHERE b.bidder_user_id=$1 ORDER BY b.created_at DESC,b.id DESC LIMIT 101 OFFSET $2`,[target,offset]),'Your latest bids across all dates.',true);
+        answers.push(rows.length?'Current live auctions and your recorded bids are below. Check the auction page for its latest price and deadline before confirming a bid.':'No card auctions currently meet the live status and deadline checks. Your recorded bids, if any, are below.');
+      }else answers.push('Auction records are unavailable on this installation.');
+      links.push({label:'Auctions',href:'/auctions'});
+    }
+    if(topics.includes('rewards')){
+      add('Recorded tournament prizes',await q(`SELECT e.id AS "entryId",c.name,c.game_week AS "gameweek",c.status,e.rank,e.prize_amount AS "recordedPrizeAmount",e.prize_card_id AS "prizeCardId" FROM app.competition_entries e JOIN app.competitions c ON c.id=e.competition_id WHERE e.user_id=$1 AND (coalesce(e.prize_amount,0)>0 OR e.prize_card_id IS NOT NULL) ORDER BY e.joined_at DESC,e.id DESC LIMIT 101 OFFSET $2`,[target,offset]),'Recorded prize amounts/card IDs are evidence of allocation, not proof of cash payout or delivery.',true);
+      await optional('competition_prize_awards','Prize Vault awards',`SELECT entry_id AS "entryId",prize_title AS title,prize_value AS value,status,created_at AS "createdAt" FROM app.competition_prize_awards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[target]);
+      answers.push('Recorded prizes and award statuses are below. Open Trophy Cabinet to check claim options and delivery status; a rank alone does not establish a paid prize.');links.push({label:'Trophy Cabinet',href:'/trophy-cabinet'});
+    }
     if(topics.includes('football')){
-      try{const report=await footballInvestigation(connections,context);answers.push(report.answer);sections.push(...report.sections);followUps.push(...report.followUps);}
+      try{const owned=/\bmy (?:team|squad|players|cards)\b/i.test(question)?await q('SELECT DISTINCT p.name FROM app.player_cards pc JOIN app.players p ON p.id=pc.player_id WHERE pc.owner_id=$1',[target]):undefined;const report=await footballInvestigation(connections,context,question,owned?.map(r=>r.name));answers.push(report.answer);sections.push(...report.sections);followUps.push(...report.followUps);}
       catch{answers.push('Current football availability could not be verified. Try again shortly; older reports are not proof of current absence.');}
       links.push({label:'Premier League availability',href:'/premier-league'});
     }
@@ -157,7 +185,7 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
     }
     if(topics.includes('loans')){
       await optional('card_loans','Loan contracts',`SELECT id,card_id AS "cardId",CASE WHEN original_owner_id=$1 THEN 'owner' ELSE 'borrower' END AS role,status,price_per_gameweek AS "pricePerGameweek",gameweeks,gross_amount AS "grossAmount",fee_amount AS "feeAmount",starts_at AS "startsAt",expires_at AS "expiresAt",returned_at AS "returnedAt" FROM app.card_loans WHERE original_owner_id=$1 OR borrower_user_id=$1 ORDER BY created_at DESC LIMIT 100`,[target]);
-      answers.push('Latest loan contract statuses, recorded charges and expiry dates are below. The assistant does not create or cancel loans.');links.push({label:'Marketplace loans',href:'/marketplace'});
+      answers.push('Latest loan contract statuses, recorded charges and expiry dates are below. To accept an offer or manage a loan, use Marketplace’s loan controls. Chat can search open loan offers; it does not accept or cancel a loan for you.');links.push({label:'Marketplace loans',href:'/marketplace'});
     }
     if(topics.includes('notifications')){
       add('Notifications',await q(`SELECT id,title,message,read,created_at AS "createdAt" FROM app.notifications WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 101 OFFSET $2`,[target,offset]),'Latest inbox records across all dates. An inbox record alone does not prove push delivery.',true);
@@ -185,10 +213,12 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
     }
     if(topics.includes('help')){
       answers.push(...knowledge.answers);
-      if(!knowledge.answers.length)answers.push('I can’t answer that reliably with the information and tools connected to me. Please ask about a specific recorded account issue or site feature.');
-      add('Help sources',knowledge.sources.map(source=>({source})));
+      const features=featureHelp(question);
+      if(!knowledge.answers.length&&features.length){answers.push(...features.map(f=>f.label+': '+f.description));links.push(...features.map(f=>({label:f.label,href:f.href})));}
+      if(!knowledge.answers.length&&!features.length)answers.push('I can’t answer that reliably with the connected information. Tell me which site feature or record you mean, or ask “What can you do?” to see the available tools.');
+      if(knowledge.sources.length)add('Help sources',knowledge.sources.map(source=>({source})));
     }
     const hasMore=sections.some(s=>s.hasMore);
-    return {context,followUps:[...new Set(followUps)],answer:[...new Set(answers)].join('\n\n'),sections,notes,links:[...new Map(links.filter(link=>input.admin||link.href!=='/admin').map(link=>[link.href,link])).values()],account,topics,period,asOf:new Date().toISOString(),nextOffset:hasMore&&offset<10000?offset+100:null,offset,scope:account?`Account ${account.teamName||account.name||account.id}`:'Platform report',limits:'Up to 100 rows per section. Current balances and latest-record sections are labelled separately from period-specific records. Totals and wallet reconciliation use their full stated scope.'};
+    return {context,followUps:[...new Set(followUps)],answer:[...new Set(answers)].join('\n\n'),sections,notes,links:[...new Map(links.filter(link=>input.admin||link.href!=='/admin').map(link=>[link.href,link])).values()],account,topics,period,asOf:new Date().toISOString(),nextOffset:hasMore&&offset<10000?offset+100:null,offset,scope:account?`Account ${account.teamName||account.name||account.id}`:topics.includes('help')?'Site help':topics.includes('market')||topics.includes('tournaments')||topics.includes('football')?'Live site information':'Account report',limits:'Up to 100 rows per section. Current balances and latest-record sections are labelled separately from period-specific records. Totals and wallet reconciliation use their full stated scope.'};
   };
 }

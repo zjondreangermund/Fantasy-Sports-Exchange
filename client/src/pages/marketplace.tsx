@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import {useSearch} from "wouter";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { PremiumFootballCard } from "../components/cards";
@@ -147,7 +148,9 @@ function SmallStat({ label, value }: { label: string; value: string }) {
 
 export default function MarketplacePage() {
   const { toast } = useToast();
-  const [search, setSearch] = useState("");
+  const urlSearch=useSearch();
+  const [search, setSearch] = useState(()=>new URLSearchParams(urlSearch).get('search')?.slice(0,80)||'');
+  useEffect(()=>{setSearch(new URLSearchParams(urlSearch).get('search')?.slice(0,80)||'');},[urlSearch]);
   const [rarityFilter, setRarityFilter] = useState<RarityFilter>("all");
   const [buyCard, setBuyCard] = useState<PlayerCardWithPlayer | null>(null);
 
