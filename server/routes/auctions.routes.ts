@@ -1,3 +1,5 @@
+import {alignAuctionPositions} from "../services/tournamentPositions.js";
+import {fplApi} from "../services/fplApi.js";
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
@@ -90,7 +92,8 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
 
   app.get("/api/auctions/active", async (_req, res) => {
     try {
-      return res.json(await listActiveAuctions());
+      const [auctions, bootstrap] = await Promise.all([listActiveAuctions(), fplApi.bootstrap().catch(() => null)]);
+      return res.json(alignAuctionPositions(auctions, bootstrap));
     } catch (error: any) {
       console.error("Failed to list active auctions:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch auctions" });
@@ -101,7 +104,8 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
   app.get("/api/auctions/packs/active", async (_req, res) => {
     try {
       await ensurePackAuctionRuntimeSchema();
-      return res.json(await listActivePackAuctions());
+      const [auctions, bootstrap] = await Promise.all([listActivePackAuctions(), fplApi.bootstrap().catch(() => null)]);
+      return res.json(alignAuctionPositions(auctions, bootstrap));
     } catch (error: any) {
       console.error("Failed to list active pack auctions:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch pack auctions" });
@@ -207,7 +211,7 @@ export function registerAuctionsRoutes(app: Express, deps: RegisterAuctionsRoute
       if (!Number.isInteger(auctionId) || auctionId <= 0) return res.status(400).json({ message: "Valid auction required" });
       const auction = await getAuctionDetails(auctionId);
       if (!auction) return res.status(404).json({ message: "Auction not found" });
-      return res.json(auction);
+      return res.json(alignAuctionPositions(auction, await fplApi.bootstrap().catch(() => null)));
     } catch (error: any) {
       console.error("Failed to fetch auction:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch auction" });

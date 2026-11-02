@@ -1,3 +1,4 @@
+import {createTournamentPositionResolver} from "../services/tournamentPositions.js";
 import type { Express } from "express";
 import { db } from "../db.js";
 import { auditLogs, idempotencyKeys, playerCards, transactions, users } from "../../shared/schema.js";
@@ -271,6 +272,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         loadApiFootballGameweekScoringContext(Number(entry.gameWeek || 0)).catch(() => null),
         fplApi.bootstrap().catch(() => null),
       ]);
+      const positionFor = createTournamentPositionResolver(entryBootstrap);
       const targetEvent = entryBootstrap?.events?.find((event: any) => Number(event.id) === Number(entry.gameWeek));
       const awaitingGameweek = Boolean(targetEvent?.deadline_time && new Date(String(targetEvent.deadline_time)).getTime() > Date.now());
       const apiFootballDirectory = apiScoringContext?.directory || await loadApiFootballPlayerDirectory().catch(() => []);
@@ -287,9 +289,11 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           ? resolveApiFootballGameweekPlayer(card, apiScoringContext)
           : null;
         const apiPlayer = resolved?.player || resolveApiFootballPlayer(card, apiFootballDirectory);
-        const position = apiPlayer?.position || String(card.position || "") || "MID";
+        const position = positionFor(card, apiPlayer?.position);
+        // Match-stat scoring remains API-Football based; it must not overwrite the fantasy roster label.
+        const scoringPosition = apiPlayer?.position || String(card.position || "") || "MID";
         const calculated = resolved?.stats
-          ? calculatePlayerScore(resolved.stats, position)
+          ? calculatePlayerScore(resolved.stats, scoringPosition)
           : null;
         const storedScore = savedScores.get(Number(card.cardId));
         const saved = storedScore && snapshot ? storedScore : null;
