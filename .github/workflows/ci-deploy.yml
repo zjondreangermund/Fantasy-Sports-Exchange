@@ -36,7 +36,7 @@ jobs:
         run: npm run build
 
       - name: Verify tournament positions after build transforms
-        run: npm run test:positions
+        run: npm run test:positions && npm run test:popups
 
   deploy:
     name: Deploy (Railway Hook)

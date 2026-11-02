@@ -1,5 +1,5 @@
+import {PopupPortal} from "../ui/popup-portal";
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { X, Activity, BarChart3, CalendarDays, Shield, Star, TrendingUp, Clock, Award, Zap } from "lucide-react";
 import { type PlayerCardWithPlayer } from "../../../../shared/schema";
@@ -201,7 +201,7 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
     : "—";
 
   const modal = (
-    <div
+    <PopupPortal><div
       className="player-profile-modal fixed inset-0 z-[300] grid place-items-center overflow-hidden bg-black/88 p-3 backdrop-blur-xl sm:p-6"
       role="dialog"
       aria-modal="true"
@@ -313,10 +313,10 @@ export default function CardProfileModal({ card, onClose }: { card: PlayerCardWi
           </div>
         </div>
       </div>
-    </div>
+    </div></PopupPortal>
   );
 
-  return typeof document !== "undefined" ? createPortal(modal, document.body) : modal;
+  return modal;
 }
 
 function HeroStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {

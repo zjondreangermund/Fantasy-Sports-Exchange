@@ -1,3 +1,4 @@
+import {usePopupLayer} from "./popup-portal";
 "use client"
 
 import * as React from "react"
@@ -12,9 +13,11 @@ const HoverCardTrigger = HoverCardPrimitive.Trigger
 const HoverCardContent = React.forwardRef<
   React.ElementRef<typeof HoverCardPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof HoverCardPrimitive.Content>
->(({ className, align = "center", sideOffset = 4, ...props }, ref) => (
+>(({ className, align = "center", sideOffset = 4, ...props }, ref) => {
+  const {layer, ref: popupRef} = usePopupLayer(ref);
+  return (
   <HoverCardPrimitive.Content
-    ref={ref}
+    ref={popupRef}
     align={align}
     sideOffset={sideOffset}
     className={cn(
@@ -22,8 +25,11 @@ const HoverCardContent = React.forwardRef<
       className
     )}
     {...props}
+    data-arena-popup
+    style={{...props.style,zIndex:layer+1}}
   />
-))
+)
+})
 HoverCardContent.displayName = HoverCardPrimitive.Content.displayName
 
 export { HoverCard, HoverCardTrigger, HoverCardContent }

@@ -1,4 +1,5 @@
-import {createPortal} from "react-dom";
+import {isTopPopup} from "../lib/popup-stack";
+import {PopupPortal} from "./ui/popup-portal";
 import "./chat-workspace.css";
 import CommunityMentionComposer from "./CommunityMentionComposer";
 import {communityMentionHandle} from "../../../shared/community-mentions";
@@ -144,7 +145,7 @@ export default function FloatingSupportWidget() {
   const [chatViewport,setChatViewport]=useState(()=>({height:window.visualViewport?.height||window.innerHeight,top:window.visualViewport?.offsetTop||0}));
   useEffect(()=>{const viewport=window.visualViewport;const resize=()=>setChatViewport({height:viewport?.height||window.innerHeight,top:viewport?.offsetTop||0});window.addEventListener('resize',resize);viewport?.addEventListener('resize',resize);viewport?.addEventListener('scroll',resize);return()=>{window.removeEventListener('resize',resize);viewport?.removeEventListener('resize',resize);viewport?.removeEventListener('scroll',resize);};},[]);
   useEffect(()=>{if(!open)return;const previousFocus=document.activeElement as HTMLElement|null;const previousOverflow=document.body.style.overflow;document.body.style.overflow='hidden';const frame=requestAnimationFrame(()=>panelRef.current?.querySelector<HTMLButtonElement>('[aria-label="Close floating panel"]')?.focus());
-    const keydown=(event:KeyboardEvent)=>{if(event.defaultPrevented)return;if(event.key==='Escape'){event.preventDefault();setOpen(false);return;}if(event.key==='Tab'){const controls=[...panelRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href],summary,[tabindex="0"]')||[]].filter(element=>element.getClientRects().length);const first=controls[0],last=controls[controls.length-1];if(event.shiftKey&&(document.activeElement===first||!panelRef.current?.contains(document.activeElement))){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(document.activeElement===last||!panelRef.current?.contains(document.activeElement))){event.preventDefault();first?.focus();}}};
+    const keydown=(event:KeyboardEvent)=>{if(event.defaultPrevented||!isTopPopup(panelRef.current))return;if(event.key==='Escape'){event.preventDefault();setOpen(false);return;}if(event.key==='Tab'){const controls=[...panelRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href],summary,[tabindex="0"]')||[]].filter(element=>element.getClientRects().length);const first=controls[0],last=controls[controls.length-1];if(event.shiftKey&&(document.activeElement===first||!panelRef.current?.contains(document.activeElement))){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(document.activeElement===last||!panelRef.current?.contains(document.activeElement))){event.preventDefault();first?.focus();}}};
     document.addEventListener('keydown',keydown);return()=>{cancelAnimationFrame(frame);document.removeEventListener('keydown',keydown);document.body.style.overflow=previousOverflow;if(previousFocus?.isConnected)previousFocus.focus();};
   },[open]);
   const [mode, setMode] = useState<WidgetMode>("community");
@@ -506,8 +507,7 @@ export default function FloatingSupportWidget() {
   return (
     <>
       <MarketplaceListingActivity />
-      {open ? createPortal(
-        <div className="arena-chat-overlay" style={{height:chatViewport.height,top:chatViewport.top}} onMouseDown={event=>{if(event.target===event.currentTarget)setOpen(false);}}>
+      {open ? <PopupPortal>{<div className="arena-chat-overlay" style={{height:chatViewport.height,top:chatViewport.top}} onMouseDown={event=>{if(event.target===event.currentTarget)setOpen(false);}}>
         <Card ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="arena-chat-title" className={`arena-chat-panel ${mode==='community'?'arena-chat-panel--community':''} flex min-h-0 flex-col overflow-hidden border-white/15 bg-slate-950 text-white shadow-2xl`}>
           <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-white/[.035] px-3 py-2">
             <div className="min-w-0"><div className="flex items-center gap-2"><span className="relative flex h-2.5 w-2.5"><span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-55 ${streamConnected ? "bg-emerald-300" : "bg-amber-300"}`} /><span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${streamConnected ? "bg-emerald-400" : "bg-amber-400"}`} /></span><p id="arena-chat-title" className="truncate text-sm font-black">{mode === "community" ? "Community Live" : adminChat ? "Admin Assistant" : "Member Help"}</p>{adminCheck?.isAdmin && mode === "community" ? <span className="rounded-full bg-violet-300/15 px-2 py-0.5 text-[9px] font-black text-violet-200">ADMIN</span> : null}</div><p className="mt-0.5 truncate text-[11px] text-white/45">{mode === "community" ? streamConnected ? "Live · messages expire after 24 hours" : "Reconnecting · 24-hour history" : adminChat ? "Private administrator investigations" : "Private support for your own account"}</p></div>
@@ -561,8 +561,7 @@ export default function FloatingSupportWidget() {
             <ArenaAssistantPanel key={`${currentUserId}:${adminChat?'admin':'member'}`} userId={currentUserId} admin={adminChat}/>
           )}
         </Card>
-        </div>,document.body
-      ) : null}
+        </div>}</PopupPortal> : null}
 
       {!open?<div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-3 z-[90] sm:bottom-4 sm:right-4" data-chat-launchers>
       <div className="flex justify-end gap-2"><Button size="icon" aria-label="Open Arena help" className="h-10 w-10 rounded-full border border-violet-200/20 bg-violet-500/75 shadow-xl backdrop-blur-xl hover:bg-violet-400 sm:h-11 sm:w-11" onClick={() => { setMode("help"); setOpen(true); }}><HelpCircle className="h-4 w-4" /></Button><Button size="icon" aria-label="Open Community Live" className="relative h-11 w-11 rounded-full border border-cyan-200/25 bg-cyan-400/80 text-slate-950 shadow-xl backdrop-blur-xl hover:bg-cyan-300 sm:h-12 sm:w-12" onClick={() => { if (latestMention && !open) { void openCommunityMention(latestMention); return; } setMode("community"); setOpen((value) => mode === "community" ? !value : true); }}>{open && mode === "community" ? <Bot className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}{(unreadMentions.length || unreadCount) && !(open && mode === "community") ? <span className={`absolute -right-1 -top-1 min-w-5 rounded-full px-1 text-[10px] font-black leading-5 text-white ${unreadMentions.length ? "bg-amber-500" : "bg-rose-500"}`}>{Math.min(99, unreadMentions.length || unreadCount)}</span> : null}</Button></div>

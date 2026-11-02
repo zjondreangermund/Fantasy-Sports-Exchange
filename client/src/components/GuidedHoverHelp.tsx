@@ -224,6 +224,7 @@ export default function GuidedHoverHelp() {
       {introVisible ? (
         <div
           data-guided-help-popup
+          data-guided-help-intro
           className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] right-3 w-[min(360px,calc(100vw-24px))] rounded-2xl border border-cyan-200/25 bg-slate-950/88 p-4 text-white shadow-[0_20px_65px_rgba(0,0,0,.62)] backdrop-blur-2xl sm:bottom-4 sm:right-4"
           style={{ zIndex: HELP_LAYER - 1 }}
         >

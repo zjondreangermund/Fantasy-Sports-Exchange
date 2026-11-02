@@ -1,3 +1,4 @@
+import {PopupPortal} from "../ui/popup-portal";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Crown, RefreshCcw, X, Clock3 } from "lucide-react";
@@ -67,7 +68,7 @@ export function EntryLineupEditor({ entry, competition, cards, allEntries, onClo
     },
     onError:(error:any)=>toast({title:"Could not update team",description:error?.message||"Try again.",variant:"destructive"}),
   });
-  return <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 px-3 py-6 text-white" role="dialog" aria-modal="true" aria-label="Edit tournament lineup">
+  return <PopupPortal><div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 px-3 py-6 text-white" role="dialog" aria-modal="true" aria-label="Edit tournament lineup">
     <section className="flex max-h-[94dvh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-cyan-400/40 bg-[#080b1b] shadow-[0_0_70px_rgba(124,58,237,.3)]">
       <header className="flex items-start justify-between gap-3 border-b border-white/10 bg-gradient-to-r from-violet-900/40 to-cyan-900/30 p-4">
         <div><h2 className="text-xl font-black">Edit submitted team</h2><p className="mt-1 text-xs text-white/70">{competition.name} · GW{competition.gameWeek ?? competition.game_week}</p></div>
@@ -100,5 +101,5 @@ export function EntryLineupEditor({ entry, competition, cards, allEntries, onClo
         <Button type="button" onClick={()=>save.mutate()} disabled={!canEdit||!valid||save.isPending} className="bg-gradient-to-r from-fuchsia-600 to-cyan-400 font-black text-white disabled:opacity-40"><RefreshCcw className="mr-2 h-4 w-4"/>{save.isPending?"Saving…":"Save changes"}</Button>
       </footer>
     </section>
-  </div>;
+  </div></PopupPortal>;
 }

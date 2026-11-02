@@ -1,3 +1,4 @@
+import {PopupPortal} from "../ui/popup-portal";
 import CaptainRequiredDialog from "../CaptainRequiredDialog";
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -397,7 +398,7 @@ export default function NativePlayPage() {
       )}
 
       {selected ? (
-        <div className="fixed inset-0 z-[140] flex flex-col bg-[#050713] text-white" role="dialog" aria-modal="true" aria-label={`Enter ${selected.name}`}>
+        <PopupPortal><div className="fixed inset-0 z-[140] flex flex-col bg-[#050713] text-white" role="dialog" aria-modal="true" aria-label={`Enter ${selected.name}`}>
           <header className="flex shrink-0 items-center gap-3 border-b border-white/[.08] bg-[#080b19] px-3 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]">
             <button onClick={() => setSelected(null)} className="grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{selected.name}</p><p className="mt-0.5 text-[10px] font-bold uppercase tracking-[.12em] text-slate-500">{String(selected.tier || "common").toUpperCase()} · 5 cards · choose captain</p></div>
@@ -447,7 +448,7 @@ export default function NativePlayPage() {
               <button onClick={() => { if (!captainId) setCaptainPrompt(true); else joinMutation.mutate(); }} disabled={joinMutation.isPending} className={`rounded-2xl px-5 py-3 text-xs font-black disabled:cursor-not-allowed disabled:opacity-35 ${toneFor(selected.tier).button}`}>{joinMutation.isPending ? "Submitting…" : Number(selected.entryFee || 0) > 0 ? `Enter · ${money(selected.entryFee)}` : "Enter FREE"}</button>
             </div>
           </footer>
-        </div>
+        </div></PopupPortal>
       ) : null}
     </div>
   );

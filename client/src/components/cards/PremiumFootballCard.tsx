@@ -1,5 +1,5 @@
+import {PopupPortal} from "../ui/popup-portal";
 import { memo, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Info, X } from "lucide-react";
 import { type PlayerCardData } from "./types";
@@ -108,8 +108,7 @@ function PremiumFootballCardBase({
   const directInteraction = Boolean(onClick);
 
   const intelligenceModal = showIntelligence && apiFootballId > 0 && typeof document !== "undefined"
-    ? createPortal(
-      <div className="fixed inset-0 z-[500] overflow-y-auto bg-black/85 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-label={`${profilePlayer.name || "Player"} intelligence`} onClick={() => setShowIntelligence(false)}>
+    ? <PopupPortal>{<div className="fixed inset-0 z-[500] overflow-y-auto bg-black/85 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-label={`${profilePlayer.name || "Player"} intelligence`} onClick={() => setShowIntelligence(false)}>
         <div className="mx-auto mt-8 w-full max-w-3xl rounded-3xl border border-white/10 bg-slate-950 p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
           <div className="mb-4 flex items-center justify-between gap-3">
             <div><div className="text-xs font-black uppercase tracking-[.18em] text-cyan-300">API-Football Pro</div><h2 className="text-xl font-black text-white">{profilePlayer.name || "Player"} Intelligence</h2></div>
@@ -117,9 +116,7 @@ function PremiumFootballCardBase({
           </div>
           <PlayerIntelligencePanel playerId={apiFootballId} />
         </div>
-      </div>,
-      document.body,
-    )
+      </div>}</PopupPortal>
     : null;
 
   return (

@@ -1,3 +1,4 @@
+import {PopupPortal} from "../ui/popup-portal";
 import * as React from "react";
 import { Loader2, RefreshCw, ShieldCheck, Sparkles, X } from "lucide-react";
 import PushNotificationControl from "../PushNotificationControl";
@@ -164,7 +165,7 @@ export default function NativeAppUpdatePrompt() {
       </div>
 
       {showUpdate && release ? (
-        <div className="absolute inset-0 z-[120] flex items-end bg-black/75 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Fantasy Arena app update">
+        <PopupPortal><div className="absolute inset-0 z-[120] flex items-end bg-black/75 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Fantasy Arena app update">
           <section className="relative w-full overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-[#0a0d1c] p-5 shadow-[0_2rem_6rem_rgba(0,0,0,.7)]">
             <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_25%_0%,rgba(34,211,238,.18),transparent_48%),radial-gradient(circle_at_85%_0%,rgba(139,92,246,.2),transparent_50%)]" />
             {!busy ? (
@@ -212,7 +213,7 @@ export default function NativeAppUpdatePrompt() {
               ) : null}
             </div>
           </section>
-        </div>
+        </div></PopupPortal>
       ) : null}
     </>
   );

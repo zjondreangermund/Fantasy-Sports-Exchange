@@ -1,3 +1,4 @@
+import {usePopupLayer} from "./popup-portal";
 "use client"
 
 import * as React from "react"
@@ -37,22 +38,27 @@ DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName
 const DrawerContent = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => {
+  const {layer, ref: popupRef} = usePopupLayer(ref);
+  return (
   <DrawerPortal>
-    <DrawerOverlay />
+    <DrawerOverlay style={{zIndex:layer}} />
     <DrawerPrimitive.Content
-      ref={ref}
+      ref={popupRef}
       className={cn(
         "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
         className
       )}
       {...props}
+      data-arena-popup
+      style={{...props.style,zIndex:layer+1}}
     >
       <div className="mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted" />
       {children}
     </DrawerPrimitive.Content>
   </DrawerPortal>
-))
+)
+})
 DrawerContent.displayName = "DrawerContent"
 
 const DrawerHeader = ({
