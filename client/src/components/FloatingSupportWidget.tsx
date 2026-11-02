@@ -51,7 +51,7 @@ type CurrentUser = {
   name?: string | null;
   email?: string | null;
 };
-type AdminCheck = { isAdmin: boolean };
+type AdminCheck = { isAdmin: boolean; userId?: string };
 type MarketplaceListing = {
   id?: number;
   cardId?: number;
@@ -172,10 +172,11 @@ export default function FloatingSupportWidget() {
     () => ["/community-live/messages", currentUserId || "anonymous"] as const,
     [currentUserId],
   );
-  const { data: adminCheck } = useQuery<AdminCheck>({
-    queryKey: ["/api/assistant/access",currentUserId],enabled:Boolean(currentUserId),retry:false,staleTime:0,refetchInterval:30000,
-    queryFn:async()=>{try{const response=await fetch('/api/assistant/access',{credentials:'include',cache:'no-store'});if(!response.ok)return {isAdmin:false};const data=await response.json();return {isAdmin:data.userId===currentUserId&&data.isAdmin===true};}catch{return {isAdmin:false};}},
+  const { data: accessCheck, isError: accessError } = useQuery<AdminCheck>({
+    queryKey: ["/api/assistant/access",currentUserId],enabled:Boolean(currentUserId),retry:false,staleTime:0,gcTime:0,refetchOnWindowFocus:"always",refetchInterval:30000,
+    queryFn:async()=>{try{const response=await fetch('/api/assistant/access',{credentials:'include',cache:'no-store'});if(!response.ok)return {isAdmin:false};const data=await response.json();return {userId:data.userId,isAdmin:data.userId===currentUserId&&data.isAdmin===true};}catch{return {isAdmin:false};}},
   });
+  const adminCheck={isAdmin:Boolean(!accessError&&currentUserId&&accessCheck?.userId===currentUserId&&accessCheck?.isAdmin===true)};
   const adminChat=mode==='admin-help'&&adminCheck?.isAdmin===true;
   useEffect(()=>{setOpen(false);setMode('community');setTargetMessage(null);},[currentUserId]);
   useEffect(()=>{if(mode==='admin-help'&&!adminCheck?.isAdmin)setMode('help');},[adminCheck?.isAdmin,mode]);

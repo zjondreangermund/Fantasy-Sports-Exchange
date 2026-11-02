@@ -89,12 +89,25 @@ export async function investigateSettlement(q:AssistantQuery,target:string,admin
   if(!scoreTable)issues.push('Player score table is unavailable.');
   return {answer:`${issues.join(' ')||'No blockers found in the connected snapshot.'} ${c.status==='completed'?'Tournament status is completed; confirm actual prize delivery separately.':'The authoritative settlement route must refresh and recheck provider scoring before issuing prizes.'} No settlement was triggered.`,sections:[{title:'Settlement evidence',note:admin?'Current tournament-wide scoring and fixture snapshot.':'Your entries only. Other entrants’ scoring records and settlement snapshots are excluded.',rows:[{...c,...summary,fixtureContextVerified:contextKnown,unfinishedFixtures:contextKnown?unfinished.length:null}]},{title:'Missing or provisional scoring',rows:scores.slice(0,100),hasMore:scores.length>100},{title:'Unfinished fixtures',rows:unfinished.map(f=>({id:f.id,kickoff:f.kickoff_time,started:f.started,finished:f.finished}))}],followUps:[]};
 }
-export async function footballInvestigation(connections:AssistantConnections,context:InvestigationContext){
+export async function footballInvestigation(connections:AssistantConnections,context:InvestigationContext,question='',ownedNames?:string[]){
   if(!connections.availability)return {answer:'Live football availability is unavailable.',sections:[],followUps:[]};
   const data=await connections.availability();
-  const term=String(context.playerSearch||'').toLowerCase();
-  const match=(r:any)=>!term||String(r.player?.id)===term||String(r.player?.name||'').toLowerCase().includes(term)||String(r.team?.name||'').toLowerCase().includes(term);
-  const rows=(items:any[])=>items.filter(match).slice(0,100).map(r=>({playerId:r.player?.id,player:r.player?.name,team:r.team?.name,status:r.availabilityStatus||r.player?.type,reason:r.player?.reason,fixtureId:r.fixture?.id,kickoff:r.fixture?.date}));
+  const normalize=(value:unknown)=>String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const all=[...(data.injuries||[]),...(data.confirmedAvailable||[]),...(data.historicalInjuries||[])];
+  const clubs=[...new Set<string>(all.map((r:any)=>String(r.team?.name||'')).filter(Boolean))];
+  const namedClub=clubs.sort((a,b)=>b.length-a.length).find(club=>(' '+normalize(question)+' ').includes(' '+normalize(club)+' '));
+  const broad=/\b(?:team availability|all (?:players|injuries|availability|clubs)|my (?:team|squad|players|cards))\b/i.test(question);
+  const term=normalize(namedClub||(!broad?context.playerSearch:''));
+  const owned=ownedNames?.map(normalize);
+  const match=(r:any)=>(!owned||owned.includes(normalize(r.player?.name)))&&(!term||String(r.player?.id)===term||normalize(r.player?.name).includes(term)||normalize(r.team?.name).includes(term));
+  const rows=(items:any[])=>[...new Map(items.filter(match).map(r=>[String(r.player?.id||r.player?.name)+':'+String(r.fixture?.id),{playerId:r.player?.id,player:r.player?.name,team:r.team?.name,status:r.availabilityStatus||r.player?.type,reason:r.player?.reason,fixtureId:r.fixture?.id,kickoff:r.fixture?.date}])).values()];
   const current=rows(data.injuries||[]),confirmed=rows(data.confirmedAvailable||[]),history=rows(data.historicalInjuries||[]);
-  return {answer:`${term?`Matching “${context.playerSearch}”: `:''}${current.length} current absence reports; ${confirmed.length} confirmed match selections; ${history.length} earlier or superseded reports shown. Confirmed selections override older injury flags for the same fixture. No report is not proof of fitness. ${data.warning||''}`,sections:[{title:'Football source freshness',rows:[{checkedAt:data.asOf,injurySourceUpdatedAt:data.sourceUpdatedAt,stale:Boolean(data.stale),lineupSources:data.lineupSourceUpdatedAt}]},{title:'Current fixture absences',rows:current},{title:'Confirmed starters and bench',rows:confirmed},{title:'Earlier or superseded reports',rows:history}],followUps:['Is player “…” starting?']};
+  const sections:any[]=[{title:'Football source freshness',rows:[{checkedAt:data.asOf,injurySourceUpdatedAt:data.sourceUpdatedAt,stale:Boolean(data.stale),lineupSources:data.lineupSourceUpdatedAt}]}];
+  if(broad||namedClub){
+    const groups=[...new Set([...current,...confirmed].map((r:any)=>String(r.team||'Unknown club')))];
+    for(const club of groups){const records=[...current.map((r:any)=>({...r,report:'Current absence'})),...confirmed.map((r:any)=>({...r,report:'Confirmed selection'}))].filter((r:any)=>r.team===club);sections.push({title:club+' availability',rows:records.slice(0,100),note:records.length+' current fixture records; shown once per player and fixture.'});}
+    if(!groups.length)sections.push({title:'Current availability reports',rows:[]});
+    sections.push({title:'Earlier or superseded reports',rows:history.slice(0,100),note:history.length+' matching earlier records. These do not prove a current absence.'});
+  }else sections.push({title:'Current fixture absences',rows:current.slice(0,100)},{title:'Confirmed starters and bench',rows:confirmed.slice(0,100)},{title:'Earlier or superseded reports',rows:history.slice(0,100)});
+  return {answer:`${owned?'For players in your collection: ':term?`Matching “${namedClub||context.playerSearch}”: `:''}${current.length} current absence reports; ${confirmed.length} confirmed match selections; ${history.length} earlier or superseded reports. ${broad&&!owned&&!namedClub?'Clubs are grouped below; name a club or ask “My squad availability” to narrow the results. ':''}Confirmed selections override older injury flags for the same fixture. No report is not proof of fitness. ${data.stale?'The provider snapshot is marked stale; do not treat it as a fresh confirmation. ':''}${data.warning||''}`,sections,followUps:['My squad availability','Team availability']};
 }

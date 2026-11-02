@@ -20,6 +20,7 @@ export function parseAssistantTask(text:string,previous?:unknown):AssistantTaskD
   const q=text.toLowerCase().replace(/[’‘]/g,"'").trim();
   // Questions about rules, past failures or current records must remain read-only.
   if(/^(?:why|how|where|when|what|which|is|are|did|has|have)\b/.test(q))return null;
+  if(/^(?:show|find|search|look up|check|tell)\b/.test(q))return null;
   let kind:AssistantTaskKind|undefined;
   if(/(?:rename|change|update|set).*(?:team name|manager name)|rename my team/.test(q))kind='team_rename';
   else if(/(?:submit|enter|join|register|put in).*(?:team|lineup|tournament|competition)|(?:pick|choose|build|make).*(?:team|lineup).*for me/.test(q))kind='team_submit';
@@ -27,7 +28,7 @@ export function parseAssistantTask(text:string,previous?:unknown):AssistantTaskD
   else if(/claim|collect|mint/.test(q)&&/weekly|free common|login card/.test(q))kind='weekly_claim';
   else if(/claim|collect|mint/.test(q)&&/prize|reward.*entry/.test(q))kind='prize_claim';
   else if(/(?:unlist|cancel|remove).*(?:listing|sale)|unlist.*card/.test(q))kind='listing_cancel';
-  else if(/sell.*card|(?:list|put).*card.*(?:for|at|price|sale)/.test(q))kind='listing_create';
+  else if(!/^(?:list|show|find) (?:all |the |available )?(?:cards|players|listings)\b/.test(q)&&/sell.*card|(?:list|put).*card.*(?:for|at|price|sale)/.test(q))kind='listing_create';
   else if(/(?:unwatch|stop watching|remove.*watch)/.test(q))kind='price_unwatch';
   else if(/watch.*(?:card|price)|alert.*price/.test(q))kind='price_watch';
   else if(/mark.*all.*(?:notifications?|inbox|messages?).*read/.test(q))kind='inbox_read_all';

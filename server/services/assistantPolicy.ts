@@ -1,4 +1,4 @@
-export const ASSISTANT_TOPICS=['visitors','overview','wallet','activity','entries','cards','loans','notifications','support','football','settlement','gameweek','help'] as const;
+export const ASSISTANT_TOPICS=['visitors','overview','wallet','activity','entries','cards','loans','notifications','support','football','settlement','gameweek','market','trades','tournaments','auctions','rewards','profile','help'] as const;
 export type AssistantTopic=typeof ASSISTANT_TOPICS[number];
 export class AssistantError extends Error { constructor(message:string,public status=400){super(message);} }
 export function scopedAssistantUser(actor:string,admin:boolean,target?:string) {
@@ -8,6 +8,14 @@ export function scopedAssistantUser(actor:string,admin:boolean,target?:string) {
 }
 export function assistantTopics(question:string,previous:unknown=[]):AssistantTopic[] {
   const q=question.toLowerCase().replace(/[’‘]/g,"'");
+  // Resolve report purpose before generic player/card words or availability synonyms.
+  if(/\b(?:my buys|my purchases|my sales|my sold cards|purchase history|sales history|trade history|what (?:did|have) i (?:buy|bought|sell|sold)|cards? i (?:bought|sold)|how much (?:did|have) i spen[dt])\b/.test(q))return ['trades'];
+  if(/marketplace|\bmarket\b|my listings|for sale|sale listings|loan offers|available to (?:buy|borrow)|find.*(?:buy|borrow)|(?:buy|borrow).*available/.test(q))return ['market'];
+  if(/^(?:and |only |under |below |less than |cheaper |show more|what about (?:rare|common|epic|unique|legendary)|(?:rare|common|epic|unique|legendary)\b)/.test(q)&&Array.isArray(previous)&&previous.includes('market'))return ['market'];
+  if(/^(?:my |show (?:me )?my |check my )?(?:profile|account details|manager name|team name)[?!.]*$/.test(q))return ['profile'];
+  if(/\b(?:auctions?|bids?|bidding)\b/.test(q)&&!/^how |^where |^explain /.test(q))return ['auctions'];
+  if(/\b(?:my (?:prizes|rewards|winnings|trophies)|prize history|reward history|trophy cabinet)\b/.test(q))return ['rewards'];
+  if(/(?:open|available|upcoming|current|free|find|browse|list|show).*(?:tournaments?|competitions?|cups?)|(?:tournaments?|competitions?|cups?).*(?:open|available|upcoming)/.test(q)&&!/(?:enter|submit|why|cannot|can't|cant|failed|settle)/.test(q))return ['tournaments'];
   if(/game\s*week|\bgw\s*\d+\b|sync (?:log|history|status)|scoring log/.test(q)&&/log|latest|current|check|status|history|sync|report/.test(q))return ['gameweek'];
   if(/^(how (do i|to)|where (can|do)|what (is|are) the|explain).*?(captain|rarity|rule|score|scoring|fee|join|install|funding)/.test(q))return ['help'];
   const topics:AssistantTopic[]=[];
@@ -19,7 +27,7 @@ export function assistantTopics(question:string,previous:unknown=[]):AssistantTo
   if(/wallet|balance|deposit|withdraw|payment|transaction|refund|money|funds/.test(q))topics.push('wallet');
   if(/visited|activity|pages|did on|doing on|last seen|what did|online/.test(q)&&!topics.includes('visitors'))topics.push('activity');
   if(/entr(?:y|ies)|entered|tournament|competition|my teams|submitted team|prize amount|prize rank|settle/.test(q))topics.push('entries');
-  if(/cards?|collection|player|marketplace|listed/.test(q))topics.push('cards');
+  if(/cards?|collection|player|listed/.test(q))topics.push('cards');
   if(/loans?|borrow/.test(q))topics.push('loans');
   if(/notification|inbox|alerts?/.test(q))topics.push('notifications');
   if(/support ticket|support request|ticket #/.test(q))topics.push('support');
@@ -65,6 +73,7 @@ export function assistantUserSearch(question:string,explicit?:string){
 /** Recognize requested operations before domain words can route them to unrelated reports. */
 export function assistantRequestRefusal(question:string){
   const q=question.toLowerCase().replace(/[’‘]/g,"'").trim().replace(/[.!?]+$/,'');
+  if(/^(?:loan offers?|loan history|loan contracts?)(?:\s|$)/.test(q))return null;
   const operation=q.match(/^(?:(?:can|could|will|would) you\s+(?:please\s+)?|please\s+|i (?:want|need) you to\s+)?(enter|submit|join|pick|select|choose|build|create|add|delete|remove|edit|change|update|approve|pay|refund|withdraw|deposit|transfer|mint|send|resend|settle|cancel|buy|sell|loan|borrow|mark)\b/)?.[1];
   if(operation){
     if(/mark.*notification.*read|(?:update|change).*support.*status/.test(q))return {answer:'I can help you preview that change, but I cannot apply it from a chat message. Open “Preview an action”, choose the record and review it before confirming.',links:[]};
