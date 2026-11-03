@@ -1,6 +1,10 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { toApiUrl } from "./api-base";
 
+export function activitySessionHeaders(): Record<string,string> {
+  try { const id=sessionStorage.getItem('arena_activity_session');return id ? {'X-Arena-Session':id}:{}; } catch { return {}; }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -24,7 +28,7 @@ export async function apiRequest(
 ): Promise<Response> {
   const res = await fetch(toApiUrl(resolveApiUrl(url)), {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: {...activitySessionHeaders(),...(data ? { "Content-Type": "application/json" } : {})},
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -42,6 +46,7 @@ export const getQueryFn: <T>(options: {
     const rawUrl = queryKey.join("/") as string;
     const res = await fetch(toApiUrl(resolveApiUrl(rawUrl)), {
       credentials: "include",
+      headers: activitySessionHeaders(),
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

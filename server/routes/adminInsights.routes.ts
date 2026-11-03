@@ -1,3 +1,5 @@
+import {getAdminActivity} from "../services/adminActivity.js";
+import {ensurePageActivitySchema} from "../services/pageActivitySchema.js";
 import type { Express } from "express";
 import { db } from "../db.js";
 import { sql } from "drizzle-orm";
@@ -79,53 +81,9 @@ export function registerAdminInsightsRoutes(app: Express, deps: { requireAuth: a
 
   app.get("/api/admin/activity", requireAuth, isAdmin, async (req: any, res) => {
     try {
-      const q = String(req.query.q || "").trim();
-      const userId = String(req.query.userId || "").trim();
-      const source = String(req.query.source || "all").toLowerCase();
-      const page = Math.max(1, Number(req.query.page || 1));
-      const limit = Math.min(100, Math.max(10, Number(req.query.limit || 50)));
-      const offset = (page - 1) * limit;
-      const pattern = q ? `%${q}%` : "%%";
-
-      const activity = rowsOf(await db.execute(sql`
-        with combined as (
-          select concat('tx-',t.id) as id, 'transaction'::text as source, t.user_id as "userId",
-            coalesce(u.manager_team_name,u.name,u.email,t.user_id) as "userName", u.email,
-            coalesce(t.description,t.type::text,'Transaction') as label, t.type::text as type,
-            t.amount::float as amount, t.gross_amount::float as "grossAmount", t.fee_amount::float as "feeAmount",
-            t.net_amount::float as "netAmount", t.status::text as status, t.source_type as "sourceType",
-            jsonb_build_object('paymentMethod',t.payment_method,'externalTransactionId',t.external_transaction_id) as meta,
-            t.created_at as "createdAt"
-          from app.transactions t left join app.users u on u.id=t.user_id
-          union all
-          select concat('log-',a.id), 'audit', a.user_id,
-            coalesce(u.manager_team_name,u.name,u.email,a.user_id), u.email,
-            a.action, a.action, null::float, null::float, null::float, null::float, null::text, null::text,
-            coalesce(a.meta,'{}'::jsonb), a.created_at
-          from app.audit_logs a left join app.users u on u.id=a.user_id
-        )
-        select * from combined
-        where (${userId}='' or "userId"=${userId})
-          and (${source}='all' or source=${source})
-          and (${q}='' or coalesce(label,'') ilike ${pattern} or coalesce(type,'') ilike ${pattern} or coalesce("userName",'') ilike ${pattern} or coalesce(email,'') ilike ${pattern} or coalesce("userId",'') ilike ${pattern} or coalesce(meta::text,'') ilike ${pattern})
-        order by "createdAt" desc nulls last
-        limit ${limit} offset ${offset}
-      `));
-
-      const total = Number(rowsOf(await db.execute(sql`
-        with combined as (
-          select 'transaction'::text as source, t.user_id as "userId", coalesce(u.manager_team_name,u.name,u.email,t.user_id) as "userName", u.email, coalesce(t.description,t.type::text,'Transaction') as label, t.type::text as type, '{}'::jsonb as meta
-          from app.transactions t left join app.users u on u.id=t.user_id
-          union all
-          select 'audit', a.user_id, coalesce(u.manager_team_name,u.name,u.email,a.user_id), u.email, a.action, a.action, coalesce(a.meta,'{}'::jsonb)
-          from app.audit_logs a left join app.users u on u.id=a.user_id
-        )
-        select count(*)::int as total from combined
-        where (${userId}='' or "userId"=${userId})
-          and (${source}='all' or source=${source})
-          and (${q}='' or coalesce(label,'') ilike ${pattern} or coalesce(type,'') ilike ${pattern} or coalesce("userName",'') ilike ${pattern} or coalesce(email,'') ilike ${pattern} or coalesce("userId",'') ilike ${pattern} or coalesce(meta::text,'') ilike ${pattern})
-      `))[0]?.total || 0);
-      return res.json({ activity, total, page, limit, pages: Math.max(1, Math.ceil(total / limit)) });
+      res.setHeader('Cache-Control','private, no-store');
+      await ensurePageActivitySchema();
+      return res.json(await getAdminActivity(db,req.query));
     } catch (error: any) {
       console.error("Failed to fetch admin activity:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch activity" });

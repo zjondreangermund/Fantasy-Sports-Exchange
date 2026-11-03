@@ -1,0 +1,13 @@
+# Admin activity and error investigation
+
+Open Admin and tap Errors to show error and rejected records from the last 24 hours. The dashboard and timeline use the same error predicates, including historical audit error actions and failed transactions. A moving 24-hour window can naturally change while a page is open. No production error cause is inferred solely from the count.
+
+Activity combines audit events, transactions and page visits into one newest-first timeline with Namibia timestamps, period/type/outcome filters, literal text search, user names and emails, pagination, session filtering, request references and account links. Duplicate legacy route audit records are suppressed when the page tracker recorded the same visit within three seconds. Heartbeats power recent activity but do not flood the timeline. Page history has the existing 90-day retention; older missing history cannot be reconstructed. Recently active is a last-seen signal, not proof of attention.
+
+Server middleware records authenticated write outcomes and failed API reads; successful polling reads and tracking writes are excluded. It generates a request reference and records status, path without query strings, elapsed time and safe client-facing rejection messages. Server failures use a generic message. It does not record request/response bodies, credentials, cookies, stack traces or query parameters. Existing business audit and transaction records remain available alongside request outcomes. A write response alone is not proof of financial settlement.
+
+Browser events record semantic control/tab clicks and runtime error signals in bounded batches. No input values, typed text, private conversations, raw error payloads or mouse trajectories are collected. Browser reports are explicitly labelled as untrusted evidence of interaction, not proof of task completion. The server assigns the authenticated identity, validates paths/sessions/batch size, and applies origin and rate gates. Metadata responses redact sensitive keys. Investigation routes remain behind both authentication and admin authorization and return private/no-store responses.
+
+New request/control coverage starts at deployment, including existing signed-in sessions once they load the updated app. Shared API requests carry a session correlation header; older/custom fetch requests can still be followed by authenticated user and timestamp. Background tabs do not count as fresh page presence. Database write failures emit an operational warning and never block the user action.
+
+Run npm run test:activity for real PostgreSQL SQL/filter/count/permission and HTTP tracking regression checks. CI repeats it after build transforms.
