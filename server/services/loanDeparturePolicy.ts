@@ -1,3 +1,4 @@
+import {currentPremierLeagueMintIds} from "./currentPremierLeagueMintPool.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { fplApi } from "./fplApi.js";
@@ -164,12 +165,14 @@ async function mintTemporaryLoanReplacement(tx: any, input: {
   if (!["GK", "DEF", "MID", "FWD"].includes(position)) throw new Error("Loan replacement position could not be verified");
 
   const fplArray = `{${input.currentFplIds.join(",")}}`;
+  const mintEligiblePlayerIds=await currentPremierLeagueMintIds(tx);
   const candidates = rowsOf(await tx.execute(sql`
     select p.id, p.name, p.team, p.position::text as position
     from app.players p
     where lower(p.league)='premier league'
       and p.fpl_id is not null
       and p.fpl_id = any(${fplArray}::int[])
+      and p.id=any(${`{${mintEligiblePlayerIds.join(",")}}`}::int[])
       and p.position::text=${position}
       and p.id <> ${input.sourcePlayerId}
       and coalesce(p.status,'a') <> 'departed'

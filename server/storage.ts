@@ -1,3 +1,4 @@
+import {assertCurrentPremierLeagueMintPlayer,currentPremierLeagueMintIds} from "./services/currentPremierLeagueMintPool.js";
 import {
   type Player,
   type InsertPlayer,
@@ -214,6 +215,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPlayerCard(card: InsertPlayerCardSafe): Promise<PlayerCard> {
+    if(card.ownerId)await assertCurrentPremierLeagueMintPlayer(db,Number(card.playerId));
     const rarity = (card.rarity ?? "common") as string;
     const maxSupply = (RARITY_SUPPLY as any)[rarity] || 0;
 
@@ -436,14 +438,15 @@ async getPlayerCount(): Promise<number> {
 
 
   async getRandomPlayers(count: number): Promise<Player[]> {
-    return db.select().from(players).orderBy(sql`RANDOM()`).limit(count);
+    const ids=await currentPremierLeagueMintIds(db);
+    return db.select().from(players).where(sql`${players.id}=any(${`{${ids.join(",")}}`}::int[])`).orderBy(sql`RANDOM()`).limit(count);
   }
 
   async getRandomPlayersByPosition(position: string, count: number): Promise<Player[]> {
     return db
       .select()
       .from(players)
-      .where(eq(players.position, position as any))
+      .where(and(eq(players.position, position as any),sql`${players.id}=any(${`{${(await currentPremierLeagueMintIds(db)).join(",")}}`}::int[])`))
       .orderBy(sql`RANDOM()`)
       .limit(count);
   }
