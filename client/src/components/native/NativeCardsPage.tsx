@@ -66,6 +66,14 @@ export default function NativeCardsPage() {
   const [search, setSearch] = React.useState("");
   const [visibleCount, setVisibleCount] = React.useState(12);
   const [selected, setSelected] = React.useState<PlayerCardWithPlayer | null>(null);
+  const [requestCutoutPreview, setRequestCutoutPreview] = React.useState(false);
+  const { data: portraitAccess } = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/admin/check"],
+    queryFn: async () => { const r = await fetch("/api/admin/check", { credentials: "include" }); return r.ok ? r.json() : { isAdmin: false }; },
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const cutoutPreview = Boolean(requestCutoutPreview && portraitAccess?.isAdmin);
 
   const { data: cardsRaw, isLoading } = useQuery<any>({
     queryKey: ["/api/user/cards"],
@@ -127,6 +135,13 @@ export default function NativeCardsPage() {
         </div>
       </section>
 
+      {portraitAccess?.isAdmin ? <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-violet-300/20 bg-violet-400/[.08] px-3 py-2 text-xs">
+        <span className="text-violet-100">Admin portrait experiment · originals stay unchanged</span>
+        <button type="button" onClick={() => setRequestCutoutPreview((v) => !v)} className="shrink-0 rounded-lg border border-violet-200/35 bg-violet-300/15 px-3 py-2 font-bold text-violet-50">
+          {cutoutPreview ? "Show originals" : "Preview cutouts"}
+        </button>
+      </div> : null}
+
       {lenderActiveCount > 0 ? <div className="mt-3 rounded-2xl border border-cyan-300/10 bg-cyan-300/[.045] px-3.5 py-3 text-[10px] leading-4 text-cyan-100"><Handshake className="mr-1.5 inline h-3.5 w-3.5" />{lenderActiveCount} of your card{lenderActiveCount === 1 ? " is" : "s are"} currently out on loan. Active loans return automatically when their agreed gameweeks expire.</div> : null}
 
       <div className="mt-3 flex gap-2">
@@ -150,7 +165,7 @@ export default function NativeCardsPage() {
               >
                 <div className="w-[96px] max-w-full" data-native-static-card>
                   <div className="mx-auto flex w-[96px] max-w-full justify-center" onClick={() => setSelected(card)}>
-                    <CardThumbnail card={card} size="xs" showMeta={false} showStats={false} />
+                    <CardThumbnail card={card} size="xs" showMeta={false} showStats={false} cutoutPreview={cutoutPreview} />
                   </div>
                   <button
                     type="button"
