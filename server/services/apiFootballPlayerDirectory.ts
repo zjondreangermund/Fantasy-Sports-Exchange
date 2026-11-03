@@ -272,9 +272,15 @@ async function synchronizeProviderIdentities(directory: ApiFootballDirectoryPlay
     // Prospective mint guard: existing cards and submitted entries are untouched.
     await db.execute(sql`create or replace function app.guard_current_pl_owned_mint()
       returns trigger language plpgsql as $$
-      declare local_player record; provider_id integer; destination_id integer; pl_count integer; on_loan boolean;
+      declare local_player record; provider_id integer; destination_id integer; pl_count integer; on_loan boolean; mint_season integer;
       begin
         if new.owner_id is null then return new; end if;
+        -- Existing owned cards may be traded/returned without rewriting history.
+        -- An unowned inventory card being granted for the first time is a new mint.
+        if TG_OP='UPDATE' then
+          if old.owner_id is not null then return new; end if;
+        end if;
+        mint_season := extract(year from now())::integer - case when extract(month from now())<7 then 1 else 0 end;
         select league, status into local_player from app.players where id=new.player_id;
         if lower(coalesce(local_player.status,'')) in ('departed','loaned_out','superseded','unlinked','archived')
           or (coalesce(local_player.league,'') <> '' and regexp_replace(lower(local_player.league),'[^a-z0-9]+','','g') not in ('premierleague','englishpremierleague','epl')) then
@@ -285,6 +291,20 @@ async function synchronizeProviderIdentities(directory: ApiFootballDirectoryPlay
           if on_loan then raise exception 'This player is on loan outside the Premier League. Choose another current player.'; end if;
         end if;
         select api_player_id into provider_id from app.player_provider_identities where player_id=new.player_id;
+        if provider_id is null or to_regclass('app.api_football_fixtures') is null then
+          raise exception 'Current Premier League mint identity is unverified. No card was issued.';
+        end if;
+        select count(distinct team_id) into pl_count from (
+          select home_team_id as team_id from app.api_football_fixtures where league_id=39 and season=mint_season
+          union select away_team_id from app.api_football_fixtures where league_id=39 and season=mint_season
+        ) current_clubs;
+        if pl_count<18 or pl_count>20 or not exists (
+          select 1 from app.api_football_players p
+          where p.api_player_id=provider_id and p.season=mint_season and p.active=true
+            and p.updated_at>=now()-interval '48 hours' and p.updated_at<=now()+interval '5 minutes'
+            and exists(select 1 from app.api_football_fixtures f where f.league_id=39 and f.season=mint_season
+              and (f.home_team_id=p.api_team_id or f.away_team_id=p.api_team_id))
+        ) then raise exception 'Current Premier League squad membership is unverified. No card was issued.'; end if;
         if provider_id is not null and to_regclass('app.api_football_transfers') is not null and to_regclass('app.api_football_fixtures') is not null then
           select to_team_id into destination_id from app.api_football_transfers
             where api_player_id=provider_id and transfer_date <= current_date
@@ -302,7 +322,7 @@ async function synchronizeProviderIdentities(directory: ApiFootballDirectoryPlay
         return new;
       end $$`);
     await db.execute(sql`create or replace trigger guard_current_pl_owned_mint
-      before insert on app.player_cards for each row execute function app.guard_current_pl_owned_mint()`);
+      before insert or update of owner_id on app.player_cards for each row execute function app.guard_current_pl_owned_mint()`);
     providerIdentitySchemaReady = true;
     }
     const links = rowsOf(await db.execute(sql`select player_id as "playerId", api_player_id as "apiPlayerId" from app.player_provider_identities`));

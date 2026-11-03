@@ -1,3 +1,4 @@
+import {currentPremierLeagueMintIds} from "./currentPremierLeagueMintPool.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "./notifications.js";
@@ -364,6 +365,7 @@ export async function claimReplacementCard(userId: string, claimId: number) {
     .filter((id: number) => Number.isInteger(id) && id > 0);
   if (currentFplIds.length < 300) throw new Error("Current Premier League player pool is unavailable; replacement will retry automatically.");
   const currentFplIdArray = `{${currentFplIds.join(",")}}`;
+  const mintEligiblePlayerIds = await currentPremierLeagueMintIds(db);
 
   return db.transaction(async (tx: any) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`player-replacement:${claimId}`}))`);
@@ -414,6 +416,7 @@ export async function claimReplacementCard(userId: string, claimId: number) {
       where lower(p.league)='premier league'
         and p.fpl_id is not null
         and p.fpl_id = any(${currentFplIdArray}::int[])
+      and p.id=any(${`{${mintEligiblePlayerIds.join(",")}}`}::int[])
         and p.position::text=${sourcePosition}
         and p.id <> ${Number(claim.sourcePlayerId)}
         and coalesce(p.status,'a') <> 'departed'

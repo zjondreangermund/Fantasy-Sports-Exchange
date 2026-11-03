@@ -43,8 +43,8 @@ expect(reward.includes('COMMON_TOURNAMENT_POSITIONS = ["GK", "DEF", "MID", "FWD"
 expect(reward.includes("commonRewardTargetTeams(commonCountAfterReward"), "Common reward must calculate the next team-capacity milestone");
 expect(reward.includes("Math.ceil(Math.max(1, commonCountAfterReward) / 5)"), "Common reward must start balancing before each 10/15/20-card milestone");
 expect(reward.includes("commonRewardPositionPriority(positionCountsBefore, commonCountAfterReward)"), "Common reward must prioritize the user's limiting position");
-expect(reward.includes("findWeeklyCommonPlayerForPosition(tx, userId, position, true)"), "Common reward must prefer a new random player in the needed position");
-expect(reward.includes("findWeeklyCommonPlayerForPosition(tx, userId, position, false)"), "Common reward must preserve position balance even if a duplicate player identity is required");
+expect(reward.includes("findWeeklyCommonPlayerForPosition(tx, userId, position, true, mintEligiblePlayerIds)"), "Common reward must prefer a new random player in the needed position");
+expect(reward.includes("findWeeklyCommonPlayerForPosition(tx, userId, position, false, mintEligiblePlayerIds)"), "Common reward must preserve position balance even if a duplicate player identity is required");
 expect(reward.includes("p.position::text = ${position}"), "Weekly Common player selection must constrain the awarded position");
 expect(reward.includes("owned.rarity::text = 'common'"), "Weekly position balancing must inspect Common ownership only");
 expect(reward.includes("supply.rarity::text = 'common'"), "Weekly position balancing must mint Common supply only");

@@ -1,3 +1,4 @@
+import {currentPremierLeagueMintIds} from "../services/currentPremierLeagueMintPool.js";
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
@@ -208,9 +209,11 @@ async function resolveCommonCardChoice(tx:any,userId:string,choiceId:number,acti
   if(commonCount<COMMON_COLLECTION_CAP)throw new Error("Your collection is below the Common card cap; claim the prize normally");
   const source=rowsOf(await tx.execute(sql`select id from app.player_cards where id=${replaceCardId} and owner_id=${userId} and rarity::text='common' and for_sale=false for update`))[0];
   if(!source)throw new Error("That Common card cannot be replaced");
+  const mintEligiblePlayerIds=await currentPremierLeagueMintIds(tx);
   const candidate=rowsOf(await tx.execute(sql`
     select p.id as "playerId",p.name as "playerName",p.team as "playerTeam" from app.players p
     where regexp_replace(lower(coalesce(p.league,'')), '[^a-z0-9]+', '', 'g') in ('premierleague','englishpremierleague','epl')
+      and p.id=any(${`{${mintEligiblePlayerIds.join(",")}}`}::int[])
       and coalesce(p.fpl_id,0)>0 and lower(coalesce(p.status,'')) not in ('departed','superseded','unlinked','archived')
       and not exists(select 1 from app.player_cards owned where owned.owner_id=${userId} and owned.player_id=p.id and owned.rarity::text='common')
       and (select count(*) from app.player_cards supply where supply.player_id=p.id and supply.rarity::text='common')<1000
@@ -302,10 +305,12 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
       return {pendingChoice:true,choiceId:Number(choice.id),cap:COMMON_COLLECTION_CAP,competitionId:Number(award.competitionId),entryId,rank,replayed:false};
     }
   }
+  const mintEligiblePlayerIds = await currentPremierLeagueMintIds(tx);
   const candidates = rowsOf(await tx.execute(sql`
     select p.id as "playerId", p.name as "playerName", p.team as "playerTeam"
     from app.players p
     where regexp_replace(lower(coalesce(p.league,'')), '[^a-z0-9]+', '', 'g') in ('premierleague','englishpremierleague','epl')
+      and p.id=any(${`{${mintEligiblePlayerIds.join(",")}}`}::int[])
       and coalesce(p.fpl_id,0) > 0
       and lower(coalesce(p.status,'')) not in ('departed','superseded','unlinked','archived')
       and not exists (

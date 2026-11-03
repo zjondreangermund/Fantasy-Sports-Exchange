@@ -68,6 +68,8 @@ export const fplApi = {
     return `https://resources.premierleague.com/premierleague/photos/players/${dimensions}/p${id}.png`;
   },
 
+  // Reward identity checks use a short-lived roster, independently of stats caches.
+  async mintBootstrap() { return cached("mint_bootstrap", 5 * 60 * 1000, () => fetchJson<any>("/bootstrap-static/")); },
   async bootstrap() { return cached("bootstrap", CACHE_TTL.bootstrap, () => fetchJson<any>("/bootstrap-static/")); },
   async playerSummary(elementId: number) { const id = Number(elementId); if (!Number.isInteger(id) || id <= 0) throw new Error("Valid FPL element id required"); return cached(`player_summary_${id}`, CACHE_TTL.playerSummary, () => fetchJson<any>(`/element-summary/${id}/`)); },
   async fixtures() { return cached("fixtures", CACHE_TTL.fixtures, () => fetchJson<any[]>("/fixtures/")); },

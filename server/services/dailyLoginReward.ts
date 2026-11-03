@@ -1,3 +1,4 @@
+import {currentPremierLeagueMintIds} from "./currentPremierLeagueMintPool.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 
@@ -6,6 +7,93 @@ export const WEEKLY_COMMON_REWARD_INTERVAL_DAYS = 7;
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : Array.isArray(result) ? result : [];
+}
+
+// COMMON_REWARD_POSITION_BALANCE_V1
+// Weekly Common cards are the free rarity users cannot simply buy to repair a
+// tournament squad. Keep the player random, but choose the position that most
+// improves the owner's ability to field distinct 1 GK / 1 DEF / 1 MID / 1 FWD
+// + 1 Utility tournament teams. No other rarity uses this balancing rule.
+const COMMON_TOURNAMENT_POSITIONS = ["GK", "DEF", "MID", "FWD"] as const;
+type CommonTournamentPosition = (typeof COMMON_TOURNAMENT_POSITIONS)[number];
+type CommonPositionCounts = Record<CommonTournamentPosition, number>;
+
+function emptyCommonPositionCounts(): CommonPositionCounts {
+  return { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+}
+
+async function loadCommonPositionCounts(executor: any, userId: string): Promise<CommonPositionCounts> {
+  const counts = emptyCommonPositionCounts();
+  const rows = rowsOf(await executor.execute(sql`
+    SELECT p.position::text AS position, count(*)::int AS count
+    FROM app.player_cards pc
+    JOIN app.players p ON p.id = pc.player_id
+    WHERE pc.owner_id = ${userId}
+      AND pc.rarity::text = 'common'
+      AND p.position::text IN ('GK', 'DEF', 'MID', 'FWD')
+    GROUP BY p.position::text
+  `));
+
+  for (const row of rows) {
+    const position = String(row.position || "").toUpperCase() as CommonTournamentPosition;
+    if (COMMON_TOURNAMENT_POSITIONS.includes(position)) {
+      counts[position] = Math.max(0, Number(row.count || 0));
+    }
+  }
+  return counts;
+}
+
+function commonRewardTargetTeams(commonCountAfterReward: number): number {
+  // Balance toward the next five-card milestone immediately. Starting from the
+  // Starter 5, this gives each 5-card block enough rewards to fill all four
+  // mandatory positions before 10, 15 and 20 Common cards are reached.
+  return Math.min(4, Math.max(1, Math.ceil(Math.max(1, commonCountAfterReward) / 5)));
+}
+
+function commonRewardPositionPriority(
+  counts: CommonPositionCounts,
+  commonCountAfterReward: number,
+): CommonTournamentPosition[] {
+  const targetTeams = commonRewardTargetTeams(commonCountAfterReward);
+  const tieBreaker = new Map(COMMON_TOURNAMENT_POSITIONS.map((position) => [position, Math.random()]));
+
+  return [...COMMON_TOURNAMENT_POSITIONS].sort((a, b) => {
+    const deficitA = Math.max(0, targetTeams - counts[a]);
+    const deficitB = Math.max(0, targetTeams - counts[b]);
+    if (deficitA !== deficitB) return deficitB - deficitA;
+    if (counts[a] !== counts[b]) return counts[a] - counts[b];
+    return Number(tieBreaker.get(a) || 0) - Number(tieBreaker.get(b) || 0);
+  });
+}
+
+async function findWeeklyCommonPlayerForPosition(
+  executor: any,
+  userId: string,
+  position: CommonTournamentPosition,
+  avoidOwnedPlayer: boolean,
+  mintEligiblePlayerIds: number[],
+) {
+  return rowsOf(await executor.execute(sql`
+    SELECT p.id, p.name, p.position::text AS position
+    FROM app.players p
+    WHERE regexp_replace(lower(coalesce(p.league, '')), '[^a-z0-9]+', '', 'g') IN ('premierleague', 'englishpremierleague', 'epl')
+      AND coalesce(p.fpl_id, 0) > 0
+      AND lower(coalesce(p.status, 'a')) NOT IN ('departed', 'superseded', 'unlinked', 'archived')
+      AND p.id = ANY(${`{${mintEligiblePlayerIds.join(",")}}`}::int[])
+      AND p.position::text = ${position}
+      AND (${avoidOwnedPlayer}::boolean = false OR NOT EXISTS (
+        SELECT 1 FROM app.player_cards owned
+        WHERE owned.owner_id = ${userId}
+          AND owned.player_id = p.id
+          AND owned.rarity::text = 'common'
+      ))
+      AND (
+        SELECT count(*) FROM app.player_cards supply
+        WHERE supply.player_id = p.id AND supply.rarity::text = 'common'
+      ) < 1000
+    ORDER BY random()
+    LIMIT 1
+  `))[0] || null;
 }
 
 let schemaReady: Promise<void> | null = null;
@@ -287,39 +375,26 @@ export async function claimDailyLoginReward(userId: string) {
       };
     }
 
-    let player = rowsOf(await tx.execute(sql`
-      SELECT p.id, p.name
-      FROM app.players p
-      WHERE regexp_replace(lower(coalesce(p.league, '')), '[^a-z0-9]+', '', 'g') IN ('premierleague', 'englishpremierleague', 'epl')
-        AND NOT EXISTS (
-          SELECT 1 FROM app.player_cards owned
-          WHERE owned.owner_id = ${userId}
-            AND owned.player_id = p.id
-            AND owned.rarity::text = 'common'
-        )
-        AND (
-          SELECT count(*) FROM app.player_cards supply
-          WHERE supply.player_id = p.id AND supply.rarity::text = 'common'
-        ) < 1000
-      ORDER BY random()
-      LIMIT 1
-    `))[0];
+    const mintEligiblePlayerIds = await currentPremierLeagueMintIds(tx);
+    const positionCountsBefore = await loadCommonPositionCounts(tx, userId);
+    const commonCountAfterReward = commonCount + 1;
+    const positionPriority = commonRewardPositionPriority(positionCountsBefore, commonCountAfterReward);
 
-    if (!player) {
-      player = rowsOf(await tx.execute(sql`
-        SELECT p.id, p.name
-        FROM app.players p
-        WHERE regexp_replace(lower(coalesce(p.league, '')), '[^a-z0-9]+', '', 'g') IN ('premierleague', 'englishpremierleague', 'epl')
-          AND (
-            SELECT count(*) FROM app.player_cards supply
-            WHERE supply.player_id = p.id AND supply.rarity::text = 'common'
-          ) < 1000
-        ORDER BY random()
-        LIMIT 1
-      `))[0];
+    let player: any = null;
+
+    // First choose the position that is limiting the next tournament-team
+    // milestone. The player identity inside that position remains random. Prefer
+    // a player the user does not already own; if necessary, allow a duplicate
+    // identity rather than issuing a surplus position that cannot form a team.
+    for (const position of positionPriority) {
+      player = await findWeeklyCommonPlayerForPosition(tx, userId, position, true, mintEligiblePlayerIds);
+      if (!player) player = await findWeeklyCommonPlayerForPosition(tx, userId, position, false, mintEligiblePlayerIds);
+      if (player) break;
     }
 
-    if (!player) throw new Error("No eligible Premier League player is available for the weekly reward");
+    if (!player) {
+      throw new Error("No eligible Premier League GK/DEF/MID/FWD player is available for the weekly Common reward");
+    }
 
     const card = rowsOf(await tx.execute(sql`
       INSERT INTO app.player_cards (player_id, owner_id, rarity, level, xp, decisive_score, for_sale, price)

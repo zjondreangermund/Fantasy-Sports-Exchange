@@ -1,3 +1,4 @@
+import {currentPremierLeagueMintIds} from "../services/currentPremierLeagueMintPool.js";
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
@@ -105,7 +106,8 @@ async function ensureCode(userId: string) {
 
 async function grantPositionBalancedCommonCard(storage: any, userId: string, executor: any) {
   const allPlayers = await storage.getPlayers();
-  const players = (Array.isArray(allPlayers) ? allPlayers : []).filter(isCurrentPremierLeaguePlayer);
+  const mintEligiblePlayerIds=new Set(await currentPremierLeagueMintIds(executor));
+  const players = (Array.isArray(allPlayers) ? allPlayers : []).filter(isCurrentPremierLeaguePlayer).filter((player:any)=>mintEligiblePlayerIds.has(Number(player.id)));
   if (players.length === 0) return null;
 
   const playersById = new Map(players.map((player: any) => [Number(player.id), player]));
