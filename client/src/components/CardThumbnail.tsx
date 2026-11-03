@@ -12,6 +12,7 @@ type CardThumbnailProps = {
   showPrice?: boolean;
   showMeta?: boolean;
   showStats?: boolean;
+  cutoutPreview?: boolean;
 };
 
 function CardThumbnailBase({
@@ -23,6 +24,7 @@ function CardThumbnailBase({
   showPrice = false,
   showMeta = true,
   showStats = true,
+  cutoutPreview = false,
 }: CardThumbnailProps) {
   const player = card.player || ({} as any);
   const fantasyCard = toFantasyCardData(card, { imageWidth: size === "lg" ? 640 : size === "xs" ? 280 : 420 });
@@ -37,6 +39,7 @@ function CardThumbnailBase({
         interactive={selectable || Boolean(onClick)}
         showPrice={showPrice}
         showStats={showStats}
+        cutoutPreview={cutoutPreview}
       />
 
       {showPrice && Number(card.price || 0) > 0 ? (

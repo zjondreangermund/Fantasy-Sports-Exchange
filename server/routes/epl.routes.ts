@@ -1,6 +1,8 @@
 import { normalizeFootballData, uniqueFootballRows, footballFixtureKey } from "../../shared/football-data.js";
 import type { Express } from "express";
 import { fplApi } from "../services/fplApi.js";
+import { db } from "../db.js";
+import { sql } from "drizzle-orm";
 
 function teamLookup(bootstrap: any): Map<number, any> {
   const teams: any[] = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
@@ -101,6 +103,41 @@ function normalizePlayer(player: any, teamById: Map<number, any>) {
 }
 
 export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreUpdater?: any }) {
+
+  // Public, read-only list of verified API-Football Premier League player IDs.
+  // Contains only already-public football metadata, never account/card records.
+  // A separate GitHub Actions batch processor uses this as its authoritative
+  // source for opt-in background-removed portraits.
+  app.get("/api/leagues/premier-league/cutout-portrait-sources", async (_req, res) => {
+    try {
+      const result: any = await db.execute(sql`
+        select distinct on (api_player_id)
+          api_player_id as id, name, team_name as team, season
+        from app.api_football_players
+        where active = true and api_player_id > 0
+          and season = (
+            select max(season) from app.api_football_players where active = true
+          )
+        order by api_player_id, updated_at desc
+      `);
+      const rows: any[] = Array.isArray(result?.rows) ? result.rows : [];
+      const players = rows
+        .map((row) => ({
+          id: Number(row.id),
+          name: String(row.name || ""),
+          team: String(row.team || ""),
+        }))
+        .filter((row) => Number.isInteger(row.id) && row.id > 0);
+      if (!players.length) return res.status(503).json({ message: "Verified Premier League squad feed not yet available" });
+      res.setHeader("Cache-Control", "public, max-age=900");
+      return res.json({ provider: "api-football", season: Number(rows[0]?.season || 0), count: players.length, players });
+    } catch (error) {
+      console.error("[portrait-cutouts] Player source feed unavailable:", error);
+      return res.status(503).json({ message: "Player photo source temporarily unavailable" });
+    }
+  });
+
+
   app.use("/api/epl", (_req, res, next) => {
     const sendJson=res.json.bind(res);
     res.json=(payload:any)=>sendJson(normalizeFootballData(payload));

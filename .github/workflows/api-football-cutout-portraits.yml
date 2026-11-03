@@ -1,0 +1,81 @@
+name: API-Football cutout portraits (safe batches)
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_size:
+        description: "Verified active Premier League players per batch (1-100)"
+        required: false
+        default: "24"
+  schedule:
+    - cron: "23 2 * * *"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/api-football-cutout-portraits.yml"
+      - "scripts/generate-player-cutouts.py"
+      - "server/routes/epl.routes.ts"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cutout-portraits-main
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Cache portrait segmentation model
+        uses: actions/cache@v4
+        with:
+          path: ~/.u2net
+          key: api-football-cutout-isnet-general-use-v1
+      - name: Install CPU-only image dependencies
+        run: |
+          python -m pip install --disable-pip-version-check "rembg[cpu]>=2.0.67,<3" "Pillow>=10,<13"
+          python -m py_compile scripts/generate-player-cutouts.py
+      - name: Wait for the verified live squad-source endpoint
+        run: |
+          python - <<'PY'
+          import json, time
+          from urllib.request import Request, urlopen
+          url = "https://playfantasyarena.com/api/leagues/premier-league/cutout-portrait-sources"
+          for attempt in range(25):
+              try:
+                  with urlopen(Request(url, headers={"Accept":"application/json"}), timeout=25) as response:
+                      payload = json.load(response)
+                  if payload.get("provider") == "api-football" and payload.get("count", 0) > 0:
+                      print("Verified live squad directory ready:", payload["count"], "players")
+                      break
+              except Exception as exc:
+                  print("Portrait source not yet deployed:", type(exc).__name__)
+              if attempt == 24:
+                  raise RuntimeError("No verified current squad directory after deployment grace period")
+              time.sleep(30)
+          PY
+      - name: Generate next transparent portrait batch
+        env:
+          BATCH_SIZE: ${{ inputs.batch_size || '24' }}
+        run: |
+          python scripts/generate-player-cutouts.py --batch-size "$BATCH_SIZE"
+      - name: Publish only passing cutouts and batch manifest
+        run: |
+          git config user.name "fantasy-arena-portrait-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/public/portraits/cutouts/
+          if git diff --cached --quiet; then
+            echo "No new portraits to publish."
+            exit 0
+          fi
+          git commit -m "assets: publish next verified API-Football cutout portrait batch [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
