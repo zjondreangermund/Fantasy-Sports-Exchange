@@ -1,4 +1,5 @@
 import {currentPremierLeagueMintIds} from "./currentPremierLeagueMintPool.js";
+import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "./apiFootballPlayerDirectory.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 
@@ -200,7 +201,16 @@ async function loadRewardCard(executor: any, userId: string, rewardDay?: string 
   `));
   const row = rows[0];
   if (!row) return null;
-  const imageUrl = String(row.imageUrl || "").trim() || null;
+  // Newly minted rewards use the same verified current-PL photo identity as
+  // Squad Collection. IDs from FPL and API-Football are not interchangeable.
+  // If the directory is unavailable, return the official original immediately.
+  const directory = await loadApiFootballPlayerDirectory().catch(() => []);
+  const linkedPlayer = resolveApiFootballPlayer(row, directory);
+  const apiFootballId = Number(linkedPlayer?.apiPlayerId || 0);
+  const approvedOriginalPhoto = linkedPlayer
+    ? apiFootballPhotoUrl(linkedPlayer.apiPlayerId, linkedPlayer.photo)
+    : null;
+  const imageUrl = approvedOriginalPhoto || String(row.imageUrl || "").trim() || null;
   const trustedOfficialImage = Boolean(
     imageUrl && /^https?:\/\/(resources\.premierleague\.com|media\.api-sports\.io)\//i.test(imageUrl),
   );
@@ -230,10 +240,11 @@ async function loadRewardCard(executor: any, userId: string, rewardDay?: string 
       photo: row.photo || null,
       webName: row.webName || null,
       imageUrl,
+      apiFootballId: apiFootballId > 0 ? apiFootballId : null,
       verifiedImageUrl: identityVerified ? imageUrl : null,
-      imageCandidates: imageUrl ? [imageUrl] : [],
+      imageCandidates: Array.from(new Set([imageUrl, row.imageUrl].filter(Boolean))),
       identityVerified,
-      identitySource: identityVerified ? "fpl" : null,
+      identitySource: apiFootballId > 0 ? "fpl+api-football" : identityVerified ? "fpl" : null,
     },
   };
 }
