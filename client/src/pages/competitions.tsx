@@ -80,6 +80,15 @@ function tournamentSettlementLabel(comp: CompetitionWithEntries) {
     hour12: false,
   }).format(date) + " CAT";
 }
+function isFreeCardCup(comp: CompetitionWithEntries) {
+  const key = String(comp.prizeKey || "").toLowerCase();
+  return Number(comp.entryFee ?? 0) === 0 && (key.startsWith("free-") || /FREE.*Card Cup/i.test(String(comp.name || "")));
+}
+function isPrizeVaultTournament(comp: CompetitionWithEntries) {
+  const key = String(comp.prizeKey || "ladder").toLowerCase();
+  return Number(comp.entryFee ?? 0) > 0 && key === "ladder";
+}
+
 function prizeProgress(comp: CompetitionWithEntries) {
   const revenue = n(comp.currentEntrantRevenue) || n(comp.entryFee) * n(comp.entryCount);
   const target = n(comp.prizeUnlockTarget);
@@ -233,10 +242,39 @@ export default function CompetitionsPage() {
 }
 
 function PrizeEconomics({ comp }: { comp: CompetitionWithEntries }) {
+  const freeCardCup = isFreeCardCup(comp);
+  const vaultTournament = isPrizeVaultTournament(comp);
   const revenue = n(comp.currentEntrantRevenue) || n(comp.entryFee) * n(comp.entryCount);
   const target = n(comp.prizeUnlockTarget);
   const progress = prizeProgress(comp);
-  return <div className="space-y-2 rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-50"><div className="flex flex-wrap items-center justify-between gap-2"><div><b>{comp.prizeDescription || "Prize"}</b>{comp.prizeValue ? ` • value N$${money(comp.prizeValue)}` : ""}</div><Link href="/prize-vault" className="text-xs font-bold underline">View Prize Vault</Link></div><div className="grid gap-2 sm:grid-cols-4"><InfoPill label="Entry" value={`N$${money(comp.entryFee)}`} helper="Per player" /><InfoPill label="Players" value={`${comp.entryCount || 0}/${comp.requiredEntrants || 0}`} helper="This GW only" /><InfoPill label="Unlock target" value={`N$${money(target)}`} helper="150% of prize" /><InfoPill label="Current revenue" value={`N$${money(revenue)}`} helper={comp.prizeUnlocked ? "Unlocked" : `${progress}% unlocked`} /></div><div className="h-2 overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-emerald-300" style={{ width: `${progress}%` }} /></div><p className="text-xs text-emerald-100/70">Prize only unlocks when entrants for this gameweek reach the target. Next gameweek entries, points and prize progress reset to 0.</p></div>;
+  if (freeCardCup) {
+    const weighted = String(comp.prizeKey || "").toLowerCase() === "free-weighted-card";
+    return <div className="space-y-2 rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-50">
+      <p className="font-black">FREE Card Cup • GW{comp.gameWeek} • N$0 entry</p>
+      <p className="text-xs text-white/80">
+        {weighted ? "1st prize: Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%. 2nd and 3rd: Common card each." : String(comp.prizeDescription || "Card prizes for the top three finishers")}
+      </p>
+      <p className="text-xs text-white/60">All accepted entries share one leaderboard. Winner rarity is frozen once at settlement, with no entry threshold to unlock card prizes.</p>
+      <InfoPill label="All FREE Cup entries" value={String(comp.entryCount || 0)} helper="All managers in this tournament" />
+    </div>;
+  }
+  if (!vaultTournament) {
+    return <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm text-cyan-50">
+      <p className="font-black">{comp.prizeDescription || "Tournament prize pool"}</p>
+      <p className="mt-1 text-xs text-white/65">This tournament is not part of the official Prize Vault. Entry: N$${money(comp.entryFee)}.</p>
+    </div>;
+  }
+  return <div className="space-y-2 rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-50">
+    <div className="flex flex-wrap items-center justify-between gap-2"><div><b>{comp.prizeDescription || "Prize Vault prize"}</b>{comp.prizeValue ? ` • value N$${money(comp.prizeValue)}` : ""}</div><Link href="/prize-vault" className="text-xs font-bold underline">View Prize Vault</Link></div>
+    <div className="grid gap-2 sm:grid-cols-4">
+      <InfoPill label="Entry" value={`N$${money(comp.entryFee)}`} helper="Per manager" />
+      <InfoPill label="Prize Vault qualifying entries" value={String(comp.entryCount || 0)} helper="This GW only" />
+      <InfoPill label="Unlock target" value={`N$${money(target)}`} helper="Prize ladder" />
+      <InfoPill label="Current revenue" value={`N$${money(revenue)}`} helper={comp.prizeUnlocked ? "Unlocked" : `${progress}% unlocked`} />
+    </div>
+    <div className="h-2 overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-emerald-300" style={{ width: `${progress}%` }} /></div>
+    <p className="text-xs text-emerald-100/70">Only paid qualifying entries contribute to the Prize Vault. Free Cup entries are separate.</p>
+  </div>;
 }
 function ArenaPulse({ label, value, helper, icon }: { label: string; value: string; helper: string; icon: ReactNode }) { return <div className="rounded-3xl border border-white/10 bg-black/30 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,.08)]"><div className="mb-3 flex items-center justify-between"><div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-2 text-cyan-100">{icon}</div><span className="text-[10px] font-black uppercase tracking-[0.22em] text-white/35">Arena</span></div><div className="text-[11px] uppercase tracking-[0.2em] text-white/45">{label}</div><div className="mt-1 text-2xl font-black text-white">{value}</div><div className="mt-1 text-xs text-white/45">{helper}</div></div>; }
 function InfoPill({ label, value, helper }: { label: string; value: string; helper: string }) { return <div className="rounded-2xl border border-white/10 bg-black/25 p-3"><div className="text-[11px] uppercase tracking-[0.2em] text-white/45">{label}</div><div className="text-lg font-bold mt-1 text-white">{value}</div><div className="text-xs text-white/45 mt-1">{helper}</div></div>; }
