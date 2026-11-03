@@ -14,6 +14,7 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from time import sleep
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -50,15 +51,27 @@ def normalize_name(value: str) -> str:
 
 def fetch_bytes(url: str) -> bytes:
     request = Request(url, headers={"Accept": "application/json,image/png", "User-Agent": "FantasyArena-PortraitCutoutBatch/1.0"})
-    with urlopen(request, timeout=28) as response:
-        if response.status != 200:
-            raise RuntimeError(f"HTTP {response.status}")
-        if int(response.headers.get("Content-Length") or 0) > MAX_BYTES:
-            raise ValueError("Source image too large")
-        data = response.read(MAX_BYTES + 1)
-        if len(data) > MAX_BYTES:
-            raise ValueError("Source image exceeded maximum size")
-        return data
+    # Retry transient CDN throttling instead of treating 429/503 as a
+    # permanently unusable player portrait in this full-directory pass.
+    for attempt in range(4):
+        try:
+            with urlopen(request, timeout=28) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"HTTP {response.status}")
+                if int(response.headers.get("Content-Length") or 0) > MAX_BYTES:
+                    raise ValueError("Source image too large")
+                data = response.read(MAX_BYTES + 1)
+                if len(data) > MAX_BYTES:
+                    raise ValueError("Source image exceeded maximum size")
+                return data
+        except HTTPError as error:
+            if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 3:
+                raise
+        except (URLError, TimeoutError):
+            if attempt == 3:
+                raise
+        sleep((2, 5, 10)[attempt])
+    raise RuntimeError("Source portrait unavailable after retries")
 
 
 def load_json(path: Path, fallback: dict) -> dict:
@@ -150,13 +163,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-url", default=DEFAULT_DIRECTORY)
     parser.add_argument("--source-file", help="Offline fixture JSON for checking input selection")
-    parser.add_argument("--batch-size", type=int, default=24)
+    parser.add_argument("--batch-size", type=int, default=700)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--retry-failed", action="store_true")
     args = parser.parse_args()
 
-    if not 1 <= args.batch_size <= 100:
-        parser.error("Batch size must be between 1 and 100")
+    if not 1 <= args.batch_size <= 700:
+        parser.error("Batch size must be between 1 and 700")
     PORTRAITS.mkdir(parents=True, exist_ok=True)
 
     manifest = load_json(MANIFEST_PATH, {"version": 1, "players": {}, "failed": {}})
@@ -286,7 +299,8 @@ def main() -> None:
     # Store only asset metadata and failure retry dates. No logins/ownership
     # information and no changes to cards, scores, wallets, minting or odds.
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", "utf-8")
-    print(f"Batch completed: accepted {processed}, deferred {rejected}, total accepted {len(existing)}.")
+    remaining = sum(1 for player in directory if str(player["id"]) not in existing and str(player["id"]) not in failed)
+    print(f"Batch completed: accepted {processed}, deferred {rejected}, total accepted {len(existing)}, pending unprocessed {remaining}.")
 
     summary = os.getenv("GITHUB_STEP_SUMMARY")
     if summary:

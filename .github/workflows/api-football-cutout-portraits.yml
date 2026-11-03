@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       batch_size:
-        description: "Verified active Premier League players per batch (1-100)"
+        description: "Verified active Premier League players per batch (1-700)"
         required: false
-        default: "100"
+        default: "700"
   schedule:
     # Catch up the current EPL player directory in small sequential batches.
     # Any unsupported or placeholder player falls back to their official photo.
@@ -28,7 +28,7 @@ concurrency:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,9 +83,9 @@ jobs:
           if not result_file.exists():
               raise RuntimeError("Verified squad source unavailable on both domains (see HTTP diagnostics). No portraits overwritten.")
           PY
-      - name: Generate next transparent portrait batch
+      - name: Generate transparent portraits for all unprocessed active EPL players
         env:
-          BATCH_SIZE: ${{ inputs.batch_size || '100' }}
+          BATCH_SIZE: ${{ inputs.batch_size || '700' }}
         run: |
           python scripts/generate-player-cutouts.py --source-file /tmp/verified-epl-player-portraits.json --batch-size "$BATCH_SIZE"
       - name: Publish only passing cutouts and batch manifest
