@@ -163,9 +163,11 @@ fi
 # tournaments through the existing guarded Admin settlement route, then open the
 # already-configured GW4 official tournaments early. The script is idempotent,
 # refuses unfinished eligible fixtures, and is inert unless the Railway flag is 1.
-if [ "${RUN_GW3_SETTLE_OPEN_GW4:-0}" = "1" ]; then
+if [ "${RUN_GW3_SETTLE_OPEN_GW4:-0}" = "1" ] && [ "$(date -u +%Y%m%d)" -le 20260915 ]; then
   echo "Running guarded GW3 settlement / GW4 entry-opening operator..."
   node scripts/operate-gw3-settle-open-gw4.mjs
+elif [ "${RUN_GW3_SETTLE_OPEN_GW4:-0}" = "1" ]; then
+  echo "Skipping expired GW3/GW4 operator: it no longer applies after 15 Sep 2026."
 fi
 
 # The database status alone is not enough: the compiled API and scoring lifecycle
