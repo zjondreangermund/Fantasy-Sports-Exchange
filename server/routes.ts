@@ -145,8 +145,7 @@ async function loadCompetitions(): Promise<any[]> {
       c.prize_key as "prizeKey"
     from app.competitions c
     where not (
-      c.created_by_user_id is null
-      and c.tier::text <> 'common'
+      c.tier::text <> 'common'
       and coalesce(c.entry_fee, 0) = 0
       and (
         lower(coalesce(c.prize_key, '')) like 'free-%-card'
