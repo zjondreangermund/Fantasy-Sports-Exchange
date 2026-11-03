@@ -174,6 +174,11 @@ export default function FreeGameweekLandingPage() {
                       <div className="rounded-2xl border border-white/10 bg-white/[.04] p-4"><Users className="h-5 w-5 text-cyan-300" /><p className="mt-3 text-3xl font-black">{entrants}</p><p className="text-xs text-slate-400">manager{entrants === 1 ? "" : "s"} entered</p></div>
                       <div className="rounded-2xl border border-white/10 bg-white/[.04] p-4"><Clock3 className="h-5 w-5 text-amber-300" /><p className="mt-3 text-xl font-black">{countdown}</p><p className="text-xs text-slate-400">until entries lock</p></div>
                     </div>
+                    <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/[.06] p-4 text-sm">
+                      <p className="font-black text-emerald-200">FREE Cup prizes</p>
+                      <p className="mt-1 text-slate-200">1st place: Rare card (95%), Unique (4.5%), Epic (0.45%) or Legendary (0.05%).</p>
+                      <p className="mt-1 text-slate-300">2nd and 3rd: one Common card each. Higher-rarity odds are deliberately very low.</p>
+                    </div>
                     <div className="rounded-2xl border border-white/10 bg-black/30 p-4"><p className="text-xs uppercase tracking-[.15em] text-slate-500">Entry deadline</p><p className="mt-1 font-bold">{lockTime}</p></div>
                     <a href={loginHref} className="block"><Button size="lg" className="w-full font-black">Enter FREE GW{gameWeek || ""}</Button></a>
                     <p className="text-center text-[11px] leading-5 text-slate-500">N$0 tournament entry fee. Premier League gameweek scoring rules apply.</p>
