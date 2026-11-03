@@ -3,14 +3,9 @@ import pg from "pg";
 const { Client } = pg;
 const SEASON = "2026-27";
 const GW2_FREE_COMMON_TEST_CUTOFF_UTC = Date.parse("2026-08-29T11:30:00.000Z"); // 13:30 CAT/Namibia on 29 Aug 2026, today's first Premier League kickoff
-const FREE_CUP_RARITIES = [
-  { tier: "common", prizeCardRarity: "rare" },
-  { tier: "rare", prizeCardRarity: "unique" },
-  { tier: "unique", prizeCardRarity: "epic" },
-  { tier: "epic", prizeCardRarity: "legendary" },
-  // Legendary is already the highest rarity, so its winner receives another Legendary card.
-  { tier: "legendary", prizeCardRarity: "legendary" },
-];
+// From GW10 onward there is one FREE Cup each week; the winner rarity is
+// locked at settlement, not determined by entry-card rarity.
+const FREE_CUP_RARITIES = [{ tier: "common", prizeCardRarity: "rare" }];
 
 function title(value) {
   const text = String(value || "");
@@ -100,7 +95,7 @@ async function main() {
         .filter(Boolean),
     )].sort((a, b) => a - b);
     const currentGw = livePaidGameweeks[0] || upcomingPaidGameweeks[0] || 1;
-    const expectedPaidCoverage = (39 - currentGw) * FREE_CUP_RARITIES.length;
+    const expectedPaidCoverage = (39 - currentGw) * 5; // paid Prize Vault still has five rarity tiers
     const currentFuturePaidCoverage = [...officialBySlot.keys()]
       .filter((key) => Number(String(key).split(":")[0]) >= currentGw).length;
     if (currentFuturePaidCoverage !== expectedPaidCoverage) {
@@ -130,16 +125,35 @@ async function main() {
       [SEASON, currentGw],
     );
 
+    // Retire extra free cups without deleting entrants, standings or rewards.
+    // Cups with prior entrants remain closable and settleable by Admin;
+    // cups with no entrants are cancelled. No legacy cup is recreated.
+    await client.query(
+      `update app.competitions c
+         set visibility='private',
+             status=case
+               when c.status::text in ('completed','cancelled') then c.status
+               when exists(select 1 from app.competition_entries e where e.competition_id=c.id)
+                 then 'closed'::text::${statusType}
+               else 'cancelled'::text::${statusType}
+             end
+       where c.created_by_user_id is null and c.season=$1
+         and c.game_week between $2 and 38
+         and c.tier::text <> 'common'
+         and coalesce(c.entry_fee,0)=0
+         and coalesce(c.prize_key,'') like 'free-%-card'
+         and c.name not like '[TEST]%'`,
+      [SEASON,currentGw],
+    );
+
     for (let gw = currentGw; gw <= 38; gw += 1) {
       for (const rarity of FREE_CUP_RARITIES) {
         const source = officialBySlot.get(`${gw}:${rarity.tier}`);
         if (!source) throw new Error(`Missing paid source window for GW${gw} ${rarity.tier}`);
 
         const name = `GW${gw} FREE ${title(rarity.tier)} Card Cup`;
-        const prizeKey = `free-${rarity.prizeCardRarity}-card`;
-        const prizeDescription = rarity.tier === "legendary"
-          ? `FREE ${title(rarity.tier)} Card Cup. Winner receives a randomized Legendary player card because Legendary is the highest rarity. The player is drawn fairly from all eligible current Premier League players across all clubs.`
-          : `FREE ${title(rarity.tier)} Card Cup. Winner receives a randomized ${title(rarity.prizeCardRarity)} player card — the next higher rarity. The player is drawn fairly from all eligible current Premier League players across all clubs.`;
+        const prizeKey = 'free-weighted-card';
+        const prizeDescription = "One FREE Common Card Cup. 1st place: Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05% (odds fixed and drawn once at settlement). 2nd and 3rd: Common player cards. Only eligible current Premier League players may be minted.";
 
         const existing = await client.query(
           `select c.id, c.status::text as status,
@@ -243,7 +257,7 @@ async function main() {
       }
     }
 
-    const expectedCoverage = (39 - currentGw) * FREE_CUP_RARITIES.length;
+    const expectedCoverage = (39 - currentGw);
     const coverage = await client.query(
       `select count(*)::int as coverage_pairs
          from (
@@ -254,7 +268,8 @@ async function main() {
               and coalesce(c.entry_fee, 0) = 0
               and coalesce(c.prize_key, '') like 'free-%-card'
               and c.game_week between $2 and 38
-              and c.tier::text in ('common','rare','unique','epic','legendary')
+              and c.tier::text = 'common'
+              and c.name not like '[TEST]%'
             group by c.game_week, c.tier::text
          ) slots`,
       [SEASON, currentGw],
@@ -268,7 +283,7 @@ async function main() {
     console.log(`FREE Card Cups synced for ${SEASON}: current entry GW ${currentGw}, created ${created}, updated ${updated}, verified ${coveragePairs}/${expectedCoverage} current/future slots.`);
     console.log("Deleted past FREE Card Cups are not recreated.");
     console.log("Explicit admin status overrides are preserved for FREE Card Cups; background sync cannot reset a manually saved status.");
-    console.log("Prize progression: Common→Rare, Rare→Unique, Unique→Epic, Epic→Legendary, Legendary→Legendary.");
+    console.log("One free Common Card Cup per gameweek; 1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd/3rd Common.");
     console.log(`Preserved ${preservedEntries} existing FREE Cup entries; no tournament entry rows were deleted or moved.`);
     if (gw2CommonForcedOpen) {
       console.log("GW2 FREE Common Card Cup forced OPEN until 13:30 CAT on 29 Aug 2026, today's first Premier League kickoff.");

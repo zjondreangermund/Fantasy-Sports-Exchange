@@ -3,7 +3,7 @@ import fs from "node:fs";
 
 const read = (file) => fs.readFileSync(file, "utf8");
 const server = read("server/routes/economyIntegrity.routes.ts");
-const awards = read("scripts/apply-free-card-cup-auto-awards.mjs");
+const prizes = read("server/services/freeCupPrizes.ts");
 const entries = read("client/src/pages/my-entries.tsx");
 const nativeClub = read("client/src/components/native/NativeClubPage.tsx");
 const notificationClient = read("client/src/lib/notifications.ts");
@@ -14,7 +14,8 @@ const need = (source, token, message) => assert.ok(source.includes(token), messa
 
 need(server, 'app.post("/api/competitions/prizes/:entryId/claim"', "Authenticated card-prize claim endpoint is missing.");
 need(server, "pg_advisory_xact_lock(99241", "Prize claims must serialize per entry.");
-need(server, "const rarity = rank === 1 ? \"rare\" : \"common\"", "FREE Common Cup rank rewards must be Rare/Common/Common.");
+need(server, "const recordedRarity", "Claim must read the rarity frozen at settlement instead of rerolling.");
+need(server, "CARD_SUPPLY_CAP_BY_RARITY", "Claim must obey the card economy supply limits.");
 need(server, "rank >= 1 && rank <= 3", "Only the top three FREE Common Cup entries may claim.");
 need(server, "ce.prize_card_id as \"prizeCardId\"", "Claims must reuse an existing awarded card.");
 need(server, "where id=${entryId} and user_id=${userId} and prize_card_id is null", "One-card-only database guard is missing.");
@@ -23,10 +24,14 @@ need(server, "${rarity}::text", "Prize metadata rarity must have an explicit Pos
 need(server, "${Number(card.id)}::integer", "Prize metadata card ID must have an explicit PostgreSQL type.");
 need(server, "Exactly one card was added to your Collection.", "Claim confirmation must state the one-card result.");
 
-need(awards, "FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS", "Top-three settlement patch marker is missing.");
-need(awards, "for (let index = 0; index < Math.min(3, ranked.length); index += 1)", "All three places must receive a pending prize right.");
-need(awards, 'index === 0 ? "Random Rare Player Card" : "Random Common Player Card"', "1st Rare, 2nd/3rd Common must be awarded as mint entitlements.");
-need(awards, "free-card-claim-ready", "Congratulations claim-ready notification is missing.");
+need(server, "FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS", "Top-three settlement implementation marker is missing.");
+need(server, "for (let index = 0; index < Math.min(3, ranked.length); index += 1)", "All three places must receive a pending prize right.");
+need(server, "drawFreeCupFirstPrize()", "First-place rarity must be drawn once at settlement.");
+need(server, ': "common";', "2nd/3rd must keep Common card awards.");
+need(prizes, 'randomInt(10_000)', "Free Cup first-place odds must use secure server-side randomness.");
+need(prizes, 'weight: 9500', "Rare card baseline must be 95%.");
+need(prizes, 'weight: 5', "Legendary odds must be strictly low.");
+need(server, "free-card-claim-ready", "Congratulations claim-ready notification is missing.");
 
 need(entries, "Claim prize card", "My Teams & Prizes must expose a real claim button.");
 need(entries, '/api/competitions/prizes/${entryId}/claim', "Claim button must call the authenticated claim endpoint.");
@@ -40,4 +45,4 @@ need(notificationClient, 'return "/trophy-cabinet"', "In-app winning-card alerts
 need(nativePush, 'return "/trophy-cabinet"', "Android winning-card pushes must open the Trophy Cabinet.");
 need(webPush, 'return "/trophy-cabinet"', "Web winning-card pushes must open the Trophy Cabinet.");
 
-console.log("FREE Common Cup top-three prizes verified: 1st Rare, 2nd/3rd Common, atomic one-card claims and Inbox congratulations.");
+console.log("FREE Common Cup verified: 1st rarity odds frozen on settlement, 2nd/3rd Common, atomic one-card claims.");

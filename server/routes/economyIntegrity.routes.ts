@@ -3,6 +3,8 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { storage } from "../storage.js";
+import { drawFreeCupFirstPrize } from "../services/freeCupPrizes.js";
+import { CARD_SUPPLY_CAP_BY_RARITY } from "../../shared/card-economy.js";
 import { awardedPrizeCardId } from "../services/prizeCardIdentity.js";
 import { fplApi } from "../services/fplApi.js";
 import { buildFplPlayerIndex } from "../services/fplPlayerIdentity.js";
@@ -248,6 +250,7 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
     select ce.id as "entryId", ce.user_id as "userId", ce.rank, ce.prize_card_id as "prizeCardId",
       ce.tiebreak_meta -> 'settlement' -> 'prizeAward' as "settlementAward",
       (select pa.metadata from app.competition_prize_awards pa where pa.entry_id=ce.id and pa.user_id=ce.user_id and pa.prize_category='card' limit 1) as "awardMetadata",
+      (select pa.rarity from app.competition_prize_awards pa where pa.entry_id=ce.id and pa.user_id=ce.user_id and pa.prize_category='card' limit 1) as "awardRarity",
       (select pa.status from app.competition_prize_awards pa where pa.entry_id=ce.id and pa.user_id=ce.user_id and pa.prize_category='card' limit 1) as "awardStatus",
       c.id as "competitionId", c.name as "competitionName", c.status::text as "competitionStatus",
       c.tier::text as tier, coalesce(c.entry_fee,0)::float as "entryFee",
@@ -260,11 +263,10 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
   if (!award || String(award.userId) !== userId) throw new Error("Prize claim not found");
   const rank = Number(award.rank || 0);
   const freeCommonCup = String(award.competitionStatus) === "completed"
-    && String(award.tier) === "common"
     && Number(award.entryFee || 0) <= 0
     && String(award.prizeKey || "").toLowerCase().startsWith("free-")
     && rank >= 1 && rank <= 3;
-  if (!freeCommonCup) throw new Error("This entry has no FREE Common Cup card prize to claim");
+  if (!freeCommonCup) throw new Error("This entry has no FREE Cup card prize to claim");
 
   const existingCardId = awardedPrizeCardId(award);
   if (existingCardId > 0) {
@@ -285,8 +287,12 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
     return { ...existing, competitionId: Number(award.competitionId), entryId, rank, replayed: true };
   }
 
-  const rarity = rank === 1 ? "rare" : "common";
-  const maxSupply = rarity === "rare" ? 100 : 1000;
+  // Never reroll rarity when the player claims later: use the exact award
+  // written at settlement, with legacy Rare/Common fallback.
+  const recordedRarity = String(award.awardRarity || asObject(award.settlementAward).rarity || "").toLowerCase();
+  const allowedRarities = ["common", "rare", "unique", "epic", "legendary"];
+  const rarity = rank === 1 && allowedRarities.includes(recordedRarity) ? recordedRarity : rank === 1 ? "rare" : "common";
+  const maxSupply = CARD_SUPPLY_CAP_BY_RARITY[rarity as keyof typeof CARD_SUPPLY_CAP_BY_RARITY];
   if(rarity==="common"){
     const commonCount=Number(rowsOf(await tx.execute(sql`select count(*)::int as count from app.player_cards where owner_id=${userId} and rarity::text='common'`))[0]?.count||0);
     if(commonCount>=COMMON_COLLECTION_CAP){
@@ -755,10 +761,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const [entries, locks] = await Promise.all([
         db.execute(sql`select ce.id, ce.user_id as "userId", u.email, c.name, c.game_week as "gameWeek", c.status, ce.rank, ce.total_score as "totalScore"
           from app.competition_entries ce join app.competitions c on c.id=ce.competition_id left join app.users u on u.id=ce.user_id
+          where c.name not like '[TEST]%' and ce.user_id not like 'test-bot-%'
           order by ce.joined_at desc, ce.id desc limit 100`),
         db.execute(sql`select cl.card_id as "cardId", cl.user_id as "userId", u.email, cl.ref_id as "refId", c.name, c.game_week as "gameWeek", c.status, c.end_date as "endDate"
           from app.card_locks cl left join app.competitions c on c.id::text=cl.ref_id left join app.users u on u.id=cl.user_id
           where cl.reason='competition' and (cl.expires_at is null or cl.expires_at>now())
+            and (c.name is null or c.name not like '[TEST]%') and cl.user_id not like 'test-bot-%'
           order by cl.created_at desc limit 100`),
       ]);
       return res.json({entries:rowsOf(entries),locks:rowsOf(locks)});
@@ -776,7 +784,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
     }
   });
 
-  app.post("/api/admin/competitions/settle/:id", requireAuth, async (req: any, res) => {
+  const settleSingleCompetition = async (req: any, res: any) => {
     try {
       await ensureCardLockGuard();
       await ensurePrizeAwardSchema();
@@ -788,6 +796,8 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
 
       const preview = await storage.getCompetition(competitionId);
       if (!preview) return res.status(404).json({ message: "Tournament not found" });
+      // Never rewrite already settled points, award metadata or claimed cards.
+      if (String(preview.status) === "completed") return res.json({ success: true, replayed: true, message: "Tournament already settled; all original points and rewards preserved" });
       if (String(preview.status) !== "completed") {
         let scoring = await new ScoreUpdateService(storage).updateCompetition(competitionId);
         // A completed fixture can precede its finalized API-Football player statistics.
@@ -834,7 +844,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             coalesce(entry_fee, 0)::float as "entryFee", coalesce(platform_fee_rate, case when created_by_user_id is not null then 0.1 else 0 end)::float as "platformFeeRate",
             coalesce(prize_type, 'goods') as "prizeType", coalesce(prize_key, '') as "prizeKey",
             coalesce(prize_description, '') as "prizeDescription", coalesce(visibility, 'public') as visibility,
-            created_by_user_id as "createdByUserId"
+            prize_card_rarity::text as "prizeCardRarity", created_by_user_id as "createdByUserId"
           from app.competitions
           where id = ${competitionId}
           for update
@@ -844,11 +854,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           throw new Error("Tournament must be closed before settlement");
         }
         const alreadyCompleted = String(competition.status) === "completed";
+        if (alreadyCompleted) return { replayed: true, prizeVault: false, winnersCount: 0, prizeAward: null, cardLocksReleased: false };
 
         const lockedEntries = rowsOf(await tx.execute(sql`
           select id, user_id as "userId", coalesce(entry_fee_paid, 0)::float as "entryFeePaid",
             coalesce(total_score, 0)::float as "totalScore", coalesce(prize_amount, 0)::float as "prizeAmount",
-            payout_posting_key as "payoutPostingKey", payout_transaction_id as "payoutTransactionId",
+            prize_card_id as "prizeCardId", payout_posting_key as "payoutPostingKey", payout_transaction_id as "payoutTransactionId",
             coalesce(tiebreak_meta, '{}'::jsonb) as "tiebreakMeta"
           from app.competition_entries
           where competition_id = ${competitionId}
@@ -875,8 +886,10 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         const grossPool = toMoney(paidFees || ranked.length * Number(competition.entryFee || 0));
         const prizeType = String(competition.prizeType || "goods").toLowerCase();
         const prizeVault = isOfficialPrizeVaultCompetition(competition);
+        const freeCardCup = Number(competition.entryFee || 0) <= 0 && Boolean(competition.prizeCardRarity)
+          && String(competition.prizeKey || "").toLowerCase().startsWith("free-");
         const cashPoolEnabled = prizeType === "cash_pool" || prizeType === "goods_plus_cash";
-        const nonCashAwardEnabled = prizeVault || ["goods", "goods_plus_cash", "packs", "sponsor_prize"].includes(prizeType);
+        const nonCashAwardEnabled = !freeCardCup && (prizeVault || ["goods", "goods_plus_cash", "packs", "sponsor_prize"].includes(prizeType));
         const payoutPercentages = [0.6, 0.3, 0.1];
 
         let sharedEntries = ranked.length;
@@ -975,7 +988,69 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           });
         }
 
-        let awardRecord: any = null;
+        // FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS
+        // Freeze each rarity only once in the award ledger; the member mints
+        // later using the stored award (never another draw at claim time).
+        let freeCardAward: any = null;
+        if (freeCardCup) {
+          for (let index = 0; index < Math.min(3, ranked.length); index += 1) {
+            const placed = ranked[index];
+            const placedEntryId = Number(placed.id);
+            const placedUserId = String(placed.userId || "");
+            const placedRank = index + 1;
+            const rarity = index === 0
+              ? String(competition.prizeKey) === "free-weighted-card"
+                ? drawFreeCupFirstPrize()
+                : String(competition.prizeCardRarity || "rare")
+              : "common";
+            const oldEntry = lockedEntries.find((entry: any) => Number(entry.id) === placedEntryId);
+            const existingCardId = Number(oldEntry?.prizeCardId || 0);
+            const placedPrize = {
+              key: "free-card-rank-" + placedRank,
+              title: "Random " + rarity.charAt(0).toUpperCase() + rarity.slice(1) + " Player Card",
+              value: 0, category: "card", rarity, rank: placedRank,
+              claimPending: existingCardId <= 0, cardId: existingCardId || null,
+            };
+            if (index === 0) {
+              prizeAward = placedPrize;
+              freeCardAward = {rarity,cardId:existingCardId||null,claimed:existingCardId>0};
+            }
+            await tx.execute(sql`
+              update app.competition_entries
+              set tiebreak_meta = jsonb_set(coalesce(tiebreak_meta, '{}'::jsonb),
+                '{settlement,prizeAward}', ${JSON.stringify(placedPrize)}::jsonb, true)
+              where id=${placedEntryId} and competition_id=${competitionId}
+            `);
+            await tx.execute(sql`
+              insert into app.competition_prize_awards
+                (competition_id,entry_id,user_id,game_week,rarity,prize_key,prize_title,prize_value,prize_category,status,metadata)
+              values
+                (${competitionId},${placedEntryId},${placedUserId},${Number(competition.gameWeek)},
+                 ${rarity},${String(placedPrize.key)},${String(placedPrize.title)},0,'card',
+                 ${existingCardId>0 ? 'claimed' : 'pending_claim'},
+                 ${JSON.stringify({rank:placedRank,freeCup:true,oneCardOnly:true,weighted:competition.prizeKey==='free-weighted-card'})}::jsonb)
+              on conflict (competition_id,entry_id) do nothing
+            `);
+            await createNotificationOnce(tx, {
+              userId: placedUserId,
+              type: index === 0 ? "win" : "runner_up",
+              title: "Congratulations — #" + placedRank + " wins a " + rarity.toUpperCase() + " card",
+              message: "You finished #" + placedRank + " in " + competition.name + " with "
+                + toMoney(placed.totalScore).toFixed(1) + " points. Your "
+                + rarity.toUpperCase() + " card is reserved. Open Trophy Cabinet and tap Mint.",
+              dedupeKey: "competition:" + competitionId + ":entry:" + placedEntryId + ":free-card-claim-ready",
+            });
+          }
+        }
+        let awardRecord: any = freeCardAward ? {
+          competitionId, entryId: Number(ranked[0].id), userId: String(ranked[0].userId || ""),
+          gameWeek: Number(competition.gameWeek), rarity: freeCardAward.rarity,
+          prizeKey: String(prizeAward?.key || "free-card-rank-1"),
+          prizeTitle: String(prizeAward?.title || "Random Rare Player Card"),
+          prizeValue: 0, prizeCategory: "card",
+          status: freeCardAward.claimed ? "claimed" : "pending_claim",
+          cardId: freeCardAward.cardId,
+        } : null;
         if (nonCashAwardEnabled && prizeAward) {
           const winner = ranked[0];
           const winnerEntryId = Number(winner.id);
@@ -1068,6 +1143,94 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const status = message === "Tournament not found" ? 404 : validationMessages.includes(message) ? 400 : 500;
       if (status === 500) console.error("Failed to settle competition atomically:", error);
       return res.status(status).json({ message });
+    }
+  };
+  app.post("/api/admin/competitions/settle/:id", requireAuth, settleSingleCompetition);
+
+  // Settle a whole gameweek. Existing per-tournament scoring, provider checks,
+  // wallet idempotency and prize claims remain authoritative for entered cups.
+  // Empty tournaments can be completed after their own settlement cutoff,
+  // without inventing a score, winner or payout.
+  app.post("/api/admin/competitions/settle-gameweek/:gameWeek", requireAuth, async (req: any, res) => {
+    try {
+      const adminId = String(req.authUserId || "");
+      if (!(await isAdminUser(adminId))) return res.status(403).json({ message: "Admin access required" });
+      const gameWeek = Number(req.params.gameWeek);
+      if (!Number.isInteger(gameWeek) || gameWeek < 1 || gameWeek > 38) {
+        return res.status(400).json({ message: "Valid gameweek between 1 and 38 required" });
+      }
+      const cups = rowsOf(await db.execute(sql`
+        select c.id, c.name, c.status::text as status, c.end_date as "endDate",
+          count(ce.id)::integer as "entryCount"
+        from app.competitions c
+        left join app.competition_entries ce on ce.competition_id=c.id
+        where c.game_week=${gameWeek} and c.name not like '[TEST]%'
+          and c.status::text <> 'cancelled'
+        group by c.id
+        order by c.id
+      `));
+      const results: Array<{ id: number; name: string; result: string; message: string }> = [];
+      for (const cup of cups) {
+        const id = Number(cup.id);
+        const name = String(cup.name || "Tournament");
+        if (String(cup.status) === "completed") {
+          results.push({ id, name, result: "already_completed", message: "Existing settlement and prizes preserved" });
+          continue;
+        }
+        const cutoff = Date.parse(String(cup.endDate || ""));
+        if (!Number.isFinite(cutoff) || Date.now() < cutoff) {
+          results.push({ id, name, result: "blocked", message: "Gameweek settlement cutoff has not passed" });
+          continue;
+        }
+        if (Number(cup.entryCount || 0) === 0) {
+          try {
+            const settled = await db.transaction(async (tx) => {
+              const locked = rowsOf(await tx.execute(sql`
+                select id, status::text as status, end_date as "endDate"
+                from app.competitions where id=${id} for update
+              `))[0];
+              if (!locked || String(locked.status) === "cancelled") throw new Error("Tournament no longer eligible");
+              if (String(locked.status) === "completed") return false;
+              if (!["open", "active", "closed"].includes(String(locked.status))) throw new Error("Tournament is not ready");
+              if (Date.parse(String(locked.endDate || "")) > Date.now()) throw new Error("Settlement cutoff has not passed");
+              const entries = rowsOf(await tx.execute(sql`select id from app.competition_entries where competition_id=${id} limit 1`));
+              if (entries.length) throw new Error("An entry was added; retry the normal settlement");
+              await tx.execute(sql`update app.competitions set status='completed',platform_fee_total=0,prize_pool_total=0 where id=${id}`);
+              await tx.execute(sql`delete from app.card_locks where reason='competition' and ref_id=${String(id)}`);
+              await tx.execute(sql`insert into app.audit_logs(user_id,action,meta)
+                values(${adminId},'admin.tournament.empty_settled',${JSON.stringify({competitionId:id,gameWeek,empty:true})}::jsonb)`);
+              return true;
+            });
+            results.push({ id, name, result: settled ? "settled_empty" : "already_completed", message: "No entries; closed without rewards" });
+          } catch (error: any) {
+            results.push({ id, name, result: "blocked", message: String(error?.message || "Could not settle empty tournament") });
+          }
+          continue;
+        }
+
+        const captured = {
+          statusCode: 200, payload: null as any,
+          status(code: number) { this.statusCode = code; return this; },
+          json(payload: any) { this.payload = payload; return this; },
+        };
+        const childRequest = Object.create(req);
+        childRequest.params = { ...req.params, id: String(id) };
+        await settleSingleCompetition(childRequest, captured);
+        results.push({
+          id, name,
+          result: captured.statusCode < 300 && captured.payload?.success ? "settled" : "blocked",
+          message: String(captured.payload?.message || "Settlement failed"),
+        });
+      }
+      const failed = results.filter(row => row.result === "blocked").length;
+      return res.status(failed ? 207 : 200).json({
+        success: failed === 0, gameWeek, total: results.length, blocked: failed,
+        settled: results.filter(row => row.result === "settled" || row.result === "settled_empty").length,
+        results,
+      });
+    } catch (error: any) {
+      console.error("Gameweek settlement failed", error);
+      return res.status(500).json({ message: "Unable to run gameweek settlement" });
     }
   });
 }

@@ -62,6 +62,8 @@ export default function AdminTournamentManager() {
   const [previewRarity, setPreviewRarity] = useState("rare");
   const [financialSearch, setFinancialSearch] = useState("");
   const [tournamentListView, setTournamentListView] = useState<"current" | "closed">("closed");
+  const [selectedGameWeek, setSelectedGameWeek] = useState("");
+  const [bulkSettlement, setBulkSettlement] = useState<any>(null);
   const { data: competitions } = useQuery<any[]>({ queryKey: ["/api/competitions"] });
   const { data: prizePayload } = useQuery<any>({ queryKey: ["/api/admin/prizes"] });
   const { data: financialPayload, isFetching: financialsFetching, refetch: refreshFinancials } = useQuery<any>({
@@ -87,6 +89,8 @@ export default function AdminTournamentManager() {
   const officialCompetitions = sortedCompetitions.filter((comp) => String(comp.prizeKey || comp.prize_key || "") !== "user-cash");
   const activeCompetitions = officialCompetitions.filter((comp) => !["completed", "closed", "cancelled"].includes(String(comp.status || "").toLowerCase()));
   const completedCompetitions = officialCompetitions.filter((comp) => ["completed", "closed", "cancelled"].includes(String(comp.status || "").toLowerCase()));
+  const latestFinishedGameWeek = Math.max(1, ...officialCompetitions.filter((comp) => { const deadline = Date.parse(String(comp.endDate || comp.end_date || "")); return Number.isFinite(deadline) && deadline <= Date.now(); }).map((comp) => Number(comp.gameWeek || comp.game_week || 0)));
+  const targetGameWeek = Number(selectedGameWeek || latestFinishedGameWeek);
   const prizesByRarity = useMemo(() => {
     const groups: Record<string, any[]> = {};
     for (const rarity of rarityOptions) groups[rarity] = [];
@@ -105,62 +109,48 @@ export default function AdminTournamentManager() {
         const gw = Number(value || 1);
         next.startDate = defaultStartForGw(gw);
         next.endDate = defaultEndForGw(gw);
-        if (!String(next.name || "").trim() || /^GW\d+\s/i.test(String(next.name))) {
-          next.name = next.rewardMode === "card" ? `GW${gw} FREE ${cap(String(next.tier))} Card Cup` : `GW${gw} ${cap(String(next.tier))} Vault`;
-        }
       }
-      if (key === "tier") {
+      if (key === "rewardMode" && value === "card") {
+        next.tier = "common";
+        next.entryFee = "0";
+        next.cardPrizeRarity = "rare";
+        next.prizeKey = "free-weighted-card";
+        next.prizeDescription = "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Common";
+      }
+      if (key === "tier" && next.rewardMode !== "card") {
         setPreviewRarity(value);
-        if (next.rewardMode === "card") {
-          next.entryFee = "0";
-          next.cardPrizeRarity = nextCardRarity[value] || value;
-          next.prizeKey = `free-${next.cardPrizeRarity}-card`;
-          next.prizeDescription = `${cap(next.cardPrizeRarity)} Player Card`;
-          next.name = `GW${next.gameWeek || 1} FREE ${cap(value)} Card Cup`;
-        } else {
-          next.entryFee = String(entryFeeByRarity[value] || 50);
-          next.prizeKey = "ladder";
-          next.prizeDescription = `${cap(value)} Prize Vault ladder`;
-          next.name = `GW${next.gameWeek || 1} ${cap(value)} Vault`;
-        }
+        next.entryFee = String(entryFeeByRarity[value] || 50);
+        next.prizeKey = "ladder";
+        next.prizeDescription = `${cap(value)} Prize Vault ladder`;
       }
-      if (key === "rewardMode") {
-        if (value === "card") {
-          const prizeRarity = nextCardRarity[String(next.tier)] || String(next.tier);
-          next.entryFee = "0";
-          next.cardPrizeRarity = prizeRarity;
-          next.prizeKey = `free-${prizeRarity}-card`;
-          next.prizeDescription = `${cap(prizeRarity)} Player Card`;
-          next.name = `GW${next.gameWeek || 1} FREE ${cap(String(next.tier))} Card Cup`;
-        } else {
-          next.entryFee = String(entryFeeByRarity[String(next.tier)] || 50);
-          next.prizeKey = "ladder";
-          next.prizeDescription = `${cap(String(next.tier))} Prize Vault ladder`;
-          next.name = `GW${next.gameWeek || 1} ${cap(String(next.tier))} Vault`;
-        }
+      if (key === "rewardMode" && value !== "card") {
+        next.entryFee = String(entryFeeByRarity[String(next.tier)] || 50);
+        next.prizeKey = "ladder";
+        next.prizeDescription = `${cap(String(next.tier))} Prize Vault ladder`;
       }
-      if (key === "cardPrizeRarity" && next.rewardMode === "card") {
-        next.prizeKey = `free-${value}-card`;
-        next.prizeDescription = `${cap(value)} Player Card`;
+      if (key === "gameWeek" || key === "rewardMode" || key === "tier") {
+        if (!String(prev.name || "").trim() || /^GW\d+\s/i.test(String(prev.name))) {
+          next.name = next.rewardMode === "card"
+            ? `GW${next.gameWeek || 1} FREE Common Card Cup`
+            : `GW${next.gameWeek || 1} ${cap(String(next.tier))} Vault`;
+        }
       }
       return next;
     });
   };
 
-  const applyFreeCupPreset = (tier: string) => {
-    const prizeRarity = nextCardRarity[tier] || tier;
-    setPreviewRarity(tier);
+  const applyFreeCupPreset = (_tier: string = "common") => {
     setForm((prev) => ({
       ...prev,
       id: "",
-      tier,
+      tier: "common",
       rewardMode: "card",
       entryFee: "0",
-      cardPrizeRarity: prizeRarity,
+      cardPrizeRarity: "rare",
       prizeType: "goods",
-      prizeKey: `free-${prizeRarity}-card`,
-      prizeDescription: `${cap(prizeRarity)} Player Card`,
-      name: `GW${prev.gameWeek || 1} FREE ${cap(tier)} Card Cup`,
+      prizeKey: "free-weighted-card",
+      prizeDescription: "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Common",
+      name: `GW${prev.gameWeek || 1} FREE Common Card Cup`,
     }));
   };
 
@@ -169,7 +159,7 @@ export default function AdminTournamentManager() {
       const cardMode = form.rewardMode === "card";
       const body = {
         name: form.name,
-        tier: form.tier,
+        tier: cardMode ? "common" : form.tier,
         status: form.status,
         gameWeek: Number(form.gameWeek || 1),
         entryFee: cardMode ? 0 : Number(form.entryFee || 0),
@@ -178,8 +168,8 @@ export default function AdminTournamentManager() {
         prizeMode: cardMode ? "card" : "ladder",
         prizeCardRarity: cardMode ? form.cardPrizeRarity : null,
         prizeType: "goods",
-        prizeKey: cardMode ? `free-${form.cardPrizeRarity}-card` : "ladder",
-        prizeDescription: cardMode ? `${cap(form.cardPrizeRarity)} Player Card` : `${cap(form.tier)} Prize Vault ladder`,
+        prizeKey: cardMode ? "free-weighted-card" : "ladder",
+        prizeDescription: cardMode ? "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Common" : `${cap(form.tier)} Prize Vault ladder`,
         startDate: new Date(form.startDate).toISOString(),
         endDate: new Date(form.endDate).toISOString(),
       };
@@ -192,7 +182,7 @@ export default function AdminTournamentManager() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       toast({
         title: form.id ? "Tournament updated" : "Tournament created",
-        description: form.rewardMode === "card" ? `FREE ${cap(form.tier)} cup awards a ${cap(form.cardPrizeRarity)} player card.` : `${cap(form.tier)} Prize Ladder linked (admin only).`,
+        description: form.rewardMode === "card" ? "One weekly Free Cup with securely drawn first-place card rarity." : `${cap(form.tier)} Prize Ladder linked (admin only).`,
       });
       if (!form.id) setForm(buildEmptyForm());
     },
@@ -230,6 +220,22 @@ export default function AdminTournamentManager() {
     },
   });
 
+  const settleGameWeekMutation = useMutation({
+    mutationFn: async (gameWeek: number) => (await apiRequest("POST", `/api/admin/competitions/settle-gameweek/${gameWeek}`, {})).json(),
+    onSuccess: (result: any) => {
+      setBulkSettlement(result);
+      for (const key of ["/api/competitions", "/api/competitions/my-entries", "/api/prize-vault", "/api/admin/tournament-financials", "/api/admin/stats", "/api/admin/entry-monitor"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+      toast({
+        title: result.blocked ? `GW${result.gameWeek}: ${result.blocked} need attention` : `GW${result.gameWeek} settled`,
+        description: `${result.settled} tournament(s) settled; previously completed results and rewards preserved.`,
+        variant: result.blocked ? "destructive" : undefined,
+      });
+    },
+    onError: (error: any) => toast({ title: "Gameweek settlement failed", description: String(error?.message || "Unknown error"), variant: "destructive" }),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (competitionId: number) => (await apiRequest("DELETE", `/api/admin/competitions/${competitionId}`)).json(),
     onSuccess: () => {
@@ -243,6 +249,11 @@ export default function AdminTournamentManager() {
     },
     onError: (error: any) => toast({ title: "Tournament deletion failed", description: error.message, variant: "destructive" }),
   });
+
+  const requestGameWeekSettlement = () => {
+    if (!window.confirm(`Settle every eligible tournament in Gameweek ${targetGameWeek}? Empty cups will close with no rewards. Already completed awards will never be rerolled. Unverified scores will remain blocked.`)) return;
+    settleGameWeekMutation.mutate(targetGameWeek);
+  };
 
   const requestDelete = (comp: any) => {
     if (!window.confirm(`Delete "${comp.name || "this tournament"}" and all related entries? This cannot be undone.`)) return;
@@ -280,6 +291,25 @@ export default function AdminTournamentManager() {
         </div>
         <div className="flex gap-2"><Link href="/prize-vault"><Button variant="outline" className="rounded-xl border-emerald-300/30 bg-emerald-300/10 text-emerald-100"><Gift className="mr-2 h-4 w-4" />Prize Vault</Button></Link><Button onClick={() => setForm(buildEmptyForm())} className="rounded-xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><Plus className="mr-2 h-4 w-4" />New</Button></div>
       </div>
+
+      <section className="mt-5 rounded-2xl border border-emerald-300/25 bg-emerald-400/[.04] p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="min-w-[140px] flex-1 space-y-1 text-sm">
+            <span className="font-bold text-emerald-100">Settle whole gameweek</span>
+            <select value={targetGameWeek} onChange={(event) => setSelectedGameWeek(event.target.value)} className="w-full rounded-lg border border-white/15 bg-slate-950 px-3 py-2 text-white">
+              {Array.from({length:38}, (_, index) => index + 1).map((week) => <option key={week} value={week}>Gameweek {week}</option>)}
+            </select>
+          </label>
+          <Button type="button" disabled={settleGameWeekMutation.isPending} onClick={requestGameWeekSettlement} className="bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200">
+            <CheckCircle2 className="mr-2 h-4 w-4" />{settleGameWeekMutation.isPending ? "Settling gameweek…" : "Settle Gameweek"}
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-white/60">Settles every eligible cup for the selected week, including cups with zero entries. Pending API-Football scores remain blocked. Completed rewards are not repeated.</p>
+        {bulkSettlement ? <div className="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-white/10 p-2 text-xs">
+          <p className="font-bold">GW{bulkSettlement.gameWeek}: {bulkSettlement.settled} settled, {bulkSettlement.blocked} blocked</p>
+          {bulkSettlement.results?.map((item: any) => <div key={item.id} className="break-words border-t border-white/10 py-2"><span className="font-semibold">{item.name}</span> — {item.result.replaceAll("_"," ")}: {item.message}</div>)}
+        </div> : null}
+      </section>
 
       <section className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-400/[.04] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -320,9 +350,9 @@ export default function AdminTournamentManager() {
       </section>
 
       <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 p-4">
-        <div className="mb-2 text-xs font-black uppercase tracking-[.16em] text-emerald-100">FREE Card Cup presets — one for every entry rarity</div>
-        <div className="flex flex-wrap gap-2">{rarityOptions.map((rarity) => <Button key={rarity} size="sm" variant="outline" onClick={() => applyFreeCupPreset(rarity)} className="capitalize border-emerald-300/30 bg-black/20 text-emerald-50">FREE {rarity}</Button>)}</div>
-        <p className="mt-2 text-xs text-emerald-100/70">Default progression: Common → Rare prize, Rare → Unique, Unique → Epic, Epic → Legendary, Legendary → Legendary. You can override the card-prize rarity below.</p>
+        <div className="mb-2 text-xs font-black uppercase tracking-[.16em] text-emerald-100">Weekly FREE Card Cup — one tournament per GW</div>
+        <Button type="button" size="sm" variant="outline" onClick={() => applyFreeCupPreset("common")} className="border-emerald-300/30 bg-black/20 text-emerald-50">Set up FREE Common Card Cup</Button>
+        <p className="mt-2 text-xs text-emerald-100/70">1st place odds: Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%. Second and third receive Common cards.</p>
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[.9fr_1.1fr]">
@@ -330,15 +360,15 @@ export default function AdminTournamentManager() {
           <div className="grid gap-3 md:grid-cols-2">
             <label className="space-y-1 text-sm md:col-span-2"><span className="text-white/55">Tournament name</span><Input value={form.name} onChange={(e) => setField("name", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
             <label className="space-y-1 text-sm"><span className="text-white/55">Gameweek 26/27</span><Input type="number" min="1" max="38" value={form.gameWeek} onChange={(e) => setField("gameWeek", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
-            <label className="space-y-1 text-sm"><span className="text-white/55">Entry card rarity</span><select value={form.tier} onChange={(e) => setField("tier", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 capitalize text-white">{rarityOptions.map((x) => <option key={x} value={x}>{x} cards</option>)}</select></label>
+            <label className="space-y-1 text-sm"><span className="text-white/55">Entry card rarity</span><select value={isCardPrize ? "common" : form.tier} disabled={isCardPrize} onChange={(e) => setField("tier", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 capitalize text-white">{rarityOptions.map((x) => <option key={x} value={x}>{x} cards</option>)}</select></label>
             <label className="space-y-1 text-sm md:col-span-2"><span className="text-white/55">Official prize mode</span><select value={form.rewardMode} onChange={(e) => setField("rewardMode", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-white"><option value="ladder">Prize Ladder — admin only</option><option value="card">FREE Player Card Prize</option></select></label>
-            {isCardPrize && <label className="space-y-1 text-sm md:col-span-2"><span className="text-white/55">Winner card prize rarity</span><select value={form.cardPrizeRarity} onChange={(e) => setField("cardPrizeRarity", e.target.value)} className="w-full rounded-md border border-emerald-300/20 bg-black/40 px-3 py-2 capitalize text-white">{rarityOptions.map((x) => <option key={x} value={x}>{x} player card</option>)}</select></label>}
+            {isCardPrize && <p className="md:col-span-2 rounded-lg border border-emerald-300/20 p-3 text-xs text-emerald-100">Winner rarity is a secure one-time draw at settlement: Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%. No manual override.</p>}
             <label className="space-y-1 text-sm"><span className="text-white/55">Entry fee</span><Input type="number" min="0" disabled={isCardPrize} value={isCardPrize ? "0" : form.entryFee} onChange={(e) => setField("entryFee", e.target.value)} className="border-white/10 bg-black/40 text-white disabled:opacity-70" /></label>
             <label className="space-y-1 text-sm"><span className="text-white/55">Max players</span><Input type="number" min="2" value={form.maxEntries} onChange={(e) => setField("maxEntries", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
             <label className="space-y-1 text-sm"><span className="text-white/55">Status</span><select value={form.status} onChange={(e) => setField("status", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 capitalize text-white">{statusOptions.map((x) => <option key={x} value={x}>{x}</option>)}</select></label>
             <label className="space-y-1 text-sm"><span className="text-white/55">Visibility</span><select value={form.visibility} onChange={(e) => setField("visibility", e.target.value)} className="w-full rounded-md border border-white/10 bg-black/40 px-3 py-2 text-white"><option value="public">Public</option><option value="private">Private PIN</option></select></label>
             <div className={`md:col-span-2 rounded-xl border p-3 text-sm ${isCardPrize ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-50" : "border-cyan-300/20 bg-cyan-300/10 text-cyan-50"}`}>
-              {isCardPrize ? <><b>FREE card prize:</b> N$0 entry using {cap(form.tier)} cards. Winner receives a random eligible {cap(form.cardPrizeRarity)} player card into Collection.</> : <><b>Admin Prize Ladder:</b> {form.tier.toUpperCase()} ladder. First unlock: {nextPrize ? `${nextPrize.title} at ${nextPrize.requiredEntrants} entries` : "loading..."}. Margin: {marginByRarity[form.tier] || 1.8}x.</>}
+              {isCardPrize ? <><b>FREE card prize:</b> N$0 entry using {cap(form.tier)} cards. 1st receives a weighted-rarity Premier League card; 2nd and 3rd receive Common cards.</> : <><b>Admin Prize Ladder:</b> {form.tier.toUpperCase()} ladder. First unlock: {nextPrize ? `${nextPrize.title} at ${nextPrize.requiredEntrants} entries` : "loading..."}. Margin: {marginByRarity[form.tier] || 1.8}x.</>}
             </div>
             <label className="space-y-1 text-sm"><span className="text-white/55">Entries open from</span><Input type="datetime-local" value={form.startDate} onChange={(e) => setField("startDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
             <label className="space-y-1 text-sm"><span className="text-white/55">Tuesday settlement cutoff</span><Input type="datetime-local" value={form.endDate} onChange={(e) => setField("endDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
@@ -348,7 +378,7 @@ export default function AdminTournamentManager() {
         </div>
 
         <div className="space-y-3">
-          {isCardPrize ? <div className={`rounded-2xl border p-5 ${rarityTone[form.cardPrizeRarity] || rarityTone.common}`}><div className="text-xs font-black uppercase tracking-[.18em]">Player card prize</div><div className="mt-2 text-2xl font-black">{cap(form.cardPrizeRarity)} Player Card</div><div className="mt-2 text-sm opacity-75">Winner receives the card directly into Collection. It can be kept, used in eligible tournaments, or listed on the Marketplace when trading is open.</div><Badge className="mt-4 bg-emerald-300 text-emerald-950">N$0 ENTRY</Badge></div> : <div className={`rounded-2xl border p-3 ${rarityTone[previewRarity] || rarityTone.common}`}><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-black uppercase tracking-[.14em]">{previewRarity} Prize Ladder preview</h3><Badge className="capitalize">Entry {money(entryFeeByRarity[previewRarity] || 0)}</Badge></div><div className="mb-3 flex flex-wrap gap-2">{rarityOptions.map((r) => <button key={r} onClick={() => setPreviewRarity(r)} className={`rounded-full border px-3 py-1 text-xs font-black capitalize ${previewRarity === r ? "bg-white text-slate-950" : "border-white/15 bg-black/25 text-white/70"}`}>{r}</button>)}</div><div className="grid max-h-[24rem] gap-2 overflow-y-auto pr-1 md:grid-cols-2">{(prizesByRarity[previewRarity] || []).map((p: any) => <div key={p.key} className="rounded-xl border border-white/10 bg-black/25 p-2 text-xs"><div className="font-bold text-white">#{p.tierIndex} {p.title}</div><div className="text-white/55">Value {money(p.value)} • target {money(p.unlockTarget)}</div><div className="mt-1 font-black text-cyan-100">Unlocks at {p.requiredEntrants} entries</div></div>)}</div></div>}
+          {isCardPrize ? <div className={`rounded-2xl border p-5 ${rarityTone[form.cardPrizeRarity] || rarityTone.common}`}><div className="text-xs font-black uppercase tracking-[.18em]">Player card prize</div><div className="mt-2 text-2xl font-black">Weighted first-place card</div><div className="mt-2 text-sm opacity-75">Winner: Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%. Rarity is locked at settlement; the winner then mints the eligible Premier League player card. 2nd and 3rd: Common.</div><Badge className="mt-4 bg-emerald-300 text-emerald-950">N$0 ENTRY</Badge></div> : <div className={`rounded-2xl border p-3 ${rarityTone[previewRarity] || rarityTone.common}`}><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-black uppercase tracking-[.14em]">{previewRarity} Prize Ladder preview</h3><Badge className="capitalize">Entry {money(entryFeeByRarity[previewRarity] || 0)}</Badge></div><div className="mb-3 flex flex-wrap gap-2">{rarityOptions.map((r) => <button key={r} onClick={() => setPreviewRarity(r)} className={`rounded-full border px-3 py-1 text-xs font-black capitalize ${previewRarity === r ? "bg-white text-slate-950" : "border-white/15 bg-black/25 text-white/70"}`}>{r}</button>)}</div><div className="grid max-h-[24rem] gap-2 overflow-y-auto pr-1 md:grid-cols-2">{(prizesByRarity[previewRarity] || []).map((p: any) => <div key={p.key} className="rounded-xl border border-white/10 bg-black/25 p-2 text-xs"><div className="font-bold text-white">#{p.tierIndex} {p.title}</div><div className="text-white/55">Value {money(p.value)} • target {money(p.unlockTarget)}</div><div className="mt-1 font-black text-cyan-100">Unlocks at {p.requiredEntrants} entries</div></div>)}</div></div>}
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2" role="group" aria-label="Tournament status">
               <Button type="button" size="sm" variant={tournamentListView === "closed" ? "default" : "outline"} onClick={() => setTournamentListView("closed")}>Closed & Completed ({completedCompetitions.length})</Button>
@@ -371,5 +401,5 @@ function FinancialStat({ label, value, helper, warning = false }: { label: strin
 }
 
 function TournamentList({ title, competitions, selectedId, onLoad, onDelete, onSettle, deleting, settling }: any) {
-  return <section><div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-black uppercase tracking-[.14em] text-white/60">{title}</h4><Badge variant="outline">{competitions.length}</Badge></div><div className="space-y-2">{competitions.length ? competitions.map((comp: any) => { const status = String(comp.status || "").toLowerCase(); const settlement = comp.endDate || comp.end_date; const settlementMs = new Date(String(settlement || "")).getTime(); const readyToSettle = ["active", "closed"].includes(status) && Number.isFinite(settlementMs) && Date.now() >= settlementMs; const key = String(comp.prizeKey || comp.prize_key || ""); const isCard = key.startsWith("free-"); const prizeRarity = String(comp.prizeCardRarity || comp.prize_card_rarity || ""); return <div key={comp.id} className={`rounded-xl border p-3 text-sm transition ${String(selectedId) === String(comp.id) ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25"}`}><button onClick={() => onLoad(comp)} className="w-full text-left"><div className="flex items-center justify-between gap-3"><span className="font-bold">{comp.name}</span><Badge className="capitalize">{comp.status}</Badge></div><div className="mt-1 text-white/50">GW {comp.gameWeek ?? comp.game_week} • {comp.tier} cards • {isCard ? `FREE → ${prizeRarity || "card"} prize` : `Prize Ladder • Entry ${money(comp.entryFee ?? comp.entry_fee)}`}</div><div className="mt-1 text-xs text-cyan-100/60">Settlement: {settlementLabel(settlement)} • Entries: {comp.entryCount ?? comp.entry_count ?? 0}</div></button>{readyToSettle ? <Button size="sm" disabled={settling} onClick={() => onSettle(comp)} className="mt-3 w-full bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200"><CheckCircle2 className="mr-2 h-4 w-4" />{settling ? "Settling..." : "Settle Tuesday Results"}</Button> : null}<Button variant="destructive" size="sm" disabled={deleting} onClick={() => onDelete(comp)} className="mt-2 w-full"><Trash2 className="mr-2 h-4 w-4" />Delete Tournament</Button></div>; }) : <div className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-white/40">No tournaments in this section.</div>}</div></section>;
+  return <section><div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-black uppercase tracking-[.14em] text-white/60">{title}</h4><Badge variant="outline">{competitions.length}</Badge></div><div className="space-y-2">{competitions.length ? competitions.map((comp: any) => { const status = String(comp.status || "").toLowerCase(); const settlement = comp.endDate || comp.end_date; const settlementMs = new Date(String(settlement || "")).getTime(); const readyToSettle = ["active", "closed"].includes(status) && Number.isFinite(settlementMs) && Date.now() >= settlementMs; const key = String(comp.prizeKey || comp.prize_key || ""); const isCard = key.startsWith("free-"); const prizeRarity = String(comp.prizeCardRarity || comp.prize_card_rarity || ""); return <div key={comp.id} className={`rounded-xl border p-3 text-sm transition ${String(selectedId) === String(comp.id) ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25"}`}><button onClick={() => onLoad(comp)} className="w-full text-left"><div className="flex items-center justify-between gap-3"><span className="font-bold">{comp.name}</span><Badge className="capitalize">{comp.status}</Badge></div><div className="mt-1 text-white/50">GW {comp.gameWeek ?? comp.game_week} • {comp.tier} cards • {isCard ? `FREE → ${key === "free-weighted-card" ? "weighted 1st / Common 2nd–3rd" : prizeRarity || "card"} prize` : `Prize Ladder • Entry ${money(comp.entryFee ?? comp.entry_fee)}`}</div><div className="mt-1 text-xs text-cyan-100/60">Settlement: {settlementLabel(settlement)} • Entries: {comp.entryCount ?? comp.entry_count ?? 0}</div></button>{readyToSettle ? <Button size="sm" disabled={settling} onClick={() => onSettle(comp)} className="mt-3 w-full bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200"><CheckCircle2 className="mr-2 h-4 w-4" />{settling ? "Settling..." : "Settle Tuesday Results"}</Button> : null}<Button variant="destructive" size="sm" disabled={deleting} onClick={() => onDelete(comp)} className="mt-2 w-full"><Trash2 className="mr-2 h-4 w-4" />Delete Tournament</Button></div>; }) : <div className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-white/40">No tournaments in this section.</div>}</div></section>;
 }

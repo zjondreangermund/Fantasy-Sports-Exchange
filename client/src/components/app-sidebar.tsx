@@ -28,8 +28,6 @@ import {
   Swords,
   UserCircle,
   Gift,
-  Beaker,
-  FastForward,
   Wifi,
   BookOpenCheck,
   FileText,
@@ -48,8 +46,6 @@ type NavItem = {
 };
 
 const BRAND_LOGO = "/brand/fantasy-arena-logo.jpg?v=lion-jpg-2026-08";
-const ADMIN_TEST_TOOLS_ENABLED =
-  import.meta.env.DEV || import.meta.env.VITE_ENABLE_ADMIN_TEST_TOOLS === "true";
 
 const menuItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard, section: "Main" },
@@ -113,12 +109,6 @@ export function AppSidebar() {
     ? [
         { title: "Admin", href: "/admin", icon: Shield, section: "Account" },
         { title: "Live Data", href: "/admin/live-data", icon: Wifi, section: "Account" },
-        ...(ADMIN_TEST_TOOLS_ENABLED
-          ? [
-              { title: "Test Console", href: "/admin/test-console", icon: Beaker, section: "Account" as const },
-              { title: "Season Simulator", href: "/admin/season-simulator", icon: FastForward, section: "Account" as const },
-            ]
-          : []),
       ]
     : [];
 
