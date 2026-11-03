@@ -56,6 +56,10 @@ replaceOnce(
   "lit cards-required panel",
 );
 
+// The current tournament card uses a single Prize Vault progress bar rather
+// than the retired capacityProgress/vaultProgress split. Keep this neon upgrade
+// compatible with either presentation.
+if (source.includes("capacityProgress") && source.includes("vaultProgress")) {
 replaceOnce(
   `<div className="h-full rounded-full" style={{ width: \`\${capacityProgress}%\`, background: t.accent, boxShadow: \`0 0 18px \${t.glow}\` }} />`,
   `<div className="h-full rounded-full" style={{ width: \`\${capacityProgress}%\`, background: \`linear-gradient(90deg,\${t.secondary},\${t.accent})\`, boxShadow: \`0 0 22px \${t.glow}\` }} />`,
@@ -66,6 +70,14 @@ replaceOnce(
   `<div className="h-full rounded-full" style={{ width: \`\${vaultProgress}%\`, background: \`linear-gradient(90deg,\${t.secondary},\${t.accent})\`, boxShadow: \`0 0 22px \${t.glow}\` }} />`,
   "upgraded Prize Vault neon progress",
 );
+
+} else if (source.includes("width: \`\${p}%\`")) {
+  replaceOnce(
+    `<div className="h-full rounded-full" style={{ width: \`\${p}%\`, background: t.accent, boxShadow: \`0 0 18px \${t.glow}\` }} />`,
+    `<div className="h-full rounded-full" style={{ width: \`\${p}%\`, background: \`linear-gradient(90deg,\${t.secondary},\${t.accent})\`, boxShadow: \`0 0 22px \${t.glow}\` }} />`,
+    "upgraded active Prize Vault neon progress",
+  );
+}
 
 replaceOnce(
   `<Button variant="outline" className="w-full border-white/15 bg-black/20 text-white"><Gift className="mr-2 h-4 w-4" />Prize ladder</Button>`,
