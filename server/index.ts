@@ -1,3 +1,4 @@
+import {createRequestActivity} from "./services/requestActivity.js";
 // server/index.ts
 
 import express, { type Request, Response, NextFunction } from "express";
@@ -74,6 +75,7 @@ app.use(
 
 app.use(passport.initialize());
 app.use(passport.session());
+app.use(createRequestActivity());
 passport.serializeUser((user: any, done) => done(null, user));
 passport.deserializeUser((user: any, done) => done(null, user));
 

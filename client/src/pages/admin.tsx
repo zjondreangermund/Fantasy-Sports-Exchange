@@ -1,6 +1,7 @@
+import AdminActivityExplorer, {type ActivityFocus} from "../components/admin/AdminActivityExplorer";
 import AdminEntryMonitor from "../components/admin/AdminEntryMonitor";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -100,14 +101,16 @@ function timeAgo(value?: string | Date | null) {
 }
 
 export default function AdminPage() {
+  const queryClient=useQueryClient();
   const [activeTab, setActiveTab] = useState("users");
+  const [activityFocus,setActivityFocus]=useState<ActivityFocus>({version:0});
+  const openActivity=(outcome='all',userId='')=>{
+    setActivityFocus(f=>({outcome,userId,version:f.version+1}));setActiveTab('activity');
+    window.setTimeout(()=>document.getElementById('admin-activity-explorer')?.scrollIntoView({behavior:'smooth',block:'start'}),80);
+  };
   const [userSearchInput, setUserSearchInput] = useState("");
   const [userSearchTerm, setUserSearchTerm] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [activitySearch, setActivitySearch] = useState("");
-  const [activityUserId, setActivityUserId] = useState("");
-  const [activitySource, setActivitySource] = useState("all");
-  const [activityPage, setActivityPage] = useState(1);
   const [cardSearch, setCardSearch] = useState("");
   const [cardRarity, setCardRarity] = useState("all");
   const [cardStatus, setCardStatus] = useState("all");
@@ -149,9 +152,6 @@ export default function AdminPage() {
     : "";
   const { data: cardData, isFetching: cardsLoading } = useQuery<any>({ queryKey: [cardUrl], enabled: Boolean(selectedUserId) });
 
-  const activityUrl = `/api/admin/activity?q=${encodeURIComponent(activitySearch.trim())}&userId=${encodeURIComponent(activityUserId.trim())}&source=${activitySource}&page=${activityPage}&limit=50`;
-  const { data: activityData, isFetching: activityLoading, refetch: refetchActivity } = useQuery<any>({ queryKey: [activityUrl] });
-
   const lookupUrl = lookupTerm ? `/api/admin/cards/lookup?q=${encodeURIComponent(lookupTerm)}` : "";
   const {
     data: lookupData,
@@ -165,13 +165,11 @@ export default function AdminPage() {
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const onlineDetailed = online.map((row) => ({ ...row, user: userMap.get(String(row.userId)) }));
   const cards = asArray(cardData?.cards);
-  const activity = asArray(activityData?.activity);
   const allCompetitions = asArray(competitions);
   const activeListings = asArray(listings);
 
   const selectUser = (userId: string) => {
     setSelectedUserId(userId);
-    setActivityUserId(userId);
     setCardPage(1);
     setActiveTab("users");
     setCardDialogOpen(false);
@@ -195,7 +193,7 @@ export default function AdminPage() {
     refetchSignupFunnel();
     refetchTx();
     refetchListings();
-    refetchActivity();
+    void queryClient.invalidateQueries({predicate:q=>String(q.queryKey[0]).startsWith('/api/admin/activity')});
   };
 
   const { data: liveFinance } = useQuery<any>({ queryKey: ['/api/admin/platform-finance'], refetchInterval: 30000 });
@@ -237,11 +235,11 @@ export default function AdminPage() {
           {statsLoading
             ? Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl bg-white/10" />)
             : kpis.map(({ label, value, hint, icon: Icon }) => (
-                <Card key={label} className="border-white/10 bg-white/[0.07] p-3 text-white">
+                <Card key={label} role={['Errors','Online'].includes(label)?'button':undefined} tabIndex={['Errors','Online'].includes(label)?0:undefined} onClick={()=>{if(['Errors','Online'].includes(label))openActivity(label==='Errors'?'error':'all');}} onKeyDown={e=>{if(['Errors','Online'].includes(label)&&['Enter',' '].includes(e.key)){e.preventDefault();openActivity(label==='Errors'?'error':'all');}}} className={`border-white/10 bg-white/[0.07] p-3 text-white ${['Errors','Online'].includes(label)?'cursor-pointer hover:border-cyan-300/50 focus-visible:ring-2 focus-visible:ring-cyan-300':''}`}>
                   <Icon className="h-4 w-4 text-cyan-200" />
                   <div className="mt-3 truncate text-xl font-black">{value}</div>
                   <div className="mt-1 text-[10px] font-black uppercase tracking-[.12em] text-white/45">{label}</div>
-                  <div className="mt-1 truncate text-[10px] text-cyan-100/70">{hint}</div>
+                  <div className="mt-1 truncate text-[10px] text-cyan-100/70">{hint}</div>{label==="Errors"&&<div className="mt-2 text-xs font-bold text-cyan-200">View error details →</div>}
                 </Card>
               ))}
         </section>
@@ -411,17 +409,7 @@ export default function AdminPage() {
 
           <TabsContent value="activity" className="mt-5">
             <AdminEntryMonitor />
-            <Card className="border-white/10 bg-white/[0.06] p-4 text-white">
-              <SectionTitle icon={Activity} title="Detailed activity explorer" subtitle="Search all transactions and audit events by user, action, route, amount or metadata." />
-              <div className="mt-4 grid gap-2 md:grid-cols-[1fr_1fr_180px_auto]">
-                <Input value={activitySearch} onChange={(e) => { setActivitySearch(e.target.value); setActivityPage(1); }} placeholder="Search action, route, description…" className="border-white/10 bg-black/35" />
-                <Input value={activityUserId} onChange={(e) => { setActivityUserId(e.target.value); setActivityPage(1); }} placeholder="User ID filter" className="border-white/10 bg-black/35" />
-                <select value={activitySource} onChange={(e) => { setActivitySource(e.target.value); setActivityPage(1); }} className="min-h-10 rounded-md border border-white/10 bg-black/35 px-3"><option value="all">All sources</option><option value="transaction">Transactions</option><option value="audit">Audit</option></select>
-                <Button onClick={() => refetchActivity()}><Search className="mr-2 h-4 w-4" />Search</Button>
-              </div>
-              <div className="mt-4 max-h-[min(52dvh,34rem)] space-y-3 overflow-y-auto pr-1">{activityLoading ? <div className="p-8 text-center text-white/45">Loading activity…</div> : activity.map((item) => <ActivityCard key={item.id} item={item} onUser={() => item.userId && selectUser(String(item.userId))} />)}</div>
-              <Pager page={activityData?.page || 1} pages={activityData?.pages || 1} onPage={setActivityPage} label={`${activityData?.total || 0} events`} />
-            </Card>
+            <AdminActivityExplorer focus={activityFocus} onOpenUser={selectUser} />
           </TabsContent>
 
           <TabsContent value="notifications" className="mt-4"><AdminNotificationAuditPanel onOpenUser={selectUser} /></TabsContent>
@@ -448,6 +436,7 @@ export default function AdminPage() {
               <div className="text-xs text-white/50">{selectedUserDetails?.user?.email || selectedUserId}</div>
             </DialogHeader>
             <div className="max-h-[calc(92dvh-105px)] space-y-4 overflow-y-auto overscroll-contain p-5">
+              <Button onClick={()=>{setUserDialogOpen(false);openActivity('all',selectedUserId);}}>View this user's journey</Button>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <Mini label="Total cards" value={cardData?.total || 0} />
                 <Mini label="Showing" value={cards.length} />
@@ -518,12 +507,6 @@ function Mini({ label, value }: { label: string; value: any }) {
 
 function Pager({ page, pages, onPage, label }: { page: number; pages: number; onPage: (page: number) => void; label: string }) {
   return <div className="mt-4 flex items-center justify-between gap-3"><div className="text-xs text-white/45">{label} • Page {page} of {pages}</div><div className="flex gap-2"><Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft className="h-4 w-4" /></Button><Button size="sm" variant="outline" disabled={page >= pages} onClick={() => onPage(page + 1)}><ChevronRight className="h-4 w-4" /></Button></div></div>;
-}
-
-function ActivityCard({ item, onUser }: { item: any; onUser: () => void }) {
-  const meta = item.meta || {};
-  const path = meta.path || meta.route;
-  return <div className="rounded-2xl border border-white/10 bg-black/25 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge className={item.source === "transaction" ? "bg-emerald-500/20 text-emerald-200" : "bg-cyan-500/20 text-cyan-200"}>{item.source}</Badge><span className="font-black">{item.label || item.type}</span></div><button onClick={onUser} className="mt-2 text-left text-sm font-semibold text-cyan-200 hover:underline">{item.userName || item.email || item.userId || "System"}</button><div className="mt-1 text-xs text-white/40">{item.email || item.userId || "No user"} • {timeAgo(item.createdAt)}</div></div>{item.amount != null && <div className="text-right"><div className="text-xl font-black">{money(item.amount)}</div><div className="text-xs text-white/45">Gross {money(item.grossAmount)} • Fee {money(item.feeAmount)} • Net {money(item.netAmount)}</div></div>}</div><div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4"><Detail label="Type" value={item.type || "-"} /><Detail label="Status" value={item.status || "-"} /><Detail label="Source type" value={item.sourceType || "-"} /><Detail label="Route / path" value={path || "-"} /></div>{Object.keys(meta).length > 0 && <details className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3"><summary className="cursor-pointer text-xs font-black uppercase tracking-[.12em] text-white/55">Event metadata</summary><pre className="mt-3 max-h-52 overflow-auto whitespace-pre-wrap break-words text-xs text-cyan-100/70">{JSON.stringify(meta, null, 2)}</pre></details>}</div>;
 }
 
 function Detail({ label, value }: { label: string; value: any }) {

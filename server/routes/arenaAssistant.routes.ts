@@ -8,17 +8,9 @@ import {randomUUID} from 'node:crypto';
 import {pool} from '../db.js';
 import {createArenaAssistant} from '../services/arenaAssistant.js';
 import {AssistantError,safeActivityPath,safeUuid} from '../services/assistantPolicy.js';
-let schemaReady:Promise<void>|undefined;
-export function ensurePageActivitySchema(){
-  return schemaReady ||= pool.query(`CREATE TABLE IF NOT EXISTS app.page_activity (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,visitor_id uuid NOT NULL,session_id uuid NOT NULL,
-    user_id varchar(255),path text NOT NULL,event text NOT NULL CHECK(event IN ('page_view','heartbeat')),
-    created_at timestamptz NOT NULL DEFAULT now())`).then(async()=>{
-      await pool.query('CREATE INDEX IF NOT EXISTS page_activity_user_time ON app.page_activity(user_id,created_at DESC)');
-      await pool.query('CREATE INDEX IF NOT EXISTS page_activity_visitor_time ON app.page_activity(visitor_id,created_at)');
-      await pool.query('CREATE INDEX IF NOT EXISTS page_activity_time ON app.page_activity(created_at)');
-    }).catch(error=>{schemaReady=undefined;throw error;});
-}
+import {ensurePageActivitySchema} from '../services/pageActivitySchema.js';
+export {ensurePageActivitySchema} from '../services/pageActivitySchema.js';
+import {cleanActivityText} from '../services/activityPolicy.js';
 const buckets=new Map<string,{count:number;until:number}>();
 function withinLimit(key:string,max:number){const now=Date.now(),bucket=buckets.get(key);if(!bucket||bucket.until<=now){buckets.set(key,{count:1,until:now+60000});return true;}return ++bucket.count<=max;}
 function sameOrigin(req:any){
@@ -49,6 +41,23 @@ export function registerArenaAssistantRoutes(app:Express,deps:{requireAuth:any;i
       await pool.query('INSERT INTO app.page_activity(visitor_id,session_id,user_id,path,event) VALUES($1,$2,$3,$4,$5)',[visitorId,sessionId,userId,path,req.body?.event==='heartbeat'?'heartbeat':'page_view']);
       return res.status(202).json({ok:true});
     }catch(error){console.warn('Page activity event failed',error);return res.status(503).json({message:'Activity tracking is unavailable.'});}
+  });
+  app.post('/api/activity/events',deps.requireAuth,async(req:any,res)=>{
+    res.setHeader('Cache-Control','private, no-store');
+    try {
+      if(!sameOrigin(req))return res.status(403).json({message:'Invalid request origin.'});
+      const actor=String(req.authUserId||req.user?.claims?.sub||req.user?.id||'');
+      if(!actor)return res.status(401).json({message:'Sign in required.'});
+      if(!withinLimit(`interaction:${actor}`,30))return res.status(429).json({message:'Activity event limit reached.'});
+      const sessionId=String(req.body?.sessionId||'');
+      if(!safeUuid(sessionId)||!Array.isArray(req.body?.events)||req.body.events.length>20)return res.status(400).json({message:'Invalid activity batch.'});
+      const events=req.body.events.map((event:any)=>({kind:event.kind,path:safeActivityPath(event.path),target:cleanActivityText(event.target,80)}));
+      if(events.some((e:any)=>!e.path||!['interaction','error'].includes(e.kind)))return res.status(400).json({message:'Invalid activity event.'});
+      if(events.length)await pool.query(`INSERT INTO app.audit_logs(user_id,action,meta)
+        SELECT $1,'client.'||kind,jsonb_build_object('path',path,'target',target,'sessionId',$2::text,'reportedBy','browser')
+        FROM jsonb_to_recordset($3::jsonb) AS e(kind text,path text,target text)`,[actor,sessionId,JSON.stringify(events)]);
+      return res.status(202).json({ok:true});
+    }catch{return res.status(503).json({message:'Activity tracking is unavailable.'});}
   });
   app.get('/api/assistant/access',deps.requireAuth,async(req:any,res)=>{
     res.setHeader('Cache-Control','private, no-store');

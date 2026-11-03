@@ -1,3 +1,4 @@
+import {auditProblem,transactionProblem} from "../services/activityPolicy.js";
 import type { Express } from "express";
 import { db } from "../db.js";
 import { sql } from "drizzle-orm";
@@ -194,7 +195,7 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
           (select count(distinct user_id)::int from app.audit_logs where created_at >= now() - interval '7 days' and user_id is not null) as wau,
           (select count(distinct user_id)::int from app.audit_logs where created_at >= now() - interval '30 days' and user_id is not null) as mau,
           (select count(distinct user_id)::int from app.audit_logs where created_at >= now() - interval '10 minutes' and user_id is not null) as "onlineUsersLast10Minutes",
-          (select count(*)::int from app.audit_logs where action ilike '%error%' and created_at >= now() - interval '24 hours') as "errorsLast24h",
+          ((select count(*)::int from app.audit_logs a where ${auditProblem} and a.created_at >= now() - interval '24 hours') + (select count(*)::int from app.transactions t where ${transactionProblem} and t.created_at >= now() - interval '24 hours')) as "errorsLast24h",
           (select coalesce(sum(case when source_type = 'marketplace_sale' or type::text in ('marketplace_sale','sale') then abs(coalesce(gross_amount, amount, 0)) else 0 end), 0)::float from app.transactions) as "marketplaceVolume",
           (select coalesce(sum(case when source_type = 'marketplace_sale' or type::text in ('marketplace_sale','sale') then coalesce(fee_amount, 0) else 0 end), 0)::float from app.transactions) as "marketplaceFees"
       `);

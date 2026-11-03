@@ -1,3 +1,4 @@
+import InteractionActivityTracker from "./components/InteractionActivityTracker";
 import {captureCommunityLink} from "./lib/community-intent";
 import PageActivityTracker from "./components/PageActivityTracker";
 import DepartureLoginPrompt from "./components/DepartureLoginPrompt";
@@ -252,7 +253,7 @@ export default function App() {
         <TooltipProvider>
           <SecurityModeBanner />
           {!nativeApp ? <GuidedHoverHelp /> : null}
-          <PageActivityTracker />
+          <PageActivityTracker /><InteractionActivityTracker />
           <AppContent />
           <AppErrorBoundary scope="SignupWelcomePopup" optional><SignupWelcomePopup /></AppErrorBoundary>
           <AppErrorBoundary scope="PendingPrizeClaimPopup" optional><PendingPrizeClaimPopup /></AppErrorBoundary>
