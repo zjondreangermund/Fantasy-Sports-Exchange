@@ -1,6 +1,7 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { type PlayerCardData } from "./types";
 import { normalizeRarity } from "./cardTheme";
+import { useApprovedCutoutPortrait } from "../../lib/approved-cutout-portrait";
 
 // STABLE_COLLECTION_PORTRAIT_STATE_V1: keep the current working portrait when React receives a new
 // imageCandidates array containing the same URLs. This prevents a failed first
@@ -102,11 +103,13 @@ export default function CollectionStableCard({ player, selected = false, onClick
   const rarity = normalizeRarity(player.rarity);
   const palette = RARITY_PALETTE[rarity] || RARITY_PALETTE.common;
   const dim = SIZE[size] || SIZE.sm;
+  const approvedCutout = useApprovedCutoutPortrait(player.apiFootballId);
   const imageCandidates = useMemo(() => Array.from(new Set([
+    approvedCutout,
     imageOf(player),
     ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : []),
     "/players/fallback.svg",
-  ].filter(Boolean))), [player.id, player.image, player.imageUrl, player.photo, player.imageCandidates]);
+  ].filter((url): url is string => typeof url === "string" && url.length > 0))), [approvedCutout, player.id, player.image, player.imageUrl, player.photo, player.imageCandidates]);
   const imageCandidateKey = imageCandidates.join("\u001f");
   const [imageIndex, setImageIndex] = useState(0);
   useEffect(() => { setImageIndex(0); }, [player.id, imageCandidateKey]);
