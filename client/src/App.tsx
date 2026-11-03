@@ -65,8 +65,6 @@ const TrophyCabinetPage = React.lazy(() => import("./pages/trophy-cabinet"));
 const PrizeVaultPage = React.lazy(() => import("./pages/prize-vault"));
 const PremierLeaguePage = React.lazy(() => import("./pages/premier-league"));
 const AdminPage = React.lazy(() => import("./pages/admin"));
-const AdminTestConsolePage = React.lazy(() => import("./pages/admin-test-console"));
-const AdminSeasonSimulatorPage = React.lazy(() => import("./pages/admin-season-simulator"));
 const AdminLiveDataPage = React.lazy(() => import("./pages/admin-live-data"));
 const CardLabPage = React.lazy(() => import("./pages/card-lab"));
 
@@ -104,8 +102,6 @@ function AdminGate({ children }: { children: React.ReactNode }) {
 
 function AdminDashboardRoute() { return <AdminGate><AdminPage /></AdminGate>; }
 function AdminLiveDataRoute() { return <AdminGate><AdminLiveDataPage /></AdminGate>; }
-function AdminTestConsoleRoute() { return <AdminGate><AdminTestConsolePage /></AdminGate>; }
-function AdminSeasonSimulatorRoute() { return <AdminGate><AdminSeasonSimulatorPage /></AdminGate>; }
 function CardLabRoute() { return <AdminGate><CardLabPage /></AdminGate>; }
 function DashboardRoute() { return isNativeMobileApp() ? <NativeMobileDashboard /> : <DashboardPage />; }
 
@@ -156,8 +152,6 @@ function AuthenticatedRouter() {
         <Route path="/wallet" component={WalletPage} />
         <Route path="/account" component={AccountPage} />
         <Route path="/profile" component={AccountPage} />
-        {ADMIN_TEST_TOOLS_ENABLED ? <Route path="/admin/test-console" component={AdminTestConsoleRoute} /> : null}
-        {ADMIN_TEST_TOOLS_ENABLED ? <Route path="/admin/season-simulator" component={AdminSeasonSimulatorRoute} /> : null}
         <Route path="/admin/live-data" component={AdminLiveDataRoute} />
         <Route path="/admin" component={AdminDashboardRoute} />
         <Route component={NotFound} />
