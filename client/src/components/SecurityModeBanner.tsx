@@ -36,13 +36,22 @@ export default function SecurityModeBanner() {
       return;
     }
 
+    // PERFORMANCE_V1_SECURITY_POLL: read-only actions are always enforced by
+    // the server. The banner need not reload the same state every five seconds.
     let cancelled = false;
+    let inFlight = false;
+    let lastPayload = "";
 
     const load = async () => {
+      if (cancelled || inFlight || document.visibilityState === "hidden") return;
+      inFlight = true;
       try {
         const response = await apiRequest("GET", "/api/security/status");
         const next = (await response.json()) as PublicSecurityStatus;
         if (cancelled) return;
+        const payload = JSON.stringify(next);
+        if (payload === lastPayload) return;
+        lastPayload = payload;
         setStatus(next);
         setClientSecurityStatus(next);
         window.dispatchEvent(
@@ -50,14 +59,21 @@ export default function SecurityModeBanner() {
         );
       } catch {
         // Server-side security controls remain authoritative if this status request fails.
+      } finally {
+        inFlight = false;
       }
     };
 
+    const onFocus = () => { if (document.visibilityState === "visible") void load(); };
     void load();
-    const timer = window.setInterval(load, 5_000);
+    const timer = window.setInterval(load, 30_000);
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onFocus);
     };
   }, [mainAppReady]);
 
