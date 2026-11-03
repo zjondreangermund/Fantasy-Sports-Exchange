@@ -29,10 +29,7 @@ requireToken(cancellation, 'scope: "single_tournament"', "single-tournament audi
 requireToken(cancellation, "Tournament refund completed", "player refund notification missing");
 
 requireToken(freeSync, '{ tier: "common", prizeCardRarity: "rare" }', "Common→Rare FREE Cup mapping missing");
-requireToken(freeSync, '{ tier: "rare", prizeCardRarity: "unique" }', "Rare→Unique FREE Cup mapping missing");
-requireToken(freeSync, '{ tier: "unique", prizeCardRarity: "epic" }', "Unique→Epic FREE Cup mapping missing");
-requireToken(freeSync, '{ tier: "epic", prizeCardRarity: "legendary" }', "Epic→Legendary FREE Cup mapping missing");
-requireToken(freeSync, '{ tier: "legendary", prizeCardRarity: "legendary" }', "Legendary ceiling FREE Cup mapping missing");
+requireToken(freeSync, "deletedUnused", "Obsolete higher-rarity FREE cups must be retired safely.");
 requireToken(freeSync, "CURRENT_TOURNAMENT_GAMEWEEK_POLICY_V1", "FREE Cup sync must use the current gameweek boundary.");
 requireToken(freeSync, "coveragePairs !== expectedCoverage", "current/future FREE Cup coverage is not verified.");
 requireToken(freeSync, "for (let gw = currentGw; gw <= 38; gw += 1)", "past deleted FREE Cups must not be recreated.");
