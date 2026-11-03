@@ -22,7 +22,7 @@ function fullWebsiteUrl() {
 export default class NativeRouteBoundary extends React.Component<Props, State> {
   state: State = { error: null, retryKey: 0 };
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { error };
   }
 
