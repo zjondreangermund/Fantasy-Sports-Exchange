@@ -14,6 +14,7 @@ type Props = {
  * The collection endpoint already returns verified API-Football identities,
  * portraits, rarity and current scores for every owned card in one response.
  *
+ * COLLECTION_FAST_GRID_V1: the collection grid has no per-card profile query.
  * Rendering ten cards should NOT create ten additional /api/cards/:id/profile
  * requests. The full profile remains available on demand in CardProfileModal.
  * This uses the exact same stable card visual as before, with the globally
