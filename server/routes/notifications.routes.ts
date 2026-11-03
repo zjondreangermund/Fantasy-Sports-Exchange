@@ -444,7 +444,9 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
       const userId = String(req.authUserId || "");
       // Return saved messages immediately; reconcile fresh gameweek/loan alerts
       // out-of-band and deliver them on the next normal Inbox poll.
-      queueNotificationReadSync(userId);
+      // Schedule the slower updates after this response finishes so even the
+      // first Inbox read is not delayed by concurrent reconciliation queries.
+      res.once("finish", () => queueNotificationReadSync(userId));
       res.setHeader("Cache-Control", "private, no-store");
       const notifications = rowsOf(await db.execute(sql`
         select n.id, n.user_id as "userId", n.type::text as type, n.title, n.message, n.read,
