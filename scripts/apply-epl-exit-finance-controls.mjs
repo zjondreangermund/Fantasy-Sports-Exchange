@@ -234,12 +234,18 @@ patchFile("client/src/pages/competitions-vault.tsx", (original) => {
     else if (source.includes(sourceAnchor)) source = source.replace(sourceAnchor, () => `${sourceAnchor}${insertion.replace("vaultTournament && ", "")}`);
     else throw new Error("[epl-exit-finance] anchor not found: public fallback calculations");
   }
-  source = replaceRequired(
-    source,
-    '  const prizeTitle = vault?.activePrize?.title || vault?.nextPrize?.title || comp.prizeDescription || comp.prize_description || "Prize ladder";',
-    '  const prizeTitle = vault?.activePrize?.title || (underMinimumCashFallback ? `Cash fallback: ${money(fallbackWinnerCash)} to #1 if minimum stays unmet` : vault?.nextPrize?.title) || comp.prizeDescription || comp.prize_description || "Prize ladder";',
-    "public fallback prize title",
-  );
+  const modernPrizeTitle = '  const prizeTitle = freeCardCup ? String(comp.prizeDescription || comp.prize_description || "Top-three Free Cup card rewards") : (vault?.activePrize?.title || vault?.nextPrize?.title || comp.prizeDescription || comp.prize_description || "Prize ladder");';
+  const modernCashTitle = '  const prizeTitle = freeCardCup ? String(comp.prizeDescription || comp.prize_description || "Top-three Free Cup card rewards") : (vault?.activePrize?.title || (underMinimumCashFallback ? `Cash fallback: ${money(fallbackWinnerCash)} to #1 if minimum stays unmet` : vault?.nextPrize?.title) || comp.prizeDescription || comp.prize_description || "Prize ladder");';
+  if (source.includes(modernPrizeTitle) || source.includes(modernCashTitle)) {
+    source = source.replace(modernPrizeTitle, () => modernCashTitle);
+  } else {
+    source = replaceRequired(
+      source,
+      '  const prizeTitle = vault?.activePrize?.title || vault?.nextPrize?.title || comp.prizeDescription || comp.prize_description || "Prize ladder";',
+      '  const prizeTitle = vault?.activePrize?.title || (underMinimumCashFallback ? `Cash fallback: ${money(fallbackWinnerCash)} to #1 if minimum stays unmet` : vault?.nextPrize?.title) || comp.prizeDescription || comp.prize_description || "Prize ladder";',
+      "public fallback prize title",
+    );
+  }
   source = replaceOneOf(
     source,
     [
