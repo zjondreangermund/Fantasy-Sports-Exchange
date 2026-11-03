@@ -109,7 +109,7 @@ export default function CollectionStableCard({ player, selected = false, onClick
     imageOf(player),
     ...(Array.isArray(player.imageCandidates) ? player.imageCandidates : []),
     "/players/fallback.svg",
-  ].filter(Boolean))), [approvedCutout, player.id, player.image, player.imageUrl, player.photo, player.imageCandidates]);
+  ].filter((url): url is string => typeof url === "string" && url.length > 0))), [approvedCutout, player.id, player.image, player.imageUrl, player.photo, player.imageCandidates]);
   const imageCandidateKey = imageCandidates.join("\u001f");
   const [imageIndex, setImageIndex] = useState(0);
   useEffect(() => { setImageIndex(0); }, [player.id, imageCandidateKey]);
