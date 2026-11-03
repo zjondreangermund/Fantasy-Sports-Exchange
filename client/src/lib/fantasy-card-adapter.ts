@@ -191,6 +191,9 @@ export function toFantasyCardData(
     season: "2026-27",
     image: primaryImage,
     imageCandidates: candidates,
+    apiFootballId: identityVerified && Number.isInteger(Number(player?.apiFootballId)) && Number(player?.apiFootballId) > 0
+      ? Number(player.apiFootballId)
+      : undefined,
     nationality: normalizeNationality(player),
     rarity: normalizeRarity(card.rarity),
     serial: Number(card.serialNumber || 0),
