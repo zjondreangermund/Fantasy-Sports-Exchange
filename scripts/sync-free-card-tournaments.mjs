@@ -129,8 +129,7 @@ async function main() {
     // weeks). Existing real entries, score history and awards remain intact:
     // only truly empty, unreferenced competitions are physically deleted.
     const obsoleteFreeCupFilter = `
-      c.created_by_user_id is null
-      and c.tier::text <> 'common'
+      c.tier::text <> 'common'
       and coalesce(c.entry_fee, 0) = 0
       and (
         lower(coalesce(c.prize_key, '')) like 'free-%-card'
