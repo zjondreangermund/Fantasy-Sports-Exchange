@@ -143,7 +143,17 @@ async function loadCompetitions(): Promise<any[]> {
       coalesce(c.prize_type, 'goods') as "prizeType",
       c.prize_description as "prizeDescription",
       c.prize_key as "prizeKey"
-    from app.competitions c order by c.game_week asc, c.id asc
+    from app.competitions c
+    where not (
+      c.created_by_user_id is null
+      and c.tier::text <> 'common'
+      and coalesce(c.entry_fee, 0) = 0
+      and (
+        lower(coalesce(c.prize_key, '')) like 'free-%-card'
+        or (c.name ilike '%free%' and c.name ilike '%cup%')
+      )
+    )
+    order by c.game_week asc, c.id asc
   `);
   return rowsOf(result);
 }
