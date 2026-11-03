@@ -102,6 +102,8 @@ export function toFantasyCardData(
   });
 
   const identityVerified = isVerifiedPlayerIdentity(player);
+  // Prefer the independently linked API-Football portrait on every verified card;
+  // only fall back to generated/placeholder artwork if no official image works.
   const directCandidates = identityVerified
     ? uniqueStrings([
         safeUrl(player?.verifiedImageUrl),
