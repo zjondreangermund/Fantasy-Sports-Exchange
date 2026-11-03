@@ -2,7 +2,7 @@ import type { Express, Response } from "express";
 import { and, eq, sql } from "drizzle-orm";
 import { buildFplPlayerIndex, fplPlayerFullName, fplPlayerPosition, strongPlayerNameMatch } from "../services/fplPlayerIdentity.js";
 import { ensureRealLifeLoanPolicySchema } from "../services/realLifeLoanMonitoring.js";
-import { loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
+import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 import { db } from "../db.js";
 import { auditLogs, playerCards, userOnboarding } from "../../shared/schema.js";
 
@@ -629,8 +629,28 @@ export function registerOnboardingRoutes(app: Express, deps: RegisterOnboardingR
       }
 
       const offeredPlayerIds = ob?.packCards?.flat() || [];
-      const offeredPlayers = await Promise.all(offeredPlayerIds.map((id: number | null) => (id ? storage.getPlayer(id) : Promise.resolve(undefined))));
-      const players = offeredPlayers.filter(Boolean);
+      const [offeredPlayers, currentApiDirectory] = await Promise.all([
+        Promise.all(offeredPlayerIds.map((id: number | null) => (id ? storage.getPlayer(id) : Promise.resolve(undefined)))),
+        loadApiFootballPlayerDirectory().catch(() => []),
+      ]);
+      // Starter selection previews are not minted cards yet, but they should
+      // use the exact same verified API-Football player ID as minted cards.
+      // Never use a Premier League/FPL ID as an API-Football ID: the providers
+      // have different namespaces. Unmatched identities retain official FPL photos.
+      const players = offeredPlayers.filter(Boolean).map((player: any) => {
+        const linked = resolveApiFootballPlayer(player, currentApiDirectory);
+        if (!linked?.apiPlayerId) return player;
+        const image = apiFootballPhotoUrl(linked.apiPlayerId, linked.photo);
+        return {
+          ...player,
+          apiFootballId: Number(linked.apiPlayerId),
+          identityVerified: true,
+          identitySource: "fpl+api-football",
+          imageUrl: image || player.imageUrl,
+          verifiedImageUrl: image || player.imageUrl,
+          imageCandidates: Array.from(new Set([image, player.imageUrl, ...(player.imageCandidates || [])].filter(Boolean))),
+        };
+      });
       res.json({ packCards: ob?.packCards || [], offeredPlayerIds, players, selectedCards: ob?.selectedCards ?? [], completed: ob?.completed ?? false, config });
     } catch (error: any) {
       console.error("Fetch offers failed:", error);
