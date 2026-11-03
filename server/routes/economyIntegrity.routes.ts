@@ -755,10 +755,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const [entries, locks] = await Promise.all([
         db.execute(sql`select ce.id, ce.user_id as "userId", u.email, c.name, c.game_week as "gameWeek", c.status, ce.rank, ce.total_score as "totalScore"
           from app.competition_entries ce join app.competitions c on c.id=ce.competition_id left join app.users u on u.id=ce.user_id
+          where c.name not like '[TEST]%' and ce.user_id not like 'test-bot-%'
           order by ce.joined_at desc, ce.id desc limit 100`),
         db.execute(sql`select cl.card_id as "cardId", cl.user_id as "userId", u.email, cl.ref_id as "refId", c.name, c.game_week as "gameWeek", c.status, c.end_date as "endDate"
           from app.card_locks cl left join app.competitions c on c.id::text=cl.ref_id left join app.users u on u.id=cl.user_id
           where cl.reason='competition' and (cl.expires_at is null or cl.expires_at>now())
+            and (c.name is null or c.name not like '[TEST]%') and cl.user_id not like 'test-bot-%'
           order by cl.created_at desc limit 100`),
       ]);
       return res.json({entries:rowsOf(entries),locks:rowsOf(locks)});
@@ -776,7 +778,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
     }
   });
 
-  app.post("/api/admin/competitions/settle/:id", requireAuth, async (req: any, res) => {
+  const settleSingleCompetition = async (req: any, res: any) => {
     try {
       await ensureCardLockGuard();
       await ensurePrizeAwardSchema();
@@ -1068,6 +1070,94 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const status = message === "Tournament not found" ? 404 : validationMessages.includes(message) ? 400 : 500;
       if (status === 500) console.error("Failed to settle competition atomically:", error);
       return res.status(status).json({ message });
+    }
+  };
+  app.post("/api/admin/competitions/settle/:id", requireAuth, settleSingleCompetition);
+
+  // Settle a whole gameweek. Existing per-tournament scoring, provider checks,
+  // wallet idempotency and prize claims remain authoritative for entered cups.
+  // Empty tournaments can be completed after their own settlement cutoff,
+  // without inventing a score, winner or payout.
+  app.post("/api/admin/competitions/settle-gameweek/:gameWeek", requireAuth, async (req: any, res) => {
+    try {
+      const adminId = String(req.authUserId || "");
+      if (!(await isAdminUser(adminId))) return res.status(403).json({ message: "Admin access required" });
+      const gameWeek = Number(req.params.gameWeek);
+      if (!Number.isInteger(gameWeek) || gameWeek < 1 || gameWeek > 38) {
+        return res.status(400).json({ message: "Valid gameweek between 1 and 38 required" });
+      }
+      const cups = rowsOf(await db.execute(sql`
+        select c.id, c.name, c.status::text as status, c.end_date as "endDate",
+          count(ce.id)::integer as "entryCount"
+        from app.competitions c
+        left join app.competition_entries ce on ce.competition_id=c.id
+        where c.game_week=${gameWeek} and c.name not like '[TEST]%'
+          and c.status::text <> 'cancelled'
+        group by c.id
+        order by c.id
+      `));
+      const results: Array<{ id: number; name: string; result: string; message: string }> = [];
+      for (const cup of cups) {
+        const id = Number(cup.id);
+        const name = String(cup.name || "Tournament");
+        if (String(cup.status) === "completed") {
+          results.push({ id, name, result: "already_completed", message: "Existing settlement and prizes preserved" });
+          continue;
+        }
+        const cutoff = Date.parse(String(cup.endDate || ""));
+        if (!Number.isFinite(cutoff) || Date.now() < cutoff) {
+          results.push({ id, name, result: "blocked", message: "Gameweek settlement cutoff has not passed" });
+          continue;
+        }
+        if (Number(cup.entryCount || 0) === 0) {
+          try {
+            const settled = await db.transaction(async (tx) => {
+              const locked = rowsOf(await tx.execute(sql`
+                select id, status::text as status, end_date as "endDate"
+                from app.competitions where id=${id} for update
+              `))[0];
+              if (!locked || String(locked.status) === "cancelled") throw new Error("Tournament no longer eligible");
+              if (String(locked.status) === "completed") return false;
+              if (!["open", "active", "closed"].includes(String(locked.status))) throw new Error("Tournament is not ready");
+              if (Date.parse(String(locked.endDate || "")) > Date.now()) throw new Error("Settlement cutoff has not passed");
+              const entries = rowsOf(await tx.execute(sql`select id from app.competition_entries where competition_id=${id} limit 1`));
+              if (entries.length) throw new Error("An entry was added; retry the normal settlement");
+              await tx.execute(sql`update app.competitions set status='completed',platform_fee_total=0,prize_pool_total=0 where id=${id}`);
+              await tx.execute(sql`delete from app.card_locks where reason='competition' and ref_id=${String(id)}`);
+              await tx.execute(sql`insert into app.audit_logs(user_id,action,meta)
+                values(${adminId},'admin.tournament.empty_settled',${JSON.stringify({competitionId:id,gameWeek,empty:true})}::jsonb)`);
+              return true;
+            });
+            results.push({ id, name, result: settled ? "settled_empty" : "already_completed", message: "No entries; closed without rewards" });
+          } catch (error: any) {
+            results.push({ id, name, result: "blocked", message: String(error?.message || "Could not settle empty tournament") });
+          }
+          continue;
+        }
+
+        const captured = {
+          statusCode: 200, payload: null as any,
+          status(code: number) { this.statusCode = code; return this; },
+          json(payload: any) { this.payload = payload; return this; },
+        };
+        const childRequest = Object.create(req);
+        childRequest.params = { ...req.params, id: String(id) };
+        await settleSingleCompetition(childRequest, captured);
+        results.push({
+          id, name,
+          result: captured.statusCode < 300 && captured.payload?.success ? "settled" : "blocked",
+          message: String(captured.payload?.message || "Settlement failed"),
+        });
+      }
+      const failed = results.filter(row => row.result === "blocked").length;
+      return res.status(failed ? 207 : 200).json({
+        success: failed === 0, gameWeek, total: results.length, blocked: failed,
+        settled: results.filter(row => row.result === "settled" || row.result === "settled_empty").length,
+        results,
+      });
+    } catch (error: any) {
+      console.error("Gameweek settlement failed", error);
+      return res.status(500).json({ message: "Unable to run gameweek settlement" });
     }
   });
 }
