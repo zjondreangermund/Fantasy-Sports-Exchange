@@ -125,26 +125,56 @@ async function main() {
       [SEASON, currentGw],
     );
 
-    // Retire extra free cups without deleting entrants, standings or rewards.
-    // Cups with prior entrants remain closable and settleable by Admin;
-    // cups with no entrants are cancelled. No legacy cup is recreated.
-    await client.query(
+    // Remove old non-Common FREE cups across ALL gameweeks (not just future
+    // weeks). Existing real entries, score history and awards remain intact:
+    // only truly empty, unreferenced competitions are physically deleted.
+    const obsoleteFreeCupFilter = `
+      c.tier::text <> 'common'
+      and coalesce(c.entry_fee, 0) = 0
+      and (
+        lower(coalesce(c.prize_key, '')) like 'free-%-card'
+        or (c.name ilike '%free%' and c.name ilike '%cup%')
+      )
+    `;
+    const retired = await client.query(
       `update app.competitions c
-         set visibility='private',
-             status=case
-               when c.status::text in ('completed','cancelled') then c.status
-               when exists(select 1 from app.competition_entries e where e.competition_id=c.id)
-                 then 'closed'::text::${statusType}
-               else 'cancelled'::text::${statusType}
-             end
-       where c.created_by_user_id is null and c.season=$1
-         and c.game_week between $2 and 38
-         and c.tier::text <> 'common'
-         and coalesce(c.entry_fee,0)=0
-         and coalesce(c.prize_key,'') like 'free-%-card'
-         and c.name not like '[TEST]%'`,
-      [SEASON,currentGw],
+          set visibility = 'private',
+              admin_status_override = null,
+              status = case
+                when c.status::text in ('completed','cancelled') then c.status
+                when exists(select 1 from app.competition_entries e where e.competition_id=c.id)
+                  then 'closed'::text::${statusType}
+                else 'cancelled'::text::${statusType}
+              end
+        where ${obsoleteFreeCupFilter}
+        returning c.id, c.name, c.status::text as status`,
     );
+
+    let deletedUnused = 0;
+    // FKs may still reference old competitions through external audit systems.
+    // A savepoint means an unsafe delete is safely skipped instead of rolling
+    // back the other cleanups or touching player-owned records.
+    for (const row of retired.rows) {
+      const hasEntries = await client.query(
+        'select 1 from app.competition_entries where competition_id = $1 limit 1',
+        [row.id],
+      );
+      if (hasEntries.rowCount) continue;
+      await client.query('SAVEPOINT erase_unused_free_cup');
+      try {
+        const removed = await client.query(
+          'delete from app.competitions where id = $1 returning id',
+          [row.id],
+        );
+        if (removed.rowCount) deletedUnused += 1;
+        await client.query('RELEASE SAVEPOINT erase_unused_free_cup');
+      } catch (error) {
+        await client.query('ROLLBACK TO SAVEPOINT erase_unused_free_cup');
+        await client.query('RELEASE SAVEPOINT erase_unused_free_cup');
+        console.warn('[free-cup-cleanup] Archived a referenced cup instead of deleting it:', row.id);
+      }
+    }
+    console.log(`Retired ${retired.rows.length} non-Common FREE cups across all gameweeks; deleted ${deletedUnused} empty unreferenced cups; preserved entered/settled history.`);
 
     for (let gw = currentGw; gw <= 38; gw += 1) {
       for (const rarity of FREE_CUP_RARITIES) {

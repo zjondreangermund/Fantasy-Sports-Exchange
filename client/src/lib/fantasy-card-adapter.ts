@@ -102,6 +102,8 @@ export function toFantasyCardData(
   });
 
   const identityVerified = isVerifiedPlayerIdentity(player);
+  // Prefer the independently linked API-Football portrait on every verified card;
+  // only fall back to generated/placeholder artwork if no official image works.
   const directCandidates = identityVerified
     ? uniqueStrings([
         safeUrl(player?.verifiedImageUrl),
@@ -164,8 +166,16 @@ export function toFantasyCardData(
   const totalPoints = statsVerified
     ? finiteNumber(player?.totalPoints, player?.total_points, (card as any).totalPoints)
     : 0;
-  const form = statsVerified
-    ? finiteNumber(player?.form, player?.currentForm, (card as any).form)
+  // Card form is calculated only from recorded Fantasy Arena match scores,
+  // never from an external Premier League/FPL form number.
+  const playedArenaScores = Array.isArray(card.last5Scores)
+    ? card.last5Scores
+        .slice(0, 5)
+        .map((value: any) => Number(value))
+        .filter((value: number) => Number.isFinite(value))
+    : [];
+  const form = identityVerified && playedArenaScores.length
+    ? Math.round(100 * playedArenaScores.reduce((sum: number, value: number) => sum + value, 0) / playedArenaScores.length) / 100
     : 0;
   const rating = statsVerified ? finiteNumber(player?.overall) : 0;
 

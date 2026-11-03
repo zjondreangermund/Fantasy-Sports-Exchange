@@ -250,7 +250,7 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
     select ce.id as "entryId", ce.user_id as "userId", ce.rank, ce.prize_card_id as "prizeCardId",
       ce.tiebreak_meta -> 'settlement' -> 'prizeAward' as "settlementAward",
       (select pa.metadata from app.competition_prize_awards pa where pa.entry_id=ce.id and pa.user_id=ce.user_id and pa.prize_category='card' limit 1) as "awardMetadata",
-      (select pa.rarity from app.competition_prize_awards pa where pa.entry_id=ce.id and pa.user_id=ce.user_id and pa.prize_category='card' limit 1) as "awardRarity",
+      (ce.tiebreak_meta -> 'settlement' -> 'prizeAward' ->> 'rarity') as "awardRarity",
       (select pa.status from app.competition_prize_awards pa where pa.entry_id=ce.id and pa.user_id=ce.user_id and pa.prize_category='card' limit 1) as "awardStatus",
       c.id as "competitionId", c.name as "competitionName", c.status::text as "competitionStatus",
       c.tier::text as tier, coalesce(c.entry_fee,0)::float as "entryFee",
@@ -289,7 +289,7 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
 
   // Never reroll rarity when the player claims later: use the exact award
   // written at settlement, with legacy Rare/Common fallback.
-  const recordedRarity = String(award.awardRarity || asObject(award.settlementAward).rarity || "").toLowerCase();
+  const recordedRarity = String(award.awardRarity || award.settlementAward?.rarity || "").toLowerCase();
   const allowedRarities = ["common", "rare", "unique", "epic", "legendary"];
   const rarity = rank === 1 && allowedRarities.includes(recordedRarity) ? recordedRarity : rank === 1 ? "rare" : "common";
   const maxSupply = CARD_SUPPLY_CAP_BY_RARITY[rarity as keyof typeof CARD_SUPPLY_CAP_BY_RARITY];
