@@ -261,7 +261,7 @@ function PrizeEconomics({ comp }: { comp: CompetitionWithEntries }) {
   if (!vaultTournament) {
     return <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm text-cyan-50">
       <p className="font-black">{comp.prizeDescription || "Tournament prize pool"}</p>
-      <p className="mt-1 text-xs text-white/65">This tournament is not part of the official Prize Vault. Entry: N$${money(comp.entryFee)}.</p>
+      <p className="mt-1 text-xs text-white/65">This tournament is not part of the official Prize Vault. Entry: {`N${money(comp.entryFee)}`}</p>
     </div>;
   }
   return <div className="space-y-2 rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-50">
