@@ -35,7 +35,7 @@ export default function CollectionCleanPage() {
     staleTime: 5 * 60_000,
     retry: false,
   });
-  const { data: cutoutManifest } = useQuery<{ players: Record<string, unknown> }>({
+  const { data: cutoutManifest } = useQuery<{ players: Record<string, unknown>; source_count?: number }>({
     queryKey: ["/portraits/cutouts/manifest.json"],
     queryFn: async () => {
       const r = await fetch("/portraits/cutouts/manifest.json", { cache: "no-cache" });
@@ -47,6 +47,8 @@ export default function CollectionCleanPage() {
     retry: false,
   });
   const cutoutsReady = Object.keys(cutoutManifest?.players || {}).length;
+  const cutoutsTotal = Number(cutoutManifest?.source_count || 0);
+  const cutoutsProgress = cutoutsTotal > 0 ? `${cutoutsReady}/${cutoutsTotal}` : `${cutoutsReady}`;
   const cutoutPreview = Boolean(requestCutoutPreview && portraitAccess?.isAdmin && cutoutsReady > 0);
   const [filter, setFilter] = useState<RarityKey>("all");
   const [search, setSearch] = useState("");
@@ -119,7 +121,7 @@ export default function CollectionCleanPage() {
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={startEditLineup} className="rounded-xl border-white/15 bg-white/[0.06] text-white hover:bg-white/10">Edit Lineup</Button>{editingLineup ? <Button size="sm" onClick={() => saveLineupMutation.mutate(Array.from(selectedForLineup))} disabled={saveLineupMutation.isPending || selectedForLineup.size !== 5} className="rounded-xl bg-emerald-400 font-black text-black hover:bg-emerald-300">Save Lineup ({selectedForLineup.size}/5)</Button> : null}<Badge className="rounded-xl bg-amber-400/15 px-3 py-1 text-amber-100">{listedCount} on market</Badge></div><div className="rounded-xl border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold text-white/70">Showing {pageStart}-{pageEnd} of {filteredCards.length}</div></div>
         </section>
         {portraitAccess?.isAdmin ? <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-violet-300/20 bg-violet-400/[.07] px-4 py-3 text-sm text-violet-100">
-          <span>{cutoutsReady > 0 ? `Admin cutout portrait test · ${cutoutsReady} players ready; originals protected` : "Cutout portraits are being prepared · none generated yet; originals shown"}</span>
+          <span>{cutoutsReady > 0 ? `Admin cutout portrait test · ${cutoutsProgress} ready; originals protected` : "Cutout portraits are being prepared · none generated yet; originals shown"}</span>
           <button type="button" disabled={cutoutsReady === 0} onClick={() => setRequestCutoutPreview(v => !v)} className="rounded-lg border border-violet-300/30 bg-violet-400/15 px-3 py-2 font-bold disabled:cursor-not-allowed disabled:opacity-40">
             {cutoutPreview ? "Show original portraits" : "Preview cutout portraits"}
           </button>
