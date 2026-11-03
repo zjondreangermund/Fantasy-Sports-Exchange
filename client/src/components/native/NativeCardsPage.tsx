@@ -73,8 +73,10 @@ export default function NativeCardsPage() {
       if (!response.ok) return [];
       return response.json();
     },
-    staleTime: 25_000,
-    refetchInterval: 60_000,
+    staleTime: 30_000,
+    refetchInterval: () => document.visibilityState === "hidden" ? false : 90_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: myLoansRaw } = useQuery<any>({
@@ -84,8 +86,10 @@ export default function NativeCardsPage() {
       if (!response.ok) return { loans: [] };
       return response.json();
     },
-    staleTime: 15_000,
-    refetchInterval: 30_000,
+    staleTime: 30_000,
+    refetchInterval: () => document.visibilityState === "hidden" ? false : 90_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const cards = React.useMemo(() => normalizeCards(cardsRaw), [cardsRaw]);
