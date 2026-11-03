@@ -10,7 +10,10 @@ export default function UnreadNotificationDot({ showCount = false, className = "
       if (!response.ok) return { unreadCount: 0 };
       return response.json();
     },
-    refetchInterval: 10000,
+    staleTime: 10_000,
+    refetchInterval: () => document.visibilityState === "hidden" ? false : 20_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const unreadCount = Math.max(0, Number(data?.unreadCount || 0));
