@@ -88,8 +88,8 @@ const OLD_SECURITY_MESSAGE = "Fantasy Arena is temporarily restricted while the 
   source = source.replace('const fantasyCard = toFantasyCardData(card, { imageWidth: 540 }); ', "");
   source = replaceOnce(
     source,
-    '<PremiumFootballCard player={fantasyCard} selected={isSelected} onClick={() => handleCardTap(card)} showPrice={Boolean(card.forSale)} size="sm" />',
-    '<CollectionProfileCard card={card} selected={isSelected} onClick={() => handleCardTap(card)} showPrice={Boolean(card.forSale)} />',
+    '<PremiumFootballCard player={fantasyCard} selected={isSelected} onClick={() => handleCardTap(card)} showPrice={Boolean(card.forSale)} size="sm" cutoutPreview={cutoutPreview} />',
+    '<CollectionProfileCard card={card} selected={isSelected} onClick={() => handleCardTap(card)} showPrice={Boolean(card.forSale)} cutoutPreview={cutoutPreview} />',
     "Collection card renderer",
   );
   write(file, source);
