@@ -761,7 +761,20 @@ export class ScoreUpdateService {
       }
 
       if (!toScore.length) { console.log(`No Premier League competitions require scoring (current/next GW${currentGameweek})`); return; }
-      console.log(`📊 Updating ${toScore.length} Premier League competitions without resetting historical scores...`);
+
+      // PERFORMANCE_V1_SKIP_EMPTY_SCORING: state/fixture transitions above still
+      // run for every competition, but score calculation and provider snapshots
+      // are only needed for competitions with real submitted teams.
+      // Batch the entry existence lookup rather than doing one per competition.
+      const candidateIds = toScore.map(({ competition }) => Number(competition.id)).filter((id) => Number.isInteger(id) && id > 0);
+      const populated = rowsOf(await db.execute(sql`
+        select distinct competition_id as "competitionId"
+        from app.competition_entries
+        where competition_id in (${sql.join(candidateIds.map((id) => sql`${id}`), sql`, `)})
+      `));
+      const hasEntries = new Set(populated.map((row: any) => Number(row.competitionId)));
+      const skipCount = toScore.filter((item) => !hasEntries.has(Number(item.competition.id))).length;
+      console.log(`📊 Scoring ${toScore.length - skipCount} entered Premier League competitions; skipping ${skipCount} with no entries.`);
 
       const apiContextByGameweek = new Map<number, Promise<ApiFootballGameweekScoringContext>>();
       const apiContextFor = (gameWeek: number) => {
@@ -771,6 +784,12 @@ export class ScoreUpdateService {
 
       let updatedEntries = 0;
       for (const item of toScore) {
+        if (!hasEntries.has(Number(item.competition.id))) {
+          // An empty finished tournament still moves to closed, ready for the
+          // admin's zero-entry Settle Gameweek action. No scores or cards minted.
+          if (item.final) await this.setCompetitionStatus(Number(item.competition.id), "closed");
+          continue;
+        }
         const gameWeek = Number(item.competition?.gameWeek || item.competition?.game_week || 0);
         const persistCards = item.final || gameWeek === currentGameweek;
         const result = await this.scoreCompetitionEntries(item.competition, await apiContextFor(gameWeek), item.final, persistCards);
