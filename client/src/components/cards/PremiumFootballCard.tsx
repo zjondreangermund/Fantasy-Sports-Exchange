@@ -16,6 +16,8 @@ export type PremiumFootballCardProps = {
   className?: string;
   size?: PremiumCardSize;
   interactive?: boolean;
+  /** Opt-in collection-only preview; false everywhere else by default. */
+  cutoutPreview?: boolean;
 };
 
 type ProfileData = {
@@ -61,6 +63,7 @@ function PremiumFootballCardBase({
   className = "",
   size = "md",
   interactive = true,
+  cutoutPreview = false,
 }: PremiumFootballCardProps) {
   const cardId = cardIdOf(player);
   const [showIntelligence, setShowIntelligence] = useState(false);
@@ -100,6 +103,31 @@ function PremiumFootballCardBase({
   }, [data, player]);
 
   const apiFootballId = Number(data?.player?.apiFootballId || (player as any).apiFootballId || 0);
+  // CUTOUT_PORTRAITS_PREVIEW_V1: only request a generated cutout when the
+  // batch manifest confirms one exists. No speculative 404s or original changes.
+  const { data: cutoutManifest } = useQuery<{ version: number; players: Record<string, unknown> }>({
+    queryKey: ["/portraits/cutouts/manifest.json"],
+    queryFn: async () => {
+      const response = await fetch("/portraits/cutouts/manifest.json", { cache: "no-cache" });
+      if (!response.ok) throw new Error("Cutout portrait manifest unavailable");
+      return response.json();
+    },
+    enabled: cutoutPreview && Number.isInteger(apiFootballId) && apiFootballId > 0,
+    staleTime: 15 * 60_000,
+    retry: false,
+  });
+  const cutoutUrl = cutoutPreview && cutoutManifest?.players?.[String(apiFootballId)]
+    ? `/portraits/cutouts/${apiFootballId}.webp`
+    : "";
+  const portraitPlayer = useMemo<PlayerCardData>(() => {
+    if (!cutoutUrl) return profilePlayer;
+    return {
+      ...profilePlayer,
+      image: cutoutUrl,
+      imageCandidates: Array.from(new Set([cutoutUrl, ...(profilePlayer.imageCandidates || []), profilePlayer.image].filter(Boolean))) as string[],
+    };
+  }, [cutoutUrl, profilePlayer]);
+
   const dimensions = CARD_SIZE[size] || CARD_SIZE.md;
   const scale = Math.min(
     dimensions.width / COLLECTION_PROFILE_WIDTH,
@@ -146,7 +174,7 @@ function PremiumFootballCardBase({
           }}
         >
           <CollectionStableCard
-            player={profilePlayer}
+            player={portraitPlayer}
             selected={selected}
             onClick={directInteraction ? onClick : undefined}
             showPrice={showPrice}
