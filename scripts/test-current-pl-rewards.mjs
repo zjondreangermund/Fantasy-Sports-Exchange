@@ -45,7 +45,7 @@ try{
  const originalDirectory=directory;directory=directory.map(p=>({...p,season:season-1}));await assert.rejects(currentPremierLeagueMintIds(db),/No card was minted/);directory=originalDirectory;
  const source=await readFile('server/routes/economyIntegrity.routes.ts','utf8');const start=source.indexOf('async function claimFreeCommonCupCard('),end=source.indexOf('\nasync function notifyEntryAdmins',start);
  const fn=ts.transpileModule(source.slice(start,end),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
- const {sql}=await import('drizzle-orm');const claimPrize=new Function('sql','rowsOf','awardedPrizeCardId','COMMON_COLLECTION_CAP','currentPremierLeagueMintIds','createNotificationOnce','ensureCommonCardChoiceSchema',fn+';return claimFreeCommonCupCard;')(sql,r=>r.rows,a=>Number(a.prizeCardId||0),20,currentPremierLeagueMintIds,async()=>{},async()=>{});
+ const {sql}=await import('drizzle-orm');const claimPrize=new Function('sql','rowsOf','awardedPrizeCardId','COMMON_COLLECTION_CAP','CARD_SUPPLY_CAP_BY_RARITY','currentPremierLeagueMintIds','createNotificationOnce','ensureCommonCardChoiceSchema',fn+';return claimFreeCommonCupCard;')(sql,r=>r.rows,a=>Number(a.prizeCardId||0),20,{common:1000,rare:100,unique:10,epic:3,legendary:1},currentPremierLeagueMintIds,async()=>{},async()=>{});
  await pg.exec(`CREATE TABLE app.competitions(id integer PRIMARY KEY,name text,status text,tier text,entry_fee real,prize_key text);
  CREATE TABLE app.competition_entries(id integer PRIMARY KEY,user_id text,rank int,prize_card_id int,competition_id int,tiebreak_meta jsonb);
  CREATE TABLE app.competition_prize_awards(entry_id int,user_id text,prize_category text,status text,metadata jsonb,updated_at timestamptz);
