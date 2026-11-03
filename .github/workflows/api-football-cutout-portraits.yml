@@ -43,30 +43,49 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check "rembg[cpu]>=2.0.67,<3" "Pillow>=10,<13"
           python -m py_compile scripts/generate-player-cutouts.py
-      - name: Wait for the verified live squad-source endpoint
+      - name: Fetch and validate verified current squad list
         run: |
           python - <<'PY'
           import json, time
+          from urllib.error import HTTPError, URLError
           from urllib.request import Request, urlopen
-          url = "https://playfantasyarena.com/api/leagues/premier-league/cutout-portrait-sources"
-          for attempt in range(25):
-              try:
-                  with urlopen(Request(url, headers={"Accept":"application/json"}), timeout=25) as response:
-                      payload = json.load(response)
-                  if payload.get("provider") == "api-football" and payload.get("count", 0) > 0:
-                      print("Verified live squad directory ready:", payload["count"], "players")
-                      break
-              except Exception as exc:
-                  print("Portrait source not yet deployed:", type(exc).__name__)
-              if attempt == 24:
-                  raise RuntimeError("No verified current squad directory after deployment grace period")
-              time.sleep(30)
+          from pathlib import Path
+          path = "/api/leagues/premier-league/cutout-portrait-sources"
+          hosts = [
+              "https://playfantasyarena.com",
+              "https://fantasy-sports-exchange-production-d05c.up.railway.app",
+          ]
+          result_file = Path("/tmp/verified-epl-player-portraits.json")
+          for attempt in range(4):
+              for host in hosts:
+                  url = host + path
+                  try:
+                      request = Request(url, headers={"Accept":"application/json", "User-Agent":"FantasyArena-CutoutBot/1.0"})
+                      with urlopen(request, timeout=22) as response:
+                          payload = json.load(response)
+                      players = payload.get("players") if isinstance(payload, dict) else None
+                      if payload.get("provider") == "api-football" and isinstance(players, list) and len(players) >= 100:
+                          result_file.write_text(json.dumps(payload), encoding="utf-8")
+                          print("Verified source ready:", host, "players:", len(players))
+                          break
+                      print("Invalid verified source:",host,"count:",len(players) if isinstance(players,list) else 0)
+                  except HTTPError as exc:
+                      body = exc.read(350).decode("utf-8", "replace")
+                      print("HTTP",exc.code,"at",host,"body:",body[:250],flush=True)
+                  except (URLError, OSError, ValueError, TimeoutError) as exc:
+                      print("Source fetch failed:",host,type(exc).__name__,str(exc)[:160],flush=True)
+              if result_file.exists():
+                  break
+              if attempt != 3:
+                  time.sleep(15)
+          if not result_file.exists():
+              raise RuntimeError("Verified squad source unavailable on both domains (see HTTP diagnostics). No portraits overwritten.")
           PY
       - name: Generate next transparent portrait batch
         env:
           BATCH_SIZE: ${{ inputs.batch_size || '24' }}
         run: |
-          python scripts/generate-player-cutouts.py --batch-size "$BATCH_SIZE"
+          python scripts/generate-player-cutouts.py --source-file /tmp/verified-epl-player-portraits.json --batch-size "$BATCH_SIZE"
       - name: Publish only passing cutouts and batch manifest
         run: |
           git config user.name "fantasy-arena-portrait-bot"
