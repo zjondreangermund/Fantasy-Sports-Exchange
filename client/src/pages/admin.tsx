@@ -136,11 +136,10 @@ export default function AdminPage() {
   const { data: usersResponse, refetch: refetchUsers } = useQuery<{ users: UserRow[]; total: number }>({ queryKey: ["/api/admin/users?limit=100"] });
   const { data: traffic, refetch: refetchTraffic } = useQuery<Traffic>({ queryKey: ["/api/admin/traffic"] });
   const { data: signupFunnel, refetch: refetchSignupFunnel } = useQuery<SignupFunnel>({ queryKey: ["/api/admin/signup-funnel?hours=168"], refetchInterval: 60_000 });
-  const { refetch: refetchTx } = useQuery<any>({ queryKey: ["/api/admin/transactions?limit=100"] });
-  const { data: revenue } = useQuery<any>({ queryKey: ["/api/admin/revenue"] });
+  const { refetch: refetchTx } = useQuery<any>({ queryKey: ["/api/admin/transactions?limit=100"], enabled: false });
   const { data: listings, refetch: refetchListings } = useQuery<any[]>({ queryKey: ["/api/marketplace"] });
   const { data: competitions } = useQuery<any[]>({ queryKey: ["/api/competitions"] });
-  const { data: withdrawals } = useQuery<any[]>({ queryKey: ["/api/admin/withdrawals"] });
+  const { data: withdrawals } = useQuery<any[]>({ queryKey: ["/api/admin/withdrawals"], enabled: activeTab === "finance" || workspacePanel === "withdrawals" });
   const { data: selectedUserDetails } = useQuery<any>({ queryKey: [`/api/admin/users/${selectedUserId}/details`], enabled: Boolean(selectedUserId) });
   const { data: searchedUsers, isFetching: searchingUsers } = useQuery<{ users: UserRow[]; total: number }>({
     queryKey: [`/api/admin/users/search?q=${encodeURIComponent(userSearchTerm)}`],
@@ -196,7 +195,7 @@ export default function AdminPage() {
     void queryClient.invalidateQueries({predicate:q=>String(q.queryKey[0]).startsWith('/api/admin/activity')});
   };
 
-  const { data: liveFinance } = useQuery<any>({ queryKey: ['/api/admin/platform-finance'], refetchInterval: 30000 });
+  const { data: liveFinance } = useQuery<any>({ queryKey: ['/api/admin/platform-finance'], refetchInterval: () => document.visibilityState === 'hidden' ? false : 60_000, staleTime: 30_000 });
   const kpis = [
     { label: "Users", value: stats?.users || usersResponse?.total || users.length, hint: `${stats?.newSignups24h || 0} new 24h`, icon: Users },
     { label: "Cards", value: stats?.cards || 0, hint: "All minted/owned", icon: CreditCard },
