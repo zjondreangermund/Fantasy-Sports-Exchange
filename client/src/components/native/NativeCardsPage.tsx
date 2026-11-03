@@ -73,7 +73,7 @@ export default function NativeCardsPage() {
     staleTime: 5 * 60_000,
     retry: false,
   });
-  const { data: cutoutManifest } = useQuery<{ players: Record<string, unknown> }>({
+  const { data: cutoutManifest } = useQuery<{ players: Record<string, unknown>; source_count?: number }>({
     queryKey: ["/portraits/cutouts/manifest.json"],
     queryFn: async () => {
       const r = await fetch("/portraits/cutouts/manifest.json", { cache: "no-cache" });
@@ -85,6 +85,8 @@ export default function NativeCardsPage() {
     retry: false,
   });
   const cutoutsReady = Object.keys(cutoutManifest?.players || {}).length;
+  const cutoutsTotal = Number(cutoutManifest?.source_count || 0);
+  const cutoutsProgress = cutoutsTotal > 0 ? `${cutoutsReady}/${cutoutsTotal}` : `${cutoutsReady}`;
   const cutoutPreview = Boolean(requestCutoutPreview && portraitAccess?.isAdmin && cutoutsReady > 0);
 
   const { data: cardsRaw, isLoading } = useQuery<any>({
@@ -148,7 +150,7 @@ export default function NativeCardsPage() {
       </section>
 
       {portraitAccess?.isAdmin ? <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-violet-300/20 bg-violet-400/[.08] px-3 py-2 text-xs">
-        <span className="text-violet-100">{cutoutsReady > 0 ? `Admin cutout test · ${cutoutsReady} players ready` : "Preparing cutouts · 0 ready; original photos displayed"}</span>
+        <span className="text-violet-100">{cutoutsReady > 0 ? `Admin cutout test · ${cutoutsProgress} ready; others use originals` : "Preparing cutouts · 0 ready; original photos displayed"}</span>
         <button type="button" disabled={cutoutsReady === 0} onClick={() => setRequestCutoutPreview((v) => !v)} className="shrink-0 rounded-lg border border-violet-200/35 bg-violet-300/15 px-3 py-2 font-bold text-violet-50 disabled:cursor-not-allowed disabled:opacity-40">
           {cutoutPreview ? "Show originals" : "Preview cutouts"}
         </button>

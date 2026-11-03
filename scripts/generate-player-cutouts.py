@@ -25,9 +25,17 @@ MANIFEST_PATH = PORTRAITS / "manifest.json"
 DEFAULT_DIRECTORY = "https://playfantasyarena.com/api/leagues/premier-league/cutout-portrait-sources"
 MAX_BYTES = 2_500_000
 RETRY_DAYS = 5
+# Repeated tiny assets are typically the provider's generic unknown-player
+# placeholder; keep the known original rather than mislabel a different face.
+MIN_ACCEPTED_CUTOUT_BYTES = 3_500
 # These six names come from the collection screenshot; include the rest of the
 # current squad directory in subsequent small and reproducible batches.
-PRIORITY_NAMES = ("gyokeres", "jaros", "savona", "saliba", "rodon", "davies")
+PRIORITY_NAMES = (
+    # Players already pictured in the owner's collection get first priority.
+    "gyokeres", "jaros", "savona", "saliba", "rodon", "davies",
+    "hecke", "enciso", "tel", "dedic", "azeez", "travers", "timber", "raya",
+    # Continue with every other currently verified Premier League player.
+)
 
 
 def utcnow() -> datetime:
@@ -162,6 +170,41 @@ def main() -> None:
         raw_directory = json.loads(fetch_bytes(args.source_url))
     directory = player_list(raw_directory)
     now = utcnow()
+    # Preserve trustworthy accepted portraits across runs, but quarantine
+    # suspiciously tiny or exact-duplicate silhouettes. A duplicate image
+    # across distinct API player IDs cannot reliably identify either player.
+    seen_sha: dict[str, list[str]] = {}
+    invalid: dict[str, str] = {}
+    for key, metadata in list(existing.items()):
+        asset = PORTRAITS / f"{key}.webp"
+        if not asset.is_file():
+            invalid[key] = "Cutout file missing"
+            continue
+        if asset.stat().st_size < MIN_ACCEPTED_CUTOUT_BYTES:
+            invalid[key] = "Generic or undersized provider portrait"
+            continue
+        digest = hashlib.sha256(asset.read_bytes()).hexdigest()[:16]
+        seen_sha.setdefault(digest, []).append(key)
+        metadata["sha256"] = digest
+    for ids in seen_sha.values():
+        if len(ids) > 1:
+            for key in ids:
+                invalid[key] = "Identical portrait used by multiple player IDs"
+    for key, reason in invalid.items():
+        if args.dry_run:
+            print(f"  WOULD QUARANTINE {key}: {reason}")
+            continue
+        existing.pop(key, None)
+        image_path = PORTRAITS / f"{key}.webp"
+        if image_path.exists():
+            image_path.unlink()
+        failed[key] = {"at": now.isoformat(), "reason": "ImageQualityFailed"}
+        print(f"  QUARANTINE {key}: {reason}")
+    accepted_digests = {
+        metadata["sha256"]: key
+        for key, metadata in existing.items()
+        if isinstance(metadata, dict) and metadata.get("sha256")
+    }
 
     pending = []
     for player in directory:
@@ -181,15 +224,17 @@ def main() -> None:
         if len(pending) >= args.batch_size:
             break
 
-    print(f"API-Football active players: {len(directory)}; previously accepted cutouts: {len(existing)}; selected this batch: {len(pending)}")
-    if args.dry_run or not pending:
+    print(f"API-Football active players: {len(directory)}; previously accepted cutouts: {len(existing)}; quarantined: {len(invalid)}; selected this batch: {len(pending)}")
+    if args.dry_run:
         for player in pending:
             print(f"  READY {player['id']} {player['name']} ({player['team']})")
         return
 
-    # Load one reusable segmentation model per batch, never per player.
-    from rembg import new_session
-    session = new_session("isnet-general-use")
+    # A no-op run should still publish manifest cleanup without loading a model.
+    session = None
+    if pending:
+        from rembg import new_session
+        session = new_session("isnet-general-use")
     processed = 0
     rejected = 0
 
@@ -203,15 +248,30 @@ def main() -> None:
             if not image.startswith(b"\x89PNG\r\n\x1a\n"):
                 raise UnidentifiedImageError("Provider did not return a PNG portrait")
             cutout = convert_portrait(image, session)
+            if len(cutout) < MIN_ACCEPTED_CUTOUT_BYTES:
+                raise ValueError("Generic or undersized provider portrait")
+            digest = hashlib.sha256(cutout).hexdigest()[:16]
+            previous_id = accepted_digests.get(digest)
+            if previous_id and previous_id != key:
+                # Both files are untrusted when the same content is assigned
+                # to separate players. Remove the old accepted preview too.
+                existing.pop(previous_id, None)
+                previous_path = PORTRAITS / f"{previous_id}.webp"
+                if previous_path.exists():
+                    previous_path.unlink()
+                failed[previous_id] = {"at": now.isoformat(), "reason": "ImageQualityFailed"}
+                accepted_digests.pop(digest, None)
+                raise ValueError(f"Duplicate provider portrait also used for player {previous_id}")
             temp = image_path.with_suffix(".webp.tmp")
             temp.write_bytes(cutout)
             temp.replace(image_path)
             existing[key] = {
                 "name": player["name"],
                 "team": player["team"],
-                "sha256": hashlib.sha256(cutout).hexdigest()[:16],
+                "sha256": digest,
             }
             failed.pop(key, None)
+            accepted_digests[digest] = key
             processed += 1
             print(f"  OK  {player_id} {player['name']} ({len(cutout)} bytes)")
         except (ValueError, OSError, HTTPError, URLError, RuntimeError, UnidentifiedImageError) as error:
@@ -219,6 +279,8 @@ def main() -> None:
             rejected += 1
             print(f"  SKIP {player_id} {player['name']}: {type(error).__name__}: {str(error)[:150]}")
 
+    manifest["source_count"] = len(directory)
+    manifest["source_season"] = int(raw_directory.get("season") or 0)
     manifest["players"] = dict(sorted(existing.items(), key=lambda pair: int(pair[0])))
     manifest["failed"] = dict(sorted(failed.items(), key=lambda pair: int(pair[0])))
     # Store only asset metadata and failure retry dates. No logins/ownership
