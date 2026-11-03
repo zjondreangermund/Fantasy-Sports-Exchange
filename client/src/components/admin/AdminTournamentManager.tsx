@@ -62,6 +62,8 @@ export default function AdminTournamentManager() {
   const [previewRarity, setPreviewRarity] = useState("rare");
   const [financialSearch, setFinancialSearch] = useState("");
   const [tournamentListView, setTournamentListView] = useState<"current" | "closed">("closed");
+  const [selectedGameWeek, setSelectedGameWeek] = useState("");
+  const [bulkSettlement, setBulkSettlement] = useState<any>(null);
   const { data: competitions } = useQuery<any[]>({ queryKey: ["/api/competitions"] });
   const { data: prizePayload } = useQuery<any>({ queryKey: ["/api/admin/prizes"] });
   const { data: financialPayload, isFetching: financialsFetching, refetch: refreshFinancials } = useQuery<any>({
@@ -87,6 +89,8 @@ export default function AdminTournamentManager() {
   const officialCompetitions = sortedCompetitions.filter((comp) => String(comp.prizeKey || comp.prize_key || "") !== "user-cash");
   const activeCompetitions = officialCompetitions.filter((comp) => !["completed", "closed", "cancelled"].includes(String(comp.status || "").toLowerCase()));
   const completedCompetitions = officialCompetitions.filter((comp) => ["completed", "closed", "cancelled"].includes(String(comp.status || "").toLowerCase()));
+  const latestFinishedGameWeek = Math.max(1, ...officialCompetitions.filter((comp) => { const deadline = Date.parse(String(comp.endDate || comp.end_date || "")); return Number.isFinite(deadline) && deadline <= Date.now(); }).map((comp) => Number(comp.gameWeek || comp.game_week || 0)));
+  const targetGameWeek = Number(selectedGameWeek || latestFinishedGameWeek);
   const prizesByRarity = useMemo(() => {
     const groups: Record<string, any[]> = {};
     for (const rarity of rarityOptions) groups[rarity] = [];
@@ -230,6 +234,22 @@ export default function AdminTournamentManager() {
     },
   });
 
+  const settleGameWeekMutation = useMutation({
+    mutationFn: async (gameWeek: number) => (await apiRequest("POST", `/api/admin/competitions/settle-gameweek/${gameWeek}`, {})).json(),
+    onSuccess: (result: any) => {
+      setBulkSettlement(result);
+      for (const key of ["/api/competitions", "/api/competitions/my-entries", "/api/prize-vault", "/api/admin/tournament-financials", "/api/admin/stats", "/api/admin/entry-monitor"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+      toast({
+        title: result.blocked ? `GW${result.gameWeek}: ${result.blocked} need attention` : `GW${result.gameWeek} settled`,
+        description: `${result.settled} tournament(s) settled; previously completed results and rewards preserved.`,
+        variant: result.blocked ? "destructive" : undefined,
+      });
+    },
+    onError: (error: any) => toast({ title: "Gameweek settlement failed", description: String(error?.message || "Unknown error"), variant: "destructive" }),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (competitionId: number) => (await apiRequest("DELETE", `/api/admin/competitions/${competitionId}`)).json(),
     onSuccess: () => {
@@ -243,6 +263,11 @@ export default function AdminTournamentManager() {
     },
     onError: (error: any) => toast({ title: "Tournament deletion failed", description: error.message, variant: "destructive" }),
   });
+
+  const requestGameWeekSettlement = () => {
+    if (!window.confirm(`Settle every eligible tournament in Gameweek ${targetGameWeek}? Empty cups will close with no rewards. Already completed awards will never be rerolled. Unverified scores will remain blocked.`)) return;
+    settleGameWeekMutation.mutate(targetGameWeek);
+  };
 
   const requestDelete = (comp: any) => {
     if (!window.confirm(`Delete "${comp.name || "this tournament"}" and all related entries? This cannot be undone.`)) return;
@@ -280,6 +305,25 @@ export default function AdminTournamentManager() {
         </div>
         <div className="flex gap-2"><Link href="/prize-vault"><Button variant="outline" className="rounded-xl border-emerald-300/30 bg-emerald-300/10 text-emerald-100"><Gift className="mr-2 h-4 w-4" />Prize Vault</Button></Link><Button onClick={() => setForm(buildEmptyForm())} className="rounded-xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><Plus className="mr-2 h-4 w-4" />New</Button></div>
       </div>
+
+      <section className="mt-5 rounded-2xl border border-emerald-300/25 bg-emerald-400/[.04] p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="min-w-[140px] flex-1 space-y-1 text-sm">
+            <span className="font-bold text-emerald-100">Settle whole gameweek</span>
+            <select value={targetGameWeek} onChange={(event) => setSelectedGameWeek(event.target.value)} className="w-full rounded-lg border border-white/15 bg-slate-950 px-3 py-2 text-white">
+              {Array.from({length:38}, (_, index) => index + 1).map((week) => <option key={week} value={week}>Gameweek {week}</option>)}
+            </select>
+          </label>
+          <Button type="button" disabled={settleGameWeekMutation.isPending} onClick={requestGameWeekSettlement} className="bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200">
+            <CheckCircle2 className="mr-2 h-4 w-4" />{settleGameWeekMutation.isPending ? "Settling gameweek…" : "Settle Gameweek"}
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-white/60">Settles every eligible cup for the selected week, including cups with zero entries. Pending API-Football scores remain blocked. Completed rewards are not repeated.</p>
+        {bulkSettlement ? <div className="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-white/10 p-2 text-xs">
+          <p className="font-bold">GW{bulkSettlement.gameWeek}: {bulkSettlement.settled} settled, {bulkSettlement.blocked} blocked</p>
+          {bulkSettlement.results?.map((item: any) => <div key={item.id} className="break-words border-t border-white/10 py-2"><span className="font-semibold">{item.name}</span> — {item.result.replaceAll("_"," ")}: {item.message}</div>)}
+        </div> : null}
+      </section>
 
       <section className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-400/[.04] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
