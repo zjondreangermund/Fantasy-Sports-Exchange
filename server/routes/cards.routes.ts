@@ -65,6 +65,31 @@ async function isAdminUserForAudit(storage: any, req: any) {
 export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps) {
   const { requireAuth, storage } = deps;
 
+  // COLLECTION_SCORING_CONTEXT_CACHE_V1: user-specific cards/ownership are
+  // always loaded fresh. Only the shared, read-only current-gameweek provider
+  // snapshots are coalesced across requests for a short time. The same promise
+  // also prevents several managers opening Squad at once from running the same
+  // expensive fixture/statistics queries concurrently.
+  const scoringContextCache = new Map<number, {
+    expiresAt: number;
+    promise: Promise<[any, any]>;
+  }>();
+  const loadSharedScoringContexts = (bootstrap: any, gameweek: number) => {
+    const now = Date.now();
+    const cached = scoringContextCache.get(gameweek);
+    if (cached && cached.expiresAt > now) return cached.promise;
+    const promise = Promise.all([
+      loadDetailedScoringContext(bootstrap || {}, gameweek),
+      loadApiFootballGameweekScoringContext(gameweek).catch(() => null),
+    ]) as Promise<[any, any]>;
+    scoringContextCache.clear(); // Never retain snapshots from previous GWs.
+    scoringContextCache.set(gameweek, { expiresAt: now + 20_000, promise });
+    void promise.catch(() => {
+      if (scoringContextCache.get(gameweek)?.promise === promise) scoringContextCache.delete(gameweek);
+    });
+    return promise;
+  };
+
   const sendUserCards = async (req: any, res: any) => {
     try {
       const userId = req.authUserId;
@@ -81,10 +106,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([fplApi.bootstrap().catch(() => null), fplApi.getLiveGameweek().catch(() => null), loadApiFootballPlayerDirectory().catch(() => [])]);
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const currentGameweek = Number((bootstrap as any)?.events?.find((event: any) => event?.is_current)?.id || await fplApi.getCurrentGameweek().catch(() => 0));
-      const [detailedScoringContext, gameweekScoringContext] = await Promise.all([
-        loadDetailedScoringContext(bootstrap || {}, currentGameweek),
-        loadApiFootballGameweekScoringContext(currentGameweek).catch(() => null),
-      ]);
+      const [detailedScoringContext, gameweekScoringContext] = await loadSharedScoringContexts(bootstrap, currentGameweek);
       const liveElements = Array.isArray((liveData as any)?.elements) ? (liveData as any).elements : [];
       const liveByElementId = new Map<number, any>();
       for (const liveElement of liveElements) liveByElementId.set(Number(liveElement.id), liveElement);
