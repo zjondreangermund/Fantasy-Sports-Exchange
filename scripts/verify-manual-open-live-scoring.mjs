@@ -10,13 +10,21 @@ const fixture = { event: 6, kickoff_time: '2026-01-02T12:00:00Z', started: true 
 const bootstrap = { events: [{ id: 6, is_current: true, deadline_time: '2026-01-02T10:00:00Z' }] };
 const calls = [];
 const statusWrites = [];
+const enteredCompetitionIds = new Set([1229]);
 const exports = {};
 const sandbox = {
   exports, process: { env: {} }, console: { log() {}, error() {}, warn() {} },
   setInterval, clearInterval,
   require(name) {
     if (name === 'drizzle-orm') return { sql: (...args) => args };
-    if (name === '../db.js') return { db: { execute: async (...args) => { statusWrites.push(args); return { rows: [] }; } } };
+    if (name === '../db.js') return { db: { execute: async (...args) => {
+      const statement = String(args[0]?.[0] || "");
+      if (statement.includes('select distinct competition_id as "competitionId"')) {
+        return { rows: [...enteredCompetitionIds].map((competitionId) => ({ competitionId })) };
+      }
+      statusWrites.push(args);
+      return { rows: [] };
+    } } };
     if (name === './fplApi.js') return { fplApi: { bootstrap: async () => bootstrap, fixturesLive: async () => [fixture] } };
     if (name === './apiFootballScoringBridge.js') return { loadApiFootballGameweekScoringContext: async () => ({ available: true }) };
     return {};
@@ -58,4 +66,12 @@ assert.equal(calls.length, before);
 competition = { ...base, status: 'active', adminStatusOverride: 'active' };
 await service.updateAllActiveCompetitions();
 assert.equal(calls.length, before + 1, 'Existing active scoring must continue');
-console.log('Verified manual-open live scoring, future-week deferral, status preservation, settlement protection, and completed/cancelled immutability.');
+// Empty tournaments need only lifecycle transitions, not expensive player
+// score snapshots. Verify this while preserving active manual overrides.
+competition = { ...base, status: 'active', adminStatusOverride: 'active' };
+enteredCompetitionIds.clear();
+const callsBeforeEmpty = calls.length;
+await service.updateAllActiveCompetitions();
+assert.equal(calls.length, callsBeforeEmpty, 'Tournament without entries should not request a scoring snapshot');
+assert.equal(competition.status, 'active', 'Empty tournament scoring must preserve manual status');
+console.log('Verified manual-open live scoring, empty-cup skip, future-week deferral, status preservation, settlement protection, and completed/cancelled immutability.');

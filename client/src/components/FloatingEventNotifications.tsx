@@ -39,7 +39,10 @@ export default function FloatingEventNotifications() {
       if (!response.ok) return { notifications: [], unreadCount: 0 };
       return response.json();
     },
-    refetchInterval: 10000,
+    staleTime: 10_000,
+    refetchInterval: () => document.visibilityState === "hidden" ? false : 20_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     enabled: Boolean(user?.id),
   });
 

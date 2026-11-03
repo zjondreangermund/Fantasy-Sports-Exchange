@@ -255,6 +255,43 @@ async function syncSubscribedUserNotifications() {
   }
 }
 
+// PERFORMANCE_V1_NOTIFICATION_READ: reading the Inbox must never wait on
+// transfer-provider reconciliation or a complete gameweek notification scan.
+// The 15-minute subscription worker remains responsible for account-wide
+// reminders, while recently active users get a deduplicated, bounded refresh.
+const notificationReadSync = new Map<string, { startedAt: number; inFlight: Promise<void> | null }>();
+const NOTIFICATION_READ_SYNC_INTERVAL_MS = 60_000;
+
+function queueNotificationReadSync(userId: string) {
+  if (!userId) return;
+  const now = Date.now();
+  const prior = notificationReadSync.get(userId);
+  if (prior && (prior.inFlight || now - prior.startedAt < NOTIFICATION_READ_SYNC_INTERVAL_MS)) return;
+  // Memory bound for sites with many users visiting over time. Do not evict
+  // running tasks; prune expired idle entries first.
+  if (notificationReadSync.size > 2_000) {
+    for (const [key, state] of notificationReadSync) {
+      if (!state.inFlight && now - state.startedAt > 2 * NOTIFICATION_READ_SYNC_INTERVAL_MS) {
+        notificationReadSync.delete(key);
+      }
+    }
+  }
+  const state: { startedAt: number; inFlight: Promise<void> | null } = { startedAt: now, inFlight: null };
+  notificationReadSync.set(userId, state);
+  state.inFlight = (async () => {
+    try {
+      await syncRealLifePlayerLoanChoices(userId);
+      await syncGameweekNotifications(userId);
+    } catch (error) {
+      // Allow an earlier retry on transient database/provider failure.
+      state.startedAt = Date.now() - NOTIFICATION_READ_SYNC_INTERVAL_MS + 15_000;
+      console.error("Background Inbox reconciliation failed:", error);
+    } finally {
+      state.inFlight = null;
+    }
+  })();
+}
+
 function startSubscribedNotificationSync() {
   if (subscribedNotificationSyncTimer) return;
   const run = () => {
@@ -405,8 +442,12 @@ export function registerNotificationRoutes(app: Express, deps: { requireAuth: an
       await ensurePlayerTransferMonitoringSchema();
       await ensureRealLifeLoanPolicySchema();
       const userId = String(req.authUserId || "");
-      await syncRealLifePlayerLoanChoices(userId);
-      await syncGameweekNotifications(userId);
+      // Return saved messages immediately; reconcile fresh gameweek/loan alerts
+      // out-of-band and deliver them on the next normal Inbox poll.
+      // Schedule the slower updates after this response finishes so even the
+      // first Inbox read is not delayed by concurrent reconciliation queries.
+      res.once("finish", () => queueNotificationReadSync(userId));
+      res.setHeader("Cache-Control", "private, no-store");
       const notifications = rowsOf(await db.execute(sql`
         select n.id, n.user_id as "userId", n.type::text as type, n.title, n.message, n.read,
                n.dedupe_key as "dedupeKey",
