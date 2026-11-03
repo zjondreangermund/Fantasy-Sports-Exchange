@@ -767,10 +767,11 @@ export class ScoreUpdateService {
       // are only needed for competitions with real submitted teams.
       // Batch the entry existence lookup rather than doing one per competition.
       const candidateIds = toScore.map(({ competition }) => Number(competition.id)).filter((id) => Number.isInteger(id) && id > 0);
+      const candidateIdArray = `{${candidateIds.join(",")}}`;
       const populated = rowsOf(await db.execute(sql`
         select distinct competition_id as "competitionId"
         from app.competition_entries
-        where competition_id in (${sql.join(candidateIds.map((id) => sql`${id}`), sql`, `)})
+        where competition_id = any(${candidateIdArray}::int[])
       `));
       const hasEntries = new Set(populated.map((row: any) => Number(row.competitionId)));
       const skipCount = toScore.filter((item) => !hasEntries.has(Number(item.competition.id))).length;
