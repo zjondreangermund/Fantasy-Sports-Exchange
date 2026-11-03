@@ -93,6 +93,14 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
   const sendUserCards = async (req: any, res: any) => {
     try {
       const userId = req.authUserId;
+      // Read-only external snapshots can load in parallel with the mandatory
+      // departure/replacement sweep. The user's actual cards are still queried
+      // only AFTER that sweep, preserving newly minted replacement visibility.
+      const providerDataPromise = Promise.all([
+        fplApi.bootstrap().catch(() => null),
+        fplApi.getLiveGameweek().catch(() => null),
+        loadApiFootballPlayerDirectory().catch(() => []),
+      ]);
       // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1
       // Ensure a confirmed departure has a protected replacement claim before
       // returning the collection. The manager may mint manually for 14 days;
@@ -103,7 +111,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       // Collection is otherwise read-only: starter cards are minted only after
       // the owner confirms their exact five onboarding player selections.
       let cards = await storage.getUserCards(userId);
-      const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([fplApi.bootstrap().catch(() => null), fplApi.getLiveGameweek().catch(() => null), loadApiFootballPlayerDirectory().catch(() => [])]);
+      const [bootstrap, liveData, apiFootballDirectory] = await providerDataPromise;
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const currentGameweek = Number((bootstrap as any)?.events?.find((event: any) => event?.is_current)?.id || await fplApi.getCurrentGameweek().catch(() => 0));
       const [detailedScoringContext, gameweekScoringContext] = await loadSharedScoringContexts(bootstrap, currentGameweek);
