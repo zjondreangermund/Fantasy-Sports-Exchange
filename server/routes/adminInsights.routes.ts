@@ -3,10 +3,6 @@ import {ensurePageActivitySchema} from "../services/pageActivitySchema.js";
 import type { Express } from "express";
 import { db } from "../db.js";
 import { sql } from "drizzle-orm";
-import { registerTestSimulatorRoutes } from "./testSimulator.routes.js";
-import { registerTestSimulatorCleanupRoutes } from "./testSimulatorCleanup.routes.js";
-import { registerTestSimulatorBulkRoutes } from "./testSimulatorBulk.routes.js";
-import { registerTestSimulatorDetailsRoutes } from "./testSimulatorDetails.routes.js";
 import { registerAdminCardLookupRoutes } from "./adminCardLookup.routes.js";
 import { registerApiFootballAdminRoutes } from "./apiFootballAdmin.routes.js";
 import { registerApiFootballSyncRoutes } from "./apiFootballSync.routes.js";
@@ -15,21 +11,11 @@ function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
 }
 
-function adminTestToolsEnabled() {
-  return process.env.NODE_ENV !== "production" || process.env.ENABLE_ADMIN_TEST_TOOLS === "true";
-}
-
 export function registerAdminInsightsRoutes(app: Express, deps: { requireAuth: any; isAdmin: any }) {
   const { requireAuth, isAdmin } = deps;
 
-  // Simulator routes create bot users, cards, entries and test tournaments. Keep
-  // them unavailable in production unless an operator explicitly enables them.
-  if (adminTestToolsEnabled()) {
-    registerTestSimulatorRoutes(app, { requireAuth });
-    registerTestSimulatorCleanupRoutes(app, { requireAuth });
-    registerTestSimulatorBulkRoutes(app, { requireAuth });
-    registerTestSimulatorDetailsRoutes(app, { requireAuth });
-  }
+  // No simulator endpoints are registered in Fantasy Arena production.
+  // Historical rows remain available for controlled audit/backups only.
 
   registerAdminCardLookupRoutes(app, { requireAuth, isAdmin });
   registerApiFootballAdminRoutes(app, { requireAuth, isAdmin });
