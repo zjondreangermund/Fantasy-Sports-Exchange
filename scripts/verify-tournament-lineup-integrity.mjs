@@ -71,15 +71,13 @@ requireText(server, "Each tournament entry must use five different unused cards.
 requireText(server, "entry_fee_paid", "Each tournament entry must persist the fee actually paid.");
 forbidText(server, "Already entered this tournament", "Server must not block all additional entries by the same user.");
 
-for (const pair of [
-  '{ tier: "common", prizeCardRarity: "rare" }',
-  '{ tier: "rare", prizeCardRarity: "unique" }',
-  '{ tier: "unique", prizeCardRarity: "epic" }',
-  '{ tier: "epic", prizeCardRarity: "legendary" }',
-  '{ tier: "legendary", prizeCardRarity: "legendary" }',
-]) {
-  requireText(freeSync, pair, `FREE Card Cup sync is missing required tournament tier mapping: ${pair}`);
+// Only the Common tier is allowed to have a weekly FREE Card Cup.
+// Higher-rarity cards are reserved for rare first-place prize draws.
+requireText(freeSync, 'FREE_CUP_RARITIES = [{ tier: "common", prizeCardRarity: "rare" }]', "Only one Common-tier FREE Cup must be seeded each week.");
+for (const tier of ["rare", "unique", "epic", "legendary"]) {
+  forbidText(freeSync, `{ tier: "${tier}", prizeCardRarity:`, `Deprecated ${tier} FREE Cup mapping must not be seeded.`);
 }
+requireText(freeSync, "deletedUnused", "Stale unentered higher-rarity FREE cups must be safely removed.");
 requireText(freeSync, "rarity.tier", "FREE Card Cups must persist their own tournament tier, not their prize-card rarity.");
 
 requireText(rarityGuard, "competition_entries_rarity_guard", "Database-level tournament rarity trigger must be installed.");
