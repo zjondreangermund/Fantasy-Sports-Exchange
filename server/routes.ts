@@ -208,12 +208,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (requestedStatus === "completed") return res.status(400).json({ message: "Use the settlement action to complete a tournament" });
       const tier = allowedTier(req.body?.tier);
       const status = allowedStatus(requestedStatus);
-      const entryFee = toMoney(req.body?.entryFee || getEntryFeeForRarity(tier));
+      const entryFee = toMoney(req.body?.entryFee ?? getEntryFeeForRarity(tier));
       const maxEntries = Number(req.body?.maxEntries || 0) > 1 ? Number(req.body.maxEntries) : null;
       const visibility = String(req.body?.visibility || "public") === "private" ? "private" : "public";
       const prizeType = allowedPrizeType(req.body?.prizeType || "goods");
       const prizeDescription = String(req.body?.prizeDescription || "Prize Vault ladder").trim();
       const prizeKey = String(req.body?.prizeKey || "ladder").trim();
+      if (prizeKey.startsWith("free-")) {
+        if (prizeKey !== "free-weighted-card" || tier !== "common" || entryFee !== 0) {
+          return res.status(400).json({ message: "Only one N$0 FREE Common Card Cup with published rarity odds is allowed per gameweek" });
+        }
+        const existing = rowsOf(await db.execute(sql`
+          select id from app.competitions
+          where game_week=${gameWeek} and tier::text='common' and coalesce(entry_fee,0)=0
+            and coalesce(prize_key,'') like 'free-%-card' and name not like '[TEST]%'
+            and status::text<>'cancelled'
+          limit 1
+        `));
+        if (existing.length) return res.status(409).json({ message: "This gameweek already has a FREE Card Cup. Edit the existing cup instead." });
+      }
+
       const startDate = req.body?.startDate ? new Date(String(req.body.startDate)) : fallbackGameweekKickoff(gameWeek);
       const endDate = req.body?.endDate ? new Date(String(req.body.endDate)) : new Date(startDate.getTime() + 3 * 86400000);
       const pin = visibility === "private" ? normalizePin(Math.random().toString(36).slice(2, 8).toUpperCase()) : null;
@@ -227,6 +241,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const { db } = await import("./db.js");
       const id = Number(req.params.id);
       if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: "Valid tournament required" });
+      const existingRecord = rowsOf(await db.execute(sql`select status::text as status from app.competitions where id=${id} limit 1`))[0];
+      if (String(existingRecord?.status) === "completed") {
+        return res.status(409).json({ message: "Already-settled tournaments are protected. Points and reward history cannot be edited." });
+      }
       const name = String(req.body?.name || "").trim();
       const gameWeek = Math.max(1, Math.min(38, Number(req.body?.gameWeek || 1)));
       if (!name) return res.status(400).json({ message: "Tournament name required" });
@@ -234,12 +252,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (requestedStatus === "completed") return res.status(400).json({ message: "Use the settlement action to complete a tournament" });
       const tier = allowedTier(req.body?.tier);
       const status = allowedStatus(requestedStatus);
-      const entryFee = toMoney(req.body?.entryFee || getEntryFeeForRarity(tier));
+      const entryFee = toMoney(req.body?.entryFee ?? getEntryFeeForRarity(tier));
       const maxEntries = Number(req.body?.maxEntries || 0) > 1 ? Number(req.body.maxEntries) : null;
       const visibility = String(req.body?.visibility || "public") === "private" ? "private" : "public";
       const prizeType = allowedPrizeType(req.body?.prizeType || "goods");
       const prizeDescription = String(req.body?.prizeDescription || "Prize Vault ladder").trim();
       const prizeKey = String(req.body?.prizeKey || "ladder").trim();
+      if (prizeKey.startsWith("free-")) {
+        if (prizeKey !== "free-weighted-card" || tier !== "common" || entryFee !== 0) {
+          return res.status(400).json({ message: "FREE cups must use the single weekly weighted-rarity Common Card Cup" });
+        }
+        const existing = rowsOf(await db.execute(sql`
+          select id from app.competitions
+          where id<>${id} and game_week=${gameWeek} and tier::text='common' and coalesce(entry_fee,0)=0
+            and coalesce(prize_key,'') like 'free-%-card' and name not like '[TEST]%'
+            and status::text<>'cancelled'
+          limit 1
+        `));
+        if (existing.length) return res.status(409).json({ message: "A FREE Card Cup already exists in the selected gameweek." });
+      }
+
       const startDate = req.body?.startDate ? new Date(String(req.body.startDate)) : fallbackGameweekKickoff(gameWeek);
       const endDate = req.body?.endDate ? new Date(String(req.body.endDate)) : new Date(startDate.getTime() + 3 * 86400000);
       const result = await db.execute(sql`update app.competitions set name=${name}, tier=${tier}, entry_fee=${entryFee}, status=${status}, game_week=${gameWeek}, start_date=${startDate}, end_date=${endDate}, prize_card_rarity=${tier === "common" ? "rare" : tier}, visibility=${visibility}, max_entries=${maxEntries}, prize_type=${prizeType}, prize_description=${prizeDescription}, prize_key=${prizeKey} where id=${id} returning *`);
