@@ -289,7 +289,7 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
 
   // Never reroll rarity when the player claims later: use the exact award
   // written at settlement, with legacy Rare/Common fallback.
-  const recordedRarity = String(award.awardRarity || asObject(award.settlementAward).rarity || "").toLowerCase();
+  const recordedRarity = String(award.awardRarity || award.settlementAward?.rarity || "").toLowerCase();
   const allowedRarities = ["common", "rare", "unique", "epic", "legendary"];
   const rarity = rank === 1 && allowedRarities.includes(recordedRarity) ? recordedRarity : rank === 1 ? "rare" : "common";
   const maxSupply = CARD_SUPPLY_CAP_BY_RARITY[rarity as keyof typeof CARD_SUPPLY_CAP_BY_RARITY];
