@@ -23,7 +23,6 @@ type Props = {
   selected?: boolean;
   onClick?: () => void;
   showPrice?: boolean;
-  cutoutPreview?: boolean;
 };
 
 /**
@@ -35,7 +34,6 @@ export default function CollectionProfileCard({
   selected = false,
   onClick,
   showPrice = false,
-  cutoutPreview = false,
 }: Props) {
   const { data } = useQuery<ProfileData>({
     queryKey: ["/api/cards/profile", card.id],
@@ -48,25 +46,6 @@ export default function CollectionProfileCard({
     staleTime: 60_000,
     retry: 1,
   });
-
-  const verifiedApiPlayerId = Number(
-    data?.source && data.source !== "card-fallback"
-      ? data?.player?.apiFootballId || (card.player as any)?.apiFootballId || 0
-      : (card.player as any)?.identityVerified ? (card.player as any)?.apiFootballId || 0 : 0,
-  );
-  const { data: cutoutManifest } = useQuery<{ version: number; players: Record<string, unknown> }>({
-    queryKey: ["/portraits/cutouts/manifest.json"],
-    queryFn: async () => {
-      const response = await fetch("/portraits/cutouts/manifest.json", { cache: "no-cache" });
-      if (!response.ok) throw new Error("Cutout portrait manifest unavailable");
-      return response.json();
-    },
-    enabled: cutoutPreview && Number.isInteger(verifiedApiPlayerId) && verifiedApiPlayerId > 0,
-    staleTime: 15 * 60_000,
-    retry: false,
-  });
-  const cutoutUrl = cutoutPreview && cutoutManifest?.players?.[String(verifiedApiPlayerId)]
-    ? `/portraits/cutouts/${verifiedApiPlayerId}.webp` : "";
 
   const fantasyCard = useMemo(() => {
     const identityVerified = Boolean(data && data.source && data.source !== "card-fallback");
@@ -102,14 +81,9 @@ export default function CollectionProfileCard({
         } as PlayerCardWithPlayer)
       : card;
 
-    const normal = toFantasyCardData(displayCard, { imageWidth: 900 });
-    if (!cutoutUrl) return normal;
-    return {
-      ...normal,
-      image: cutoutUrl,
-      imageCandidates: Array.from(new Set([cutoutUrl, ...(normal.imageCandidates || []), normal.image].filter(Boolean))) as string[],
-    };
-  }, [card, data, cutoutUrl]);
+    // CollectionStableCard now applies approved cutouts sitewide.
+    return toFantasyCardData(displayCard, { imageWidth: 900 });
+  }, [card, data]);
 
   return (
     <CollectionStableCard
