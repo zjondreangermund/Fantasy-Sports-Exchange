@@ -187,7 +187,7 @@ function AuthenticatedApp() {
   // This prevents dashboard chrome and the global app scroll rules from taking
   // space away from the starter draft, and gives onboarding its own touch scroll.
   if (onboardingStatus && !onboardingStatus.completed) {
-    return <div className="h-[100dvh] w-full overflow-hidden bg-[#02040d]"><AuthenticatedRouter /></div>;
+    return <div className="h-[100dvh] w-full overflow-hidden bg-[#02040d]"><AppErrorBoundary key={location} scope={`onboarding-route:${location}`}><AuthenticatedRouter /></AppErrorBoundary></div>;
   }
 
   // The native APK is intentionally its own compact mobile product. It reuses
@@ -208,15 +208,15 @@ function AuthenticatedApp() {
             <div className="flex min-w-0 items-center gap-2"><SidebarTrigger data-testid="button-sidebar-toggle" className="h-10 w-10 shrink-0 rounded-xl border border-white/15 bg-white/5" /><span className="truncate text-xs font-bold text-white/65">Show / hide menu</span></div>
             <div className="flex shrink-0 items-center gap-1.5"><button type="button" onClick={() => setSiteView(applySiteView(siteView === "desktop" ? "mobile" : "desktop"))} aria-label={siteView === "desktop" ? "Switch to mobile site view" : "Switch to desktop site view"} title={siteView === "desktop" ? "Switch to mobile view" : "Switch to desktop view"} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-2 text-[11px] font-bold text-white/75 hover:bg-white/10">{siteView === "desktop" ? <Smartphone className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}<span className="hidden sm:inline">{siteView === "desktop" ? "Mobile view" : "Desktop view"}</span></button><ThemeToggle /></div>
           </header>
-          {!isInfoRoute && <LivePulseDock />}
+          {!isInfoRoute && <AppErrorBoundary scope="LivePulseDock" optional><LivePulseDock /></AppErrorBoundary>}
           {showMarketplaceFloors && <MarketplaceFloorNotice />}
           <main className={`app-scroll-root relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto ${isPlayRoute ? "play-route-scroll" : ""}`} data-app-scroll-root>
-            <div className="app-page-content min-w-0 flex-none" data-page-scroll-content data-fixed-docks={isInfoRoute ? "false" : "true"}><AuthenticatedRouter /></div>
+            <div className="app-page-content min-w-0 flex-none" data-page-scroll-content data-fixed-docks={isInfoRoute ? "false" : "true"}><AppErrorBoundary key={location} scope={`route:${location}`}><AuthenticatedRouter /></AppErrorBoundary></div>
             {isInfoRoute && <SiteFooter />}
           </main>
-          {!isInfoRoute && <MatchdayQuickDock />}
+          {!isInfoRoute && <AppErrorBoundary scope="MatchdayQuickDock" optional><MatchdayQuickDock /></AppErrorBoundary>}
           {!isInfoRoute && <MobileNavDock />}
-          {!isInfoRoute && <FloatingEventNotifications />}
+          {!isInfoRoute && <AppErrorBoundary scope="FloatingEventNotifications" optional><FloatingEventNotifications /></AppErrorBoundary>}
 
         </div>
       </div>
@@ -236,7 +236,7 @@ function AppContent() {
   if (window.location.pathname.replace(/\/$/, "") === "/install") return <React.Suspense fallback={<RouteFallback />}><InstallPage /></React.Suspense>;
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-background"><div className="flex flex-col items-center gap-4"><Skeleton className="h-12 w-12 rounded-md" /><Skeleton className="h-4 w-32" /></div></div>;
   if (!user) { const pathname = window.location.pathname || "/"; return <PageScene variant={routeToPageSceneVariant(pathname, false)} className="min-h-screen"><PublicRouter /></PageScene>; }
-  return <><AuthenticatedApp /><FloatingSupportWidget /></>;
+  return <><AuthenticatedApp /><AppErrorBoundary scope="FloatingSupportWidget" optional><FloatingSupportWidget /></AppErrorBoundary></>;
 }
 
 export default function App() {
@@ -245,9 +245,9 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <SecurityModeBanner />
-          {!nativeApp ? <GuidedHoverHelp /> : null}
-          <PageActivityTracker /><InteractionActivityTracker />
+          <AppErrorBoundary scope="SecurityModeBanner" optional><SecurityModeBanner /></AppErrorBoundary>
+          {!nativeApp ? <AppErrorBoundary scope="GuidedHoverHelp" optional><GuidedHoverHelp /></AppErrorBoundary> : null}
+          <AppErrorBoundary scope="ActivityTracker" optional><PageActivityTracker /><InteractionActivityTracker /></AppErrorBoundary>
           <AppContent />
           <AppErrorBoundary scope="SignupWelcomePopup" optional><SignupWelcomePopup /></AppErrorBoundary>
           <AppErrorBoundary scope="PendingPrizeClaimPopup" optional><PendingPrizeClaimPopup /></AppErrorBoundary>
