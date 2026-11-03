@@ -3,7 +3,8 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Float, RoundedBox, ContactShadows, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
-import { buildCardImageCandidates } from "../lib/card-image";
+import { buildCardImageCandidates, isVerifiedPlayerIdentity } from "../lib/card-image";
+import { useApprovedCutoutPortrait } from "../lib/approved-cutout-portrait";
 import { reserveFeaturedCanvasSlot } from "../lib/scene-budget";
 
 type FeaturedCardSceneProps = {
@@ -121,9 +122,11 @@ function FeaturedCardMesh({ edgeColor }: { edgeColor: string }) {
 function FeaturedCardFace({
   card,
   imageUrl,
+  onImageError,
 }: {
   card: PlayerCardWithPlayer;
   imageUrl: string;
+  onImageError: () => void;
 }) {
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -225,6 +228,7 @@ function FeaturedCardFace({
           >
             <img
               src={imageUrl}
+              onError={onImageError}
               alt={playerName}
               className="absolute inset-0 h-full w-full object-cover object-top"
               loading="lazy"
@@ -293,20 +297,28 @@ function FeaturedCardSceneBase({ card, className }: FeaturedCardSceneProps) {
     };
   }, []);
 
-  const imageUrl = useMemo(() => {
-    const candidates = buildCardImageCandidates(card, {
+  const verifiedId = isVerifiedPlayerIdentity(card.player)
+    ? Number((card.player as any)?.apiFootballId || 0) : 0;
+  const approvedCutout = useApprovedCutoutPortrait(verifiedId);
+  const imageCandidates = useMemo(() => Array.from(new Set([
+    approvedCutout,
+    ...buildCardImageCandidates(card, {
       thumb: false,
       width: 900,
       format: "webp",
-    });
-    return candidates[0] || "/images/player-1.png";
-  }, [card]);
+    }),
+  ].filter((url): url is string => typeof url === "string" && url.length > 0))), [card, approvedCutout]);
+  const candidateKey = imageCandidates.join("|");
+  const [imageIndex, setImageIndex] = useState(0);
+  useEffect(() => { setImageIndex(0); }, [card.id, candidateKey]);
+  const imageUrl = imageCandidates[imageIndex] || "/players/fallback.svg";
+  const onImageError = () => setImageIndex((index) => Math.min(index + 1, imageCandidates.length - 1));
 
   if (!useCanvas) {
     return (
       <div className={className || "relative h-[520px] w-[360px]"}>
         <div className="absolute inset-0 rounded-[26px] bg-slate-950/90" />
-        <FeaturedCardFace card={card} imageUrl={imageUrl} />
+        <FeaturedCardFace card={card} imageUrl={imageUrl} onImageError={onImageError} />
       </div>
     );
   }
@@ -347,7 +359,7 @@ function FeaturedCardSceneBase({ card, className }: FeaturedCardSceneProps) {
         </Canvas>
       </div>
 
-      <FeaturedCardFace card={card} imageUrl={imageUrl} />
+      <FeaturedCardFace card={card} imageUrl={imageUrl} onImageError={onImageError} />
     </div>
   );
 }

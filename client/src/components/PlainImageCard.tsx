@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { type PlayerCardData } from "./cards/types";
 import { CARD_IMAGE_FALLBACK } from "../lib/card-image";
+import { useApprovedCutoutPortrait } from "../lib/approved-cutout-portrait";
 
 type PlainImageCardProps = {
   player: PlayerCardData;
@@ -8,13 +9,15 @@ type PlainImageCardProps = {
 };
 
 export default function PlainImageCard({ player, className = "" }: PlainImageCardProps) {
+  const approvedCutout = useApprovedCutoutPortrait(player.apiFootballId);
   const candidates = useMemo(() => {
-    const list = [player.image, ...(player.imageCandidates || []), CARD_IMAGE_FALLBACK]
-      .filter((value): value is string => Boolean(value));
+    const list = [approvedCutout, player.image, ...(player.imageCandidates || []), CARD_IMAGE_FALLBACK]
+      .filter((value): value is string => typeof value === "string" && value.length > 0);
     return Array.from(new Set(list));
-  }, [player.image, player.imageCandidates]);
+  }, [approvedCutout, player.image, player.imageCandidates]);
 
   const [candidateIndex, setCandidateIndex] = useState(0);
+  useEffect(() => { setCandidateIndex(0); }, [player.id, candidates.join("|")]);
   const src = candidates[Math.min(candidateIndex, Math.max(0, candidates.length - 1))] || CARD_IMAGE_FALLBACK;
 
   return (
