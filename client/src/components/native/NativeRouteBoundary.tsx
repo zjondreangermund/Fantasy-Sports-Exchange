@@ -8,6 +8,7 @@ type Props = {
 
 type State = {
   error: Error | null;
+  retryKey: number;
 };
 
 const CHUNK_ERROR = /ChunkLoadError|Loading chunk|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i;
@@ -19,7 +20,7 @@ function fullWebsiteUrl() {
 }
 
 export default class NativeRouteBoundary extends React.Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, retryKey: 0 };
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
@@ -53,20 +54,23 @@ export default class NativeRouteBoundary extends React.Component<Props, State> {
        If that compact renderer ever throws, move to the same live route once
        instead of trapping the user on a recovery card. This preserves all
        existing website actions and prevents a blank/dead tab. */
+    let fallbackScheduled = false;
     if (!isFullWebsiteView) {
       try {
         const key = `fa_native_full_fallback:${route}`;
         if (window.sessionStorage.getItem(key) !== "1") {
           window.sessionStorage.setItem(key, "1");
+          fallbackScheduled = true;
           window.setTimeout(() => window.location.replace(fullWebsiteUrl()), 90);
-          return;
         }
       } catch {
         // Storage may be blocked. Visible recovery controls remain available.
       }
     }
 
-    if (isChunkFailure) {
+    // Do not schedule a reload and route fallback at the same time: those
+    // competing navigations previously caused seemingly random reload prompts.
+    if (isChunkFailure && !fallbackScheduled) {
       try {
         const key = `fa_native_chunk_retry:${route}`;
         if (window.sessionStorage.getItem(key) !== "1") {
@@ -80,7 +84,7 @@ export default class NativeRouteBoundary extends React.Component<Props, State> {
   }
 
   render() {
-    if (!this.state.error) return this.props.children;
+    if (!this.state.error) return <React.Fragment key={this.state.retryKey}>{this.props.children}</React.Fragment>;
 
     const route = this.props.routeKey || window.location.pathname || "/";
     const canOpenWebsiteView = route !== "/" && route !== "/dashboard";
@@ -94,7 +98,7 @@ export default class NativeRouteBoundary extends React.Component<Props, State> {
           <h2 className="mt-1 text-xl font-black">Opening the live Arena view</h2>
           <p className="mt-2 text-xs leading-5 text-slate-400">If the compact screen cannot render, Fantasy Arena automatically opens the same live website section. You can also use the controls below.</p>
           <div className={`mt-5 grid gap-2 ${canOpenWebsiteView ? "grid-cols-1" : "grid-cols-2"}`}>
-            <button onClick={() => window.location.reload()} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 px-3 py-3 text-xs font-black text-white shadow-[0_0_22px_rgba(139,92,246,.16)]"><RefreshCcw className="h-4 w-4" />Retry app screen</button>
+            <button onClick={() => this.setState((previous) => ({ error: null, retryKey: previous.retryKey + 1 }))} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 px-3 py-3 text-xs font-black text-white shadow-[0_0_22px_rgba(139,92,246,.16)]"><RefreshCcw className="h-4 w-4" />Retry this screen</button>
             {canOpenWebsiteView ? <button onClick={() => { window.location.href = fullRoute; }} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-cyan-300/20 bg-cyan-300/[.06] px-3 py-3 text-xs font-black text-cyan-50"><ExternalLink className="h-4 w-4" />Open live website view</button> : null}
             <button onClick={() => { window.location.href = "/"; }} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[.04] px-3 py-3 text-xs font-black"><Home className="h-4 w-4" />Arena HQ</button>
           </div>
