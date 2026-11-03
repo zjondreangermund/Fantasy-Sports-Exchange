@@ -52,7 +52,7 @@ patch(ECONOMY, (original) => {
   if (original.includes(`${MARKER}:entry-evidence`)) return original;
   let source = original;
   const from = `    from app.competitions c\n    join app.users u on u.id = \${userId}\n    where c.id = \${competitionId}\n    limit 1`;
-  const to = `    from app.competitions c\n    join app.users u on u.id = \${userId}\n    // ${MARKER}:entry-evidence\n    // A confirmation/admin alert is only allowed for the exact committed entry.\n    join app.competition_entries ce\n      on ce.id = \${entryId}\n     and ce.competition_id = c.id\n     and ce.user_id = u.id\n    where c.id = \${competitionId}\n    limit 1`;
+  const to = `    from app.competitions c\n    join app.users u on u.id = \${userId}\n    -- ${MARKER}:entry-evidence\n    -- A confirmation/admin alert is only allowed for the exact committed entry.\n    join app.competition_entries ce\n      on ce.id = \${entryId}\n     and ce.competition_id = c.id\n     and ce.user_id = u.id\n    where c.id = \${competitionId}\n    limit 1`;
   source = replaceRequired(source, from, to, "exact tournament-entry evidence");
   return source;
 });
