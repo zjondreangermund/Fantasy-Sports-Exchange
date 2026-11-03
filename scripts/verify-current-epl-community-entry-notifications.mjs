@@ -95,9 +95,20 @@ need(economy, "you finished #", "entrant settlement result notification");
 need(economy, "Think your squad can take the next one?", "public winner encouragement copy");
 need(economy, "public-settlement-winner", "public settlement dedupe");
 
-need(collectionProfileCard, "retainedImages", "collection profile portrait candidates");
-need(collectionProfileCard, "existingVerified", "collection profile identity preservation");
-need(collectionProfileCard, "verifiedImageUrl: retainedPrimary", "collection profile portrait retention");
+if (collectionProfileCard.includes("COLLECTION_FAST_GRID_V1")) {
+  // Fast grid renders the already verified current-PL card payload directly.
+  // Its original photo candidates and API identity are preserved by the card
+  // adapter + CollectionStableCard, avoiding one API profile lookup per card.
+  need(collectionProfileCard, "toFantasyCardData(card", "collection fast-grid card mapping");
+  need(collectionProfileCard, "<CollectionStableCard", "collection fast-grid card renderer");
+  if (collectionProfileCard.includes("/api/cards/${card.id}/profile")) {
+    throw new Error("[arena-live-entry] collection fast-grid must not fetch one profile per card");
+  }
+} else {
+  need(collectionProfileCard, "retainedImages", "collection profile portrait candidates");
+  need(collectionProfileCard, "existingVerified", "collection profile identity preservation");
+  need(collectionProfileCard, "verifiedImageUrl: retainedPrimary", "collection profile portrait retention");
+}
 need(cardProfileModal, "retainedImages", "modal portrait candidates");
 need(cardProfileModal, "existingVerified", "modal identity preservation");
 need(cardProfileModal, "verifiedImageUrl: retainedPrimary", "modal portrait retention");
