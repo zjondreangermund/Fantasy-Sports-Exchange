@@ -19,8 +19,11 @@
           }
           if (pendingCheck) window.clearTimeout(pendingCheck);
           pendingCheck = window.setTimeout(function () {
-            if (!hasApp()) recovery.hidden = false;
-          }, 12000);
+            // Slow mobile networks can take longer to receive the first
+            // JavaScript bundle. Only show recovery when startup is genuinely
+            // still empty, never while the app is in a background tab.
+            if (document.visibilityState !== "hidden" && !hasApp()) recovery.hidden = false;
+          }, 22_000);
         }
         var observer = new MutationObserver(checkBoot);
         observer.observe(root, { childList: true, subtree: false });
