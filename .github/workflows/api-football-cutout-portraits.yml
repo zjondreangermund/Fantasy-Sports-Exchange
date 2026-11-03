@@ -6,9 +6,11 @@ on:
       batch_size:
         description: "Verified active Premier League players per batch (1-100)"
         required: false
-        default: "24"
+        default: "100"
   schedule:
-    - cron: "23 2 * * *"
+    # Catch up the current EPL player directory in small sequential batches.
+    # Any unsupported or placeholder player falls back to their official photo.
+    - cron: "23 2,8,14,20 * * *"
   push:
     branches: [main]
     paths:
@@ -83,7 +85,7 @@ jobs:
           PY
       - name: Generate next transparent portrait batch
         env:
-          BATCH_SIZE: ${{ inputs.batch_size || '24' }}
+          BATCH_SIZE: ${{ inputs.batch_size || '100' }}
         run: |
           python scripts/generate-player-cutouts.py --source-file /tmp/verified-epl-player-portraits.json --batch-size "$BATCH_SIZE"
       - name: Publish only passing cutouts and batch manifest
