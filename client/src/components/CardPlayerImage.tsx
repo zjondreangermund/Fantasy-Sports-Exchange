@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { buildCardImageCandidates, CARD_IMAGE_FALLBACK } from "../lib/card-image";
+import { buildCardImageCandidates, CARD_IMAGE_FALLBACK, isVerifiedPlayerIdentity } from "../lib/card-image";
+import { useApprovedCutoutPortrait } from "../lib/approved-cutout-portrait";
 import { type PlayerCardWithPlayer } from "../../../shared/schema";
 
 type CardPlayerImageProps = {
@@ -10,9 +11,15 @@ type CardPlayerImageProps = {
 };
 
 function CardPlayerImageBase({ card, alt, className, thumb = true }: CardPlayerImageProps) {
+  const verifiedPlayerId = isVerifiedPlayerIdentity(card.player)
+    ? Number((card.player as any)?.apiFootballId || 0) : 0;
+  const approvedCutout = useApprovedCutoutPortrait(verifiedPlayerId);
   const candidates = useMemo(
-    () => buildCardImageCandidates(card, { thumb, width: thumb ? 256 : 720, format: "webp" }),
-    [card, thumb],
+    () => Array.from(new Set([
+      approvedCutout,
+      ...buildCardImageCandidates(card, { thumb, width: thumb ? 256 : 720, format: "webp" }),
+    ].filter(Boolean))) as string[],
+    [card, thumb, approvedCutout],
   );
   const candidateKey = candidates.join("\n");
   const [index, setIndex] = useState(0);
