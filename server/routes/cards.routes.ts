@@ -65,9 +65,42 @@ async function isAdminUserForAudit(storage: any, req: any) {
 export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps) {
   const { requireAuth, storage } = deps;
 
+  // COLLECTION_SCORING_CONTEXT_CACHE_V1: user-specific cards/ownership are
+  // always loaded fresh. Only the shared, read-only current-gameweek provider
+  // snapshots are coalesced across requests for a short time. The same promise
+  // also prevents several managers opening Squad at once from running the same
+  // expensive fixture/statistics queries concurrently.
+  const scoringContextCache = new Map<number, {
+    expiresAt: number;
+    promise: Promise<[any, any]>;
+  }>();
+  const loadSharedScoringContexts = (bootstrap: any, gameweek: number) => {
+    const now = Date.now();
+    const cached = scoringContextCache.get(gameweek);
+    if (cached && cached.expiresAt > now) return cached.promise;
+    const promise = Promise.all([
+      loadDetailedScoringContext(bootstrap || {}, gameweek),
+      loadApiFootballGameweekScoringContext(gameweek).catch(() => null),
+    ]) as Promise<[any, any]>;
+    scoringContextCache.clear(); // Never retain snapshots from previous GWs.
+    scoringContextCache.set(gameweek, { expiresAt: now + 20_000, promise });
+    void promise.catch(() => {
+      if (scoringContextCache.get(gameweek)?.promise === promise) scoringContextCache.delete(gameweek);
+    });
+    return promise;
+  };
+
   const sendUserCards = async (req: any, res: any) => {
     try {
       const userId = req.authUserId;
+      // Read-only external snapshots can load in parallel with the mandatory
+      // departure/replacement sweep. The user's actual cards are still queried
+      // only AFTER that sweep, preserving newly minted replacement visibility.
+      const providerDataPromise = Promise.all([
+        fplApi.bootstrap().catch(() => null),
+        fplApi.getLiveGameweek().catch(() => null),
+        loadApiFootballPlayerDirectory().catch(() => []),
+      ]);
       // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1
       // Ensure a confirmed departure has a protected replacement claim before
       // returning the collection. The manager may mint manually for 14 days;
@@ -78,13 +111,10 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       // Collection is otherwise read-only: starter cards are minted only after
       // the owner confirms their exact five onboarding player selections.
       let cards = await storage.getUserCards(userId);
-      const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([fplApi.bootstrap().catch(() => null), fplApi.getLiveGameweek().catch(() => null), loadApiFootballPlayerDirectory().catch(() => [])]);
+      const [bootstrap, liveData, apiFootballDirectory] = await providerDataPromise;
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const currentGameweek = Number((bootstrap as any)?.events?.find((event: any) => event?.is_current)?.id || await fplApi.getCurrentGameweek().catch(() => 0));
-      const [detailedScoringContext, gameweekScoringContext] = await Promise.all([
-        loadDetailedScoringContext(bootstrap || {}, currentGameweek),
-        loadApiFootballGameweekScoringContext(currentGameweek).catch(() => null),
-      ]);
+      const [detailedScoringContext, gameweekScoringContext] = await loadSharedScoringContexts(bootstrap, currentGameweek);
       const liveElements = Array.isArray((liveData as any)?.elements) ? (liveData as any).elements : [];
       const liveByElementId = new Map<number, any>();
       for (const liveElement of liveElements) liveByElementId.set(Number(liveElement.id), liveElement);

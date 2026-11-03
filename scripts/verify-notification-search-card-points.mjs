@@ -56,7 +56,15 @@ assert.ok(!chat.includes("sm:opacity-0 sm:transition sm:group-hover:opacity-100"
 
 for (const [name, source] of [["Collection", collection], ["Marketplace", market], ["Marketplace V2", marketV2]]) {
   includes(source, "cardMatchesSearch(search, card", `${name} must search player, club, position, rarity and card identifiers consistently.`);
-  includes(source, "refetchInterval: 15_000", `${name} must refresh official Arena card scores promptly.`);
+  if (name === "Collection") {
+    // The full collection response performs expensive live scoring + departure
+    // reconciliation. A visible-only refresh within 60s and an immediate
+    // refresh on app focus preserves current scores without repeated stalls.
+    includes(source, 'document.visibilityState === "hidden" ? false : 60_000', "Collection should refresh live scores within a minute when visible.");
+    includes(source, "refetchOnWindowFocus: true", "Collection should refresh scores when reopened.");
+  } else {
+    includes(source, "refetchInterval: 15_000", `${name} must refresh official Arena card scores promptly.`);
+  }
 }
 includes(football, "normalizeSearchText(playerSearch)", "Official player searches must normalize accents and whitespace.");
 includes(football, "LongListFilter", "Long Premier League data lists must expose filter controls.");

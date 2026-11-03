@@ -43,7 +43,11 @@ const checks = [
   [collection.includes("<CollectionProfileCard card={card}"), "Collection still uses the old dull card renderer"],
   [!collection.includes("PremiumFootballCard"), "Collection still references PremiumFootballCard"],
   [profileCollectionCard.includes("CollectionStableCard"), "Collection profile card does not use the profile modal renderer"],
-  [profileCollectionCard.includes('queryKey: ["/api/cards/profile", card.id]'), "Collection profile card does not use verified profile data"],
+  [profileCollectionCard.includes('queryKey: ["/api/cards/profile", card.id]')
+    || (profileCollectionCard.includes("COLLECTION_FAST_GRID_V1")
+      && profileCollectionCard.includes("toFantasyCardData(card")
+      && !profileCollectionCard.includes('queryKey: ["/api/cards/profile", card.id]')),
+    "Collection card must use verified identities from either the profile API or fast card list"],
 
   [guidedHelp.includes('import { createPortal } from "react-dom";'), "Guided hover help is not rendered through a portal"],
   [guidedHelp.includes("createPortal(content, document.body)"), "Guided hover help is still trapped inside the app/sidebar stacking context"],
