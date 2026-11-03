@@ -149,10 +149,9 @@ if ! node scripts/sync-official-tournaments.mjs; then
   exit 1
 fi
 
-# Create/refresh one FREE Card Cup for every rarity in every gameweek, using the
-# exact same fixture windows as the paid official tournaments. Winners progress
-# Common→Rare, Rare→Unique, Unique→Epic, Epic→Legendary and Legendary→Legendary.
-# Existing FREE Cup entries are preserved; no entry rows are deleted or moved.
+# Maintain ONE FREE Common Card Cup per gameweek with weighted first-place
+# rarity. Preserve historical points, entrants, and awarded cards.
+# Retire extra empty future FREE cups; keep entered cups for protected settlement.
 echo "Syncing and verifying all FREE Card Cups..."
 if ! node scripts/sync-free-card-tournaments.mjs; then
   echo "ERROR: FREE Card Cup sync did not produce complete 38-gameweek coverage."
