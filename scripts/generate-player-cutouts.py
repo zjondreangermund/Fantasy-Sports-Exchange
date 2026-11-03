@@ -191,6 +191,9 @@ def main() -> None:
             for key in ids:
                 invalid[key] = "Identical portrait used by multiple player IDs"
     for key, reason in invalid.items():
+        if args.dry_run:
+            print(f"  WOULD QUARANTINE {key}: {reason}")
+            continue
         existing.pop(key, None)
         image_path = PORTRAITS / f"{key}.webp"
         if image_path.exists():
