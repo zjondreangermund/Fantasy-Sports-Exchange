@@ -1,6 +1,7 @@
 import React from "react";
 import { Badge } from "./ui/badge";
 import { Zap } from "lucide-react";
+import { useApprovedCutoutPortrait } from "../lib/approved-cutout-portrait";
 
 export type Rarity = "common" | "rare" | "unique" | "epic" | "legendary";
 
@@ -12,6 +13,7 @@ export type PlayerCardData = {
   club?: string;
   image?: string;
   imageCandidates?: string[];
+  apiFootballId?: number;
   rarity: Rarity;
   serial?: number;
   maxSupply?: number;
@@ -151,11 +153,13 @@ function computeStats(player: PlayerCardData) {
 }
 
 function useResolvedImage(player: PlayerCardData) {
+  const approvedCutout = useApprovedCutoutPortrait(player.apiFootballId);
   const imageCandidates = React.useMemo(() => {
     const list = Array.isArray(player.imageCandidates) ? player.imageCandidates : [];
-    const merged = [player.image, ...list].filter((value): value is string => Boolean(String(value || "").trim()));
+    const merged = [approvedCutout, player.image, ...list]
+      .filter((value): value is string => typeof value === "string" && Boolean(value.trim()));
     return Array.from(new Set(merged));
-  }, [player.image, player.imageCandidates]);
+  }, [approvedCutout, player.image, player.imageCandidates]);
 
   const [imageIndex, setImageIndex] = React.useState(0);
 
