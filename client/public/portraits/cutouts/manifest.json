@@ -2870,6 +2870,10 @@
       "at": "2026-11-03T11:56:04.540166+00:00",
       "reason": "ImageQualityFailed"
     },
+    "458588": {
+      "at": "2026-11-05T09:39:29.623940+00:00",
+      "reason": "ValueError"
+    },
     "465310": {
       "at": "2026-11-03T12:38:53.931716+00:00",
       "reason": "UnidentifiedImageError"
@@ -3083,6 +3087,6 @@
       "reason": "ValueError"
     }
   },
-  "source_count": 628,
+  "source_count": 629,
   "source_season": 2026
 }
