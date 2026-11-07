@@ -52,6 +52,7 @@ let cacheSchemaPromise: Promise<void> | null = null;
 // one longer-lived /fixtures?live=all cache key. Otherwise a busy matchday
 // burns through the entire provider quota after just a few minutes.
 const API_FOOTBALL_LIVE_SITE_TTL_SECONDS = 15 * 60;
+const inFlightProviderLoads = new Map<string, Promise<any>>();
 function protectedSiteCacheTtl(path: string, params: Record<string, string | number | boolean | undefined>, seconds: number) {
   return path === "fixtures" && params.live === "all"
     ? Math.max(seconds, API_FOOTBALL_LIVE_SITE_TTL_SECONDS)
@@ -127,28 +128,40 @@ async function cachedProvider(
     return { payload: cached.payload, cached: true, stale: false, updatedAt: cached.updatedAt, warning: null };
   }
 
-  try {
-    const payload = await fetchApiFootballProvider(path, params as Record<string, string | number | undefined>);
-    const expiresAt = new Date(Date.now() + Math.max(5, ttlSeconds) * 1000);
-    await db.execute(sql`
-      insert into app.api_football_site_cache (cache_key,payload,expires_at,updated_at)
-      values (${key},${JSON.stringify(payload)}::jsonb,${expiresAt},now())
-      on conflict (cache_key) do update set payload=excluded.payload,expires_at=excluded.expires_at,updated_at=now()
-    `);
-    return { payload, cached: false, stale: false, updatedAt: new Date().toISOString(), warning: null };
-  } catch (error: any) {
-    // API_FOOTBALL_STALE_CACHE_FALLBACK_V1: provider outages must not erase good data.
-    if (cached?.payload) {
-      console.warn(`[football-data] Serving saved ${path} data after provider failure:`, error?.message || error);
-      return {
-        payload: cached.payload,
-        cached: true,
-        stale: true,
-        updatedAt: cached.updatedAt,
-        warning: "API-Football is temporarily unavailable; the latest saved match data is being shown.",
-      };
+  // Single-flight requests: several managers opening Match Centre at the
+  // same moment must not each spend one API-Football call at cache expiry.
+  const pending = inFlightProviderLoads.get(key);
+  if (pending) return pending;
+  const refresh = (async () => {
+    try {
+      const payload = await fetchApiFootballProvider(path, params as Record<string, string | number | undefined>);
+      const expiresAt = new Date(Date.now() + Math.max(5, ttlSeconds) * 1000);
+      await db.execute(sql`
+        insert into app.api_football_site_cache (cache_key,payload,expires_at,updated_at)
+        values (${key},${JSON.stringify(payload)}::jsonb,${expiresAt},now())
+        on conflict (cache_key) do update set payload=excluded.payload,expires_at=excluded.expires_at,updated_at=now()
+      `);
+      return { payload, cached: false, stale: false, updatedAt: new Date().toISOString(), warning: null };
+    } catch (error: any) {
+      // API_FOOTBALL_STALE_CACHE_FALLBACK_V1: provider outages must not erase good data.
+      if (cached?.payload) {
+        console.warn(`[football-data] Serving saved ${path} data after provider failure:`, error?.message || error);
+        return {
+          payload: cached.payload,
+          cached: true,
+          stale: true,
+          updatedAt: cached.updatedAt,
+          warning: "API-Football is temporarily unavailable; the latest saved match data is being shown.",
+        };
+      }
+      throw error;
     }
-    throw error;
+  })();
+  inFlightProviderLoads.set(key, refresh);
+  try {
+    return await refresh;
+  } finally {
+    if (inFlightProviderLoads.get(key) === refresh) inFlightProviderLoads.delete(key);
   }
 }
 
