@@ -46,6 +46,20 @@ const FOOTBALL_LEAGUES: Record<FootballLeagueKey, LeagueConfig> = {
 
 let cacheSchemaPromise: Promise<void> | null = null;
 
+// API_FOOTBALL_LIVE_QUOTA_GUARD_V1: the public page polls FPL live scores
+// every 30 seconds, but provider calls are subject to the shared daily cap.
+// Every site route (including Availability and Player Intelligence) must share
+// one longer-lived /fixtures?live=all cache key. Otherwise a busy matchday
+// burns through the entire provider quota after just a few minutes.
+const API_FOOTBALL_LIVE_SITE_TTL_SECONDS = 15 * 60;
+const inFlightProviderLoads = new Map<string, Promise<any>>();
+function protectedSiteCacheTtl(path: string, params: Record<string, string | number | boolean | undefined>, seconds: number) {
+  return path === "fixtures" && params.live === "all"
+    ? Math.max(seconds, API_FOOTBALL_LIVE_SITE_TTL_SECONDS)
+    : seconds;
+}
+
+
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : Array.isArray(result) ? result : [];
 }
@@ -102,6 +116,7 @@ async function cachedProvider(
   ttlSeconds: number,
 ) {
   await ensureSiteCacheSchema();
+  ttlSeconds = protectedSiteCacheTtl(path, params, ttlSeconds);
   const key = stableCacheKey(path, params);
   const cached = rowsOf(await db.execute(sql`
     select payload, updated_at as "updatedAt", expires_at > now() as fresh
@@ -113,28 +128,40 @@ async function cachedProvider(
     return { payload: cached.payload, cached: true, stale: false, updatedAt: cached.updatedAt, warning: null };
   }
 
-  try {
-    const payload = await fetchApiFootballProvider(path, params as Record<string, string | number | undefined>);
-    const expiresAt = new Date(Date.now() + Math.max(5, ttlSeconds) * 1000);
-    await db.execute(sql`
-      insert into app.api_football_site_cache (cache_key,payload,expires_at,updated_at)
-      values (${key},${JSON.stringify(payload)}::jsonb,${expiresAt},now())
-      on conflict (cache_key) do update set payload=excluded.payload,expires_at=excluded.expires_at,updated_at=now()
-    `);
-    return { payload, cached: false, stale: false, updatedAt: new Date().toISOString(), warning: null };
-  } catch (error: any) {
-    // API_FOOTBALL_STALE_CACHE_FALLBACK_V1: provider outages must not erase good data.
-    if (cached?.payload) {
-      console.warn(`[football-data] Serving saved ${path} data after provider failure:`, error?.message || error);
-      return {
-        payload: cached.payload,
-        cached: true,
-        stale: true,
-        updatedAt: cached.updatedAt,
-        warning: "API-Football is temporarily unavailable; the latest saved match data is being shown.",
-      };
+  // Single-flight requests: several managers opening Match Centre at the
+  // same moment must not each spend one API-Football call at cache expiry.
+  const pending = inFlightProviderLoads.get(key);
+  if (pending) return pending;
+  const refresh = (async () => {
+    try {
+      const payload = await fetchApiFootballProvider(path, params as Record<string, string | number | undefined>);
+      const expiresAt = new Date(Date.now() + Math.max(5, ttlSeconds) * 1000);
+      await db.execute(sql`
+        insert into app.api_football_site_cache (cache_key,payload,expires_at,updated_at)
+        values (${key},${JSON.stringify(payload)}::jsonb,${expiresAt},now())
+        on conflict (cache_key) do update set payload=excluded.payload,expires_at=excluded.expires_at,updated_at=now()
+      `);
+      return { payload, cached: false, stale: false, updatedAt: new Date().toISOString(), warning: null };
+    } catch (error: any) {
+      // API_FOOTBALL_STALE_CACHE_FALLBACK_V1: provider outages must not erase good data.
+      if (cached?.payload) {
+        console.warn(`[football-data] Serving saved ${path} data after provider failure:`, error?.message || error);
+        return {
+          payload: cached.payload,
+          cached: true,
+          stale: true,
+          updatedAt: cached.updatedAt,
+          warning: "API-Football is temporarily unavailable; the latest saved match data is being shown.",
+        };
+      }
+      throw error;
     }
-    throw error;
+  })();
+  inFlightProviderLoads.set(key, refresh);
+  try {
+    return await refresh;
+  } finally {
+    if (inFlightProviderLoads.get(key) === refresh) inFlightProviderLoads.delete(key);
   }
 }
 
@@ -752,9 +779,13 @@ export function registerFootballDataRoutes(app: Express) {
         }
       }
 
-      const warning = fallback
-        ? "API-Football is temporarily unavailable; official Premier League/FPL live scores and saved match details are being shown."
-        : result?.warning || null;
+      // FPL can report a live match before the API-Football /live=all feed
+      // lists it. That is a normal cross-provider timing difference, NOT proof
+      // of an API outage. Only a failed or stale provider call merits a warning.
+      const providerDelayed = Boolean(providerFailure || result?.stale);
+      const warning = providerDelayed
+        ? "API-Football live updates could not be refreshed; official Premier League/FPL scores and saved match details are being shown."
+        : null;
       return res.json({
         league: league.config,
         season,
@@ -762,9 +793,10 @@ export function registerFootballDataRoutes(app: Express) {
         round: round || null,
         fixtures,
         cached: Boolean(result?.cached),
-        stale: Boolean(result?.stale || providerFailure),
+        stale: providerDelayed,
         fallback,
-        source: fallback ? "fpl-fallback" : "api-football",
+        source: providerDelayed ? "fpl-fallback" : fallback ? "api-football+fpl" : "api-football",
+        providerStatus: providerDelayed ? "delayed" : fallback ? "supplemented" : "current",
         updatedAt: result?.updatedAt || new Date().toISOString(),
         warning,
       });

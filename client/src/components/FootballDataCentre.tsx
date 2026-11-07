@@ -331,8 +331,13 @@ export default function FootballDataCentre() {
               <div>
                 <div className="font-semibold">Official Premier League backup feed active</div>
                 <div className="mt-1 text-amber-100/80">{fixtures.data.warning}</div>
+                <Button size="sm" variant="outline" className="mt-3" onClick={() => { void fixtures.refetch(); }}>Check feed again</Button>
               </div>
             </Card>
+          ) : fixtures.data?.providerStatus === "supplemented" ? (
+            <div className="rounded-lg border border-cyan-400/15 bg-cyan-400/[.045] px-3 py-2 text-xs text-cyan-100/75" role="status">
+              Official Premier League live scores are filling gaps while API-Football match details catch up.
+            </div>
           ) : null}
 
           {fixtures.isError && fixtureRows.length > 0 ? (

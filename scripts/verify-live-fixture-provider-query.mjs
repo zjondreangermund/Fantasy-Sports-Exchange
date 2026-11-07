@@ -21,6 +21,17 @@ requireText(route, "fplAvailable: !fplLiveResult.error", "FPL success is not dis
 requireText(route, "!live.fplAvailable && !live.savedFixtures.length", "an empty successful FPL response can still be reported as an outage");
 rejectText(route, "params.live = league.config.id", "numeric live filter regression restored");
 
+// API_FOOTBALL_LIVE_QUOTA_GUARD_V1: UI FPL updates are every 30 seconds, but
+// provider /fixtures?live=all calls must have a much longer shared cache and
+// one in-flight promise to avoid exhausting the site's daily request cap.
+requireText(route, "API_FOOTBALL_LIVE_QUOTA_GUARD_V1", "live site cache quota guard missing");
+requireText(route, 'path === "fixtures" && params.live === "all"', "live cache floor missing");
+requireText(route, "API_FOOTBALL_LIVE_SITE_TTL_SECONDS = 15 * 60", "live provider is not cached for 15 minutes");
+requireText(route, "inFlightProviderLoads.get(key)", "concurrent live provider requests are not deduplicated");
+requireText(route, "providerDelayed = Boolean(providerFailure || result?.stale)", "true API failures are not distinguished from supplemental FPL fixtures");
+requireText(route, 'providerStatus: providerDelayed ? "delayed" : fallback ? "supplemented" : "current"', "client does not receive distinct live provider status");
+rejectText(route, 'fallback = live.usedFallback || Boolean(providerFailure) || Boolean(result?.stale);\n        // API-Football is temporarily unavailable', "fallback data must not automatically claim an upstream outage");
+
 requireText(sync, 'providerGet("fixtures", { live: "all" })', "background live sync does not use the valid standalone live filter");
 requireText(sync, "Number(row?.league?.id || 0) === LEAGUE_ID", "background live sync does not scope all-live results to Premier League");
 rejectText(sync, 'providerGet("fixtures", { league: LEAGUE_ID, season: seasonNow(), live: "all" })', "background live sync still combines incompatible live filters");
