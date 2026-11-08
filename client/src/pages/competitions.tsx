@@ -252,7 +252,7 @@ function PrizeEconomics({ comp }: { comp: CompetitionWithEntries }) {
     return <div className="space-y-2 rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-50">
       <p className="font-black">FREE Card Cup • GW{comp.gameWeek} • N$0 entry</p>
       <p className="text-xs text-white/80">
-        {weighted ? "1st prize: Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%. 2nd and 3rd: Rare card each." : String(comp.prizeDescription || "Card prizes for the top three finishers")}
+        {weighted ? "1st prize: Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%. 2nd and 3rd: Common card each." : String(comp.prizeDescription || "Card prizes for the top three finishers")}
       </p>
       <p className="text-xs text-white/60">All accepted entries share one leaderboard. Winner rarity is frozen once at settlement, with no entry threshold to unlock card prizes.</p>
       <InfoPill label="All FREE Cup entries" value={String(comp.entryCount || 0)} helper="All managers in this tournament" />

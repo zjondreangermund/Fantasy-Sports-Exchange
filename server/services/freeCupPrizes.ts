@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 
 // Probabilities are drawn once, server-side, at first-place settlement.
-// New 2nd/3rd awards are Rare. Historical recorded prizes remain unchanged.
+// New 2nd/3rd awards are Common. Historical recorded prizes remain unchanged.
 export const FREE_CUP_FIRST_PRIZE_ODDS = [
   { rarity: "rare", weight: 9500, percentage: 95 },
   { rarity: "unique", weight: 450, percentage: 4.5 },
