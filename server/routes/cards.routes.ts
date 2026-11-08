@@ -74,6 +74,11 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
   // Arena score once per gameweek snapshot, not once per owner's card. Sharing
   // both the FPL live payload and the detailed API stats prevents two accounts
   // from temporarily seeing different scores for the same verified FPL ID.
+  const lastSuccessfulScoreSnapshot = new Map<number, {
+    scoreByElementId: Map<number, number>;
+    scoreUpdatedAt: string;
+    expiresAt: number;
+  }>();
   const scoringContextCache = new Map<number, {
     expiresAt: number;
     promise: Promise<{
@@ -105,10 +110,22 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         scoreByElementId.set(elementId,
           Number(calculatePlayerScore(combinedStats, String(canonical.position || 'MID'))?.total_score || 0));
       }
+      const liveAvailable = Array.isArray(liveData?.elements);
+      const scoreUpdatedAt = new Date().toISOString();
+      if (liveAvailable) {
+        lastSuccessfulScoreSnapshot.clear();
+        lastSuccessfulScoreSnapshot.set(gameweek, {
+          scoreByElementId, scoreUpdatedAt, expiresAt: Date.now() + 15 * 60_000,
+        });
+      }
+      const lastGood = !liveAvailable ? lastSuccessfulScoreSnapshot.get(gameweek) : null;
       return {
-        detailedScoringContext, gameweekScoringContext, scoreByElementId,
-        scoreUpdatedAt: new Date().toISOString(),
-        liveAvailable: Boolean(liveData?.elements),
+        detailedScoringContext, gameweekScoringContext,
+        scoreByElementId: lastGood?.expiresAt && lastGood.expiresAt > Date.now()
+          ? lastGood.scoreByElementId : scoreByElementId,
+        scoreUpdatedAt: lastGood?.expiresAt && lastGood.expiresAt > Date.now()
+          ? lastGood.scoreUpdatedAt : scoreUpdatedAt,
+        liveAvailable,
       };
     });
     scoringContextCache.clear(); // Never mix snapshots from different GWs.
