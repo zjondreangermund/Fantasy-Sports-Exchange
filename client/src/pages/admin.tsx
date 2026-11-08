@@ -64,6 +64,8 @@ type UserRow = {
 type Traffic = {
   onlineUsersLast10Minutes?: number;
   requestsLastHour?: number;
+  pageViewsLastHour?: number;
+  browserVisitorsLastHour?: number;
   activeUsers?: any[];
 };
 
@@ -201,7 +203,7 @@ export default function AdminPage() {
     { label: "Cards", value: stats?.cards || 0, hint: "All minted/owned", icon: CreditCard },
     { label: "Marketplace", value: money(activeListings.reduce((sum: number, listing: any) => sum + Number(listing.price || 0), 0)), hint: `${activeListings.length} listings`, icon: ShoppingCart },
     { label: "Fees", value: money(liveFinance?.revenue || 0), hint: "Since testing reset", icon: DollarSign },
-    { label: "Online", value: traffic?.onlineUsersLast10Minutes || 0, hint: `${traffic?.requestsLastHour || 0} req/hour`, icon: Activity },
+    { label: "Recent players", value: traffic?.onlineUsersLast10Minutes || 0, hint: `${traffic?.browserVisitorsLastHour || 0} browser visitors · ${traffic?.requestsLastHour || 0} sessions/hour`, icon: Activity },
     { label: "Tournaments", value: stats?.competitions || allCompetitions.length, hint: `${allCompetitions.filter((c) => ["open", "active"].includes(String(c.status))).length} live/open`, icon: Trophy },
     { label: "Revenue", value: money(liveFinance?.revenue || 0), hint: "Live platform income", icon: Wallet },
     { label: "Errors", value: stats?.errorsLast24h || 0, hint: "Last 24h", icon: AlertTriangle },
