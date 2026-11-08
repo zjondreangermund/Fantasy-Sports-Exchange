@@ -22,6 +22,12 @@ export async function getAdminActivity(executor:any, query:any) {
     ...adminIds.map(id=>sql`"userId" <> ${id}`),
     ...adminEmails.map(email=>sql`lower(coalesce(email,'')) <> ${email}`),
   ],sql` and `);
+  const recentPublic=sql.join([
+    sql`p.user_id is not null`,
+    ...(viewerId?[sql`p.user_id <> ${viewerId}`]:[]),
+    ...adminIds.map(id=>sql`p.user_id <> ${id}`),
+    ...adminEmails.map(email=>sql`lower(coalesce(u.email,'')) <> ${email}`),
+  ],sql` and `);
   const result=rows(await executor.execute(sql`
     with combined as (
       select concat('log-',a.id) as id,'audit'::text as source,a.user_id as "userId",
@@ -62,12 +68,7 @@ export async function getAdminActivity(executor:any, query:any) {
       max(p.created_at) as "lastSeen",(array_agg(p.path order by p.created_at desc,p.id desc))[1] as path
     from app.page_activity p join app.users u on u.id=p.user_id
     where p.created_at>now()-interval '10 minutes' and p.event='page_view'
-      and (${!excludeAdmins} or (
-        p.user_id is not null
-        and (${viewerId}='' or p.user_id <>${viewerId})
-        and ${sql.join(adminIds.map(id=>sql`p.user_id <> ${id}`).length?adminIds.map(id=>sql`p.user_id <> ${id}`):[sql`true`],sql` and `)}
-        and ${sql.join(adminEmails.map(email=>sql`lower(coalesce(u.email,'')) <> ${email}`).length?adminEmails.map(email=>sql`lower(coalesce(u.email,'')) <> ${email}`):[sql`true`],sql` and `)}
-      ))
+      and (${!excludeAdmins} or (${recentPublic}))
     group by p.user_id,u.manager_team_name,u.name,u.email order by "lastSeen" desc limit 30
   `));
   return {activity:(result.activity||[]).map((item:any)=>({...item,meta:cleanActivityMeta(item.meta)})),total:Number(result.total||0),page,limit,pages:Math.max(1,Math.ceil(Number(result.total||0)/limit)),recentUsers,summary:{events:result.events||0,errors:result.errors||0,visits:result.visits||0,pageViews:result.pageViews||0,users:result.users||0},from:start.toISOString(),to:end.toISOString()};
