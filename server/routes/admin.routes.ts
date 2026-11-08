@@ -420,42 +420,60 @@ export function registerAdminRoutes(app: Express, deps: RegisterAdminRoutesDeps)
     }
   });
 
-  app.get("/api/admin/traffic", requireAuth, isAdmin, async (_req: any, res) => {
+  app.get("/api/admin/traffic", requireAuth, isAdmin, async (req: any, res) => {
     try {
-      const counts = rowsOf(await db.execute(sql`
+      // TRAFFIC_REAL_SESSIONS_V1: client.route_view audit logs record route
+      // rerenders, not human visits or online users. Use browser page-view
+      // sessions instead; exclude the owner and configured administrators.
+      const viewerId=String(req.authUserId||req.user?.claims?.sub||req.user?.id||'');
+      const adminIds=String(process.env.ADMIN_USER_IDS||'').split(',').map(v=>v.trim()).filter(Boolean);
+      const adminEmails=String(process.env.ADMIN_EMAILS||'lbcplaya@gmail.com').split(',').map(v=>v.trim().toLowerCase()).filter(Boolean);
+      const publicActivity=sql.join([
+        sql`p.event='page_view'`,
+        sql`(p.user_id is null or p.user_id <> ${viewerId})`,
+        ...adminIds.map(id=>sql`(p.user_id is null or p.user_id <> ${id})`),
+        ...adminEmails.map(email=>sql`lower(coalesce(u.email,'')) <> ${email}`),
+      ],sql` and `);
+      const counts=rowsOf(await db.execute(sql`
         select
-          (select count(*)::int from app.audit_logs where action = 'client.route_view' and created_at >= now() - interval '1 minute') as "requestsLastMinute",
-          (select count(*)::int from app.audit_logs where action = 'client.route_view' and created_at >= now() - interval '5 minutes') as "requestsLast5Minutes",
-          (select count(*)::int from app.audit_logs where action = 'client.route_view' and created_at >= now() - interval '1 hour') as "requestsLastHour",
-          (select count(distinct user_id)::int from app.audit_logs where created_at >= now() - interval '10 minutes' and user_id is not null) as "onlineUsersLast10Minutes"
-      `))[0] || {};
-      const activeUsers = rowsOf(await db.execute(sql`
-        select user_id as "userId", extract(epoch from (now() - max(created_at)))::int as "lastSeenSecondsAgo"
-        from app.audit_logs
-        where created_at >= now() - interval '10 minutes' and user_id is not null
-        group by user_id
-        order by max(created_at) desc
-        limit 50
+          count(distinct p.session_id) filter(where p.created_at >= now()-interval '1 minute')::int as "requestsLastMinute",
+          count(distinct p.session_id) filter(where p.created_at >= now()-interval '5 minutes')::int as "requestsLast5Minutes",
+          count(distinct p.session_id) filter(where p.created_at >= now()-interval '1 hour')::int as "requestsLastHour",
+          count(*) filter(where p.created_at >= now()-interval '1 hour')::int as "pageViewsLastHour",
+          count(distinct p.visitor_id) filter(where p.created_at >= now()-interval '1 hour')::int as "browserVisitorsLastHour",
+          count(distinct p.user_id) filter(where p.created_at >= now()-interval '10 minutes')::int as "onlineUsersLast10Minutes"
+        from app.page_activity p left join app.users u on u.id=p.user_id
+        where ${publicActivity}
+      `))[0]||{};
+      const activeUsers=rowsOf(await db.execute(sql`
+        select p.user_id as "userId",
+          extract(epoch from (now()-max(p.created_at)))::int as "lastSeenSecondsAgo"
+        from app.page_activity p left join app.users u on u.id=p.user_id
+        where ${publicActivity} and p.user_id is not null
+          and p.created_at >= now()-interval '10 minutes'
+        group by p.user_id order by max(p.created_at) desc limit 50
       `));
-      const topRoutes = rowsOf(await db.execute(sql`
-        select coalesce(meta->>'path','unknown') as route, count(*)::int as count, 0::float as "errorRate", 0::float as "avgDurationMs"
-        from app.audit_logs
-        where action = 'client.route_view' and created_at >= now() - interval '1 hour'
-        group by coalesce(meta->>'path','unknown')
-        order by count(*) desc
-        limit 12
+      const topRoutes=rowsOf(await db.execute(sql`
+        select p.path as route,count(*)::int as count,
+          count(distinct p.session_id)::int as sessions,
+          0::float as "errorRate",0::float as "avgDurationMs"
+        from app.page_activity p left join app.users u on u.id=p.user_id
+        where ${publicActivity} and p.created_at >= now()-interval '1 hour'
+        group by p.path order by count(*) desc limit 12
       `));
       return res.json({
-        requestsLastMinute: Number(counts.requestsLastMinute || 0),
-        requestsLast5Minutes: Number(counts.requestsLast5Minutes || 0),
-        requestsLastHour: Number(counts.requestsLastHour || 0),
-        onlineUsersLast10Minutes: Number(counts.onlineUsersLast10Minutes || 0),
-        activeUsers,
-        topRoutes,
+        requestsLastMinute:Number(counts.requestsLastMinute||0),
+        requestsLast5Minutes:Number(counts.requestsLast5Minutes||0),
+        requestsLastHour:Number(counts.requestsLastHour||0),
+        pageViewsLastHour:Number(counts.pageViewsLastHour||0),
+        browserVisitorsLastHour:Number(counts.browserVisitorsLastHour||0),
+        onlineUsersLast10Minutes:Number(counts.onlineUsersLast10Minutes||0),
+        activeUsers,topRoutes,
+        countMeaning:"Recorded page-view sessions and distinct browsers, excluding admin accounts; not HTTP requests or guaranteed human visitors.",
       });
     } catch (error: any) {
       console.error("Failed to fetch admin traffic:", error);
-      return res.status(500).json({ message: error?.message || "Failed to fetch admin traffic" });
+      return res.status(500).json({ message: "Failed to fetch traffic" });
     }
   });
 
