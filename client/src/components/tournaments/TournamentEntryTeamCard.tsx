@@ -62,6 +62,7 @@ export default function TournamentEntryTeamCard({ entry, competition, compact = 
 
   const { data: team, isLoading, isError } = useQuery<TournamentTeamDetails>({
     queryKey: ["/api/competitions/entry-score", competitionId, entryId],
+    staleTime: 10_000, // Reuse a recent lineup when switching between Squad and standings.
     queryFn: async () => {
       const response = await fetch(`/api/competitions/${competitionId}/entries/${entryId}`, { credentials: "include" });
       if (!response.ok) throw new Error("Failed to load submitted tournament team");
@@ -108,7 +109,7 @@ export default function TournamentEntryTeamCard({ entry, competition, compact = 
           : isError ? <div className="col-span-full rounded-xl border border-amber-300/15 bg-amber-400/[.06] p-3 text-xs text-amber-100">This submitted lineup could not be loaded right now.</div>
             : players.length ? players.map((player) => <div key={player.cardId} className="flex min-w-0 items-center gap-2 rounded-xl border border-white/[.07] bg-black/25 p-2">
               <div className="grid h-11 w-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-slate-900 text-[9px] font-black text-slate-500">
-                {player.imageUrl ? <img src={player.imageUrl} alt={player.name} className="h-full w-full object-contain object-top" /> : player.position}
+                {player.imageUrl ? <img loading="lazy" decoding="async" src={player.imageUrl} alt={player.name} className="h-full w-full object-contain object-top" /> : player.position}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1"><p className="truncate text-[11px] font-black text-white">{player.name}</p>{player.captain ? <Crown className="h-3 w-3 shrink-0 text-amber-300" /> : null}</div>
@@ -125,3 +126,4 @@ export default function TournamentEntryTeamCard({ entry, competition, compact = 
     </article>
   );
 }
+
