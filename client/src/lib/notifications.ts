@@ -70,6 +70,7 @@ export function notificationDestination(notification: ArenaNotification): string
   if(notification.communityMessageId||replacementKey.startsWith("community-mention:"))return communityMentionDestination(replacementKey,notification.id,notification.communityMessageId);
   // Match the native Android and Web Push deep link for the once-per-GW close alert.
   if (replacementKey.startsWith("gameweek:") && replacementKey.endsWith(":entries-closed-good-luck")) return "/my-entries";
+  if (/^gameweek:(?:\d+:)?\d+:entries-open$/.test(replacementKey)) return "/competitions";
   if (replacementKey.startsWith("prize-level:")) return "/prize-vault";
   if (replacementKey.startsWith("prize-award:")) return "/trophy-cabinet";
   if (replacementKey.startsWith("player-availability:")) return "/my-entries";

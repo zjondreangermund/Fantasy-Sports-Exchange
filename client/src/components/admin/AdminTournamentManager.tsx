@@ -72,11 +72,6 @@ export default function AdminTournamentManager() {
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,
   });
-  const { data: gw8Recovery, isFetching: gw8Auditing, refetch: auditGw8 } = useQuery<any>({
-    queryKey: ["/api/admin/competitions/recovery-audit/8"],
-    enabled: false,
-    staleTime: 0,
-  });
   const financialSummary = financialPayload?.summary || {};
   const financialRows = Array.isArray(financialPayload?.tournaments) ? financialPayload.tournaments : [];
   const visibleFinancialRows = useMemo(() => {
@@ -91,6 +86,11 @@ export default function AdminTournamentManager() {
   const completedCompetitions = officialCompetitions.filter((comp) => ["completed", "closed", "cancelled"].includes(String(comp.status || "").toLowerCase()));
   const latestFinishedGameWeek = Math.max(1, ...officialCompetitions.filter((comp) => { const deadline = Date.parse(String(comp.endDate || comp.end_date || "")); return Number.isFinite(deadline) && deadline <= Date.now(); }).map((comp) => Number(comp.gameWeek || comp.game_week || 0)));
   const targetGameWeek = Number(selectedGameWeek || latestFinishedGameWeek);
+  const { data: gwRecovery, isFetching: gwAuditing, refetch: auditGw } = useQuery<any>({
+    queryKey: [`/api/admin/competitions/recovery-audit/${targetGameWeek}`],
+    enabled: false,
+    staleTime: 0,
+  });
   const prizesByRarity = useMemo(() => {
     const groups: Record<string, any[]> = {};
     for (const rarity of rarityOptions) groups[rarity] = [];
@@ -198,7 +198,7 @@ export default function AdminTournamentManager() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/backoffice?range=30d"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/tournament-financials"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
-      void auditGw8();
+      void auditGw();
       toast({ title: "Tournament settled", description: "Tuesday-frozen scores, ranks and prizes are now final." });
     },
     onError: (error: any) => {
@@ -305,18 +305,33 @@ export default function AdminTournamentManager() {
           </Button>
         </div>
         <p className="mt-2 text-xs text-white/60">Settles every eligible cup for the selected week, including cups with zero entries. Pending API-Football scores remain blocked. Completed rewards are not repeated.</p>
-        {bulkSettlement ? <div className="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-white/10 p-2 text-xs">
+        {bulkSettlement ? <div className="mt-3 max-h-[65vh] space-y-3 overflow-y-auto rounded-lg border border-white/10 p-3 text-xs">
           <p className="font-bold">GW{bulkSettlement.gameWeek}: {bulkSettlement.settled} settled, {bulkSettlement.blocked} blocked</p>
-          {bulkSettlement.results?.map((item: any) => <div key={item.id} className="break-words border-t border-white/10 py-2"><span className="font-semibold">{item.name}</span> — {item.result.replaceAll("_"," ")}: {item.message}</div>)}
+          {bulkSettlement.blocked > 0 ? <div role="alert" className="rounded-lg border border-red-300/30 bg-red-400/10 p-3">
+            <p className="mb-2 font-bold text-red-100">{bulkSettlement.blocked} tournament(s) need attention — no prizes issued for these blocked cups</p>
+            {bulkSettlement.results?.filter((item: any) => item.result === "blocked").map((item: any) => <div key={item.id} className="border-t border-red-200/15 py-2">
+              <p className="font-semibold text-white">{item.name} (#{item.id}) {item.code ? `• ${item.code}` : ""}</p>
+              <p className="mt-1 text-red-100">{item.message}</p>
+              {item.cutoffAt ? <p className="mt-1 text-white/75">Settlement cutoff: {settlementLabel(item.cutoffAt)}</p> : null}
+              {item.unresolvedCardIds?.length ? <p className="mt-1 text-white/70">Unverified card IDs: {item.unresolvedCardIds.join(", ")}</p> : null}
+            </div>)}
+          </div> : null}
+          {bulkSettlement.results?.filter((item: any) => item.result !== "blocked").map((item: any) =>
+            <div key={item.id} className="break-words border-t border-white/10 py-2"><span className="font-semibold">{item.name}</span> — {item.result.replaceAll("_"," ")}: {item.message}</div>
+          )}
+          {bulkSettlement.nextGameweek ? <p className="rounded-lg border border-white/10 p-2 text-white/80">
+            GW{bulkSettlement.nextGameweek.gameWeek} opening: {String(bulkSettlement.nextGameweek.status || "unknown").replaceAll("_"," ")}.
+            {Number(bulkSettlement.nextGameweek.opened || 0) > 0 ? ` ${bulkSettlement.nextGameweek.opened} official cups opened; notifications link to Play.` : ""}
+          </p> : null}
         </div> : null}
       </section>
 
       <section className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-400/[.04] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h3 className="font-black text-amber-100">GW8 settlement recovery audit</h3><p className="mt-1 text-xs text-white/60">Review original scoring, locks, payouts and prizes here. For a Closed cup, use Settle GW8 below; completed cups remain protected against duplicate awards.</p></div>
-          <Button type="button" variant="outline" disabled={gw8Auditing} onClick={() => { void auditGw8(); }} className="border-amber-300/30 text-amber-100"><RefreshCw className={`mr-2 h-4 w-4 ${gw8Auditing ? "animate-spin" : ""}`} />{gw8Auditing ? "Checking GW8…" : "Audit GW8"}</Button>
+          <div><h3 className="font-black text-amber-100">GW{targetGameWeek} settlement recovery audit</h3><p className="mt-1 text-xs text-white/60">Review original scoring, locks, payouts and prizes here. For a Closed cup, use Settle Gameweek above; completed cups remain protected against duplicate awards.</p></div>
+          <Button type="button" variant="outline" disabled={gwAuditing} onClick={() => { void auditGw(); }} className="border-amber-300/30 text-amber-100"><RefreshCw className={`mr-2 h-4 w-4 ${gwAuditing ? "animate-spin" : ""}`} />{gwAuditing ? `Checking GW${targetGameWeek}…` : `Audit GW${targetGameWeek}`}</Button>
         </div>
-        {gw8Recovery ? <div className="mt-3 space-y-2">{gw8Recovery.tournaments?.length ? gw8Recovery.tournaments.map((cup: any) => <div key={cup.id} className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><b className="text-white">{cup.name}</b><Badge variant="outline">{cup.status}</Badge></div><div className="mt-2 text-white/65">{cup.entryCount} entries · {cup.unverifiedEntries} unverified snapshots · {cup.activeCardLocks} active card locks · {cup.paidEntryCount} cash payouts · {cup.mintedPrizeCount} minted cards · {cup.prizeAwardCount} award records ({cup.unclaimedAwardCount} pending claims)</div><p className="mt-1 text-amber-100">{cup.recoveryStatus}</p>{String(cup.status).toLowerCase() === "closed" ? <Button type="button" disabled={settleMutation.isPending || Number(cup.unverifiedEntries || 0) > 0} onClick={() => requestSettlement(cup)} className="mt-3 w-full bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200"><CheckCircle2 className="mr-2 h-4 w-4" />{settleMutation.isPending ? "Settling…" : Number(cup.unverifiedEntries || 0) > 0 ? "Waiting for verified scores" : "Settle GW8 — finalize prizes & unlock cards"}</Button> : null}</div>) : <p className="text-sm text-white/60">No GW8 tournaments found.</p>}<p className="text-xs text-white/50">Completed tournaments cannot be safely settled a second time without reconciling original rewards. A zero-point player is not automatically an unverified player.</p></div> : null}
+        {gwRecovery ? <div className="mt-3 space-y-2">{gwRecovery.tournaments?.length ? gwRecovery.tournaments.map((cup: any) => <div key={cup.id} className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><b className="text-white">{cup.name}</b><Badge variant="outline">{cup.status}</Badge></div><div className="mt-2 text-white/65">{cup.entryCount} entries · {cup.unverifiedEntries} unverified snapshots · {cup.activeCardLocks} active card locks · {cup.paidEntryCount} cash payouts · {cup.mintedPrizeCount} minted cards · {cup.prizeAwardCount} award records ({cup.unclaimedAwardCount} pending claims)</div><p className="mt-1 text-amber-100">{cup.recoveryStatus}</p>{String(cup.status).toLowerCase() === "closed" ? <Button type="button" disabled={settleMutation.isPending || Number(cup.unverifiedEntries || 0) > 0} onClick={() => requestSettlement(cup)} className="mt-3 w-full bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200"><CheckCircle2 className="mr-2 h-4 w-4" />{settleMutation.isPending ? "Settling…" : Number(cup.unverifiedEntries || 0) > 0 ? "Waiting for verified scores" : "Settle GW{targetGameWeek} — finalize prizes & unlock cards"}</Button> : null}</div>) : <p className="text-sm text-white/60">No tournaments found for GW{targetGameWeek}.</p>}<p className="text-xs text-white/50">Completed tournaments cannot be safely settled a second time without reconciling original rewards. A zero-point player is not automatically an unverified player.</p></div> : null}
       </section>
 
       <section className="mt-5 overflow-hidden rounded-2xl border border-cyan-300/20 bg-black/30">

@@ -30,6 +30,7 @@ const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 const PREMIER_LEAGUE_KEYS = new Set(["premierleague", "englishpremierleague", "epl"]);
 let cardLockGuardPromise: Promise<void> | null = null;
 let prizeAwardSchemaPromise: Promise<void> | null = null;
+let nextGameweekSchemaPromise: Promise<void> | null = null;
 const COMMON_COLLECTION_CAP = 20;
 
 function rowsOf(result: any): any[] {
@@ -738,14 +739,20 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
              and cl.ref_id=c.id::text and (cl.expires_at is null or cl.expires_at>now())) as "activeCardLocks"
         from app.competitions c where c.game_week=${gameWeek} order by c.id
       `));
-      const tournaments = records.map((row: any) => ({
-        ...row,
-        recoveryStatus: row.status === "completed"
-          ? "Completed — preserve existing payouts and prizes; review mismatches before changes"
-          : row.status === "cancelled" ? "Cancelled — do not resettle"
-          : Number(row.unverifiedEntries || 0) > 0 ? "Scoring incomplete — refresh provider before settling"
-          : "Check final fixture coverage before normal settlement",
-      }));
+      const tournaments = records.map((row: any) => {
+        const cutoff = Date.parse(String(row.endDate || ""));
+        const settlementCutoffPassed = Number.isFinite(cutoff) && Date.now() >= cutoff;
+        return {
+          ...row,
+          settlementCutoffPassed,
+          recoveryStatus: row.status === "completed"
+            ? "Completed — preserve existing payouts and prizes; review mismatches before changes"
+            : row.status === "cancelled" ? "Cancelled — do not resettle"
+            : !settlementCutoffPassed ? "Blocked: settlement cutoff has not passed; do not settle before the scheduled final freeze"
+            : Number(row.unverifiedEntries || 0) > 0 ? "Blocked: one or more entries lack a verified final scoring snapshot; refresh API-Football"
+            : "Settlement cutoff passed; confirm final fixture coverage and use normal settlement",
+        };
+      });
       return res.json({ gameWeek, readOnly: true, tournaments,
         notice: "This audit does not update scoring, unlock cards, reopen completed cups or reissue any awards." });
     } catch (error) {
@@ -782,6 +789,66 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       return res.status(500).json({ message: error?.message || "Failed to inspect wallet postings" });
     }
   });
+
+
+  // GW_SETTLEMENT_ROLLOVER_V1: Open the next official week only after ALL
+  // non-cancelled tournaments in this season/week have completed settlement.
+  // Keep Premier League kickoff (fixture_window_start) and scoring cutoffs unchanged.
+  const openNextGameweekIfComplete = async (gameWeek: number) => {
+    if (gameWeek < 1 || gameWeek >= 38) return { status: "season_complete", opened: 0, gameWeek: gameWeek + 1 };
+    if (!nextGameweekSchemaPromise) {
+      nextGameweekSchemaPromise = db.execute(sql`alter table app.competitions add column if not exists auto_opened_after_settlement boolean not null default false`)
+        .then(() => {}).catch((error) => { nextGameweekSchemaPromise = null; throw error; });
+    }
+    await nextGameweekSchemaPromise;
+    return db.transaction(async (tx) => {
+      const official = rowsOf(await tx.execute(sql`
+        select season from app.competitions
+        where game_week=${gameWeek} and created_by_user_id is null
+          and coalesce(prize_key,'')='ladder' and name not like '[TEST]%'
+        order by id limit 1
+      `))[0];
+      const season = String(official?.season || "");
+      if (!season) return { status: "not_prepared", opened: 0, gameWeek: gameWeek + 1 };
+      const incomplete = rowsOf(await tx.execute(sql`
+        select id from app.competitions where game_week=${gameWeek}
+          and (season=${season} or season is null)
+          and name not like '[TEST]%'
+          and status::text not in ('completed','cancelled')
+        limit 1
+      `));
+      if (incomplete.length) return { status: "settlement_incomplete", opened: 0, gameWeek: gameWeek + 1 };
+
+      const targetWeek = gameWeek + 1;
+      const prepared = rowsOf(await tx.execute(sql`
+        select id, status::text as status from app.competitions
+        where game_week=${targetWeek} and season=${season}
+          and created_by_user_id is null and coalesce(visibility,'public')='public'
+          and coalesce(prize_key,'') in ('ladder','free-weighted-card')
+          and name not like '[TEST]%' and status::text not in ('cancelled','completed')
+        for update
+      `));
+      // Five paid rarity ladders plus the single FREE Common Card Cup must exist.
+      // Never partially launch a week while the official calendar is incomplete.
+      if (prepared.length < 6) return { status: "not_prepared", opened: 0, gameWeek: targetWeek };
+      const updated = rowsOf(await tx.execute(sql`
+        update app.competitions
+        set status='open', start_date=least(start_date,now()),
+          auto_opened_after_settlement=true
+        where game_week=${targetWeek} and season=${season}
+          and created_by_user_id is null and coalesce(visibility,'public')='public'
+          and coalesce(prize_key,'') in ('ladder','free-weighted-card')
+          and name not like '[TEST]%'
+          and status::text='upcoming' and admin_status_override is null
+          and coalesce(fixture_window_start,start_date)>now()
+        returning id
+      `));
+      return {
+        status: updated.length ? "opened" : prepared.every((row: any) => row.status === "open") ? "already_open" : "not_open",
+        opened: updated.length, gameWeek: targetWeek,
+      };
+    });
+  };
 
   const settleSingleCompetition = async (req: any, res: any) => {
     try {
@@ -1114,8 +1181,18 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         };
       });
 
+      let nextGameweek: any = null;
+      if (!req.skipNextGameweekRollover) {
+        try {
+          nextGameweek = await openNextGameweekIfComplete(Number(preview.gameWeek || 0));
+        } catch (rolloverError) {
+          console.error("[gw-rollover] Settlement completed but next week could not be opened:", rolloverError);
+          nextGameweek = { status: "error", opened: 0, gameWeek: Number(preview.gameWeek || 0) + 1 };
+        }
+      }
       return res.json({
         success: true,
+        nextGameweek,
         message: settlement.replayed
           ? "Tournament settlement already completed and verified"
           : settlement.prizeVault
@@ -1168,7 +1245,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         group by c.id
         order by c.id
       `));
-      const results: Array<{ id: number; name: string; result: string; message: string }> = [];
+      const results: Array<{ id: number; name: string; result: string; message: string; code?: string; cutoffAt?: string; unresolvedCardIds?: number[]; entryCount?: number }> = [];
       for (const cup of cups) {
         const id = Number(cup.id);
         const name = String(cup.name || "Tournament");
@@ -1178,7 +1255,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         }
         const cutoff = Date.parse(String(cup.endDate || ""));
         if (!Number.isFinite(cutoff) || Date.now() < cutoff) {
-          results.push({ id, name, result: "blocked", message: "Gameweek settlement cutoff has not passed" });
+          results.push({ id, name, result: "blocked", message: "Gameweek settlement cutoff has not passed", code: "SETTLEMENT_CUTOFF_NOT_REACHED", cutoffAt: String(cup.endDate || "") });
           continue;
         }
         if (Number(cup.entryCount || 0) === 0) {
@@ -1214,16 +1291,29 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         };
         const childRequest = Object.create(req);
         childRequest.params = { ...req.params, id: String(id) };
+        childRequest.skipNextGameweekRollover = true;
         await settleSingleCompetition(childRequest, captured);
         results.push({
           id, name,
           result: captured.statusCode < 300 && captured.payload?.success ? "settled" : "blocked",
           message: String(captured.payload?.message || "Settlement failed"),
+          code: String(captured.payload?.code || ""),
+          unresolvedCardIds: Array.isArray(captured.payload?.unresolvedCardIds) ? captured.payload.unresolvedCardIds : [],
+          entryCount: Number(cup.entryCount || 0),
         });
       }
       const failed = results.filter(row => row.result === "blocked").length;
+      let nextGameweek: any = { status: "settlement_incomplete", opened: 0, gameWeek: gameWeek + 1 };
+      if (failed === 0) {
+        try {
+          nextGameweek = await openNextGameweekIfComplete(gameWeek);
+        } catch (rolloverError) {
+          console.error("[gw-rollover] Settlement completed but next week could not be opened:", rolloverError);
+          nextGameweek = { status: "error", opened: 0, gameWeek: gameWeek + 1 };
+        }
+      }
       return res.status(failed ? 207 : 200).json({
-        success: failed === 0, gameWeek, total: results.length, blocked: failed,
+        success: failed === 0, gameWeek, total: results.length, blocked: failed, nextGameweek,
         settled: results.filter(row => row.result === "settled" || row.result === "settled_empty").length,
         results,
       });
