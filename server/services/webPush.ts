@@ -167,6 +167,7 @@ export async function disableWebPushSubscription(userId: string, endpointValue: 
 function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
   const key = String(dedupeKey || "");
   if (key === "digest") return "/account?tab=inbox";
+  if (/^gameweek:(?:\d+:)?\d+:entries-open$/.test(key)) return "/competitions";
   if (key.startsWith("prize-level:")) return "/prize-vault";
   if (key.startsWith("prize-award:")) return "/trophy-cabinet";
   if (key.startsWith("player-availability:")) return "/my-entries";
