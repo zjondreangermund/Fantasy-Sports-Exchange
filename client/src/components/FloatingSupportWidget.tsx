@@ -1,3 +1,4 @@
+import {CommunityGif, CommunityReactions, CommunitySocialComposer} from "./CommunitySocial";
 import {isTopPopup} from "../lib/popup-stack";
 import {PopupPortal} from "./ui/popup-portal";
 import "./chat-workspace.css";
@@ -152,6 +153,7 @@ export default function FloatingSupportWidget() {
   const [chatInput, setChatInput] = useState("");
   const [chatSearch, setChatSearch] = useState("");
   const [chatError, setChatError] = useState("");
+  const [selectedGif,setSelectedGif]=useState<string|null>(null);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
@@ -283,15 +285,29 @@ export default function FloatingSupportWidget() {
         }
       } catch { /* ignore malformed stream events */ }
     };
+    const onReaction=(event:Event)=>{
+      try {
+        const id=Number(JSON.parse((event as MessageEvent).data).messageId);
+        if(!Number.isSafeInteger(id)||id<=0)return;
+        void fetch(`/community-live/messages/${id}`,{credentials:'include',cache:'no-store'}).then(async response=>{
+          if(!response.ok)return;
+          const payload=await response.json();if(!payload.message)return;
+          queryClient.setQueryData<ChatMessage[]>(chatQueryKey,current=>mergeMessage(current,payload.message));
+          setTargetMessage(current=>current?.id===id?payload.message:current);
+        }).catch(()=>{});
+      }catch{/* Ignore invalid stream events. */}
+    };
     stream.addEventListener("open", onReady);
     stream.addEventListener("ready", onReady);
     stream.addEventListener("error", onError);
     stream.addEventListener("community-message", onMessage);
+    stream.addEventListener("community-reaction", onReaction);
     return () => {
       stream.removeEventListener("open", onReady);
       stream.removeEventListener("ready", onReady);
       stream.removeEventListener("error", onError);
       stream.removeEventListener("community-message", onMessage);
+      stream.removeEventListener("community-reaction", onReaction);
       stream.close();
     };
   }, [adminCheck?.isAdmin, chatQueryKey, currentUserId, user?.email, user?.managerTeamName, user?.name]);
@@ -408,8 +424,8 @@ export default function FloatingSupportWidget() {
   }, [highlightedMessageId]);
 
   const sendMutation = useMutation({
-    mutationFn: async ({ message, replyToId }: { message: string; replyToId?: number | null }) =>
-      (await apiRequest("POST", "/community-live/messages", { message, replyToId })).json(),
+    mutationFn: async ({ message, replyToId, gifId }: { message: string; replyToId?: number | null; gifId?: string|null }) =>
+      (await apiRequest("POST", "/community-live/messages", { message, replyToId, gifId })).json(),
     onSuccess: (payload: any) => {
       const message = payload.message as ChatMessage;
       queryClient.setQueryData<ChatMessage[]>(chatQueryKey, (current) => {
@@ -418,9 +434,21 @@ export default function FloatingSupportWidget() {
         return merged;
       });
       setFollowingLatest(true);
-      setChatInput(""); setReplyingTo(null); setChatError("");
+      setChatInput(""); setSelectedGif(null); setReplyingTo(null); setChatError("");
     },
     onError: (error) => setChatError(errorMessage(error)),
+  });
+
+  const reactionMutation=useMutation({
+    mutationFn:async({id,emoji,active}:{id:number;emoji:string;active:boolean})=>(await apiRequest('PUT',`/community-live/messages/${id}/reactions`,{emoji,active})).json(),
+    onSuccess:(payload:any)=>{
+      if(payload.message){
+        queryClient.setQueryData<ChatMessage[]>(chatQueryKey,current=>mergeMessage(current,payload.message));
+        setTargetMessage(current=>current?.id===payload.message.id?payload.message:current);
+      }
+      setChatError('');
+    },
+    onError:(error)=>setChatError(errorMessage(error)),
   });
 
   const editMutation = useMutation({
@@ -457,9 +485,9 @@ export default function FloatingSupportWidget() {
 
   const submitChat = () => {
     const message = chatInput.trim();
-    if (!message || sendMutation.isPending) return;
+    if ((!message && !selectedGif) || sendMutation.isPending) return;
     setChatError("");
-    sendMutation.mutate({ message, replyToId: replyingTo?.id || null });
+    sendMutation.mutate({ message, gifId:selectedGif, replyToId: replyingTo?.id || null });
   };
 
   const loadOlderMessages = async () => {
@@ -543,6 +571,8 @@ export default function FloatingSupportWidget() {
                         {message.replyTo ? <button type="button" onClick={() => { void openCommunityMention({ communityMessageId: message.replyTo?.id }); }} className="mb-2 block w-full rounded-xl border-l-2 border-cyan-300/45 bg-black/25 px-2 py-1.5 text-left text-[10px] text-white/48 hover:bg-black/40"><span className="font-black text-cyan-200/70">{message.replyTo.teamName}</span><p className="mt-0.5 line-clamp-2">{message.replyTo.message}</p></button> : null}
                         <div className="mb-1 flex items-center gap-2 text-[10px]"><button type="button" onClick={() => addMention(message)} disabled={own || Boolean(message.deletedAt)} className={`max-w-[180px] truncate font-black ${own ? "text-cyan-200" : "text-white/65 hover:text-cyan-200"}`}>{own ? "You" : message.teamName || "Arena Manager"}</button><span className="text-white/30">{formatMessageTime(message.createdAt)}</span>{message.editedAt ? <span className="text-white/25">edited</span> : null}</div>
                         {editing ? <div className="space-y-2"><CommunityMentionComposer value={editingText} onChange={setEditingText} onError={setChatError} sendOnEnter={false} rows={3} placeholder="Edit your community message…" /><div className="flex justify-end gap-2"><button onClick={() => { setEditingId(null); setEditingText(""); }} className="text-[10px] font-bold text-white/45">Cancel</button><button onClick={() => editMutation.mutate({ id: message.id, message: editingText.trim() })} disabled={!editingText.trim() || editMutation.isPending} className="rounded-lg bg-cyan-300 px-2 py-1 text-[10px] font-black text-slate-950">Save</button></div></div> : <p className={`whitespace-pre-wrap break-words text-sm leading-5 ${message.deletedAt ? "italic text-white/45" : "text-white/90"}`}>{message.message}</p>}
+                        {!message.deletedAt && !editing && message.gifId ? <CommunityGif id={message.gifId} /> : null}
+                        {!message.deletedAt && !editing ? <CommunityReactions reactions={message.reactions} disabled={reactionMutation.isPending} onChange={(emoji,active)=>reactionMutation.mutate({id:message.id,emoji,active})} /> : null}
                         {!message.deletedAt && !editing ? <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-2 text-[10px] font-black tracking-[.04em]"><button type="button" onClick={() => { setReplyingTo(message); setChatError(""); }} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-white/[.07] px-2 text-white/75 hover:bg-cyan-300/15 hover:text-cyan-200"><Reply className="h-3.5 w-3.5" />Reply</button>{!own ? <button type="button" onClick={() => addMention(message)} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-cyan-300/10 px-2 text-cyan-100 hover:bg-cyan-300/20"><AtSign className="h-3.5 w-3.5" />Mention</button> : null}{canEdit ? <button type="button" onClick={() => { setEditingId(message.id); setEditingText(message.message); }} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-white/[.07] px-2 text-white/75 hover:text-amber-200"><Pencil className="h-3.5 w-3.5" />Edit</button> : null}{canDelete ? <button type="button" onClick={() => window.confirm(adminCheck?.isAdmin && !own ? "Delete this community message as administrator?" : "Delete your message?") && deleteMutation.mutate(message)} className="inline-flex min-h-8 touch-manipulation items-center gap-1 rounded-lg bg-white/[.07] px-2 text-white/75 hover:text-rose-200"><Trash2 className="h-3.5 w-3.5" />{adminCheck?.isAdmin && !own ? "Admin delete" : "Delete"}</button> : null}</div> : null}
                       </div>
                     </div>
@@ -553,7 +583,8 @@ export default function FloatingSupportWidget() {
               <div className="shrink-0 border-t border-white/10 bg-black/25 p-2.5">
                 {!followingLatest && unreadCount ? <button type="button" onClick={() => { setFollowingLatest(true); scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }} className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 py-1.5 text-xs font-bold text-cyan-100">{unreadCount} new message{unreadCount === 1 ? "" : "s"} · Jump to latest</button> : null}
                 {replyingTo ? <div className="mb-2 flex items-start justify-between gap-2 rounded-xl border border-cyan-200/15 bg-cyan-300/[.06] px-3 py-2"><div className="min-w-0 text-[10px] text-white/48"><span className="font-black text-cyan-200">Replying to {replyingTo.teamName}</span><p className="mt-0.5 truncate">{replyingTo.message}</p></div><button onClick={() => setReplyingTo(null)} className="text-white/35 hover:text-white"><X className="h-3.5 w-3.5" /></button></div> : null}
-                <div className="flex items-end gap-2"><CommunityMentionComposer value={chatInput} onChange={text=>{setChatInput(text);setChatError('');}} onError={setChatError} onSubmit={submitChat} placeholder={replyingTo?`Reply to ${replyingTo.teamName}…`:'Message the community… type @ or a team name to tag'} /><Button size="icon" className="h-10 w-10 shrink-0 rounded-xl bg-cyan-300 text-slate-950 hover:bg-cyan-200" onClick={submitChat} disabled={!chatInput.trim() || sendMutation.isPending} aria-label="Send community message"><Send className="h-4 w-4" /></Button></div>
+                <CommunitySocialComposer gifId={selectedGif} onGif={setSelectedGif} onEmoji={emoji=>{if(chatInput.length+emoji.length<=280){setChatInput(text=>text+emoji);setChatError('');}else setChatError('Message must be 280 characters or fewer');}} />
+                <div className="flex items-end gap-2"><CommunityMentionComposer value={chatInput} onChange={text=>{setChatInput(text);setChatError('');}} onError={setChatError} onSubmit={submitChat} placeholder={replyingTo?`Reply to ${replyingTo.teamName}…`:'Message the community… type @ or a team name to tag'} /><Button size="icon" className="h-10 w-10 shrink-0 rounded-xl bg-cyan-300 text-slate-950 hover:bg-cyan-200" onClick={submitChat} disabled={(!chatInput.trim() && !selectedGif) || sendMutation.isPending} aria-label="Send community message"><Send className="h-4 w-4" /></Button></div>
                 <div className="mt-1 flex items-center justify-between gap-2 px-1"><p className="truncate text-[10px] text-rose-200">{chatError || "Profanity and slurs are automatically blocked."}</p><p className="shrink-0 text-[10px] text-white/25">{chatInput.length}/280</p></div>
               </div>
             </div>
@@ -569,3 +600,4 @@ export default function FloatingSupportWidget() {
     </>
   );
 }
+

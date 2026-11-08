@@ -12,6 +12,8 @@ export type CommunityChatMessage = {
   teamName: string;
   avatarUrl?: string | null;
   message: string;
+  gifId?: string | null;
+  reactions?: Array<{emoji:string;count:number;mine:boolean}>;
   replyToId?: number | null;
   replyTo?: CommunityReplyPreview | null;
   mentions?: string[];
@@ -116,3 +118,4 @@ export function communityMessagesWithTarget(messages:CommunityChatMessage[],targ
   const pinned=mergeCommunityMessages(target?[target]:[])[0];
   return pinned&&!messages.some(message=>message.id===pinned.id)?[...messages,pinned].sort((a,b)=>a.id-b.id):messages;
 }
+

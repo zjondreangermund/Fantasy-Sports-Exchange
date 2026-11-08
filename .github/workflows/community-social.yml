@@ -1,0 +1,26 @@
+name: Community reactions and GIFs
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'shared/community-social.ts'
+      - 'server/routes/communityChatV2.routes.ts'
+      - 'client/src/components/CommunitySocial.tsx'
+      - 'client/src/components/FloatingSupportWidget.tsx'
+      - 'client/src/lib/community-chat.ts'
+      - 'scripts/test-community-social.mjs'
+      - '.github/workflows/community-social.yml'
+  workflow_dispatch:
+jobs:
+  verify-community-social:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: node scripts/test-community-social.mjs
+      - run: node scripts/test-community-expiry.mjs && node scripts/test-community-mentions.mjs
