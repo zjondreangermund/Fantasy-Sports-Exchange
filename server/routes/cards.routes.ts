@@ -97,10 +97,12 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       loadDetailedScoringContext(bootstrap || {}, gameweek),
       loadApiFootballGameweekScoringContext(gameweek).catch(() => null),
       fplApi.getLiveGameweek(gameweek).catch(() => null),
-    ]).then(([detailedScoringContext, gameweekScoringContext, liveData]) => {
+    ]).then(async ([detailedScoringContext, gameweekScoringContext, liveData]) => {
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const scoreByElementId = new Map<number, number>();
+      let processedElements=0;
       for (const element of Array.isArray(liveData?.elements) ? liveData.elements : []) {
+        if(++processedElements%20===0)await new Promise<void>(resolve=>setImmediate(resolve));
         const elementId = Number(element?.id || 0);
         const verifiedElement = fplIndex.byId.get(elementId);
         if (!elementId || !verifiedElement) continue;

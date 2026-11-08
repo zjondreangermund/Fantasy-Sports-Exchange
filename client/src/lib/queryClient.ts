@@ -42,10 +42,11 @@ export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
-  async ({ queryKey }) => {
+  async ({ queryKey, signal }) => {
     const rawUrl = queryKey.join("/") as string;
     const res = await fetch(toApiUrl(resolveApiUrl(rawUrl)), {
       credentials: "include",
+      signal,
       headers: activitySessionHeaders(),
     });
 

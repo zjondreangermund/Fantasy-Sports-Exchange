@@ -1,19 +1,13 @@
+import {useAuth} from "../hooks/use-auth";
+import {notificationQueryOptions} from "../lib/notification-query";
 import { useQuery } from "@tanstack/react-query";
 
 type NotificationSummary = { unreadCount?: number };
 
 export default function UnreadNotificationDot({ showCount = false, className = "" }: { showCount?: boolean; className?: string }) {
+  const {user}=useAuth();
   const { data } = useQuery<NotificationSummary>({
-    queryKey: ["/api/notifications"],
-    queryFn: async () => {
-      const response = await fetch("/api/notifications", { credentials: "include" });
-      if (!response.ok) return { unreadCount: 0 };
-      return response.json();
-    },
-    staleTime: 10_000,
-    refetchInterval: () => document.visibilityState === "hidden" ? false : 20_000,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    ...notificationQueryOptions(user?.id),
   });
 
   const unreadCount = Math.max(0, Number(data?.unreadCount || 0));

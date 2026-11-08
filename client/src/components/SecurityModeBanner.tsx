@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Eye, Gavel, LockKeyhole } from "lucide-react";
-import { apiRequest } from "../lib/queryClient";
 import { useAuth } from "../hooks/use-auth";
 import {
   setClientSecurityStatus,
@@ -30,52 +29,27 @@ export default function SecurityModeBanner() {
       !onboardingRoute,
   );
 
-  useEffect(() => {
-    if (!mainAppReady) {
-      setStatus(null);
-      return;
-    }
-
-    // PERFORMANCE_V1_SECURITY_POLL: read-only actions are always enforced by
-    // the server. The banner need not reload the same state every five seconds.
-    let cancelled = false;
-    let inFlight = false;
-    let lastPayload = "";
-
-    const load = async () => {
-      if (cancelled || inFlight || document.visibilityState === "hidden") return;
-      inFlight = true;
-      try {
-        const response = await apiRequest("GET", "/api/security/status");
-        const next = (await response.json()) as PublicSecurityStatus;
-        if (cancelled) return;
-        const payload = JSON.stringify(next);
-        if (payload === lastPayload) return;
-        lastPayload = payload;
-        setStatus(next);
-        setClientSecurityStatus(next);
-        window.dispatchEvent(
-          new CustomEvent("fantasy-arena-security-status", { detail: next }),
-        );
-      } catch {
-        // Server-side security controls remain authoritative if this status request fails.
-      } finally {
-        inFlight = false;
-      }
-    };
-
-    const onFocus = () => { if (document.visibilityState === "visible") void load(); };
-    void load();
-    const timer = window.setInterval(load, 30_000);
-    document.addEventListener("visibilitychange", onFocus);
-    window.addEventListener("focus", onFocus);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onFocus);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [mainAppReady]);
+  // PERFORMANCE_V1_SECURITY_POLL: one shared query for every banner instance.
+  const {data:liveStatus}=useQuery<PublicSecurityStatus>({
+    queryKey:['/api/security/status',user?.id||'anonymous'],
+    enabled:mainAppReady,
+    queryFn:async({signal})=>{
+      const response=await fetch('/api/security/status',{credentials:'include',signal});
+      if(!response.ok)throw new Error('Security status unavailable');
+      return response.json();
+    },
+    staleTime:15_000,
+    refetchInterval:()=>document.visibilityState==='hidden'?false:30_000,
+    refetchIntervalInBackground:false,
+    refetchOnWindowFocus:true,
+  });
+  useEffect(()=>{
+    if(!mainAppReady){setStatus(null);return;}
+    if(!liveStatus)return;
+    setStatus(liveStatus);
+    setClientSecurityStatus(liveStatus);
+    window.dispatchEvent(new CustomEvent('fantasy-arena-security-status',{detail:liveStatus}));
+  },[mainAppReady,liveStatus]);
 
   if (!mainAppReady || !status?.readOnly) return null;
 

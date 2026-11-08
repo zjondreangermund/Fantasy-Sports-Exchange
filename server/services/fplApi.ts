@@ -22,7 +22,7 @@ const cache: Record<string, CacheEntry<any> | undefined> = {};
 const pendingRequests: Record<string, Promise<any> | undefined> = {};
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${FPL_BASE}${path}`, { headers: { "user-agent": "Mozilla/5.0" } });
+  const res = await fetch(`${FPL_BASE}${path}`, { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8_000) });
   if (!res.ok) throw new Error(`FPL request failed: ${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }
