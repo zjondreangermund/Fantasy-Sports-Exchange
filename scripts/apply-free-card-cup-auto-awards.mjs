@@ -66,7 +66,7 @@ const awardBlock = `        // FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS
             const placedEntryId = Number(placed.id);
             const placedUserId = String(placed.userId || "");
             const placedRank = index + 1;
-            const rarity = index === 0 ? "rare" : "common";
+            const rarity = "rare";
             const oldEntry = lockedEntries.find((entry: any) => Number(entry.id) === placedEntryId);
             const existingCardId = Number(oldEntry?.prizeCardId || 0);
             const placedPrize = {
@@ -122,3 +122,4 @@ replaceOnce(awardAnchor, awardBlock, "automatic all-player free card award");
 
 fs.writeFileSync(file, source);
 console.log("[free-card-cups] Applied top-three claim rights: prizes remain pending until each eligible winner mints");
+

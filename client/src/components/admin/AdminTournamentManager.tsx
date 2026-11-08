@@ -115,7 +115,7 @@ export default function AdminTournamentManager() {
         next.entryFee = "0";
         next.cardPrizeRarity = "rare";
         next.prizeKey = "free-weighted-card";
-        next.prizeDescription = "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Common";
+        next.prizeDescription = "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Rare";
       }
       if (key === "tier" && next.rewardMode !== "card") {
         setPreviewRarity(value);
@@ -149,7 +149,7 @@ export default function AdminTournamentManager() {
       cardPrizeRarity: "rare",
       prizeType: "goods",
       prizeKey: "free-weighted-card",
-      prizeDescription: "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Common",
+      prizeDescription: "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Rare",
       name: `GW${prev.gameWeek || 1} FREE Common Card Cup`,
     }));
   };
@@ -169,7 +169,7 @@ export default function AdminTournamentManager() {
         prizeCardRarity: cardMode ? form.cardPrizeRarity : null,
         prizeType: "goods",
         prizeKey: cardMode ? "free-weighted-card" : "ladder",
-        prizeDescription: cardMode ? "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Common" : `${cap(form.tier)} Prize Vault ladder`,
+        prizeDescription: cardMode ? "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Rare" : `${cap(form.tier)} Prize Vault ladder`,
         startDate: new Date(form.startDate).toISOString(),
         endDate: new Date(form.endDate).toISOString(),
       };
@@ -403,3 +403,4 @@ function FinancialStat({ label, value, helper, warning = false }: { label: strin
 function TournamentList({ title, competitions, selectedId, onLoad, onDelete, onSettle, deleting, settling }: any) {
   return <section><div className="mb-2 flex items-center justify-between"><h4 className="text-sm font-black uppercase tracking-[.14em] text-white/60">{title}</h4><Badge variant="outline">{competitions.length}</Badge></div><div className="space-y-2">{competitions.length ? competitions.map((comp: any) => { const status = String(comp.status || "").toLowerCase(); const settlement = comp.endDate || comp.end_date; const settlementMs = new Date(String(settlement || "")).getTime(); const readyToSettle = ["active", "closed"].includes(status) && Number.isFinite(settlementMs) && Date.now() >= settlementMs; const key = String(comp.prizeKey || comp.prize_key || ""); const isCard = key.startsWith("free-"); const prizeRarity = String(comp.prizeCardRarity || comp.prize_card_rarity || ""); return <div key={comp.id} className={`rounded-xl border p-3 text-sm transition ${String(selectedId) === String(comp.id) ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-black/25"}`}><button onClick={() => onLoad(comp)} className="w-full text-left"><div className="flex items-center justify-between gap-3"><span className="font-bold">{comp.name}</span><Badge className="capitalize">{comp.status}</Badge></div><div className="mt-1 text-white/50">GW {comp.gameWeek ?? comp.game_week} • {comp.tier} cards • {isCard ? `FREE → ${key === "free-weighted-card" ? "weighted 1st / Common 2nd–3rd" : prizeRarity || "card"} prize` : `Prize Ladder • Entry ${money(comp.entryFee ?? comp.entry_fee)}`}</div><div className="mt-1 text-xs text-cyan-100/60">Settlement: {settlementLabel(settlement)} • Entries: {comp.entryCount ?? comp.entry_count ?? 0}</div></button>{readyToSettle ? <Button size="sm" disabled={settling} onClick={() => onSettle(comp)} className="mt-3 w-full bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200"><CheckCircle2 className="mr-2 h-4 w-4" />{settling ? "Settling..." : "Settle Tuesday Results"}</Button> : null}<Button variant="destructive" size="sm" disabled={deleting} onClick={() => onDelete(comp)} className="mt-2 w-full"><Trash2 className="mr-2 h-4 w-4" />Delete Tournament</Button></div>; }) : <div className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-white/40">No tournaments in this section.</div>}</div></section>;
 }
+

@@ -3,7 +3,7 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { storage } from "../storage.js";
-import { drawFreeCupFirstPrize } from "../services/freeCupPrizes.js";
+import { drawFreeCupFirstPrize, resolveFreeCupClaimRarity } from "../services/freeCupPrizes.js";
 import { CARD_SUPPLY_CAP_BY_RARITY } from "../../shared/card-economy.js";
 import { awardedPrizeCardId } from "../services/prizeCardIdentity.js";
 import { fplApi } from "../services/fplApi.js";
@@ -290,8 +290,7 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
   // Never reroll rarity when the player claims later: use the exact award
   // written at settlement, with legacy Rare/Common fallback.
   const recordedRarity = String(award.awardRarity || award.settlementAward?.rarity || "").toLowerCase();
-  const allowedRarities = ["common", "rare", "unique", "epic", "legendary"];
-  const rarity = rank === 1 && allowedRarities.includes(recordedRarity) ? recordedRarity : rank === 1 ? "rare" : "common";
+  const rarity = resolveFreeCupClaimRarity(rank, recordedRarity);
   const maxSupply = CARD_SUPPLY_CAP_BY_RARITY[rarity as keyof typeof CARD_SUPPLY_CAP_BY_RARITY];
   if(rarity==="common"){
     const commonCount=Number(rowsOf(await tx.execute(sql`select count(*)::int as count from app.player_cards where owner_id=${userId} and rarity::text='common'`))[0]?.count||0);
@@ -1002,7 +1001,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
               ? String(competition.prizeKey) === "free-weighted-card"
                 ? drawFreeCupFirstPrize()
                 : String(competition.prizeCardRarity || "rare")
-              : "common";
+              : "rare";
             const oldEntry = lockedEntries.find((entry: any) => Number(entry.id) === placedEntryId);
             const existingCardId = Number(oldEntry?.prizeCardId || 0);
             const placedPrize = {
@@ -1234,3 +1233,4 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
     }
   });
 }
+
