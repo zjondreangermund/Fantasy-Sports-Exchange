@@ -10,7 +10,7 @@ const visitorAssistant = read("server/services/arenaAssistant.ts");
 
 assert.match(activity, /ADMIN_ACTIVITY_OTHER_USERS_ONLY_V1/);
 assert.match(activity, /\$\{excludedActors\}/);
-assert.match(activity, /count\(distinct session\) filter\(where category='page'\)/);
+assert.match(activity, /count\(distinct session\) filter\(where source='page'\)/);
 assert.match(activity, /p\.event='page_view'/);
 assert.match(insights, /excludeAdmins:true,viewerId/);
 assert.match(traffic, /TRAFFIC_REAL_SESSIONS_V1/);
