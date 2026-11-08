@@ -183,7 +183,7 @@ async function main() {
 
         const name = `GW${gw} FREE ${title(rarity.tier)} Card Cup`;
         const prizeKey = 'free-weighted-card';
-        const prizeDescription = "One FREE Common Card Cup. 1st place: Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05% (odds fixed and drawn once at settlement). 2nd and 3rd: Common player cards. Only eligible current Premier League players may be minted.";
+        const prizeDescription = "One FREE Common Card Cup. 1st place: Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05% (odds fixed and drawn once at settlement). 2nd and 3rd: Rare player cards. Only eligible current Premier League players may be minted.";
 
         const existing = await client.query(
           `select c.id, c.status::text as status,
@@ -313,7 +313,7 @@ async function main() {
     console.log(`FREE Card Cups synced for ${SEASON}: current entry GW ${currentGw}, created ${created}, updated ${updated}, verified ${coveragePairs}/${expectedCoverage} current/future slots.`);
     console.log("Deleted past FREE Card Cups are not recreated.");
     console.log("Explicit admin status overrides are preserved for FREE Card Cups; background sync cannot reset a manually saved status.");
-    console.log("One free Common Card Cup per gameweek; 1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd/3rd Common.");
+    console.log("One free Common Card Cup per gameweek; 1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd/3rd Rare.");
     console.log(`Preserved ${preservedEntries} existing FREE Cup entries; no tournament entry rows were deleted or moved.`);
     if (gw2CommonForcedOpen) {
       console.log("GW2 FREE Common Card Cup forced OPEN until 13:30 CAT on 29 Aug 2026, today's first Premier League kickoff.");
@@ -330,3 +330,4 @@ main().catch((error) => {
   console.error("Failed to sync FREE Card Cups:", error);
   process.exit(1);
 });
+

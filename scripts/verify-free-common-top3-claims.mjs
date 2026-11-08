@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import "./test-free-cup-prizes.mjs";
 
 const read = (file) => fs.readFileSync(file, "utf8");
 const server = read("server/routes/economyIntegrity.routes.ts");
@@ -27,7 +28,8 @@ need(server, "Exactly one card was added to your Collection.", "Claim confirmati
 need(server, "FREE_CARD_CUP_AUTO_AWARD_V3_TOP3_CLAIMS", "Top-three settlement implementation marker is missing.");
 need(server, "for (let index = 0; index < Math.min(3, ranked.length); index += 1)", "All three places must receive a pending prize right.");
 need(server, "drawFreeCupFirstPrize()", "First-place rarity must be drawn once at settlement.");
-need(server, ': "common";', "2nd/3rd must keep Common card awards.");
+need(server, ': "rare";', "New 2nd/3rd awards must be Rare cards.");
+need(server, "resolveFreeCupClaimRarity(rank, recordedRarity)", "Claims must honor frozen runner-up rarity while preserving historical awards.");
 need(prizes, 'randomInt(10_000)', "Free Cup first-place odds must use secure server-side randomness.");
 need(prizes, 'weight: 9500', "Rare card baseline must be 95%.");
 need(prizes, 'weight: 5', "Legendary odds must be strictly low.");
@@ -45,4 +47,5 @@ need(notificationClient, 'return "/trophy-cabinet"', "In-app winning-card alerts
 need(nativePush, 'return "/trophy-cabinet"', "Android winning-card pushes must open the Trophy Cabinet.");
 need(webPush, 'return "/trophy-cabinet"', "Web winning-card pushes must open the Trophy Cabinet.");
 
-console.log("FREE Common Cup verified: 1st rarity odds frozen on settlement, 2nd/3rd Common, atomic one-card claims.");
+console.log("FREE Common Cup verified: 1st rarity odds frozen on settlement, 2nd/3rd Rare, atomic one-card claims.");
+
