@@ -193,6 +193,7 @@ async function main() {
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS admin_status_override text`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS admin_status_override_at timestamptz`);
     await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS admin_status_override_by varchar(255)`);
+    await client.query(`ALTER TABLE IF EXISTS app.competitions ADD COLUMN IF NOT EXISTS auto_opened_after_settlement boolean NOT NULL DEFAULT false`);
 
     let created = 0;
     let updated = 0;
@@ -225,8 +226,8 @@ async function main() {
         const scheduleNote = `${title(rarity.tier)} Prize Vault ladder. Entries lock at the first Premier League kickoff. Scores freeze at 23:59 CAT on the day after the last eligible Premier League fixture in this gameweek. A postponed fixture moved to or beyond the start of the next gameweek is excluded. FA Cup matches do not count. ${dateSource}`;
 
         const existing = await client.query(
-          `select c.id, c.status::text as status,
-             c.admin_status_override,
+          `select c.id, c.status::text as status, c.start_date as existing_start_date,
+             c.admin_status_override, c.auto_opened_after_settlement,
              (select count(*)::int from app.competition_entries ce where ce.competition_id = c.id) as entry_count
            from app.competitions c
            where c.created_by_user_id is null
@@ -247,11 +248,20 @@ async function main() {
           const row = existing.rows[0];
           const currentStatus = String(row.status || "").toLowerCase();
           const manualOverride = String(row.admin_status_override || "").toLowerCase();
+          // An early opening caused by the preceding GW's verified settlement
+          // is durable across the calendar sync. Real kickoff still controls
+          // lineup locking and scoring; after kickoff normal status wins.
+          const earlyOpen = Boolean(row.auto_opened_after_settlement)
+            && now.getTime() < window.first.getTime();
           const nextStatus = ["completed", "cancelled"].includes(currentStatus)
             ? currentStatus
             : ["open", "upcoming", "closed", "active"].includes(manualOverride)
               ? manualOverride
-              : status;
+              : earlyOpen ? "open" : status;
+          const earlyStart = new Date(String(row.existing_start_date || ""));
+          const syncedStart = earlyOpen && Number.isFinite(earlyStart.getTime())
+            ? new Date(Math.min(earlyStart.getTime(), window.start.getTime()))
+            : window.start;
           preservedEntries += Number(row.entry_count || 0);
           await client.query(
             `update app.competitions
@@ -278,7 +288,7 @@ async function main() {
               name,
               rarity.fee,
               nextStatus,
-              window.start,
+              syncedStart,
               window.settlement,
               rarity.prizeCardRarity,
               scheduleNote,
