@@ -1,3 +1,4 @@
+import {communityGif, communityReaction, type CommunityReactionCount} from "../../shared/community-social.js";
 import {extractCommunityMentions} from "../../shared/community-mentions.js";
 // COMMUNITY_ROLLING_RETENTION_V1: per-message expiry, not a room-wide reset.
 import type { Express, Response } from "express";
@@ -17,6 +18,8 @@ type ChatMessage = {
   teamName: string;
   avatarUrl: string | null;
   message: string;
+  gifId: string | null;
+  reactions: CommunityReactionCount[];
   replyToId: number | null;
   replyTo: null | { id: number; teamName: string; message: string; deleted: boolean; createdAt?: string | null };
   mentions: string[];
@@ -105,6 +108,8 @@ function toMessage(row: any, currentUserId: string, admin = false): ChatMessage 
     teamName: String(row?.teamName ?? row?.team_name ?? "Arena Manager"),
     avatarUrl: row?.avatarUrl ?? row?.avatar_url ?? null,
     message: rawMessage,
+    gifId: deletedAt ? null : communityGif(row?.gifId)?.id || null,
+    reactions: deletedAt ? [] : (Array.isArray(row?.reactions) ? row.reactions : []),
     replyToId: replyId,
     replyTo: replyId
       ? {
@@ -138,11 +143,18 @@ async function ensureSchema() {
       `);
       await db.execute(sql`
         ALTER TABLE app.community_chat_messages
+          ADD COLUMN IF NOT EXISTS gif_id text,
           ADD COLUMN IF NOT EXISTS reply_to_id bigint REFERENCES app.community_chat_messages(id) ON DELETE SET NULL,
           ADD COLUMN IF NOT EXISTS edited_at timestamptz,
           ADD COLUMN IF NOT EXISTS deleted_at timestamptz,
           ADD COLUMN IF NOT EXISTS deleted_by varchar(255)
       `);
+      await db.execute(sql`CREATE TABLE IF NOT EXISTS app.community_chat_reactions (
+        message_id bigint NOT NULL REFERENCES app.community_chat_messages(id) ON DELETE CASCADE,
+        user_id varchar(255) NOT NULL REFERENCES app.users(id) ON DELETE CASCADE,
+        emoji text NOT NULL,
+        PRIMARY KEY(message_id,user_id,emoji)
+      )`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS community_chat_messages_created_at_idx ON app.community_chat_messages (created_at DESC, id DESC)`);
       await db.execute(sql`CREATE INDEX IF NOT EXISTS community_chat_messages_reply_idx ON app.community_chat_messages (reply_to_id) WHERE reply_to_id IS NOT NULL`);
     })().catch((error) => {
@@ -178,9 +190,13 @@ function enforceWriteRate(userId: string, minimumMs = 1_200) {
   return true;
 }
 
-function messageSelect(where: any) {
+function messageSelect(where: any, currentUserId = "") {
   return sql`
-    SELECT m.id, m.user_id AS "userId", m.message, m.reply_to_id AS "replyToId",
+    SELECT m.id, m.user_id AS "userId", m.message, m.gif_id AS "gifId",
+      coalesce((SELECT jsonb_agg(jsonb_build_object('emoji',r.emoji,'count',r.count,'mine',r.mine) ORDER BY r.emoji)
+        FROM (SELECT emoji,count(*)::int AS count,bool_or(user_id=${currentUserId}) AS mine
+          FROM app.community_chat_reactions WHERE message_id=m.id GROUP BY emoji) r),'[]'::jsonb) AS reactions,
+      m.reply_to_id AS "replyToId",
       m.edited_at AS "editedAt", m.deleted_at AS "deletedAt", m.created_at AS "createdAt",
       COALESCE(NULLIF(btrim(u.manager_team_name), ''), NULLIF(btrim(u.name), ''), split_part(COALESCE(u.email, ''), '@', 1), 'Arena Manager') AS "teamName",
       u.avatar_url AS "avatarUrl",
@@ -195,12 +211,12 @@ function messageSelect(where: any) {
 }
 
 async function loadMessage(id: number, currentUserId: string, admin = false) {
-  const row = rowsOf(await db.execute(messageSelect(sql`WHERE m.id = ${id} LIMIT 1`)))[0];
+  const row = rowsOf(await db.execute(messageSelect(sql`WHERE m.id = ${id} LIMIT 1`, currentUserId)))[0];
   return row ? toMessage(row, currentUserId, admin) : null;
 }
 
 function broadcast(message: ChatMessage) {
-  const publicMessage = { ...message, isOwn: false, canEdit: false, canDelete: false };
+  const publicMessage = { ...message, reactions: undefined, isOwn: false, canEdit: false, canDelete: false };
   const payload = `event: community-message\ndata: ${JSON.stringify(publicMessage)}\n\n`;
   for (const client of clients) {
     try { client.write(payload); } catch { clients.delete(client); }
@@ -295,7 +311,7 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
       const limit = Math.max(10, Math.min(100, Number(req.query?.limit || 60) || 60));
       const before = Math.max(0, Number(req.query?.before || 0) || 0);
       const where = before > 0 ? sql`WHERE m.id < ${before}` : sql``;
-      const result = await db.execute(sql`${messageSelect(where)} ORDER BY m.id DESC LIMIT ${limit + 1}`);
+      const result = await db.execute(sql`${messageSelect(where, userId)} ORDER BY m.id DESC LIMIT ${limit + 1}`);
       const rows = rowsOf(result);
       const hasMore = rows.length > limit;
       const messages = rows.slice(0, limit).map((row) => toMessage(row, userId)).reverse();
@@ -337,7 +353,9 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
       await ensureSchema();
       const userId = await ensureUser(req);
       if (!enforceWriteRate(userId)) return res.status(429).json({ message: "Please wait before sending another message" });
-      const message = cleanMessage(req.body?.message);
+      const gif = communityGif(req.body?.gifId);
+      if (req.body?.gifId && !gif) return res.status(400).json({message:"Choose a GIF from the Community picker"});
+      const message = cleanMessage(req.body?.message) || (gif ? gif.label : "");
       const replyToId = Math.max(0, Number(req.body?.replyToId || 0) || 0) || null;
       if (!message) return res.status(400).json({ message: "Message cannot be empty" });
       if (message.length > 280) return res.status(400).json({ message: "Message must be 280 characters or fewer" });
@@ -347,8 +365,8 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
         if (!parent) return res.status(400).json({ message: "The replied-to message no longer exists" });
       }
       const inserted = rowsOf(await db.execute(sql`
-        INSERT INTO app.community_chat_messages (user_id, message, reply_to_id)
-        VALUES (${userId}, ${message}, ${replyToId})
+        INSERT INTO app.community_chat_messages (user_id, message, reply_to_id, gif_id)
+        VALUES (${userId}, ${message}, ${replyToId}, ${gif?.id || null})
         RETURNING id
       `))[0];
       const chatMessage = await loadMessage(Number(inserted?.id || 0), userId);
@@ -362,6 +380,35 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
     } catch (error) {
       console.error("Community Live send failed:", error);
       return res.status(500).json({ message: "Failed to send community message" });
+    }
+  });
+
+  // Desired-state writes are idempotent, so network retries cannot double-react.
+  app.put("/community-live/messages/:id/reactions", requireAuth, async (req: any, res) => {
+    try {
+      if (!sameOrigin(req)) return res.status(403).json({message:"Request origin is not allowed"});
+      const id = Number(req.params.id), userId = String(req.authUserId || "");
+      const emoji = req.body?.emoji, active = req.body?.active;
+      if (!Number.isSafeInteger(id) || id <= 0 || !communityReaction(emoji) || typeof active !== "boolean") return res.status(400).json({message:"Valid message and reaction required"});
+      await ensureSchema();
+      if (!enforceWriteRate(userId, 350)) return res.status(429).json({message:"Please pause before reacting again"});
+      const found = await db.transaction(async tx => {
+        const message = rowsOf(await tx.execute(sql`SELECT id FROM app.community_chat_messages
+          WHERE id=${id} AND deleted_at IS NULL AND created_at > now()-interval '24 hours' FOR UPDATE`))[0];
+        if (!message) return false;
+        if (active) await tx.execute(sql`INSERT INTO app.community_chat_reactions(message_id,user_id,emoji)
+          VALUES(${id},${userId},${emoji}) ON CONFLICT DO NOTHING`);
+        else await tx.execute(sql`DELETE FROM app.community_chat_reactions WHERE message_id=${id} AND user_id=${userId} AND emoji=${emoji}`);
+        return true;
+      });
+      if (!found) return res.status(404).json({message:"This message has expired or was removed"});
+      // Send no viewer-specific reaction state to other members.
+      for (const client of clients) { try { client.write(`event: community-reaction\ndata: ${JSON.stringify({messageId:id})}\n\n`); } catch { clients.delete(client); } }
+      res.setHeader("Cache-Control","private, no-store");
+      return res.json({message:await loadMessage(id,userId)});
+    } catch (error) {
+      console.error("Community reaction failed:",error);
+      return res.status(500).json({message:"Could not update reaction"});
     }
   });
 
@@ -466,3 +513,4 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
     }
   });
 }
+
