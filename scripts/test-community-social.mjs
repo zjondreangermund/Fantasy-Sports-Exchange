@@ -41,7 +41,7 @@ try {
   await pg.exec(`INSERT INTO app.community_chat_messages(user_id,message,created_at) VALUES('a','expired',now()-interval '25 hours')`);
   const expired=(await pg.query("SELECT id FROM app.community_chat_messages WHERE message='expired'")).rows[0].id;
   await pause();assert.equal((await call(`/community-live/messages/${expired}/reactions`,'a','PUT',{emoji:'🔥',active:true})).status,404);
-  await pause();assert.equal((await call('/community-live/messages','a','POST',{gifId:'https://evil.test/payload.gif'})).status,400);
+  await pause();assert.equal((await call('/community-live/messages','admin','POST',{gifId:'https://evil.test/payload.gif'})).status,400);
   await new Promise(resolve=>setTimeout(resolve,1250));response=await call('/community-live/messages','a','POST',{gifId:'lol'});assert.equal(response.status,201);assert.equal((await response.json()).message.gifId,'lol','GIF-only messages supported');
   await new Promise(resolve=>setTimeout(resolve,1250));await call(`/community-live/messages/${message.id}`,'a','DELETE');
   await pause();assert.equal((await call(url,'b','PUT',{emoji:'🔥',active:true})).status,404);
