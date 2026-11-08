@@ -27,7 +27,7 @@ function file(value: unknown): string {
     const url = new URL(value, 'https://playfantasyarena.com');
     if (!['http:', 'https:'].includes(url.protocol)) return '';
     // Retain code locations only, never user/account routes or URL parameters.
-    if (!/\.(?:js|mjs|cjs|tsx?|jsx)$/i.test(url.pathname)) return '';
+    if (!/\.(?:js|mjs|cjs|tsx?|jsx|css)$/i.test(url.pathname)) return '';
     return text(url.pathname, 240);
   } catch { return ''; }
 }
