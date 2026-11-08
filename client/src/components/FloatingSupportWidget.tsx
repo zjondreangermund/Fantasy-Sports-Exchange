@@ -234,7 +234,7 @@ export default function FloatingSupportWidget() {
     if(!currentUserId)return;
     const timer=window.setInterval(()=>{
       queryClient.setQueryData<ChatMessage[]>(chatQueryKey,current=>{
-        const kept=mergeCommunityMessages(current);return kept.length===current?.length?current:kept;
+        return mergeCommunityMessages(current);
       });
     },30000);
     return ()=>window.clearInterval(timer);
