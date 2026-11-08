@@ -738,14 +738,20 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
              and cl.ref_id=c.id::text and (cl.expires_at is null or cl.expires_at>now())) as "activeCardLocks"
         from app.competitions c where c.game_week=${gameWeek} order by c.id
       `));
-      const tournaments = records.map((row: any) => ({
-        ...row,
-        recoveryStatus: row.status === "completed"
-          ? "Completed — preserve existing payouts and prizes; review mismatches before changes"
-          : row.status === "cancelled" ? "Cancelled — do not resettle"
-          : Number(row.unverifiedEntries || 0) > 0 ? "Scoring incomplete — refresh provider before settling"
-          : "Check final fixture coverage before normal settlement",
-      }));
+      const tournaments = records.map((row: any) => {
+        const cutoff = Date.parse(String(row.endDate || ""));
+        const settlementCutoffPassed = Number.isFinite(cutoff) && Date.now() >= cutoff;
+        return {
+          ...row,
+          settlementCutoffPassed,
+          recoveryStatus: row.status === "completed"
+            ? "Completed — preserve existing payouts and prizes; review mismatches before changes"
+            : row.status === "cancelled" ? "Cancelled — do not resettle"
+            : !settlementCutoffPassed ? "Blocked: settlement cutoff has not passed; do not settle before the scheduled final freeze"
+            : Number(row.unverifiedEntries || 0) > 0 ? "Blocked: one or more entries lack a verified final scoring snapshot; refresh API-Football"
+            : "Settlement cutoff passed; confirm final fixture coverage and use normal settlement",
+        };
+      });
       return res.json({ gameWeek, readOnly: true, tournaments,
         notice: "This audit does not update scoring, unlock cards, reopen completed cups or reissue any awards." });
     } catch (error) {
