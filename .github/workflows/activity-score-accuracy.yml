@@ -14,6 +14,9 @@ on:
       - 'client/src/components/admin/AdminActivityExplorer.tsx'
       - 'client/src/pages/admin.tsx'
       - 'scripts/test-admin-activity.mjs'
+      - 'shared/client-error.ts'
+      - 'client/src/components/InteractionActivityTracker.tsx'
+      - 'scripts/test-client-error.mjs'
       - 'scripts/verify-activity-score-accuracy.mjs'
       - '.github/workflows/activity-score-accuracy.yml'
   push:
@@ -35,7 +38,10 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      - name: Verify bounded and sanitized browser error diagnostics
+        run: node scripts/test-client-error.mjs
       - name: Confirm admin timeline and page-view semantics with a real Postgres-compatible test
         run: npm run test:activity
       - name: Confirm live scoring and visit metric invariants
         run: node scripts/verify-activity-score-accuracy.mjs
+

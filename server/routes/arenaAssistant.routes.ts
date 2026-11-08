@@ -1,3 +1,4 @@
+import {sanitizeClientError} from '../../shared/client-error.js';
 import {assistantAccess} from '../services/assistantAccess.js';
 import {registerAssistantSiteTaskRoutes} from './assistantSiteTasks.routes.js';
 import {ASSISTANT_ACTION_SCHEMA,previewAssistantAction,confirmAssistantAction} from '../services/assistantActions.js';
@@ -70,11 +71,11 @@ export function registerArenaAssistantRoutes(app:Express,deps:{requireAuth:any;i
       if(!withinLimit(`interaction:${actor}`,30))return res.status(429).json({message:'Activity event limit reached.'});
       const sessionId=String(req.body?.sessionId||'');
       if(!safeUuid(sessionId)||!Array.isArray(req.body?.events)||req.body.events.length>20)return res.status(400).json({message:'Invalid activity batch.'});
-      const events=req.body.events.map((event:any)=>({kind:event.kind,path:safeActivityPath(event.path),target:cleanActivityText(event.target,80)}));
+      const events=req.body.events.map((event:any)=>({kind:event.kind,path:safeActivityPath(event.path),target:cleanActivityText(event.target,80),error:event.kind==='error'?sanitizeClientError(event.error):null}));
       if(events.some((e:any)=>!e.path||!['interaction','error'].includes(e.kind)))return res.status(400).json({message:'Invalid activity event.'});
       if(events.length)await pool.query(`INSERT INTO app.audit_logs(user_id,action,meta)
-        SELECT $1,'client.'||kind,jsonb_build_object('path',path,'target',target,'sessionId',$2::text,'reportedBy','browser')
-        FROM jsonb_to_recordset($3::jsonb) AS e(kind text,path text,target text)`,[actor,sessionId,JSON.stringify(events)]);
+        SELECT $1,'client.'||kind,jsonb_build_object('path',path,'target',target,'sessionId',$2::text,'reportedBy','browser') || CASE WHEN error IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('error',error) END
+        FROM jsonb_to_recordset($3::jsonb) AS e(kind text,path text,target text,error jsonb)`,[actor,sessionId,JSON.stringify(events)]);
       return res.status(202).json({ok:true});
     }catch{return res.status(503).json({message:'Activity tracking is unavailable.'});}
   });
@@ -123,3 +124,4 @@ export function registerArenaAssistantRoutes(app:Express,deps:{requireAuth:any;i
     }
   });
 }
+
