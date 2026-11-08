@@ -312,6 +312,7 @@ export default function AdminTournamentManager() {
             {bulkSettlement.results?.filter((item: any) => item.result === "blocked").map((item: any) => <div key={item.id} className="border-t border-red-200/15 py-2">
               <p className="font-semibold text-white">{item.name} (#{item.id}) {item.code ? `• ${item.code}` : ""}</p>
               <p className="mt-1 text-red-100">{item.message}</p>
+              {item.cutoffAt ? <p className="mt-1 text-white/75">Settlement cutoff: {settlementLabel(item.cutoffAt)}</p> : null}
               {item.unresolvedCardIds?.length ? <p className="mt-1 text-white/70">Unverified card IDs: {item.unresolvedCardIds.join(", ")}</p> : null}
             </div>)}
           </div> : null}
