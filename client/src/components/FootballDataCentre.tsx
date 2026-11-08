@@ -1,3 +1,4 @@
+import { fixtureMatchesTab, fixtureClock } from "../../../shared/fixture-display";
 import {fixturePeriodScores} from "../lib/fixture-period-scores";
 import FootballTeamGroups from "./FootballTeamGroups";
 import { normalizeFootballData, uniqueFootballRows, footballPlayerKey, dedupeAvailability, groupAvailabilityByTeam } from "../../../shared/football-data";
@@ -168,19 +169,21 @@ export default function FootballDataCentre() {
   });
 
   const fixtureUrl = selectedRound
-    ? `/api/football/fixtures/${leagueKey}?round=${encodeURIComponent(selectedRound)}&limit=40`
+    ? `/api/football/fixtures/${leagueKey}?status=${fixtureStatus}&round=${encodeURIComponent(selectedRound)}&limit=40`
     : `/api/football/fixtures/${leagueKey}?status=${fixtureStatus}&limit=20`;
   const fixtures = useQuery<any>({
     queryKey: ["api-football-fixtures", leagueKey, fixtureStatus, selectedRound],
     queryFn: () => getJson(fixtureUrl),
-    refetchInterval: fixtureStatus === "live" && !selectedRound ? 30_000 : false,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 
   const match = useQuery<any>({
     queryKey: ["api-football-match", leagueKey, selectedFixtureId],
     queryFn: () => getJson(`/api/football/match/${leagueKey}/${selectedFixtureId}`),
     enabled: Boolean(selectedFixtureId),
-    refetchInterval: fixtureStatus === "live" && selectedFixtureId ? 30_000 : false,
+    staleTime: 15_000,
+    refetchInterval: selectedFixtureId ? 30_000 : false,
   });
 
   const standings = useQuery<any>({
@@ -256,6 +259,7 @@ export default function FootballDataCentre() {
   const rawFixtureRows = Array.isArray(fixtures.data?.fixtures) ? fixtures.data.fixtures : [];
   const fixtureFilterQuery = normalizeSearchText(fixtureFilter);
   const fixtureRows = rawFixtureRows.filter((fixture: any) => {
+    if (!fixtureMatchesTab(fixture, fixtureStatus)) return false;
     if (!fixtureFilterQuery) return true;
     return normalizeSearchText([
       fixture?.homeTeam?.name,
@@ -354,7 +358,7 @@ export default function FootballDataCentre() {
             <div className="space-y-2">
               {fixtures.isLoading ? [1,2,3,4].map((item) => <Skeleton key={item} className="h-24 w-full" />) : fixtureRows.length ? fixtureRows.map((fixture: any) => (
                 <button key={fixture.id} type="button" onClick={() => setSelectedFixtureId(Number(fixture.id))} className={`w-full rounded-xl border p-4 text-left transition ${Number(fixture.id) === selectedFixtureId ? "border-violet-400 bg-violet-500/10" : "border-white/10 bg-black/20 hover:bg-white/5"}`}>
-                  <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{fixture.round || selectedCompetition.name}</span><Badge variant="outline">{fixture.elapsed > 0 ? `${fixture.elapsed}'` : fixture.status}</Badge></div>
+                  <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground"><span>{fixture.round || selectedCompetition.name}</span><Badge variant="outline">{fixtureClock(fixture)}</Badge></div>
                   <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 font-bold"><span className="truncate">{fixture.homeTeam?.name}</span><span className="rounded bg-black/30 px-2 py-1 text-center">{fixture.homeTeam?.score ?? "-"} : {fixture.awayTeam?.score ?? "-"}</span><span className="truncate text-right">{fixture.awayTeam?.name}</span></div>
                   <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground"><Clock className="h-3 w-3" />{formatDate(fixture.kickoffTime)}</div>
                 </button>

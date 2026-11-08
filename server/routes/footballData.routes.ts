@@ -1,3 +1,4 @@
+import { fixtureMatchesTab, newerFixture } from "../../shared/fixture-display.js";
 import {resolveFixtureAvailability} from "../../shared/fixture-availability.js";
 import { normalizeFootballData } from "../../shared/football-data.js";
 import type { Express } from "express";
@@ -265,6 +266,7 @@ function normalizeSavedFixture(row: any) {
     status: String(row?.status || base.status || "NS"),
     statusLong: String(row?.statusLong || base.statusLong || ""),
     elapsed: Number(row?.elapsed ?? base.elapsed ?? 0),
+    updatedAt: row?.updatedAt || null,
     homeTeam: {
       ...base.homeTeam,
       id: Number(row?.homeTeamId || base.homeTeam?.id || 0),
@@ -288,7 +290,7 @@ async function savedPremierLeagueMatchdayFixtures(season: number) {
   try {
     const rows = rowsOf(await db.execute(sql`
       select f.api_fixture_id as "apiFixtureId", f.raw, f.season, f.round,
-             f.kickoff_at as "kickoffTime", f.timezone,
+             f.kickoff_at as "kickoffTime", f.timezone, f.updated_at as "updatedAt",
              coalesce(f.status_short,'NS') as status, f.status_long as "statusLong", f.elapsed,
              f.home_team_id as "homeTeamId", f.away_team_id as "awayTeamId",
              f.home_score as "homeScore", f.away_score as "awayScore",
@@ -309,7 +311,9 @@ async function savedPremierLeagueMatchdayFixtures(season: number) {
 }
 
 function mergeFplLiveFixture(game: any, saved: any, season: number) {
-  const minutes = Number(game?.minutes || saved?.elapsed || 0);
+  // API-Football is authoritative when available, including its final status.
+  if (saved) return saved;
+  const minutes = Number(game?.minutes || 0);
   const apiFixtureId = Number(saved?.apiFixtureId || saved?.id || 0) || null;
   const fplFixtureId = Number(game?.id || 0);
   return {
@@ -357,6 +361,12 @@ async function resolvePremierLeagueLiveFixtures(providerFixtures: any[], season:
     source: "api-football",
     intelligenceAvailable: true,
   }));
+  // Background sync is fresher than the quota-protected public provider cache.
+  for (const saved of savedFixtures) {
+    const index = merged.findIndex((fixture: any) => Number(fixture.id) === Number(saved.id));
+    if (index >= 0) merged[index] = newerFixture(merged[index], saved);
+    else merged.push(saved);
+  }
   let usedFallback = false;
 
   for (const game of Array.isArray(fplLiveGames) ? fplLiveGames : []) {
@@ -382,7 +392,7 @@ async function resolvePremierLeagueLiveFixtures(providerFixtures: any[], season:
 
   merged.sort((left: any, right: any) => new Date(left?.kickoffTime || 0).getTime() - new Date(right?.kickoffTime || 0).getTime());
   return {
-    fixtures: merged,
+    fixtures: merged.filter((fixture: any) => fixtureMatchesTab(fixture, "live")),
     usedFallback,
     savedFixtures,
     fplAvailable: !fplLiveResult.error,
@@ -762,7 +772,7 @@ export function registerFootballDataRoutes(app: Express) {
         console.warn("[football-data] Premier League live provider failed; checking saved/FPL matches:", error?.message || error);
       }
 
-      let fixtures = result ? responseRows(result.payload).map(normalizeFixture) : [];
+      let fixtures = result ? responseRows(result.payload).map((row: any) => ({ ...normalizeFixture(row), updatedAt: result.updatedAt })) : [];
       if (status === "live" && !round) {
         fixtures = fixtures.filter((fixture: any) => Number(fixture.leagueId || 0) === league.config.id);
       }
@@ -778,6 +788,15 @@ export function registerFootballDataRoutes(app: Express) {
           throw providerFailure;
         }
       }
+
+      if (league.config.id === 39 && (status !== "live" || round)) {
+        const saved = await savedPremierLeagueMatchdayFixtures(season);
+        fixtures = fixtures.map((fixture: any) => newerFixture(fixture, saved.find((row: any) => Number(row.id) === Number(fixture.id))));
+        for (const row of saved) {
+          if ((!round || row.round === round) && !fixtures.some((fixture: any) => Number(fixture.id) === Number(row.id))) fixtures.push(row);
+        }
+      }
+      fixtures = fixtures.filter((fixture: any) => fixtureMatchesTab(fixture, status));
 
       // FPL can report a live match before the API-Football /live=all feed
       // lists it. That is a normal cross-provider timing difference, NOT proof
@@ -853,6 +872,9 @@ export function registerFootballDataRoutes(app: Express) {
         if (fallback) return res.json(fallback);
         return res.status(404).json({ message: "Fixture not found" });
       }
+      const normalizedFixture = { ...normalizeFixture(fixtureRow), updatedAt: base.updatedAt };
+      const savedMatchday = league.config.id === 39 ? await savedPremierLeagueMatchdayFixtures(season) : [];
+      const displayFixture = newerFixture(normalizedFixture, savedMatchday.find((row: any) => Number(row.id) === fixtureId));
       const ttl = fixtureTtl(fixtureRow);
       const coverage = await coverageFor(league.config.id, season);
       const fixtureCoverage = coverage.coverage?.fixtures || {};
@@ -881,7 +903,7 @@ export function registerFootballDataRoutes(app: Express) {
         league: league.config,
         season,
         coverage: coverage.coverage,
-        fixture: normalizeFixture(fixtureRow),
+        fixture: displayFixture,
         rawFixture: fixtureRow,
         events: embeddedEvents || (eventsResult ? responseRows(eventsResult.payload) : []),
         lineups: embeddedLineups || (lineupsResult ? responseRows(lineupsResult.payload) : []),
