@@ -186,7 +186,8 @@ export default function NativeTournamentLeaderboard({ tournament, onClose }: Pro
   });
 
   const teamQuery = useQuery<TournamentTeamDetails>({
-    queryKey: ["/api/competitions/native-entry-score", competitionId, selectedEntry?.entryId || 0],
+    queryKey: ["/api/competitions/entry-score", competitionId, selectedEntry?.entryId || 0],
+    staleTime: 10_000, // Reuse a recent lineup when switching between Squad and standings.
     queryFn: async () => {
       const response = await fetch(
         `/api/competitions/${competitionId}/entries/${selectedEntry?.entryId}`,
@@ -371,3 +372,4 @@ function ScoreCell({ label, value }: { label: string; value: unknown }) {
 function LeaderboardNotice({ text, error = false }: { text: string; error?: boolean }) {
   return <div className={`rounded-xl border p-5 text-center text-xs ${error ? "border-rose-300/20 bg-rose-500/[.08] text-rose-100" : "border-white/[.07] bg-white/[.025] text-white/45"}`}><UsersRound className="mx-auto mb-2 h-4 w-4 opacity-60" />{text}</div>;
 }
+

@@ -483,6 +483,7 @@ function TournamentLeaderboardPreview({ comp }: { comp: Tournament }) {
 
   const { data: team, isLoading: teamLoading, isError: teamError } = useQuery<TournamentTeamDetails>({
     queryKey: ["/api/competitions/entry-score", competitionId, selectedEntry?.entryId || 0],
+    staleTime: 10_000, // Reuse a recent lineup when switching between Squad and standings.
     queryFn: async () => {
       const response = await fetch(
         `/api/competitions/${competitionId}/entries/${selectedEntry?.entryId}`,
@@ -632,3 +633,4 @@ function ScoreCategory({ label, points }: { label: string; points: number }) {
   const value = Number(points || 0);
   return <div className="rounded-xl border border-white/10 bg-white/[.035] p-2"><div className="text-[9px] font-black uppercase tracking-[.12em] text-white/40">{label}</div><div className={`mt-1 text-sm font-black ${value < 0 ? "text-rose-300" : "text-emerald-200"}`}>{value > 0 ? "+" : ""}{scoreLabel(value)}</div></div>;
 }
+

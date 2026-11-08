@@ -22,7 +22,10 @@ requireText(routes, 'limit ${pageSize} offset ${offset}', "Tournament leaderboar
 requireText(routes, "totalPages: Math.max(1, Math.ceil(totalEntries / pageSize))", "Tournament leaderboard pagination totals are missing.");
 requireText(routes, 'app.get("/api/competitions/:id/entries/:entryId"', "The submitted-team scoring endpoint is missing.");
 requireText(routes, "snapshot.cardScores", "Submitted teams must use official per-card scoring snapshots.");
-requireText(routes, "loadApiFootballGameweekScoringContext(Number(entry.gameWeek || 0))", "Team scoring must load API-Football statistics for the tournament's actual gameweek.");
+requireText(routes, "loadEnteredTeamContext(Number(entry.gameWeek || 0))", "Team scoring must load the tournament's actual gameweek through the shared read.");
+requireText(routes, "coalesceConcurrentRead(async (gameWeek: number)", "Submitted-team provider reads must share only concurrent work.");
+requireText(routes, "loadApiFootballGameweekScoringContext(gameWeek)", "The shared read must pass the tournament gameweek to API-Football.");
+requireText(routes, "const { apiScoringContext, entryBootstrap } = await contextRead", "Submitted teams must await their shared provider read before resolving players.");
 requireText(routes, "resolveApiFootballGameweekPlayer", "Submitted-team scoring must resolve the exact API-Football player and fixture.");
 requireText(routes, 'identityProvider: "api-football"', "Submitted-team scoring must identify API-Football as the scoring provider.");
 requireText(routes, "saved?.breakdown || calculated?.breakdown", "Submitted teams must expose each player's exact scoring categories.");

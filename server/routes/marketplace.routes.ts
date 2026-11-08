@@ -1,3 +1,4 @@
+import { coalesceConcurrentRead } from "../services/concurrentRead.js";
 import {createTournamentPositionResolver} from "../services/tournamentPositions.js";
 import type { Express } from "express";
 import { db } from "../db.js";
@@ -16,6 +17,17 @@ import { loadDetailedScoringContext, resolveDetailedStatsForPlayer, loadApiFootb
 import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
 
 interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
+
+// Submitted teams in the same gameweek share in-flight provider/SQL reads.
+// No completed results, user entries or scores are cached here.
+const loadEnteredTeamContext = coalesceConcurrentRead(async (gameWeek: number) => {
+  const [apiScoringContext, entryBootstrap] = await Promise.all([
+    loadApiFootballGameweekScoringContext(gameWeek).catch(() => null),
+    fplApi.bootstrap().catch(() => null),
+  ]);
+  return { apiScoringContext, entryBootstrap };
+});
+
 
 const BUY_TX_TYPE = "marketplace_buy" as any;
 const SALE_TX_TYPE = "marketplace_sale" as any;
@@ -247,6 +259,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
       const lineupCardIds = Array.isArray(entry.lineupCardIds)
         ? entry.lineupCardIds.map(Number).filter((id: number) => Number.isInteger(id) && id > 0)
         : [];
+      const contextRead = loadEnteredTeamContext(Number(entry.gameWeek || 0));
       const cardsResult = await db.execute(sql`
         select
           pc.id as "cardId",
@@ -268,10 +281,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         join app.players p on p.id = pc.player_id
         order by ordered.ordinality asc
       `);
-      const [apiScoringContext, entryBootstrap] = await Promise.all([
-        loadApiFootballGameweekScoringContext(Number(entry.gameWeek || 0)).catch(() => null),
-        fplApi.bootstrap().catch(() => null),
-      ]);
+      const { apiScoringContext, entryBootstrap } = await contextRead;
       const positionFor = createTournamentPositionResolver(entryBootstrap);
       const targetEvent = entryBootstrap?.events?.find((event: any) => Number(event.id) === Number(entry.gameWeek));
       const awaitingGameweek = Boolean(targetEvent?.deadline_time && new Date(String(targetEvent.deadline_time)).getTime() > Date.now());
@@ -468,3 +478,4 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
   app.post("/api/marketplace/buy", requireAuth, async (req: any, res) => { const result = await processMarketplacePurchase(String(req.authUserId || ""), req.body?.cardId, req.body?.serialId, req.headers?.["x-idempotency-key"] || req.body?.idempotencyKey); if (!result.ok) return res.status(result.status).json({ message: result.message }); return res.json({ success: true, cardId: result.cardId, duplicate: result.duplicate }); });
   app.post("/api/marketplace/buy/:cardId", requireAuth, async (req: any, res) => { const result = await processMarketplacePurchase(String(req.authUserId || ""), req.params.cardId, req.body?.serialId, req.headers?.["x-idempotency-key"] || req.body?.idempotencyKey); if (!result.ok) return res.status(result.status).json({ message: result.message }); return res.json({ success: true, cardId: result.cardId, duplicate: result.duplicate }); });
 }
+
