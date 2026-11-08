@@ -9,6 +9,19 @@ export async function getAdminActivity(executor:any, query:any) {
   const like=(s:string)=>'%'+s.replace(/[\\%_]/g,'\\$&')+'%';
   const category=String(query.category||'all'),outcome=String(query.outcome||'all');
   const source=String(query.source||'all');
+  // ADMIN_ACTIVITY_OTHER_USERS_ONLY_V1: audit records are never deleted.
+  // Filter the viewer and every configured admin *before* pagination/KPIs,
+  // rather than hiding rows after pagination (which still causes empty pages).
+  const excludeAdmins=query.excludeAdmins===true;
+  const viewerId=String(query.viewerId||'').trim();
+  const adminIds=String(process.env.ADMIN_USER_IDS||'').split(',').map(v=>v.trim()).filter(Boolean);
+  const adminEmails=String(process.env.ADMIN_EMAILS||'lbcplaya@gmail.com').split(',').map(v=>v.trim().toLowerCase()).filter(Boolean);
+  const excludedActors=sql.join([
+    sql`"userId" is not null`,
+    ...(viewerId?[sql`"userId" <> ${viewerId}`]:[]),
+    ...adminIds.map(id=>sql`"userId" <> ${id}`),
+    ...adminEmails.map(email=>sql`lower(coalesce(email,'')) <> ${email}`),
+  ],sql` and `);
   const result=rows(await executor.execute(sql`
     with combined as (
       select concat('log-',a.id) as id,'audit'::text as source,a.user_id as "userId",
@@ -32,21 +45,30 @@ export async function getAdminActivity(executor:any, query:any) {
         case when ${transactionProblem} then 'error' when lower(coalesce(t.status::text,'')) in ('pending','processing') then 'pending' else 'recorded' end,null::text,null::text
       from app.transactions t left join app.users u on u.id=t.user_id where t.created_at >= ${start} and t.created_at <= ${end}
     ), scoped as (
-      select * from combined where (${userId}='' or "userId"=${userId}) and (${session}='' or session=${session})
+      select * from combined where (${!excludeAdmins} or (${excludedActors}))
+        and (${userId}='' or "userId"=${userId}) and (${session}='' or session=${session})
         and (${user}='' or "userName" ilike ${like(user)} or email ilike ${like(user)} or "userId" ilike ${like(user)})
         and (${q}='' or label ilike ${like(q)} or path ilike ${like(q)} or meta::text ilike ${like(q)} or id=${q})
     ), filtered as (select * from scoped where (${category}='all' or category=${category}) and (${outcome}='all' or outcome=${outcome}) and (${source}='all' or source=${source}))
     select (select coalesce(jsonb_agg(e),'[]'::jsonb) from (select * from filtered order by "createdAt" desc,id desc limit ${limit} offset ${(page-1)*limit}) e) as activity,
       (select count(*)::int from filtered) as total,count(*)::int as events,count(*) filter(where outcome='error')::int as errors,
-      count(*) filter(where category='page')::int as visits,count(distinct "userId")::int as users
+      count(distinct session) filter(where category='page')::int as visits,
+      count(*) filter(where category='page')::int as "pageViews",
+      count(distinct "userId")::int as users
     from scoped
   `))[0]||{};
   const recentUsers=rows(await executor.execute(sql`
     select p.user_id as "userId",coalesce(nullif(u.manager_team_name,''),nullif(u.name,''),u.email,p.user_id) as "userName",
       max(p.created_at) as "lastSeen",(array_agg(p.path order by p.created_at desc,p.id desc))[1] as path
     from app.page_activity p join app.users u on u.id=p.user_id
-    where p.created_at>now()-interval '10 minutes'
+    where p.created_at>now()-interval '10 minutes' and p.event='page_view'
+      and (${!excludeAdmins} or (
+        p.user_id is not null
+        and (${viewerId}='' or p.user_id <>${viewerId})
+        and ${sql.join(adminIds.map(id=>sql`p.user_id <> ${id}`).length?adminIds.map(id=>sql`p.user_id <> ${id}`):[sql`true`],sql` and `)}
+        and ${sql.join(adminEmails.map(email=>sql`lower(coalesce(u.email,'')) <> ${email}`).length?adminEmails.map(email=>sql`lower(coalesce(u.email,'')) <> ${email}`):[sql`true`],sql` and `)}
+      ))
     group by p.user_id,u.manager_team_name,u.name,u.email order by "lastSeen" desc limit 30
   `));
-  return {activity:(result.activity||[]).map((item:any)=>({...item,meta:cleanActivityMeta(item.meta)})),total:Number(result.total||0),page,limit,pages:Math.max(1,Math.ceil(Number(result.total||0)/limit)),recentUsers,summary:{events:result.events||0,errors:result.errors||0,visits:result.visits||0,users:result.users||0},from:start.toISOString(),to:end.toISOString()};
+  return {activity:(result.activity||[]).map((item:any)=>({...item,meta:cleanActivityMeta(item.meta)})),total:Number(result.total||0),page,limit,pages:Math.max(1,Math.ceil(Number(result.total||0)/limit)),recentUsers,summary:{events:result.events||0,errors:result.errors||0,visits:result.visits||0,pageViews:result.pageViews||0,users:result.users||0},from:start.toISOString(),to:end.toISOString()};
 }
