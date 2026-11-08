@@ -30,6 +30,7 @@ const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 const PREMIER_LEAGUE_KEYS = new Set(["premierleague", "englishpremierleague", "epl"]);
 let cardLockGuardPromise: Promise<void> | null = null;
 let prizeAwardSchemaPromise: Promise<void> | null = null;
+let nextGameweekSchemaPromise: Promise<void> | null = null;
 const COMMON_COLLECTION_CAP = 20;
 
 function rowsOf(result: any): any[] {
@@ -795,7 +796,11 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
   // Keep Premier League kickoff (fixture_window_start) and scoring cutoffs unchanged.
   const openNextGameweekIfComplete = async (gameWeek: number) => {
     if (gameWeek < 1 || gameWeek >= 38) return { status: "season_complete", opened: 0, gameWeek: gameWeek + 1 };
-    await db.execute(sql`alter table app.competitions add column if not exists auto_opened_after_settlement boolean not null default false`);
+    if (!nextGameweekSchemaPromise) {
+      nextGameweekSchemaPromise = db.execute(sql`alter table app.competitions add column if not exists auto_opened_after_settlement boolean not null default false`)
+        .then(() => {}).catch((error) => { nextGameweekSchemaPromise = null; throw error; });
+    }
+    await nextGameweekSchemaPromise;
     return db.transaction(async (tx) => {
       const official = rowsOf(await tx.execute(sql`
         select season from app.competitions
@@ -1240,7 +1245,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         group by c.id
         order by c.id
       `));
-      const results: Array<{ id: number; name: string; result: string; message: string; code?: string; unresolvedCardIds?: number[]; entryCount?: number }> = [];
+      const results: Array<{ id: number; name: string; result: string; message: string; code?: string; cutoffAt?: string; unresolvedCardIds?: number[]; entryCount?: number }> = [];
       for (const cup of cups) {
         const id = Number(cup.id);
         const name = String(cup.name || "Tournament");
@@ -1250,7 +1255,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         }
         const cutoff = Date.parse(String(cup.endDate || ""));
         if (!Number.isFinite(cutoff) || Date.now() < cutoff) {
-          results.push({ id, name, result: "blocked", message: "Gameweek settlement cutoff has not passed" });
+          results.push({ id, name, result: "blocked", message: "Gameweek settlement cutoff has not passed", code: "SETTLEMENT_CUTOFF_NOT_REACHED", cutoffAt: String(cup.endDate || "") });
           continue;
         }
         if (Number(cup.entryCount || 0) === 0) {
