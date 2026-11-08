@@ -60,7 +60,7 @@ for (const [name, source] of [["Collection", collection], ["Marketplace", market
     // The full collection response performs expensive live scoring + departure
     // reconciliation. A visible-only refresh within 60s and an immediate
     // refresh on app focus preserves current scores without repeated stalls.
-    includes(source, 'document.visibilityState === "hidden" ? false : 60_000', "Collection should refresh live scores within a minute when visible.");
+    includes(source, 'document.visibilityState === "hidden" ? false : 30_000', "Collection should refresh live scores every 30 seconds when visible.");
     includes(source, "refetchOnWindowFocus: true", "Collection should refresh scores when reopened.");
   } else {
     includes(source, "refetchInterval: 15_000", `${name} must refresh official Arena card scores promptly.`);

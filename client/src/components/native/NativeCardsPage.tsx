@@ -73,8 +73,8 @@ export default function NativeCardsPage() {
       if (!response.ok) return [];
       return response.json();
     },
-    staleTime: 30_000,
-    refetchInterval: () => document.visibilityState === "hidden" ? false : 90_000,
+    staleTime: 15_000,
+    refetchInterval: () => document.visibilityState === "hidden" ? false : 30_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });

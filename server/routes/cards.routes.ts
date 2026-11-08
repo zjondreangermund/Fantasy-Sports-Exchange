@@ -70,9 +70,24 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
   // snapshots are coalesced across requests for a short time. The same promise
   // also prevents several managers opening Squad at once from running the same
   // expensive fixture/statistics queries concurrently.
+  // CANONICAL_PLAYER_SCORE_SNAPSHOT_V1: calculate every footballer's current
+  // Arena score once per gameweek snapshot, not once per owner's card. Sharing
+  // both the FPL live payload and the detailed API stats prevents two accounts
+  // from temporarily seeing different scores for the same verified FPL ID.
+  const lastSuccessfulScoreSnapshot = new Map<number, {
+    scoreByElementId: Map<number, number>;
+    scoreUpdatedAt: string;
+    expiresAt: number;
+  }>();
   const scoringContextCache = new Map<number, {
     expiresAt: number;
-    promise: Promise<[any, any]>;
+    promise: Promise<{
+      detailedScoringContext: any;
+      gameweekScoringContext: any;
+      scoreByElementId: Map<number, number>;
+      scoreUpdatedAt: string;
+      liveAvailable: boolean;
+    }>;
   }>();
   const loadSharedScoringContexts = (bootstrap: any, gameweek: number) => {
     const now = Date.now();
@@ -81,8 +96,39 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
     const promise = Promise.all([
       loadDetailedScoringContext(bootstrap || {}, gameweek),
       loadApiFootballGameweekScoringContext(gameweek).catch(() => null),
-    ]) as Promise<[any, any]>;
-    scoringContextCache.clear(); // Never retain snapshots from previous GWs.
+      fplApi.getLiveGameweek(gameweek).catch(() => null),
+    ]).then(([detailedScoringContext, gameweekScoringContext, liveData]) => {
+      const fplIndex = buildFplPlayerIndex(bootstrap || {});
+      const scoreByElementId = new Map<number, number>();
+      for (const element of Array.isArray(liveData?.elements) ? liveData.elements : []) {
+        const elementId = Number(element?.id || 0);
+        const verifiedElement = fplIndex.byId.get(elementId);
+        if (!elementId || !verifiedElement) continue;
+        const canonical = fplIndex.canonical(verifiedElement);
+        const detailedStats = resolveDetailedStatsForPlayer(canonical, detailedScoringContext);
+        const combinedStats = mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(element), detailedStats);
+        scoreByElementId.set(elementId,
+          Number(calculatePlayerScore(combinedStats, String(canonical.position || 'MID'))?.total_score || 0));
+      }
+      const liveAvailable = Array.isArray(liveData?.elements);
+      const scoreUpdatedAt = new Date().toISOString();
+      if (liveAvailable) {
+        lastSuccessfulScoreSnapshot.clear();
+        lastSuccessfulScoreSnapshot.set(gameweek, {
+          scoreByElementId, scoreUpdatedAt, expiresAt: Date.now() + 15 * 60_000,
+        });
+      }
+      const lastGood = !liveAvailable ? lastSuccessfulScoreSnapshot.get(gameweek) : null;
+      return {
+        detailedScoringContext, gameweekScoringContext,
+        scoreByElementId: lastGood?.expiresAt && lastGood.expiresAt > Date.now()
+          ? lastGood.scoreByElementId : scoreByElementId,
+        scoreUpdatedAt: lastGood?.expiresAt && lastGood.expiresAt > Date.now()
+          ? lastGood.scoreUpdatedAt : scoreUpdatedAt,
+        liveAvailable,
+      };
+    });
+    scoringContextCache.clear(); // Never mix snapshots from different GWs.
     scoringContextCache.set(gameweek, { expiresAt: now + 20_000, promise });
     void promise.catch(() => {
       if (scoringContextCache.get(gameweek)?.promise === promise) scoringContextCache.delete(gameweek);
@@ -98,7 +144,6 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       // only AFTER that sweep, preserving newly minted replacement visibility.
       const providerDataPromise = Promise.all([
         fplApi.bootstrap().catch(() => null),
-        fplApi.getLiveGameweek().catch(() => null),
         loadApiFootballPlayerDirectory().catch(() => []),
       ]);
       // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1
@@ -111,13 +156,11 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       // Collection is otherwise read-only: starter cards are minted only after
       // the owner confirms their exact five onboarding player selections.
       let cards = await storage.getUserCards(userId);
-      const [bootstrap, liveData, apiFootballDirectory] = await providerDataPromise;
+      const [bootstrap, apiFootballDirectory] = await providerDataPromise;
       const fplIndex = buildFplPlayerIndex(bootstrap || {});
       const currentGameweek = Number((bootstrap as any)?.events?.find((event: any) => event?.is_current)?.id || await fplApi.getCurrentGameweek().catch(() => 0));
-      const [detailedScoringContext, gameweekScoringContext] = await loadSharedScoringContexts(bootstrap, currentGameweek);
-      const liveElements = Array.isArray((liveData as any)?.elements) ? (liveData as any).elements : [];
-      const liveByElementId = new Map<number, any>();
-      for (const liveElement of liveElements) liveByElementId.set(Number(liveElement.id), liveElement);
+      const {gameweekScoringContext,scoreByElementId,scoreUpdatedAt,liveAvailable} =
+        await loadSharedScoringContexts(bootstrap,currentGameweek);
 
       // PROVIDER_CONFIRMED_DEPARTURE_REPLACEMENT_V1
       // The collection can learn about a transfer-out directly from API-Football
@@ -174,7 +217,6 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         const outsidePremierLeague = Boolean(departedApiFootballPlayer)
           || ["departed", "superseded", "unlinked", "archived"].includes(storedStatus)
           || (storedLeague && !["premier league", "english premier league", "epl"].includes(storedLeague));
-        const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
         const identityVerified = !outsidePremierLeague && Boolean(apiFootballPlayer);
         const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
         const selectionProvider = apiFootballPlayer
@@ -182,17 +224,13 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
           : matchedElement
             ? "fpl-fallback"
             : null;
-        let currentGameweekPoints = 0;
+        const elementId = Number(matchedElement?.id || 0);
+        // Never recompute with owner-specific stored fields. Identical FPL
+        // player IDs always resolve to one score from the shared snapshot.
+        const currentGameweekPoints = Number(scoreByElementId.get(elementId) || 0);
         let last5Scores = Array.isArray(card.last5Scores) ? card.last5Scores.map((value: any) => Number(value || 0)).slice(0, 5) : [];
-        if (liveElement) {
-          const verifiedPlayer = { ...player, ...(canonical || {}) };
-          const detailedStats = resolveDetailedStatsForPlayer(verifiedPlayer, detailedScoringContext);
-          const combinedStats = mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats);
-          const verifiedPosition = String(canonical?.position || currentPosition || (detailedStats as any)?.api_position || "MID");
-          const calculatedScore = calculatePlayerScore(combinedStats, verifiedPosition);
-          currentGameweekPoints = Number(calculatedScore?.total_score || 0);
-          const latestLiveScore = currentGameweekPoints;
-          last5Scores = [latestLiveScore, ...last5Scores];
+        if (scoreByElementId.has(elementId)) {
+          last5Scores = [currentGameweekPoints, ...last5Scores];
         }
         last5Scores = last5Scores.map((value: any) => Number(value || 0)).slice(0, 5);
         while (last5Scores.length < 5) last5Scores.push(0);
@@ -250,7 +288,10 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
           },
         };
       });
-      return res.json({ cards: enrichedCards });
+      // Provenance is shared by every request in this snapshot, and signals
+      // when the FPL feed is temporarily unavailable rather than hiding stale
+      // or absent data behind an apparently fresh zero.
+      return res.json({ cards: enrichedCards, scoreGameweek: currentGameweek, scoreUpdatedAt, scoreLiveAvailable: liveAvailable });
     } catch (error: any) {
       console.error("Fetch my cards failed:", error);
       return res.status(500).json({ message: "Failed to fetch my cards" });

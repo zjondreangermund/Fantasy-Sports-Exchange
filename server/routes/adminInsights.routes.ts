@@ -69,7 +69,10 @@ export function registerAdminInsightsRoutes(app: Express, deps: { requireAuth: a
     try {
       res.setHeader('Cache-Control','private, no-store');
       await ensurePageActivitySchema();
-      return res.json(await getAdminActivity(db,req.query));
+      // Only other authenticated users appear in Admin Command Activity.
+      // Retain all underlying audit records for security investigations.
+      const viewerId=String(req.authUserId||req.user?.claims?.sub||req.user?.id||'');
+      return res.json(await getAdminActivity(db,{...req.query,excludeAdmins:true,viewerId}));
     } catch (error: any) {
       console.error("Failed to fetch admin activity:", error);
       return res.status(500).json({ message: error?.message || "Failed to fetch activity" });

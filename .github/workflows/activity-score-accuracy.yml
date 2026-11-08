@@ -1,0 +1,41 @@
+name: Activity and score accuracy
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server/services/adminActivity.ts'
+      - 'server/services/arenaAssistant.ts'
+      - 'server/routes/arenaAssistant.routes.ts'
+      - 'server/routes/admin.routes.ts'
+      - 'server/routes/adminInsights.routes.ts'
+      - 'server/routes/cards.routes.ts'
+      - 'server/services/playerCardEnrichment.ts'
+      - 'client/src/components/admin/AdminActivityExplorer.tsx'
+      - 'client/src/pages/admin.tsx'
+      - 'scripts/test-admin-activity.mjs'
+      - 'scripts/verify-activity-score-accuracy.mjs'
+      - '.github/workflows/activity-score-accuracy.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/services/adminActivity.ts'
+      - 'server/routes/cards.routes.ts'
+      - 'scripts/verify-activity-score-accuracy.mjs'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Confirm admin timeline and page-view semantics with a real Postgres-compatible test
+        run: npm run test:activity
+      - name: Confirm live scoring and visit metric invariants
+        run: node scripts/verify-activity-score-accuracy.mjs

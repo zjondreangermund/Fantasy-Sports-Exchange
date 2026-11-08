@@ -31,6 +31,13 @@ export function registerArenaAssistantRoutes(app:Express,deps:{requireAuth:any;i
     res.setHeader('Cache-Control','no-store');
     try{
       if(!sameOrigin(req))return res.status(403).json({message:'Invalid request origin.'});
+      // Ignore clearly automated browser-agent traffic. Human attribution
+      // remains an estimate: scripts can imitate browsers, and old records
+      // cannot be retroactively proven human.
+      const agent=String(req.headers['user-agent']||'').toLowerCase();
+      if(/(?:googlebot|bingbot|duckduckbot|crawler|spider|headless|lighthouse|curl\/|wget\/|python-requests|uptimerobot|facebookexternalhit|previewbot)/i.test(agent)){
+        return res.status(202).json({ok:true,ignored:'automated-agent'});
+      }
       if(!withinLimit(`page:${req.ip}`,90))return res.status(429).json({message:'Activity event limit reached.'});
       const path=safeActivityPath(req.body?.path),sessionId=String(req.body?.sessionId||'');
       if(!path||!safeUuid(sessionId))return res.status(400).json({message:'Invalid route or session.'});
@@ -38,7 +45,19 @@ export function registerArenaAssistantRoutes(app:Express,deps:{requireAuth:any;i
       if(!safeUuid(visitorId)){visitorId=randomUUID();res.cookie('arena_visitor',visitorId,{httpOnly:true,sameSite:'lax',secure:req.secure||process.env.NODE_ENV==='production',maxAge:90*86400000});}
       const userId=String(req.user?.claims?.sub||req.user?.id||'')||null;
       await ensurePageActivitySchema();
-      await pool.query('INSERT INTO app.page_activity(visitor_id,session_id,user_id,path,event) VALUES($1,$2,$3,$4,$5)',[visitorId,sessionId,userId,path,req.body?.event==='heartbeat'?'heartbeat':'page_view']);
+      const event=req.body?.event==='heartbeat'?'heartbeat':'page_view';
+      // PAGE_VIEW_REMOUNT_DEDUP_V1: a SPA remount/reload within 15s isn't
+      // another page visit. Preserve a login transition (anonymous -> user)
+      // as a separate authenticated page observation when it occurs.
+      await pool.query(`INSERT INTO app.page_activity(visitor_id,session_id,user_id,path,event)
+        SELECT $1::uuid,$2::uuid,$3::varchar,$4::text,$5::text
+        WHERE $5::text <> 'page_view' OR NOT EXISTS(
+          SELECT 1 FROM app.page_activity
+          WHERE visitor_id=$1::uuid AND session_id=$2::uuid
+            AND user_id IS NOT DISTINCT FROM $3::varchar
+            AND path=$4::text AND event='page_view'
+            AND created_at>now()-interval '15 seconds'
+        )`,[visitorId,sessionId,userId,path,event]);
       return res.status(202).json({ok:true});
     }catch(error){console.warn('Page activity event failed',error);return res.status(503).json({message:'Activity tracking is unavailable.'});}
   });
