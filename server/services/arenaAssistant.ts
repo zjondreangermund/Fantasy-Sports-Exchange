@@ -94,26 +94,37 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
       const report=await investigateEntry(q,target,context,connections);answers.push(report.answer);sections.push(...report.sections);followUps.push(...report.followUps);
     }
     if(topics.includes('visitors')){
-      const siteTraffic=(await q(`SELECT count(*) FILTER(WHERE event='page_view')::int AS "sitePageViews",count(DISTINCT visitor_id) FILTER(WHERE event='page_view')::int AS "siteBrowserVisitors" FROM app.page_activity WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz`,[period.from,period.to]))[0]||{};
-      add('Site-wide traffic',[siteTraffic],'All recorded routes in the selected period. Browser cookies approximate visitors, not unique people. Heartbeats are excluded from views.');
-      add('Most viewed pages',await q(`SELECT path,count(*)::int AS "pageViews",count(DISTINCT visitor_id)::int AS "browserVisitors" FROM app.page_activity WHERE event='page_view' AND created_at >= $1::timestamptz AND created_at < $2::timestamptz GROUP BY path ORDER BY count(*) DESC,path LIMIT 100`,[period.from,period.to]));
-      answers.push(`Site-wide: ${siteTraffic.sitePageViews||0} recorded page views from ${siteTraffic.siteBrowserVisitors||0} distinct browser visitors in this period.`);
+      // VISIT_METRICS_NOT_PAGE_CLICKS_V1: visits are distinct browser
+      // sessions, not a count of pages or background requests. Ignore any
+      // browser associated with a configured administrator.
+      const adminVisitorIds=String(process.env.ADMIN_USER_IDS||'').split(',').map(v=>v.trim()).filter(Boolean);
+      const adminVisitorEmails=String(process.env.ADMIN_EMAILS||'lbcplaya@gmail.com').split(',').map(v=>v.trim().toLowerCase()).filter(Boolean);
+      const visitorParams=[period.from,period.to,adminVisitorIds,adminVisitorEmails];
+      const excludeAdminBrowsers=`and not exists(
+        select 1 from app.page_activity ap join app.users au on au.id=ap.user_id
+        where ap.visitor_id=p.visitor_id
+          and (ap.user_id=any($3::text[]) or lower(coalesce(au.email,''))=any($4::text[]))
+      )`;
+      const siteTraffic=(await q(`SELECT count(*)::int AS "sitePageViews",count(distinct p.session_id)::int AS "siteVisitSessions",count(distinct p.visitor_id)::int AS "siteBrowserVisitors" FROM app.page_activity p WHERE p.event='page_view' AND p.created_at >= $1::timestamptz AND p.created_at < $2::timestamptz ${excludeAdminBrowsers}`,visitorParams))[0]||{};
+      add('Site-wide traffic',[siteTraffic],'Distinct browser sessions are visits; page views are route openings, not unique people. Configured admin browsers and heartbeat events are excluded. Cookies approximate browsers, not verified humans.');
+      add('Most viewed pages',await q(`SELECT p.path,count(*)::int AS "pageViews",count(distinct p.session_id)::int AS sessions,count(distinct p.visitor_id)::int AS "browserVisitors" FROM app.page_activity p WHERE p.event='page_view' AND p.created_at >= $1::timestamptz AND p.created_at < $2::timestamptz ${excludeAdminBrowsers} GROUP BY p.path ORDER BY count(*) DESC,p.path LIMIT 100`,visitorParams));
+      answers.push(`Site-wide, excluding admin browsers: ${siteTraffic.siteVisitSessions||0} recorded visits (browser sessions), ${siteTraffic.siteBrowserVisitors||0} distinct browsers and ${siteTraffic.sitePageViews||0} page views. These are observations, not proof of distinct people.`);
 
-      const summary=(await q(`WITH first_seen AS (SELECT visitor_id,min(created_at) AS first_at FROM app.page_activity GROUP BY visitor_id)
-        SELECT count(*) FILTER(WHERE a.event='page_view')::int AS "homepageViews",
-          count(DISTINCT a.visitor_id) FILTER(WHERE a.event='page_view')::int AS "uniqueHomepageVisitors",
-          count(DISTINCT a.visitor_id) FILTER(WHERE a.event='page_view' AND f.first_at >= $1::timestamptz)::int AS "firstSeenHomepageVisitors"
-        FROM app.page_activity a JOIN first_seen f USING(visitor_id) WHERE a.path='/' AND a.created_at >= $1::timestamptz AND a.created_at < $2::timestamptz`,[period.from,period.to]))[0]||{};
+      const summary=(await q(`WITH first_seen AS (SELECT p.visitor_id,min(p.created_at) AS first_at FROM app.page_activity p WHERE p.event='page_view' ${excludeAdminBrowsers} GROUP BY p.visitor_id)
+        SELECT count(*)::int AS "homepageViews",count(distinct p.session_id)::int AS "homepageSessions",
+          count(distinct p.visitor_id)::int AS "uniqueHomepageVisitors",
+          count(distinct p.visitor_id) FILTER(WHERE f.first_at >= $1::timestamptz)::int AS "firstSeenHomepageVisitors"
+        FROM app.page_activity p JOIN first_seen f USING(visitor_id) WHERE p.path='/' AND p.event='page_view' AND p.created_at >= $1::timestamptz AND p.created_at < $2::timestamptz ${excludeAdminBrowsers}`,visitorParams))[0]||{};
       const registered=(await q('SELECT count(*)::int AS count FROM app.users WHERE created_at >= $1::timestamptz AND created_at < $2::timestamptz',[period.from,period.to]))[0]?.count||0;
       const since=(await q('SELECT min(created_at) AS since FROM app.page_activity'))[0]?.since;
       add('Homepage traffic',[{...summary,newAccountsRegistered:registered,recordingSince:since}]);
-      add('Recently active accounts',await q(`SELECT a.user_id AS "userId",u.manager_team_name AS "teamName",u.name,max(a.created_at) AS "lastSeen" FROM app.page_activity a JOIN app.users u ON u.id=a.user_id WHERE a.created_at > now()-interval '2 minutes' GROUP BY a.user_id,u.manager_team_name,u.name ORDER BY "lastSeen" DESC LIMIT 100`),'Current activity, independent of the report period. A recent heartbeat does not prove human attention.');
+      add('Recently active accounts',await q(`SELECT a.user_id AS "userId",u.manager_team_name AS "teamName",u.name,max(a.created_at) AS "lastSeen" FROM app.page_activity a JOIN app.users u ON u.id=a.user_id WHERE a.event='page_view' AND a.created_at > now()-interval '2 minutes' AND a.user_id <> all($1::text[]) AND lower(coalesce(u.email,'')) <> all($2::text[]) GROUP BY a.user_id,u.manager_team_name,u.name ORDER BY "lastSeen" DESC LIMIT 100`,[adminVisitorIds,adminVisitorEmails]),'Only accounts that actually opened a page in the last two minutes, excluding administrators. Heartbeats alone do not count.');
       add('Older marketing funnel records',await q(`SELECT meta->>'event' AS event,count(*)::int AS events,count(DISTINCT meta->>'visitorId')::int AS "browserVisitors" FROM app.audit_logs WHERE action='marketing.funnel' AND created_at >= $1::timestamptz AND created_at < $2::timestamptz GROUP BY meta->>'event'`,[period.from,period.to]),'Legacy funnel counts are separate and are not added to page tracking totals.');
-      answers.push(`Homepage: ${summary.homepageViews||0} page views, ${summary.uniqueHomepageVisitors||0} distinct browser visitors, ${summary.firstSeenHomepageVisitors||0} first seen in the retained tracking history. ${registered} accounts registered in this period. Browser visitors and registrations are different metrics. Page history begins ${since||'when the first tracking event arrives'} and is retained for 90 days; cookies and multiple devices affect visitor counts.`);
+      answers.push(`Homepage: ${summary.homepageSessions||0} recorded visits, ${summary.homepageViews||0} page views, ${summary.uniqueHomepageVisitors||0} distinct browser visitors, ${summary.firstSeenHomepageVisitors||0} first seen in the retained tracking history. ${registered} accounts registered in this period. Browser visitors and registrations are different metrics. Page history begins ${since||'when the first tracking event arrives'} and is retained for 90 days; cookies and multiple devices affect visitor counts.`);
       // Ordered browser cohort: attribution only when the same retained browser later identifies one account.
       const funnel=(await q(`WITH cohort AS (
-        SELECT visitor_id,min(created_at) AS landed_at FROM app.page_activity
-        WHERE path='/' AND event='page_view' AND created_at >= $1::timestamptz AND created_at < $2::timestamptz GROUP BY visitor_id
+        SELECT p.visitor_id,min(p.created_at) AS landed_at FROM app.page_activity p
+        WHERE p.path='/' AND p.event='page_view' AND p.created_at >= $1::timestamptz AND p.created_at < $2::timestamptz ${excludeAdminBrowsers} GROUP BY p.visitor_id
       ), identity AS (
         SELECT c.visitor_id,c.landed_at,min(a.user_id) AS user_id,count(DISTINCT a.user_id) AS accounts
         FROM cohort c LEFT JOIN app.page_activity a ON a.visitor_id=c.visitor_id AND a.user_id IS NOT NULL AND a.created_at>=c.landed_at AND a.created_at<$2::timestamptz
@@ -123,7 +134,7 @@ export function createArenaAssistant(q:AssistantQuery,connections:AssistantConne
       ) SELECT count(*)::int AS "homepageBrowsers",count(*) FILTER(WHERE registered_at IS NOT NULL)::int AS "linkedNewAccounts",
         count(*) FILTER(WHERE accounts>1)::int AS "sharedBrowserIdentities",
         count(*) FILTER(WHERE registered_at IS NOT NULL AND EXISTS(SELECT 1 FROM app.competition_entries e WHERE e.user_id=linked.user_id AND e.joined_at>=registered_at AND e.joined_at<$2::timestamptz))::int AS "enteredAfterSignup"
-        FROM linked`,[period.from,period.to]))[0]||{};
+        FROM linked`,visitorParams))[0]||{};
       add('Observed homepage conversion cohort',[{...funnel,unlinkedOrNotRegistered:Math.max(0,Number(funnel.homepageBrowsers||0)-Number(funnel.linkedNewAccounts||0))}], 'Homepage browsers first observed within the selected period, linked to exactly one account on the same browser before period end. Existing accounts and shared browsers are excluded from signup conversion. Unlinked visitors may have registered on another device; this is observed attribution, not proof of abandonment.');
       if(await exists('user_onboarding'))add('New-account onboarding cohort',await q(`SELECT count(*)::int AS "newAccounts",count(*) FILTER(WHERE o.completed)::int AS "starterSelectionCompletedNow",count(*) FILTER(WHERE EXISTS(SELECT 1 FROM app.competition_entries e WHERE e.user_id=u.id AND e.joined_at>=u.created_at AND e.joined_at<$2::timestamptz))::int AS "enteredByPeriodEnd" FROM app.users u LEFT JOIN app.user_onboarding o ON o.user_id=u.id WHERE u.created_at >= $1::timestamptz AND u.created_at < $2::timestamptz`,[period.from,period.to]),'Starter completion is the current onboarding flag; it has no completion timestamp and cannot establish ordering or historical completion by the period end.');
       answers.push('Conversion evidence separates linked homepage browsers from all new accounts. Unknown links and untimestamped onboarding flags are labelled; recorded counts cannot explain why someone left.');
