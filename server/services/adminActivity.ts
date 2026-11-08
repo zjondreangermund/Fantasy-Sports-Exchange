@@ -58,8 +58,8 @@ export async function getAdminActivity(executor:any, query:any) {
     ), filtered as (select * from scoped where (${category}='all' or category=${category}) and (${outcome}='all' or outcome=${outcome}) and (${source}='all' or source=${source}))
     select (select coalesce(jsonb_agg(e),'[]'::jsonb) from (select * from filtered order by "createdAt" desc,id desc limit ${limit} offset ${(page-1)*limit}) e) as activity,
       (select count(*)::int from filtered) as total,count(*)::int as events,count(*) filter(where outcome='error')::int as errors,
-      count(distinct session) filter(where category='page')::int as visits,
-      count(*) filter(where category='page')::int as "pageViews",
+      count(distinct session) filter(where source='page')::int as visits,
+      count(*) filter(where source='page')::int as "pageViews",
       count(distinct "userId")::int as users
     from scoped
   `))[0]||{};
