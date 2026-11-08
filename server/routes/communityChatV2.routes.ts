@@ -350,12 +350,11 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
   app.post("/community-live/messages", requireAuth, async (req: any, res) => {
     try {
       if (!sameOrigin(req)) return res.status(403).json({ message: "Request origin is not allowed" });
+      if (req.body?.gifId) return res.status(400).json({message:"GIFs are currently disabled. Please send text or emojis."});
       await ensureSchema();
       const userId = await ensureUser(req);
       if (!enforceWriteRate(userId)) return res.status(429).json({ message: "Please wait before sending another message" });
-      const gif = communityGif(req.body?.gifId);
-      if (req.body?.gifId && !gif) return res.status(400).json({message:"Choose a GIF from the Community picker"});
-      const message = cleanMessage(req.body?.message) || (gif ? gif.label : "");
+      const message = cleanMessage(req.body?.message);
       const replyToId = Math.max(0, Number(req.body?.replyToId || 0) || 0) || null;
       if (!message) return res.status(400).json({ message: "Message cannot be empty" });
       if (message.length > 280) return res.status(400).json({ message: "Message must be 280 characters or fewer" });
@@ -365,8 +364,8 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
         if (!parent) return res.status(400).json({ message: "The replied-to message no longer exists" });
       }
       const inserted = rowsOf(await db.execute(sql`
-        INSERT INTO app.community_chat_messages (user_id, message, reply_to_id, gif_id)
-        VALUES (${userId}, ${message}, ${replyToId}, ${gif?.id || null})
+        INSERT INTO app.community_chat_messages (user_id, message, reply_to_id)
+        VALUES (${userId}, ${message}, ${replyToId})
         RETURNING id
       `))[0];
       const chatMessage = await loadMessage(Number(inserted?.id || 0), userId);
@@ -513,4 +512,5 @@ export function registerCommunityChatV2Routes(app: Express, deps: CommunityChatV
     }
   });
 }
+
 
