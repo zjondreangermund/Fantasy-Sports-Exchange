@@ -1001,7 +1001,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
               ? String(competition.prizeKey) === "free-weighted-card"
                 ? drawFreeCupFirstPrize()
                 : String(competition.prizeCardRarity || "rare")
-              : "rare";
+              : "common";
             const oldEntry = lockedEntries.find((entry: any) => Number(entry.id) === placedEntryId);
             const existingCardId = Number(oldEntry?.prizeCardId || 0);
             const placedPrize = {

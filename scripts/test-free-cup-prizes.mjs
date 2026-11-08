@@ -27,4 +27,6 @@ for (const rank of [2, 3]) {
 }
 for (const rarity of Object.keys(counts)) assert.equal(resolveFreeCupClaimRarity(1, rarity), rarity);
 assert.throws(() => resolveFreeCupClaimRarity(4, 'rare'));
+const settlement = readFileSync(new URL('../server/routes/economyIntegrity.routes.ts', import.meta.url), 'utf8');
+assert.ok(settlement.includes(': String(competition.prizeCardRarity || "rare")\n              : "common";'), 'new runner-up entitlements must be Common while first-place draw is preserved');
 console.log('Free Cup prizes passed: all 10,000 first-place rolls, Rare runner-up claims, historical awards and rank guards.');

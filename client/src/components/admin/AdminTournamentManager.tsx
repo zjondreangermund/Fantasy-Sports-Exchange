@@ -115,7 +115,7 @@ export default function AdminTournamentManager() {
         next.entryFee = "0";
         next.cardPrizeRarity = "rare";
         next.prizeKey = "free-weighted-card";
-        next.prizeDescription = "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Rare";
+        next.prizeDescription = "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Common";
       }
       if (key === "tier" && next.rewardMode !== "card") {
         setPreviewRarity(value);
@@ -149,7 +149,7 @@ export default function AdminTournamentManager() {
       cardPrizeRarity: "rare",
       prizeType: "goods",
       prizeKey: "free-weighted-card",
-      prizeDescription: "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Rare",
+      prizeDescription: "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Common",
       name: `GW${prev.gameWeek || 1} FREE Common Card Cup`,
     }));
   };
@@ -169,7 +169,7 @@ export default function AdminTournamentManager() {
         prizeCardRarity: cardMode ? form.cardPrizeRarity : null,
         prizeType: "goods",
         prizeKey: cardMode ? "free-weighted-card" : "ladder",
-        prizeDescription: cardMode ? "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Rare" : `${cap(form.tier)} Prize Vault ladder`,
+        prizeDescription: cardMode ? "1st Rare 95%, Unique 4.5%, Epic 0.45%, Legendary 0.05%; 2nd & 3rd Common" : `${cap(form.tier)} Prize Vault ladder`,
         startDate: new Date(form.startDate).toISOString(),
         endDate: new Date(form.endDate).toISOString(),
       };
