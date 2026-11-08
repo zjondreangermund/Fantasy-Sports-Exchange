@@ -1,3 +1,4 @@
+import {fixturePeriodScores} from "../lib/fixture-period-scores";
 import FootballTeamGroups from "./FootballTeamGroups";
 import { normalizeFootballData, uniqueFootballRows, footballPlayerKey, dedupeAvailability, groupAvailabilityByTeam } from "../../../shared/football-data";
 import { useState } from "react";
@@ -438,6 +439,7 @@ function MatchIntelligence({ data, loading, onPlayer }: { data: any; loading: bo
   const h2h = Array.isArray(data.headToHead) ? data.headToHead : [];
   const ratedPlayers = playerGroups.flatMap((group: any) => (Array.isArray(group?.players) ? group.players.map((item: any) => ({ ...item, team: group.team })) : [])).filter((item: any) => item?.player?.id).sort((a: any, b: any) => asNumber(b?.statistics?.[0]?.games?.rating) - asNumber(a?.statistics?.[0]?.games?.rating)).slice(0, 12);
   const score = raw?.score || fixture?.score || {};
+  const periodScores = fixturePeriodScores(fixture.status || raw?.fixture?.status?.short, score);
 
   return (
     <Card className="space-y-5 overflow-hidden p-4 sm:p-5">
@@ -457,8 +459,8 @@ function MatchIntelligence({ data, loading, onPlayer }: { data: any; loading: bo
         <h4 className="mb-2 font-black">Detailed match report</h4>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Metric label="Referee" value={fixture.referee || "TBD"} />
-          <Metric label="Half-time" value={`${score?.halftime?.home ?? "-"} : ${score?.halftime?.away ?? "-"}`} />
-          <Metric label="Full-time" value={`${score?.fulltime?.home ?? fixture.homeTeam?.score ?? "-"} : ${score?.fulltime?.away ?? fixture.awayTeam?.score ?? "-"}`} />
+          <Metric label="Half-time" value={periodScores.halftime} />
+          <Metric label="Full-time" value={periodScores.fulltime} />
           <Metric label="Extra / pens" value={score?.penalty?.home != null ? `${score.penalty.home} : ${score.penalty.away}` : score?.extratime?.home != null ? `${score.extratime.home} : ${score.extratime.away}` : "—"} />
         </div>
       </section>
@@ -652,3 +654,4 @@ function HistoryList({ title, rows, render }: { title: string; rows: any[]; rend
   const visible = list.filter((row: any) => !query || normalizeSearchText(render(row)).includes(query)).slice(0, 20);
   return <FootballTeamGroups title={title} count={list.length} defaultOpen={list.length<=3}><div className="mb-2 flex flex-wrap items-center gap-2">{list.length > 6 ? <LongListFilter value={filter} onChange={setFilter} placeholder={`Filter ${title.toLowerCase()}`} /> : null}</div>{list.length ? <div className="space-y-2">{visible.map((row: any, index: number) => <div key={index} className="rounded-lg border border-white/10 bg-black/20 p-2 text-sm text-muted-foreground">{render(row)}</div>)}{query && !visible.length ? <EmptyText text="No matching records." /> : null}</div> : <EmptyText text={`No ${title.toLowerCase()} returned.`} />}</FootballTeamGroups>;
 }
+
