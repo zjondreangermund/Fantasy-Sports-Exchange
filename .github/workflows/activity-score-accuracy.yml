@@ -6,6 +6,7 @@ on:
     paths:
       - 'server/services/adminActivity.ts'
       - 'server/services/arenaAssistant.ts'
+      - 'server/routes/arenaAssistant.routes.ts'
       - 'server/routes/admin.routes.ts'
       - 'server/routes/adminInsights.routes.ts'
       - 'server/routes/cards.routes.ts'
