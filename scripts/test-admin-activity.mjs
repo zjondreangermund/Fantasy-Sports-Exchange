@@ -31,6 +31,12 @@ try{
  report=await getAdminActivity(executor,{session:'22222222-2222-4222-8222-222222222222'});assert.equal(report.total,1);
  const first=await getAdminActivity(executor,{limit:10,page:1}),second=await getAdminActivity(executor,{limit:10,page:2});assert.equal(first.activity.length,10);assert.equal(second.activity.length,9);assert(!first.activity.some(x=>second.activity.some(y=>x.id===y.id)));
  report=await getAdminActivity(executor,{page:999});assert.equal(report.activity.length,0);assert.equal(report.total,19);
+ report=await getAdminActivity(executor,{excludeAdmins:true,viewerId:'a'});
+ assert(report.activity.length>0,'other user events should remain visible');
+ assert(report.activity.every(x=>x.userId==='b'),'admin clicks and system events must not appear in other-user activity');
+ assert.equal(report.summary.visits,0,'owner sessions must not inflate visible user visits');
+ assert.equal(report.summary.pageViews,0,'page views must be separated from sessions and owner views');
+ assert.equal(report.recentUsers.length,0,'heartbeat must not be interpreted as a new visitor');
  report=await getAdminActivity(executor,{hours:168,outcome:'error'});assert.equal(report.total,6);
  const app=express();app.use(express.json());app.use((req,res,next)=>{if(req.headers['x-test-user'])req.authUserId=String(req.headers['x-test-user']);next();});app.use(createRequestActivity(executor));
  app.get('/api/poll',(req,res)=>res.json({ok:true}));app.post('/api/task',(req,res)=>res.status(409).json({message:'Team is locked',secret:'not recorded'}));app.get('/api/broken',(req,res)=>res.status(500).json({message:'postgres://username:password@host/database secret'}));
