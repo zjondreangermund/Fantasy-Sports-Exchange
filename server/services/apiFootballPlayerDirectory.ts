@@ -349,18 +349,31 @@ async function synchronizeProviderIdentities(directory: ApiFootballDirectoryPlay
 }
 
 function tokenSet(value: unknown) {
-  return new Set(normalizePlayerText(value).split(" ").filter((token) => token.length > 1));
+  return new Set(cachedPlayerText(value).split(" ").filter((token) => token.length > 1));
+}
+
+// Bounded memoization of pure normalization only: no player matches, scores or
+// eligibility decisions are cached. Candidate/roster changes are always rechecked.
+const identityTextCache = new Map();
+const identityTeamKeysCache = new Map();
+function cachedPlayerText(value: unknown) {
+  const key = String(value || "");
+  if (identityTextCache.has(key)) return String(identityTextCache.get(key));
+  const normalized = normalizePlayerText(key);
+  if (identityTextCache.size >= 8192) identityTextCache.clear();
+  identityTextCache.set(key, normalized);
+  return normalized;
 }
 
 function aliasesOf(candidate: ApiFootballDirectoryPlayer) {
   return Array.from(new Set([
-    normalizePlayerText(candidate.name),
-    normalizePlayerText(`${candidate.firstName} ${candidate.lastName}`),
+    cachedPlayerText(candidate.name),
+    cachedPlayerText(`${candidate.firstName} ${candidate.lastName}`),
   ].filter(Boolean)));
 }
 
 function nameCompatibility(rawName: unknown, candidate: ApiFootballDirectoryPlayer) {
-  const name = normalizePlayerText(rawName);
+  const name = cachedPlayerText(rawName);
   if (!name) return 0;
   const aliases = aliasesOf(candidate);
   if (aliases.includes(name)) return 120;
@@ -403,11 +416,13 @@ function teamCompatibility(rawTeam: unknown, candidateTeam: string) {
     "west ham united": ["west ham"],
     "wolverhampton wanderers": ["wolverhampton", "wolves"],
   };
-  const normalize = (value: unknown) => normalizePlayerText(value)
+  const normalize = (value: unknown) => cachedPlayerText(value)
     .replace(/\bfootball club\b|\bfc\b|\bafc\b/g, "")
     .replace(/\s+/g, " ")
     .trim();
   const keys = (value: unknown) => {
+    const cacheKey = String(value || "");
+    if (identityTeamKeysCache.has(cacheKey)) return identityTeamKeysCache.get(cacheKey);
     const normalized = normalize(value);
     const result = new Set(normalized ? [normalized] : []);
     const directAliases = Object.entries(aliases).find(([canonical]) => canonical === normalized)?.[1] || [];
@@ -418,6 +433,8 @@ function teamCompatibility(rawTeam: unknown, candidateTeam: string) {
         for (const variant of variants) result.add(normalize(variant));
       }
     }
+    if (identityTeamKeysCache.size >= 512) identityTeamKeysCache.clear();
+    identityTeamKeysCache.set(cacheKey, result);
     return result;
   };
   const teamKeys = keys(rawTeam);
@@ -486,9 +503,9 @@ export function resolveApiFootballPlayer(player: any, directory: ApiFootballDire
   // A provider mononym (Kepa) may match the first token of a legal name,
   // only when club + position identify exactly one distinct provider player.
   const mononyms = directory.filter((candidate) => {
-    const alias = normalizePlayerText(candidate.name);
+    const alias = cachedPlayerText(candidate.name);
     return alias.length >= 4 && !alias.includes(" ")
-      && rawNames.some((name) => normalizePlayerText(name).split(" ")[0] === alias)
+      && rawNames.some((name) => cachedPlayerText(name).split(" ")[0] === alias)
       && teamCompatibility(player?.team, candidate.team) >= 20
       && Boolean(rawPosition) && rawPosition === candidate.position;
   });
@@ -502,7 +519,7 @@ export function resolveApiFootballPlayer(player: any, directory: ApiFootballDire
   // only a unique same-club, same-position candidate sharing a non-first
   // name token. This avoids inventing stats or cross-linking players.
   const surnameTokens = new Set(
-    rawNames.flatMap((value) => normalizePlayerText(value).split(" ").slice(1))
+    rawNames.flatMap((value) => cachedPlayerText(value).split(" ").slice(1))
       .filter((token) => token.length >= 4),
   );
   if (surnameTokens.size) {

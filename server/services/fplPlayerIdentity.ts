@@ -8,8 +8,14 @@ export const FPL_POSITION_BY_ELEMENT_TYPE: Record<number, FplPosition> = {
   4: "FWD",
 };
 
+// Text normalization is pure and heavily reused by strict identity comparisons.
+// Bound this cache; never cache the resolved player or any eligibility decision.
+const normalizedTextCache = new Map<string,string>();
 export function normalizePlayerText(value: unknown): string {
-  return String(value || "")
+  const key=String(value || "");
+  const hit=normalizedTextCache.get(key);
+  if(hit!==undefined)return hit;
+  const result = key
     .replace(/&apos;|&#39;|&#x27;/gi, "'")
     .replace(/&quot;|&#34;|&#x22;/gi, '"')
     .replace(/&amp;|&#38;|&#x26;/gi, "&")
@@ -21,6 +27,9 @@ export function normalizePlayerText(value: unknown): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+  if(normalizedTextCache.size>=8192)normalizedTextCache.clear();
+  normalizedTextCache.set(key,result);
+  return result;
 }
 
 export function fplPlayerFullName(element: any): string {

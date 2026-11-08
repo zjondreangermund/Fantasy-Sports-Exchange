@@ -31,7 +31,8 @@ export default function MatchdayQuickDock() {
       if (!res.ok) return { lineup: {} as Lineup, cards: [] };
       return res.json();
     },
-    refetchInterval: 15000,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 
   const { data: livePointEvents } = useQuery<LivePointEvent[]>({
@@ -42,7 +43,8 @@ export default function MatchdayQuickDock() {
       const data = await res.json();
       return Array.isArray(data) ? data : [];
     },
-    refetchInterval: 7000,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 
   const cards = lineupData?.cards || [];

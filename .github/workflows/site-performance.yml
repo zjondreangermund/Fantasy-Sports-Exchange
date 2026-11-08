@@ -1,0 +1,18 @@
+name: Site request and responsiveness checks
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  verify-site-performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: node scripts/test-site-performance.mjs
+      - run: node scripts/verify-premier-league-card-eligibility.mjs && node scripts/verify-strict-player-identity-fixtures.mjs

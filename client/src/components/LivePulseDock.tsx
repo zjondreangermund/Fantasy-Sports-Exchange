@@ -19,7 +19,8 @@ type LiveHubPayload = {
 export default function LivePulseDock() {
   const { data } = useQuery<LiveHubPayload>({
     queryKey: ["/api/live/hub"],
-    refetchInterval: 15000,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 
   const liveSummary = useMemo(() => {

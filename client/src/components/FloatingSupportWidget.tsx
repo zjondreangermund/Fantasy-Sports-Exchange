@@ -1,3 +1,6 @@
+import {usePageVisible} from "../hooks/use-page-visible";
+import {communityRequestPolicy,coalesceCommunityRefresh} from "../lib/community-request-policy";
+import {notificationQueryOptions} from "../lib/notification-query";
 import {CommunityReactions, CommunitySocialComposer} from "./CommunitySocial";
 import {isTopPopup} from "../lib/popup-stack";
 import {PopupPortal} from "./ui/popup-portal";
@@ -97,8 +100,8 @@ function MarketplaceListingActivity() {
       const payload = await response.json();
       return Array.isArray(payload) ? payload : payload.listings || payload.cards || [];
     },
-    refetchInterval: 12_000,
-    staleTime: 0,
+    refetchInterval: () => document.visibilityState === "hidden" ? false : 60_000,
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -142,9 +145,19 @@ function MarketplaceListingActivity() {
 
 export default function FloatingSupportWidget() {
   const [open, setOpen] = useState(false);
+  const pageVisible=usePageVisible();
   const panelRef=useRef<HTMLDivElement>(null);
   const [chatViewport,setChatViewport]=useState(()=>({height:window.visualViewport?.height||window.innerHeight,top:window.visualViewport?.offsetTop||0}));
-  useEffect(()=>{const viewport=window.visualViewport;const resize=()=>setChatViewport({height:viewport?.height||window.innerHeight,top:viewport?.offsetTop||0});window.addEventListener('resize',resize);viewport?.addEventListener('resize',resize);viewport?.addEventListener('scroll',resize);return()=>{window.removeEventListener('resize',resize);viewport?.removeEventListener('resize',resize);viewport?.removeEventListener('scroll',resize);};},[]);
+  useEffect(()=>{
+    if(!open)return;
+    const viewport=window.visualViewport;let frame=0;
+    const resize=()=>{if(frame)return;frame=requestAnimationFrame(()=>{
+      frame=0;const height=viewport?.height||window.innerHeight,top=viewport?.offsetTop||0;
+      setChatViewport(current=>current.height===height&&current.top===top?current:{height,top});
+    });};
+    resize();window.addEventListener('resize',resize);viewport?.addEventListener('resize',resize);viewport?.addEventListener('scroll',resize);
+    return()=>{cancelAnimationFrame(frame);window.removeEventListener('resize',resize);viewport?.removeEventListener('resize',resize);viewport?.removeEventListener('scroll',resize);};
+  },[open]);
   useEffect(()=>{if(!open)return;const previousFocus=document.activeElement as HTMLElement|null;const previousOverflow=document.body.style.overflow;document.body.style.overflow='hidden';const frame=requestAnimationFrame(()=>panelRef.current?.querySelector<HTMLButtonElement>('[aria-label="Close floating panel"]')?.focus());
     const keydown=(event:KeyboardEvent)=>{if(event.defaultPrevented||!isTopPopup(panelRef.current))return;if(event.key==='Escape'){event.preventDefault();setOpen(false);return;}if(event.key==='Tab'){const controls=[...panelRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),a[href],summary,[tabindex="0"]')||[]].filter(element=>element.getClientRects().length);const first=controls[0],last=controls[controls.length-1];if(event.shiftKey&&(document.activeElement===first||!panelRef.current?.contains(document.activeElement))){event.preventDefault();last?.focus();}else if(!event.shiftKey&&(document.activeElement===last||!panelRef.current?.contains(document.activeElement))){event.preventDefault();first?.focus();}}};
     document.addEventListener('keydown',keydown);return()=>{cancelAnimationFrame(frame);document.removeEventListener('keydown',keydown);document.body.style.overflow=previousOverflow;if(previousFocus?.isConnected)previousFocus.focus();};
@@ -158,39 +171,34 @@ export default function FloatingSupportWidget() {
   const [editingText, setEditingText] = useState("");
   const [lastSeenId, setLastSeenId] = useState(() => Number(window.localStorage.getItem(lastSeenStorageKey) || 0) || 0);
   const [targetMessage,setTargetMessage]=useState<ChatMessage|null>(null);
+  const targetMessageRef=useRef(targetMessage);
+  targetMessageRef.current=targetMessage;
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [streamConnected, setStreamConnected] = useState(false);
+  const communityRequests=communityRequestPolicy(open,mode,pageVisible,streamConnected);
   const [followingLatest, setFollowingLatest] = useState(true);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const preserveScrollHeightRef = useRef<number | null>(null);
 
   const {user:sessionUser}=useAuth();
   const currentUserId=String(sessionUser?.id||'');
-  const {data:ownProfile}=useQuery<CurrentUser>({queryKey:['support-profile',currentUserId],enabled:Boolean(currentUserId),queryFn:async()=>{const response=await fetch('/api/user',{credentials:'include',cache:'no-store'});if(!response.ok)return {id:currentUserId};const data=await response.json();return data.id===currentUserId?data:{id:currentUserId};}});
+  const {data:ownProfile}=useQuery<CurrentUser>({queryKey:['support-profile',currentUserId],enabled:Boolean(currentUserId)&&open&&pageVisible,queryFn:async()=>{const response=await fetch('/api/user',{credentials:'include',cache:'no-store'});if(!response.ok)return {id:currentUserId};const data=await response.json();return data.id===currentUserId?data:{id:currentUserId};}});
   const user:CurrentUser|undefined=sessionUser?{...sessionUser,...ownProfile,id:currentUserId}:undefined;
   const chatQueryKey = useMemo(
     () => ["/community-live/messages", currentUserId || "anonymous"] as const,
     [currentUserId],
   );
   const { data: accessCheck, isError: accessError } = useQuery<AdminCheck>({
-    queryKey: ["/api/assistant/access",currentUserId],enabled:Boolean(currentUserId),retry:false,staleTime:0,gcTime:0,refetchOnWindowFocus:"always",refetchInterval:30000,
+    queryKey: ["/api/assistant/access",currentUserId],enabled:Boolean(currentUserId)&&open&&pageVisible,retry:false,staleTime:30_000,refetchOnWindowFocus:true,refetchInterval:open&&pageVisible?60_000:false,
     queryFn:async()=>{try{const response=await fetch('/api/assistant/access',{credentials:'include',cache:'no-store'});if(!response.ok)return {isAdmin:false};const data=await response.json();return {userId:data.userId,isAdmin:data.userId===currentUserId&&data.isAdmin===true};}catch{return {isAdmin:false};}},
   });
   const adminCheck={isAdmin:Boolean(!accessError&&currentUserId&&accessCheck?.userId===currentUserId&&accessCheck?.isAdmin===true)};
   const adminChat=mode==='admin-help'&&adminCheck?.isAdmin===true;
   useEffect(()=>{setOpen(false);setMode('community');setTargetMessage(null);},[currentUserId]);
   useEffect(()=>{if(mode==='admin-help'&&!adminCheck?.isAdmin)setMode('help');},[adminCheck?.isAdmin,mode]);
-  const { data: notificationInbox } = useQuery<NotificationCache>({
-    queryKey: ["/api/notifications",currentUserId],enabled:Boolean(currentUserId),
-    queryFn: async () => {
-      const response = await fetch("/api/notifications", { credentials: "include" });
-      if (!response.ok) return { notifications: [], unreadCount: 0 };
-      return response.json();
-    },
-    refetchInterval: 10_000,
-  });
+  const { data: notificationInbox } = useQuery<NotificationCache>(notificationQueryOptions(currentUserId));
   const {
     data: storedMessages = [],
     isLoading,
@@ -209,14 +217,12 @@ export default function FloatingSupportWidget() {
       if (!Array.isArray(incoming)) throw new Error("Community Live returned an invalid conversation.");
       setHasOlderMessages(Boolean(payload?.hasMore));
       const current = queryClient.getQueryData<ChatMessage[]>(chatQueryKey);
-      const restored = readCommunityMessageHistory(currentUserId);
-      const merged = mergeCommunityMessages(restored, current, incoming);
-      saveCommunityMessageHistory(currentUserId, merged);
+      const merged = mergeCommunityMessages(current, incoming);
       return merged;
     },
-    enabled: Boolean(currentUserId),
-    staleTime: 5_000,
-    refetchInterval: streamConnected ? 30_000 : 8_000,
+    enabled: Boolean(currentUserId)&&pageVisible,
+    staleTime: 15_000,
+    refetchInterval: communityRequests.pollMs,
     refetchOnWindowFocus: true,
     retry: 2,
   });
@@ -228,7 +234,7 @@ export default function FloatingSupportWidget() {
     if(!currentUserId)return;
     const timer=window.setInterval(()=>{
       queryClient.setQueryData<ChatMessage[]>(chatQueryKey,current=>{
-        const kept=mergeCommunityMessages(current);saveCommunityMessageHistory(currentUserId,kept);return kept;
+        const kept=mergeCommunityMessages(current);return kept.length===current?.length?current:kept;
       });
     },30000);
     return ()=>window.clearInterval(timer);
@@ -248,17 +254,21 @@ export default function FloatingSupportWidget() {
   }, [chatQueryKey, currentUserId]);
 
   useEffect(() => {
-    if (currentUserId && messages.length) saveCommunityMessageHistory(currentUserId, messages);
+    if(!currentUserId||!messages.length)return;
+    const timer=window.setTimeout(()=>saveCommunityMessageHistory(currentUserId,messages),250);
+    return ()=>window.clearTimeout(timer);
   }, [currentUserId, messages]);
 
   useEffect(() => {
-    if (!currentUserId || typeof EventSource === "undefined") return;
+    if (!currentUserId || !communityRequests.stream || typeof EventSource === "undefined") return;
     const stream = new EventSource("/community-live/stream");
+    let ready=false;
     const onReady = () => {
+      if(ready)return;ready=true;
       setStreamConnected(true);
       void queryClient.invalidateQueries({ queryKey: chatQueryKey });
     };
-    const onError = () => setStreamConnected(false);
+    const onError = () => {ready=false;setStreamConnected(false);};
     const onMessage = (event: Event) => {
       try {
         const raw = JSON.parse((event as MessageEvent).data) as ChatMessage;
@@ -271,7 +281,6 @@ export default function FloatingSupportWidget() {
         setTargetMessage(current=>current?.id===incoming.id?incoming:current);
         queryClient.setQueryData<ChatMessage[]>(chatQueryKey, (current) => {
           const merged = mergeMessage(current, incoming);
-          saveCommunityMessageHistory(currentUserId, merged);
           return merged;
         });
         const currentHandle = mentionHandle(
@@ -284,18 +293,14 @@ export default function FloatingSupportWidget() {
         }
       } catch { /* ignore malformed stream events */ }
     };
-    const onReaction=(event:Event)=>{
-      try {
-        const id=Number(JSON.parse((event as MessageEvent).data).messageId);
-        if(!Number.isSafeInteger(id)||id<=0)return;
-        void fetch(`/community-live/messages/${id}`,{credentials:'include',cache:'no-store'}).then(async response=>{
-          if(!response.ok)return;
-          const payload=await response.json();if(!payload.message)return;
-          queryClient.setQueryData<ChatMessage[]>(chatQueryKey,current=>mergeMessage(current,payload.message));
-          setTargetMessage(current=>current?.id===id?payload.message:current);
-        }).catch(()=>{});
-      }catch{/* Ignore invalid stream events. */}
-    };
+    const refreshBurst=coalesceCommunityRefresh(()=>{
+      void queryClient.invalidateQueries({queryKey:chatQueryKey},{cancelRefetch:false});
+      const pinned=targetMessageRef.current;
+      if(pinned)void fetch(`/community-live/messages/${pinned.id}`,{credentials:'include',cache:'no-store'}).then(async response=>{
+        if(response.ok){const payload=await response.json();setTargetMessage(latest=>latest?.id===payload.message?.id?payload.message:latest);}
+      }).catch(()=>{});
+    });
+    const onReaction=()=>refreshBurst.schedule();
     stream.addEventListener("open", onReady);
     stream.addEventListener("ready", onReady);
     stream.addEventListener("error", onError);
@@ -307,9 +312,11 @@ export default function FloatingSupportWidget() {
       stream.removeEventListener("error", onError);
       stream.removeEventListener("community-message", onMessage);
       stream.removeEventListener("community-reaction", onReaction);
+      refreshBurst.cancel();
       stream.close();
+      setStreamConnected(false);
     };
-  }, [adminCheck?.isAdmin, chatQueryKey, currentUserId, user?.email, user?.managerTeamName, user?.name]);
+  }, [communityRequests.stream, adminCheck?.isAdmin, chatQueryKey, currentUserId, user?.email, user?.managerTeamName, user?.name]);
 
   const latestId = messages[messages.length - 1]?.id || 0;
   const unreadCount = useMemo(
@@ -363,8 +370,7 @@ export default function FloatingSupportWidget() {
           setTargetMessage(payload.message);
           queryClient.setQueryData<ChatMessage[]>(chatQueryKey, (current) => {
             const merged = mergeMessage(current, payload.message);
-            saveCommunityMessageHistory(currentUserId, merged);
-            return merged;
+              return merged;
           });
         }
       } catch (error) {
@@ -429,7 +435,6 @@ export default function FloatingSupportWidget() {
       const message = payload.message as ChatMessage;
       queryClient.setQueryData<ChatMessage[]>(chatQueryKey, (current) => {
         const merged = mergeMessage(current, { ...message, isOwn: true, canEdit: true, canDelete: true });
-        saveCommunityMessageHistory(currentUserId, merged);
         return merged;
       });
       setFollowingLatest(true);
@@ -456,7 +461,6 @@ export default function FloatingSupportWidget() {
     onSuccess: (payload: any) => {
       queryClient.setQueryData<ChatMessage[]>(chatQueryKey, (current) => {
         const merged = mergeMessage(current, { ...payload.message, isOwn: true, canEdit: true, canDelete: true });
-        saveCommunityMessageHistory(currentUserId, merged);
         return merged;
       });
       setEditingId(null); setEditingText(""); setChatError("");
@@ -474,7 +478,6 @@ export default function FloatingSupportWidget() {
     onSuccess: (payload: any) => {
       queryClient.setQueryData<ChatMessage[]>(chatQueryKey, (current) => {
         const merged = mergeMessage(current, payload.message);
-        saveCommunityMessageHistory(currentUserId, merged);
         return merged;
       });
       setChatError("");
@@ -505,7 +508,6 @@ export default function FloatingSupportWidget() {
       setHasOlderMessages(Boolean(payload?.hasMore));
       queryClient.setQueryData<ChatMessage[]>(chatQueryKey, (current) => {
         const merged = mergeCommunityMessages(older, current);
-        saveCommunityMessageHistory(currentUserId, merged);
         return merged;
       });
     } catch (error) {

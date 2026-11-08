@@ -1,3 +1,4 @@
+import {notificationQueryOptions} from "../lib/notification-query";
 import { useAuth } from "../hooks/use-auth";
 import { pendingToastEvents, type NotificationToastState } from "../lib/notification-toast-policy";
 import * as React from "react";
@@ -33,17 +34,7 @@ export default function FloatingEventNotifications() {
   const fallbackState = React.useRef<Record<string, NotificationToastState>>({});
 
   const { data } = useQuery<NotificationResponse>({
-    queryKey: ["/api/notifications"],
-    queryFn: async () => {
-      const response = await fetch("/api/notifications", { credentials: "include" });
-      if (!response.ok) return { notifications: [], unreadCount: 0 };
-      return response.json();
-    },
-    staleTime: 10_000,
-    refetchInterval: () => document.visibilityState === "hidden" ? false : 20_000,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
-    enabled: Boolean(user?.id),
+    ...notificationQueryOptions(user?.id),
   });
 
   React.useEffect(() => {
