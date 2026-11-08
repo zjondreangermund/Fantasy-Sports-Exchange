@@ -1,0 +1,19 @@
+name: Match period scores
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'client/src/lib/fixture-period-scores.ts'
+      - 'client/src/components/FootballDataCentre.tsx'
+      - 'scripts/test-fixture-period-scores.mjs'
+      - '.github/workflows/match-period-scores.yml'
+  workflow_dispatch:
+jobs:
+  verify-period-scores:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/test-fixture-period-scores.mjs
