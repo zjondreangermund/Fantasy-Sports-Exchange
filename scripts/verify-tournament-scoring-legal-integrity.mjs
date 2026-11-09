@@ -124,8 +124,8 @@ includesAll(preflight, [
 
 includesAll(competitions, [
   "tournamentSettlementLabel",
-  "After the final eligible Premier League match",
-  "gameweek settlement cutoff",
+  "After final Premier League match",
+  "final-match settlement cutoff",
   "FA Cup",
   "postponed fixtures played after the next gameweek starts",
   "submissionClosesAt",
@@ -137,7 +137,7 @@ includesAll(adminTournaments, [
   "MANUAL EARLY SETTLEMENT",
   "/api/admin/competitions/settle/",
   "postponed Premier League fixture does not count",
-  "common: 1.7, rare: 1.6, unique: 1.5, epic: 1.4, legendary: 1.3",
+  "common: 2.0, rare: 1.8, unique: 1.7, epic: 1.6, legendary: 1.5",
   "const scheduled = officialCompetitions.find",
 ], "Admin tournament manager");
 
@@ -170,8 +170,8 @@ includesAll(sharedRules, [
   "common: 1",
   "legendary: 1",
   "SUBMITTED_LINEUPS_ARE_FINAL = true",
-  'TOURNAMENT_SETTLEMENT_DAY = "day-after-last-eligible-fixture"',
-  'TOURNAMENT_SETTLEMENT_TIME_CAT = "23:59"',
+  'TOURNAMENT_SETTLEMENT_DAY = "After final eligible Premier League match"',
+  'TOURNAMENT_SETTLEMENT_TIME_CAT = "Post-match, once fixtures and player statistics are verified"',
   "CUP_FIXTURES_COUNT = false",
   "POST_SETTLEMENT_FIXTURES_COUNT = false",
   "POSTPONED_AFTER_NEXT_GAMEWEEK_START_COUNT = false",
