@@ -222,7 +222,7 @@ export default function AdminTournamentManager() {
 
   const settleMutation = useMutation({
     mutationFn: async (competitionId: number) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, {})).json(),
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/competitions/my-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/prize-vault"] });
@@ -230,7 +230,9 @@ export default function AdminTournamentManager() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/tournament-financials"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       void auditGw();
-      toast({ title: "Tournament settled", description: "Final-match verified scores, ranks and prizes are now final." });
+      toast({ title: "Tournament settled", description: result?.breakNotice?.eligible
+        ? "GW10 complete! International-break advice queued once for participating managers."
+        : "Final-match verified scores, ranks and prizes are now final." });
     },
     onError: (error: any) => {
       const raw = String(error?.message || "Unable to settle tournament");
@@ -260,7 +262,9 @@ export default function AdminTournamentManager() {
       }
       toast({
         title: result.blocked ? `GW${result.gameWeek}: ${result.blocked} need attention` : `GW${result.gameWeek} settled`,
-        description: `${result.settled} tournament(s) settled; previously completed results and rewards preserved.`,
+        description: result.breakNotice?.eligible
+          ? `${result.settled} cup(s) settled. International-break notice queued for ${result.breakNotice.created} manager(s) this time.`
+          : `${result.settled} tournament(s) settled; previously completed results and rewards preserved.`,
         variant: result.blocked ? "destructive" : undefined,
       });
     },
@@ -336,6 +340,12 @@ export default function AdminTournamentManager() {
           </Button>
         </div>
         <p className="mt-2 text-xs text-white/60">Settles every eligible cup for the selected week, including cups with zero entries. Pending API-Football scores remain blocked. Completed rewards are not repeated.</p>
+        {targetGameWeek === 10 ? <div className="mt-3 rounded-xl border border-sky-300/20 bg-sky-300/[.06] p-3 text-xs leading-5 text-sky-100">
+          <b className="block text-sm text-white">🌍⚽ International Break — GW10 message</b>
+          <p className="mt-1">After all GW10 cups are settled, every participating manager receives this message in Inbox and, when enabled, by push notification:</p>
+          <p className="mt-2 text-white/90">“GW10 is officially settled! 🏆 We're heading into the international break, so enjoy the international football while we wait for the Premier League to return. Before GW11 kicks off, please review your players for injuries, suspensions, availability and fixture changes — and update your Fantasy Arena lineup before the entry deadline. Enjoy the break, recharge, and let's get our lineups ready for GW11! ⚽💙”</p>
+          <p className="mt-1 text-sky-100/70">Sent once per manager after successful settlement, with a link to Play for GW11.</p>
+        </div> : null}
         {bulkSettlement ? <div className="mt-3 max-h-[65vh] space-y-3 overflow-y-auto rounded-lg border border-white/10 p-3 text-xs">
           <p className="font-bold">GW{bulkSettlement.gameWeek}: {bulkSettlement.settled} settled, {bulkSettlement.blocked} blocked</p>
           {bulkSettlement.blocked > 0 ? <div role="alert" className="rounded-lg border border-red-300/30 bg-red-400/10 p-3">
@@ -350,6 +360,11 @@ export default function AdminTournamentManager() {
           {bulkSettlement.results?.filter((item: any) => item.result !== "blocked").map((item: any) =>
             <div key={item.id} className="break-words border-t border-white/10 py-2"><span className="font-semibold">{item.name}</span> — {item.result.replaceAll("_"," ")}: {item.message}</div>
           )}
+          {bulkSettlement.breakNotice?.eligible ? <div role="status" className="rounded-lg border border-sky-300/20 bg-sky-300/[.07] p-3 leading-5 text-sky-50">
+            <b>🌍 International-break message</b>
+            <p className="mt-1">{bulkSettlement.breakNotice.message}</p>
+            <p className="mt-1 text-sky-100/75">Queued for {bulkSettlement.breakNotice.created} manager(s) on this attempt. Repeated settlement actions do not send duplicates.</p>
+          </div> : null}
           {bulkSettlement.nextGameweek ? <p className="rounded-lg border border-white/10 p-2 text-white/80">
             GW{bulkSettlement.nextGameweek.gameWeek} opening: {String(bulkSettlement.nextGameweek.status || "unknown").replaceAll("_"," ")}.
             {Number(bulkSettlement.nextGameweek.opened || 0) > 0 ? ` ${bulkSettlement.nextGameweek.opened} official cups opened; notifications link to Play.` : ""}
