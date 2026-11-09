@@ -211,6 +211,23 @@ async function main() {
     let excludedPostponed = 0;
     let fallbackWindows = 0;
     let migratedUnsettledHistoricalCutoffs = 0;
+    // GW11 must not be automatically opened by the calendar while any GW10
+    // tournament remains unsettled. The notification worker owns the timed
+    // 18:00 CAT release; previously completed entry snapshots are untouched.
+    const gw10State = await client.query(`
+      select count(*) filter(where created_by_user_id is null and
+        coalesce(prize_key,'') in ('ladder','free-weighted-card'))::int as official_count,
+        count(*) filter(where created_by_user_id is null and
+        coalesce(prize_key,'') in ('ladder','free-weighted-card') and
+        status::text='completed')::int as completed_official_count,
+        count(*) filter(where status::text not in ('completed','cancelled'))::int as unsettled_count
+      from app.competitions
+      where season='2026-27' and game_week=10 and name not like '[TEST]%'
+    `);
+    const progress = gw10State.rows[0] || {};
+    const gw10Settled = Number(progress.official_count || 0) >= 6
+      && Number(progress.official_count || 0) === Number(progress.completed_official_count || 0)
+      && Number(progress.unsettled_count || 0) === 0;
 
     // Past official weeks are historical only. Close stale rows, but never recreate
     // a past tournament that an admin intentionally deleted.
@@ -246,7 +263,8 @@ async function main() {
 
     for (const window of windows) {
       if (window.gw < currentGw) continue;
-      const status = plannedStatus({ ...window, now });
+      const status = window.gw === 11 && !gw10Settled
+        ? "upcoming" : plannedStatus({ ...window, now });
       excludedPostponed += window.excludedPostponed;
       if (window.usedFallback) fallbackWindows += 1;
       for (const rarity of RARITIES) {
