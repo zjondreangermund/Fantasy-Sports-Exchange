@@ -13,6 +13,7 @@ import { loadApiFootballGameweekScoringContext } from "../services/apiFootballSc
 import { ScoreUpdateService } from "../services/scoreUpdater.js";
 import { runApiFootballSync } from "../services/apiFootballSync.js";
 import { gameweekSettlementReadiness } from "../services/gameweekSettlementReady.js";
+import { loadVerifiedFinalFixtureIds } from "../services/verifiedMatchFinish.js";
 import { rankCompetitionEntries } from "../services/tournamentRules.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
@@ -723,7 +724,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       if (!Number.isInteger(gameWeek) || gameWeek < 1 || gameWeek > 38) return res.status(400).json({ message: "Invalid gameweek" });
       const records = rowsOf(await db.execute(sql`
         select c.id, c.name, c.tier::text as tier, c.status::text as status,
-          c.end_date as "endDate",
+          c.end_date as "endDate", c.created_by_user_id as "createdByUserId",
           (select count(*)::int from app.competition_entries ce where ce.competition_id=c.id) as "entryCount",
           (select count(*)::int from app.competition_entries ce where ce.competition_id=c.id
              and (ce.tiebreak_meta -> 'scoring' ->> 'complete' is distinct from 'true'
@@ -740,9 +741,16 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
              and cl.ref_id=c.id::text and (cl.expires_at is null or cl.expires_at>now())) as "activeCardLocks"
         from app.competitions c where c.game_week=${gameWeek} order by c.id
       `));
-      const fixtureFeed = await fplApi.fixturesLive().catch(() => []);
+      const [fixtureFeed, officialBootstrap] = await Promise.all([
+        fplApi.fixturesLive().catch(() => []), fplApi.bootstrap().catch(() => ({events:[],teams:[]})),
+      ]);
+      const deadlineTime = (Array.isArray(officialBootstrap?.events) ? officialBootstrap.events : [])
+        .find((event: any) => Number(event?.id) === gameWeek)?.deadline_time;
+      const confirmedFinalFixtureIds = await loadVerifiedFinalFixtureIds(gameWeek, fixtureFeed, officialBootstrap);
       const tournaments = records.map((row: any) => {
-        const readiness = gameweekSettlementReadiness(fixtureFeed, gameWeek, row.endDate);
+        const readiness = gameweekSettlementReadiness(fixtureFeed, gameWeek, row.endDate, Date.now(), {
+          deadlineTime, confirmedFinalFixtureIds, useFixtureCutoff: !row.createdByUserId,
+        });
         const settlementCutoffPassed = readiness.code !== "SETTLEMENT_CUTOFF_NOT_REACHED" && readiness.code !== "MISSING_SETTLEMENT_CUTOFF";
         return {
           ...row,
@@ -1240,7 +1248,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       }
       const cups = rowsOf(await db.execute(sql`
         select c.id, c.name, c.status::text as status, c.end_date as "endDate",
-          count(ce.id)::integer as "entryCount"
+          c.created_by_user_id as "createdByUserId", count(ce.id)::integer as "entryCount"
         from app.competitions c
         left join app.competition_entries ce on ce.competition_id=c.id
         where c.game_week=${gameWeek} and c.name not like '[TEST]%'
@@ -1249,7 +1257,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         order by c.id
       `));
       const results: Array<{ id: number; name: string; result: string; message: string; code?: string; cutoffAt?: string; unresolvedCardIds?: number[]; entryCount?: number }> = [];
-      const fixtures = await fplApi.fixturesLive().catch(() => []);
+      const [fixtures, officialBootstrap] = await Promise.all([
+        fplApi.fixturesLive().catch(() => []), fplApi.bootstrap().catch(() => ({events:[],teams:[]})),
+      ]);
+      const deadlineTime = (Array.isArray(officialBootstrap?.events) ? officialBootstrap.events : [])
+        .find((event: any) => Number(event?.id) === gameWeek)?.deadline_time;
+      const confirmedFinalFixtureIds = await loadVerifiedFinalFixtureIds(gameWeek, fixtures, officialBootstrap);
 
       for (const cup of cups) {
         const id = Number(cup.id);
@@ -1258,9 +1271,11 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           results.push({ id, name, result: "already_completed", message: "Existing settlement and prizes preserved" });
           continue;
         }
-        const readiness = gameweekSettlementReadiness(fixtures, gameWeek, cup.endDate);
+        const readiness = gameweekSettlementReadiness(fixtures, gameWeek, cup.endDate, Date.now(), {
+          deadlineTime, confirmedFinalFixtureIds, useFixtureCutoff: !cup.createdByUserId,
+        });
         if (!readiness.ready) {
-          results.push({ id, name, result: "blocked", message: readiness.message, code: readiness.code, cutoffAt: String(cup.endDate || "") });
+          results.push({ id, name, result: "blocked", message: readiness.message, code: readiness.code, cutoffAt: readiness.cutoffAt || String(cup.endDate || "") });
           continue;
         }
         if (Number(cup.entryCount || 0) === 0) {
@@ -1273,7 +1288,9 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
               if (!locked || String(locked.status) === "cancelled") throw new Error("Tournament no longer eligible");
               if (String(locked.status) === "completed") return false;
               if (!["open", "active", "closed"].includes(String(locked.status))) throw new Error("Tournament is not ready");
-              if (!gameweekSettlementReadiness(fixtures, gameWeek, locked.endDate).ready) throw new Error("Eligible gameweek matches are not all verified finished");
+              if (!gameweekSettlementReadiness(fixtures, gameWeek, locked.endDate, Date.now(), {
+                deadlineTime, confirmedFinalFixtureIds, useFixtureCutoff: !cup.createdByUserId,
+              }).ready) throw new Error("Eligible in-week Premier League matches are not all verified finished");
               const entries = rowsOf(await tx.execute(sql`select id from app.competition_entries where competition_id=${id} limit 1`));
               if (entries.length) throw new Error("An entry was added; retry the normal settlement");
               await tx.execute(sql`update app.competitions set status='completed',platform_fee_total=0,prize_pool_total=0 where id=${id}`);
