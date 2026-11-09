@@ -19,6 +19,7 @@ import { rankCompetitionEntries } from "../services/tournamentRules.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
 import { notifyGw10InternationalBreakIfSettled } from "../services/gameweekBreakNotice.js";
+import { openNextGameweekIfComplete } from "../services/gameweekRollover.js";
 import { TOURNAMENT_REQUIRED_POSITIONS, TOURNAMENT_UTILITY_POSITIONS, validateTournamentRarityLineup } from "../../shared/game-rules.js";
 import {
   getWalletPostingIntegrityReport,
@@ -34,7 +35,6 @@ const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 const PREMIER_LEAGUE_KEYS = new Set(["premierleague", "englishpremierleague", "epl"]);
 let cardLockGuardPromise: Promise<void> | null = null;
 let prizeAwardSchemaPromise: Promise<void> | null = null;
-let nextGameweekSchemaPromise: Promise<void> | null = null;
 const COMMON_COLLECTION_CAP = 20;
 
 function rowsOf(result: any): any[] {
@@ -925,62 +925,6 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
   });
 
   // Keep Premier League kickoff (fixture_window_start) and scoring cutoffs unchanged.
-  const openNextGameweekIfComplete = async (gameWeek: number) => {
-    if (gameWeek < 1 || gameWeek >= 38) return { status: "season_complete", opened: 0, gameWeek: gameWeek + 1 };
-    if (!nextGameweekSchemaPromise) {
-      nextGameweekSchemaPromise = db.execute(sql`alter table app.competitions add column if not exists auto_opened_after_settlement boolean not null default false`)
-        .then(() => {}).catch((error) => { nextGameweekSchemaPromise = null; throw error; });
-    }
-    await nextGameweekSchemaPromise;
-    return db.transaction(async (tx) => {
-      const official = rowsOf(await tx.execute(sql`
-        select season from app.competitions
-        where game_week=${gameWeek} and created_by_user_id is null
-          and coalesce(prize_key,'')='ladder' and name not like '[TEST]%'
-        order by id limit 1
-      `))[0];
-      const season = String(official?.season || "");
-      if (!season) return { status: "not_prepared", opened: 0, gameWeek: gameWeek + 1 };
-      const incomplete = rowsOf(await tx.execute(sql`
-        select id from app.competitions where game_week=${gameWeek}
-          and (season=${season} or season is null)
-          and name not like '[TEST]%'
-          and status::text not in ('completed','cancelled')
-        limit 1
-      `));
-      if (incomplete.length) return { status: "settlement_incomplete", opened: 0, gameWeek: gameWeek + 1 };
-
-      const targetWeek = gameWeek + 1;
-      const prepared = rowsOf(await tx.execute(sql`
-        select id, status::text as status from app.competitions
-        where game_week=${targetWeek} and season=${season}
-          and created_by_user_id is null and coalesce(visibility,'public')='public'
-          and coalesce(prize_key,'') in ('ladder','free-weighted-card')
-          and name not like '[TEST]%' and status::text not in ('cancelled','completed')
-        for update
-      `));
-      // Five paid rarity ladders plus the single FREE Common Card Cup must exist.
-      // Never partially launch a week while the official calendar is incomplete.
-      if (prepared.length < 6) return { status: "not_prepared", opened: 0, gameWeek: targetWeek };
-      const updated = rowsOf(await tx.execute(sql`
-        update app.competitions
-        set status='open', start_date=least(start_date,now()),
-          auto_opened_after_settlement=true
-        where game_week=${targetWeek} and season=${season}
-          and created_by_user_id is null and coalesce(visibility,'public')='public'
-          and coalesce(prize_key,'') in ('ladder','free-weighted-card')
-          and name not like '[TEST]%'
-          and status::text='upcoming' and admin_status_override is null
-          and coalesce(fixture_window_start,start_date)>now()
-        returning id
-      `));
-      return {
-        status: updated.length ? "opened" : prepared.every((row: any) => row.status === "open") ? "already_open" : "not_open",
-        opened: updated.length, gameWeek: targetWeek,
-      };
-    });
-  };
-
   const settleSingleCompetition = async (req: any, res: any) => {
     try {
       await ensureCardLockGuard();
