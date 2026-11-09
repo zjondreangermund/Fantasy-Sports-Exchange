@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
+import { fplApi } from "./fplApi.js";
+import { gameweekFixtureWindow } from "./gameweekSettlementReady.js";
 import {
   loadApiFootballPlayerDirectory,
   resolveApiFootballPlayer,
@@ -270,7 +272,7 @@ function inferredFixtureStats(row: any): PlayerStats {
   return mapped;
 }
 
-export async function loadApiFootballGameweekScoringContext(gameWeek: number): Promise<ApiFootballGameweekScoringContext> {
+export async function loadApiFootballGameweekScoringContext(gameWeek: number, eligibleWindowEndMs?: number): Promise<ApiFootballGameweekScoringContext> {
   const gw = Math.max(1, Number(gameWeek || 0));
   const empty = (directory: ApiFootballDirectoryPlayer[] = []): ApiFootballGameweekScoringContext => ({
     directory,
@@ -286,6 +288,18 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
 
   try {
     const directory = await loadApiFootballPlayerDirectory();
+    // A fixture can remain tagged to its original EPL round after being moved
+    // weeks later. Do not score that delayed match inside this GW, regardless
+    // of what the provider's round string says.
+    let endMs = Number(eligibleWindowEndMs);
+    if (!Number.isFinite(endMs) || endMs <= 0) {
+      const [fixtures, bootstrap] = await Promise.all([fplApi.fixturesLive(), fplApi.bootstrap()]);
+      const deadline = (Array.isArray(bootstrap?.events) ? bootstrap.events : [])
+        .find((e: any) => Number(e?.id) === gw)?.deadline_time;
+      endMs = gameweekFixtureWindow(fixtures, gw, deadline)?.end || NaN;
+    }
+    if (!Number.isFinite(endMs)) return empty(directory); // No verified week boundary: never award late points.
+    const windowEnd = new Date(endMs);
     const seasonRow = rowsOf(await db.execute(sql`
       select max(season)::int as season
       from app.api_football_fixtures
@@ -304,6 +318,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
       where league_id=${LEAGUE_ID}
         and season=${season}
         and coalesce(round,'') ~ ${roundPattern}
+        and kickoff_at < ${windowEnd}
       order by kickoff_at asc, api_fixture_id asc
     `));
     if (!fixtureRows.length) return { ...empty(directory), season };
@@ -339,6 +354,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number): P
       where f.league_id=${LEAGUE_ID}
         and f.season=${season}
         and coalesce(f.round,'') ~ ${roundPattern}
+        and f.kickoff_at < ${windowEnd}
         and s.statistics <> '{}'::jsonb
       order by f.kickoff_at asc, s.api_fixture_id asc
     `));
