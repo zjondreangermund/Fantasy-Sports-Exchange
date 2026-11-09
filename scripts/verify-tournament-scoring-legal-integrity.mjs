@@ -25,6 +25,7 @@ const sidebar = read("client/src/components/app-sidebar.tsx");
 const footer = read("client/src/components/SiteFooter.tsx");
 const myEntries = read("client/src/pages/my-entries.tsx");
 const competitions = read("client/src/pages/competitions.tsx");
+const vaultPage = read("client/src/pages/competitions-vault.tsx");
 const adminTournaments = read("client/src/components/admin/AdminTournamentManager.tsx");
 const sharedRules = read("shared/game-rules.ts");
 const calendarPatch = read("scripts/apply-official-tournament-calendar.mjs");
@@ -125,11 +126,13 @@ includesAll(preflight, [
 includesAll(competitions, [
   "tournamentSettlementLabel",
   "After final Premier League match",
-  "final-match settlement cutoff",
-  "FA Cup",
-  "postponed fixtures played after the next gameweek starts",
   "submissionClosesAt",
 ], "Tournament page");
+includesAll(vaultPage, [
+  "gameweek final-match settlement cutoff",
+  "FA Cup",
+  "Postponed fixtures played after the next gameweek starts",
+], "Play tournament page");
 includesAll(adminTournaments, [
   "Final Premier League match settlement cutoff",
   "Manual Settle Now",
