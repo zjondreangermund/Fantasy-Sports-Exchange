@@ -722,6 +722,16 @@ export class ScoreUpdateService {
       } catch (error) {
         console.error("GW entry-closed notification dispatch failed (retry next poll):", error);
       }
+      // The recovery audit and scoring daemon must use the SAME verified-FT
+      // evidence. FPL's "finished" flag can lag for hours after a completed PL
+      // match, leaving all entries permanently provisional unless this is checked.
+      // One database lookup per relevant gameweek per scoring pass, not per cup.
+      const verifiedFinalByGw = new Map<number, Promise<Set<number>>>();
+      const verifiedFinalFor = (gameWeek: number) => {
+        if (!verifiedFinalByGw.has(gameWeek))
+          verifiedFinalByGw.set(gameWeek, loadVerifiedFinalFixtureIds(gameWeek, fixtures, bootstrap));
+        return verifiedFinalByGw.get(gameWeek)!;
+      };
       const toScore: Array<{ competition: any; final: boolean }> = [];
 
       for (const competition of competitions) {
@@ -730,7 +740,7 @@ export class ScoreUpdateService {
         const event = this.eventForGameweek(bootstrap, gameWeek);
         const deadline = this.entryDeadline(competition, event, fixtures);
         const startTime = new Date(String(competition?.startDate || competition?.start_date || 0)).getTime();
-        const final = this.isSettlementFinal(competition, fixtures, bootstrap);
+        let final = this.isSettlementFinal(competition, fixtures, bootstrap);
         let status = String(competition?.status || "upcoming");
         const manualStatus = this.adminStatusOverride(competition);
         if (manualStatus) {
@@ -758,6 +768,11 @@ export class ScoreUpdateService {
         }
         if (!manualStatus && status === "open" && now >= deadline.getTime()) {
           status = await this.activateCompetitionAtDeadline(competition);
+        }
+        if (!final && ["active", "closed"].includes(status) &&
+          this.hasGameweekStarted(competition, event, fixtures, now)) {
+          const providerFinalIds = await verifiedFinalFor(gameWeek);
+          final = this.isSettlementFinal(competition, fixtures, bootstrap, providerFinalIds);
         }
         const liveWhileOpen = ["open", "upcoming", "closed"].includes(status)
           && this.hasGameweekStarted(competition, event, fixtures, now);

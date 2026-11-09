@@ -742,6 +742,43 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
              and cl.ref_id=c.id::text and (cl.expires_at is null or cl.expires_at>now())) as "activeCardLocks"
         from app.competitions c where c.game_week=${gameWeek} order by c.id
       `));
+      // Explain whether all 13 entries are merely provisional or whether
+      // particular players have truly missing provider data. This read-only
+      // diagnostic cannot turn unfinished cards into verified zero scores.
+      const snapshots = rowsOf(await db.execute(sql`
+        select ce.id as "entryId", ce.competition_id as "competitionId",
+               coalesce(ce.tiebreak_meta -> 'scoring','{}'::jsonb) as "scoring"
+        from app.competition_entries ce
+        join app.competitions c on c.id=ce.competition_id
+        where c.game_week=${gameWeek}
+      `));
+      const snapshotHealth = new Map<number, {
+        missing: number; provisional: number; incomplete: number;
+        wrongGameweek: number; cardFailures: Map<number,any>;
+      }>();
+      for (const entry of snapshots) {
+        const cupId = Number(entry.competitionId || 0);
+        if (!snapshotHealth.has(cupId)) snapshotHealth.set(cupId, {
+          missing:0, provisional:0, incomplete:0, wrongGameweek:0, cardFailures:new Map(),
+        });
+        const health = snapshotHealth.get(cupId)!;
+        const state = asObject(entry.scoring);
+        if (!Object.keys(state).length) health.missing++;
+        if (state.final !== true) health.provisional++;
+        if (state.complete !== true) health.incomplete++;
+        if (Number(state.gameWeek || 0) !== gameWeek) health.wrongGameweek++;
+        for (const card of Array.isArray(state.cardScores) ? state.cardScores : []) {
+          const cardId = Number(card?.cardId || 0);
+          if (cardId && (String(card?.identityStatus || "") !== "verified" ||
+            (Array.isArray(state.unresolvedCardIds) && state.unresolvedCardIds.map(Number).includes(cardId)))) {
+            health.cardFailures.set(cardId, {
+              cardId, playerName: String(card.officialPlayerName || "Unknown player"),
+              status: String(card.identityStatus || "unverified"),
+              explanation: String(card.identityMessage || "Official provider statistics are still pending").slice(0,300),
+            });
+          }
+        }
+      }
       const [fixtureFeed, officialBootstrap] = await Promise.all([
         fplApi.fixturesLive().catch(() => []), fplApi.bootstrap().catch(() => ({events:[],teams:[]})),
       ]);
@@ -759,6 +796,14 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           ...row,
           settlementCutoffPassed,
           fixtureReadiness: readiness,
+          snapshotHealth: (() => {
+            const h = snapshotHealth.get(Number(row.id));
+            return { missing: h?.missing || 0, provisional: h?.provisional || 0,
+              incomplete: h?.incomplete || 0, wrongGameweek: h?.wrongGameweek || 0,
+              pendingCards: [...(h?.cardFailures.values() || [])].slice(0,30),
+              totalDistinctPendingCards: h?.cardFailures.size || 0,
+            };
+          })(),
           unfinishedFixtureDetails: readiness.unfinishedFixtures.map((fixture: any) => {
             const live = matchInfo.fixtures.find((f: any) => Number(f.id) === fixture.id);
             const provider = finalEvidence.fixtures.find((f: any) => Number(f.fplFixtureId) === fixture.id);
@@ -829,6 +874,55 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
 
   // GW_SETTLEMENT_ROLLOVER_V1: Open the next official week only after ALL
   // non-cancelled tournaments in this season/week have completed settlement.
+  // GW_SCORE_REFRESH_V1. Recalculate provisional entries only; NEVER settle,
+  // unlock, mint cards, transfer funds or alter completed tournament history.
+  app.post("/api/admin/competitions/refresh-gameweek-scores/:gameWeek", requireAuth, async (req: any, res) => {
+    try {
+      if (!(await isAdminUser(String(req.authUserId || ""))))
+        return res.status(403).json({ message: "Admin access required" });
+      const gameWeek = Number(req.params.gameWeek);
+      if (!Number.isInteger(gameWeek) || gameWeek < 1 || gameWeek > 38)
+        return res.status(400).json({ message: "Valid gameweek between 1 and 38 required" });
+      const active = rowsOf(await db.execute(sql`
+        select c.id, c.name, c.status::text as status
+        from app.competitions c
+        where c.game_week=${gameWeek}
+          and c.status::text in ('active','closed')
+          and c.name not like '[TEST]%'
+          and exists(select 1 from app.competition_entries ce where ce.competition_id=c.id)
+        order by c.id
+      `));
+      const results: any[] = [];
+      for (const cup of active) {
+        try {
+          const scoring = await new ScoreUpdateService(storage).updateCompetition(Number(cup.id));
+          results.push({
+            id:Number(cup.id),name:String(cup.name || ""),updatedEntries:scoring.updatedCount,
+            totalEntries:scoring.totalEntries,final:scoring.final,complete:scoring.complete,
+            unresolvedCardIds:scoring.unresolvedCardIds || [],
+            message:scoring.skipped ? scoring.reason || "Skipped" :
+              scoring.final && scoring.complete ? "Verified final scoring snapshots saved; safe for normal settlement" :
+              scoring.final ? "Final match verified; player statistics or links still incomplete" :
+              "Waiting for confirmed final match or post-match cutoff",
+          });
+        } catch (error: any) {
+          console.warn(`[gw-score-refresh] GW${gameWeek} competition ${Number(cup.id)} is not ready:`,error?.message||error);
+          results.push({ id:Number(cup.id),name:String(cup.name||""),final:false,complete:false,
+            message:String(error?.message || "Scoring refresh failed"),unresolvedCardIds:[] });
+        }
+      }
+      return res.json({
+        gameWeek, readOnlyAwards:true, refreshed:results.length,
+        fullyVerified:results.filter(row=>row.complete && row.final).length,
+        results,
+        notice:"Entry scores only. No tournament settlement, card unlocks or prizes were issued.",
+      });
+    } catch (error) {
+      console.error("[gw-score-refresh] failed:",error);
+      return res.status(500).json({message:"Unable to refresh gameweek entry scores"});
+    }
+  });
+
   // Keep Premier League kickoff (fixture_window_start) and scoring cutoffs unchanged.
   const openNextGameweekIfComplete = async (gameWeek: number) => {
     if (gameWeek < 1 || gameWeek >= 38) return { status: "season_complete", opened: 0, gameWeek: gameWeek + 1 };
