@@ -64,6 +64,7 @@ export default function AdminTournamentManager() {
   const [tournamentListView, setTournamentListView] = useState<"current" | "closed">("closed");
   const [selectedGameWeek, setSelectedGameWeek] = useState("");
   const [bulkSettlement, setBulkSettlement] = useState<any>(null);
+  const [lastScoreRefresh, setLastScoreRefresh] = useState<any>(null);
   const { data: competitions } = useQuery<any[]>({ queryKey: ["/api/competitions"] });
   const { data: prizePayload } = useQuery<any>({ queryKey: ["/api/admin/prizes"] });
   const { data: financialPayload, isFetching: financialsFetching, refetch: refreshFinancials } = useQuery<any>({
@@ -98,13 +99,19 @@ export default function AdminTournamentManager() {
       const fixtureRun = await fixtureResponse.json();
       const statsResponse = await apiRequest("POST", "/api/admin/live-data/sync/completed_stats", {});
       const statsRun = await statsResponse.json();
-      return { fixtureRun, statsRun };
+      // A provider sync alone does not recalculate an already submitted
+      // tournament entry. Rebuild only scoring snapshots, never awards.
+      const scoringResponse = await apiRequest("POST", `/api/admin/competitions/refresh-gameweek-scores/${targetGameWeek}`, {});
+      const scoringRun = await scoringResponse.json();
+      return { fixtureRun, statsRun, scoringRun };
     },
     onSuccess: (result: any) => {
+      setLastScoreRefresh(result.scoringRun);
       void auditGw();
       toast({
-        title: `GW${targetGameWeek} provider refresh complete`,
-        description: `Fixture sync: ${result.fixtureRun?.message || "checked"}. Player stats: ${result.statsRun?.message || "checked"}. Recheck audit before settling.`,
+        title: `GW${targetGameWeek}: ${result.scoringRun?.fullyVerified ?? 0}/${result.scoringRun?.refreshed ?? 0} cups verified`,
+        description: "Fixture, player-stat and entry-score refresh checked. No prizes were issued. Review any remaining player warnings below.",
+        variant: Number(result.scoringRun?.fullyVerified || 0) < Number(result.scoringRun?.refreshed || 0) ? "destructive" : undefined,
       });
     },
     onError: (error: any) => {
@@ -355,10 +362,18 @@ export default function AdminTournamentManager() {
           <div><h3 className="font-black text-amber-100">GW{targetGameWeek} settlement recovery audit</h3><p className="mt-1 text-xs text-white/60">Review original scoring, locks, payouts and prizes here. For a Closed cup, use Settle Gameweek above; completed cups remain protected against duplicate awards.</p></div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <Button type="button" variant="outline" disabled={gwAuditing || refreshGameweekProvider.isPending} onClick={() => { void auditGw(); }} className="flex-1 border-amber-300/30 text-amber-100 sm:flex-none"><RefreshCw className={`mr-1.5 h-4 w-4 ${gwAuditing ? "animate-spin" : ""}`} />{gwAuditing ? "Checking…" : `Audit GW${targetGameWeek}`}</Button>
-            <Button type="button" variant="outline" disabled={refreshGameweekProvider.isPending || gwAuditing} onClick={() => refreshGameweekProvider.mutate()} className="flex-1 border-cyan-300/30 text-cyan-100 sm:flex-none"><RefreshCw className={`mr-1.5 h-4 w-4 ${refreshGameweekProvider.isPending ? "animate-spin" : ""}`} />{refreshGameweekProvider.isPending ? "Syncing match data…" : "Refresh match & player stats"}</Button>
+            <Button type="button" variant="outline" disabled={refreshGameweekProvider.isPending || gwAuditing} onClick={() => refreshGameweekProvider.mutate()} className="flex-1 border-cyan-300/30 text-cyan-100 sm:flex-none"><RefreshCw className={`mr-1.5 h-4 w-4 ${refreshGameweekProvider.isPending ? "animate-spin" : ""}`} />{refreshGameweekProvider.isPending ? "Verifying entry scores…" : "Refresh matches, players & entry scores"}</Button>
           </div>
         </div>
+        {lastScoreRefresh?.gameWeek === targetGameWeek ? <div role="status" className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-400/10 p-3 text-xs leading-5 text-cyan-50">
+          <b>GW{targetGameWeek} score refresh:</b> {lastScoreRefresh.fullyVerified}/{lastScoreRefresh.refreshed} entered cups have complete final snapshots; no prizes issued.
+          {lastScoreRefresh.results?.filter((item: any) => !item.final || !item.complete).map((item: any) => <p key={item.id} className="mt-1 text-orange-200"><b>{item.name}:</b> {item.message}{item.unresolvedCardIds?.length ? ` · ${item.unresolvedCardIds.length} card(s) need verification` : ""}</p>)}
+        </div> : null}
         {gwRecovery ? <div className="mt-3 space-y-2">{gwRecovery.tournaments?.length ? gwRecovery.tournaments.map((cup: any) => <div key={cup.id} className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><b className="text-white">{cup.name}</b><Badge variant="outline">{cup.status}</Badge></div><div className="mt-2 text-white/65">{cup.entryCount} entries · {cup.unverifiedEntries} unverified snapshots · {cup.activeCardLocks} active card locks · {cup.paidEntryCount} cash payouts · {cup.mintedPrizeCount} minted cards · {cup.prizeAwardCount} award records ({cup.unclaimedAwardCount} pending claims)</div><p className="mt-1 text-amber-100">{cup.recoveryStatus}</p>
+            {cup.snapshotHealth ? <div className="mt-2 rounded-lg border border-white/10 bg-white/[.04] p-2 text-xs text-white/75">
+              <b>Scoring snapshot status:</b> {cup.snapshotHealth.provisional} provisional, {cup.snapshotHealth.incomplete} missing player verification, {cup.snapshotHealth.missing} absent, {cup.snapshotHealth.wrongGameweek} wrong GW.
+              {cup.snapshotHealth.totalDistinctPendingCards > 0 ? <div className="mt-2 space-y-1"><b className="text-amber-100">{cup.snapshotHealth.totalDistinctPendingCards} distinct card(s) need attention</b>{cup.snapshotHealth.pendingCards.map((card: any) => <div key={card.cardId} className="text-orange-100"><b>{card.playerName}</b> (#{card.cardId}): {card.explanation}</div>)}</div> : null}
+            </div> : null}
             {cup.unfinishedFixtureDetails?.length ? <div className="mt-2 space-y-2">{cup.unfinishedFixtureDetails.map((fixture: any) => <div key={fixture.id} className="rounded-lg border border-orange-300/20 bg-orange-400/10 p-2 text-xs text-orange-100"><b>{fixture.homeTeam} vs {fixture.awayTeam}</b> · Fixture #{fixture.id}<div className="mt-0.5">Scheduled: {fixture.kickoffTime ? settlementLabel(fixture.kickoffTime) : "Date not supplied"} · FPL FT: {fixture.fplFinished ? "Yes" : "No"} · API-Football matched FT: {fixture.verifiedByApiFootball ? "Yes" : "No"}
               <div className="mt-1 rounded-md border border-white/10 bg-black/25 p-2 text-[11px] leading-5 text-white/85">
                 {fixture.apiFootballMatched
