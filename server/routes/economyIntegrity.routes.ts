@@ -18,6 +18,7 @@ import { loadVerifiedFinalFixtureEvidence, loadVerifiedFinalFixtureIds } from ".
 import { rankCompetitionEntries } from "../services/tournamentRules.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
+import { notifyGw10InternationalBreakIfSettled } from "../services/gameweekBreakNotice.js";
 import { TOURNAMENT_REQUIRED_POSITIONS, TOURNAMENT_UTILITY_POSITIONS, validateTournamentRarityLineup } from "../../shared/game-rules.js";
 import {
   getWalletPostingIntegrityReport,
@@ -1320,9 +1321,18 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           nextGameweek = { status: "error", opened: 0, gameWeek: Number(preview.gameWeek || 0) + 1 };
         }
       }
+      let breakNotice: any = null;
+      if (!req.skipNextGameweekRollover) {
+        try {
+          breakNotice = await notifyGw10InternationalBreakIfSettled(Number(preview.gameWeek || 0));
+        } catch (noticeError) {
+          console.error("[gw10-break] Tournament settled but break notification could not be sent:", noticeError);
+        }
+      }
       return res.json({
         success: true,
         nextGameweek,
+        breakNotice,
         message: settlement.replayed
           ? "Tournament settlement already completed and verified"
           : settlement.prizeVault
@@ -1474,8 +1484,16 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           nextGameweek = { status: "error", opened: 0, gameWeek: gameWeek + 1 };
         }
       }
+      let breakNotice: any = null;
+      if (failed === 0) {
+        try {
+          breakNotice = await notifyGw10InternationalBreakIfSettled(gameWeek);
+        } catch (noticeError) {
+          console.error("[gw10-break] Gameweek settled but international-break notifications could not be queued:", noticeError);
+        }
+      }
       return res.status(failed ? 207 : 200).json({
-        success: failed === 0, gameWeek, total: results.length, blocked: failed, nextGameweek,
+        success: failed === 0, gameWeek, total: results.length, blocked: failed, nextGameweek, breakNotice,
         settled: results.filter(row => row.result === "settled" || row.result === "settled_empty").length,
         results,
       });

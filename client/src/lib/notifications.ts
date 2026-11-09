@@ -71,6 +71,7 @@ export function notificationDestination(notification: ArenaNotification): string
   // Match the native Android and Web Push deep link for the once-per-GW close alert.
   if (replacementKey.startsWith("gameweek:") && replacementKey.endsWith(":entries-closed-good-luck")) return "/my-entries";
   if (/^gameweek:(?:\d+:)?\d+:entries-open$/.test(replacementKey)) return "/competitions";
+  if (/^gameweek:2026-27:10:international-break$/.test(replacementKey)) return "/competitions";
   if (replacementKey.startsWith("prize-level:")) return "/prize-vault";
   if (replacementKey.startsWith("prize-award:")) return "/trophy-cabinet";
   if (replacementKey.startsWith("player-availability:")) return "/my-entries";
