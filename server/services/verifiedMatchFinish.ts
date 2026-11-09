@@ -49,8 +49,10 @@ export function matchVerifiedFinalFixtures(fixtures: any[], bootstrap: any, apiM
 export async function loadVerifiedFinalFixtureIds(gameweek: number, fixtures: any[], bootstrap: any): Promise<Set<number>> {
   try {
     const roundPattern = `(^|[^0-9])${Number(gameweek)}$`;
-    const season = Number(String((Array.isArray(bootstrap?.events) ? bootstrap.events : [])
-      .find((e: any) => Number(e?.id) === Number(gameweek))?.deadline_time || "").slice(0,4)) || new Date().getUTCFullYear();
+    const deadline = Date.parse(String((Array.isArray(bootstrap?.events) ? bootstrap.events : [])
+      .find((e: any) => Number(e?.id) === Number(gameweek))?.deadline_time || ""));
+    const eventDate = Number.isFinite(deadline) ? new Date(deadline) : new Date();
+    const season = eventDate.getUTCFullYear() - (eventDate.getUTCMonth() < 6 ? 1 : 0);
     const records = rowsOf(await db.execute(sql`
       select f.kickoff_at as "kickoffAt", coalesce(f.status_short,'NS') as "statusShort",
              h.name as "homeTeamName", a.name as "awayTeamName"
