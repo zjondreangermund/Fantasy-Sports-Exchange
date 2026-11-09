@@ -66,9 +66,11 @@ function gameweekWindow(bootstrap: any, gameWeek: number) {
   const nextDeadline = next?.deadline_time ? new Date(String(next.deadline_time)) : null;
 
   const start = new Date(deadline.getTime() - 2 * 60 * 60 * 1000);
-  const end = nextDeadline && Number.isFinite(nextDeadline.getTime())
-    ? nextDeadline
-    : new Date(deadline.getTime() + 9 * 24 * 60 * 60 * 1000);
+  const originalWeekEnd = deadline.getTime() + 7 * 24 * 60 * 60 * 1000;
+  const end = new Date(Math.min(
+    nextDeadline && Number.isFinite(nextDeadline.getTime()) ? nextDeadline.getTime() : Infinity,
+    originalWeekEnd,
+  ));
   return { start, end };
 }
 
