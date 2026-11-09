@@ -31,7 +31,7 @@ try{
  globalThis.__positionTest.db={execute,transaction:async fn=>fn({execute})};
  const stubs={
   db:'export const db=globalThis.__positionTest.db;',
-  fpl:'export const fplApi={bootstrap:async()=>globalThis.__positionTest.bootstrap};',
+  fpl:'export const fplApi={bootstrap:async()=>globalThis.__positionTest.bootstrap,fixturesLive:async()=>[]};',
   directory:`export const loadApiFootballPlayerDirectory=async()=>[...globalThis.__positionTest.provider.values()];export const resolveApiFootballPlayer=(p)=>globalThis.__positionTest.provider.get(Number(p.playerId||p.id));export const apiFootballPhotoUrl=()=>'';`,
   bridge:`export const loadApiFootballGameweekScoringContext=async()=>({directory:[...globalThis.__positionTest.provider.values()]});export const resolveApiFootballGameweekPlayer=p=>({player:globalThis.__positionTest.provider.get(Number(p.playerId||p.id)),stats:{minutes:90},fixture:{statusShort:'FT',statsReady:true}});export const loadDetailedScoringContext=async()=>null;export const resolveDetailedStatsForPlayer=()=>null;`,
   scoring:`export const calculatePlayerScore=(stats,position)=>{globalThis.__positionTest.scoringCalls.push(position);return {total_score:position==='FWD'?40:32,breakdown:{},reasons:[]};};export const mapFplStatsToPlayerStats=()=>({});export const mergePlayerStatsWithDetailedStats=()=>({});`,
