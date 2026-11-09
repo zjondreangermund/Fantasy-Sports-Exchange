@@ -17,6 +17,7 @@ type TournamentPlayer = {
   contribution: number;
   minutes: number;
   identityStatus?: string;
+  identityMessage?: string;
 };
 
 type TournamentTeamDetails = {
@@ -113,7 +114,7 @@ export default function TournamentEntryTeamCard({ entry, competition, compact = 
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1"><p className="truncate text-[11px] font-black text-white">{player.name}</p>{player.captain ? <Crown className="h-3 w-3 shrink-0 text-amber-300" /> : null}</div>
-                <p className="truncate text-[8px] font-bold uppercase tracking-[.09em] text-slate-500">{player.position} · {player.team}</p>
+                <p className="truncate text-[8px] font-bold uppercase tracking-[.09em] text-slate-500">{player.position} · {player.team}</p>{player.identityStatus === "postponed-outside-gameweek" ? <p className="mt-1 text-[9px] leading-4 text-orange-200">{player.identityMessage}</p> : null}
               </div>
               <div className="shrink-0 text-right"><p className="text-[11px] font-black text-cyan-100">{score(player.contribution)}</p><p className="text-[7px] font-black uppercase text-slate-600">pts</p></div>
             </div>) : <div className="col-span-full rounded-xl border border-dashed border-white/[.08] p-3 text-center text-xs text-slate-500">No submitted cards are available for this entry yet.</div>}

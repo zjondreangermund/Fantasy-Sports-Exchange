@@ -5,6 +5,7 @@ import { Crown, RefreshCcw, X, Clock3 } from "lucide-react";
 import { Button } from "../ui/button";
 import { queryClient } from "../../lib/queryClient";
 import { useToast } from "../../hooks/use-toast";
+import { findClubNotice, postponementWarning, useGameweekFixtureNotices } from "../../lib/gameweekPostponement";
 import type { PlayerCardWithPlayer } from "../../../../shared/schema";
 
 type TeamEntry = Record<string, any>;
@@ -20,6 +21,10 @@ export function EntryLineupEditor({ entry, competition, cards, allEntries, onClo
   entry: TeamEntry; competition: any; cards: PlayerCardWithPlayer[]; allEntries: TeamEntry[]; onClose:()=>void;
 }) {
   const { toast } = useToast();
+  const gameWeek = Number(competition.gameWeek ?? competition.game_week ?? 0);
+  const { data: fixtureStatus } = useGameweekFixtureNotices(gameWeek);
+  const warningFor = (card: PlayerCardWithPlayer | undefined) => card
+    ? postponementWarning(findClubNotice(fixtureStatus, card), gameWeek) : null;
   const initialIds = idsOf(entry);
   const [slots,setSlots] = useState<number[]>(initialIds.length===5?initialIds:[0,0,0,0,0]);
   const [captain,setCaptain]=useState(Number(entry.captainId ?? entry.captain_id ?? 0));
@@ -84,9 +89,9 @@ export function EntryLineupEditor({ entry, competition, cards, allEntries, onClo
             if(captain&&!next.includes(captain))setCaptain(0);
           }} className="w-full min-w-0 rounded-lg border border-white/15 bg-[#10182b] p-2 text-sm text-white">
             <option value="">Choose a player</option>
-            {slots[i]>0&&byId.get(slots[i])?<option value={slots[i]}>{label(byId.get(slots[i])!)}</option>:null}
-            {candidate(i).filter(card=>Number(card.id)!==slots[i]).map(card=><option key={card.id} value={Number(card.id)}>{label(card)}</option>)}
-          </select>
+            {slots[i]>0&&byId.get(slots[i])?<option value={slots[i]}>{label(byId.get(slots[i])!)}{warningFor(byId.get(slots[i])) ? " · POSTPONED / NO GW POINTS" : ""}</option>:null}
+            {candidate(i).filter(card=>Number(card.id)!==slots[i]).map(card=><option key={card.id} value={Number(card.id)}>{label(card)}{warningFor(card) ? " · POSTPONED GW" + gameWeek : ""}</option>)}
+          </select>{slots[i] > 0 && warningFor(byId.get(slots[i])) ? <div role="status" className="rounded-lg border border-orange-300/25 bg-orange-500/10 p-2 text-[11px] leading-4 text-orange-200">{warningFor(byId.get(slots[i]))}</div> : null}
         </label>)}
         <label className="block space-y-1 rounded-xl border border-yellow-400/20 bg-yellow-400/5 p-3">
           <span className="inline-flex items-center gap-1 text-xs font-black text-yellow-200"><Crown className="h-4 w-4"/> Captain</span>
