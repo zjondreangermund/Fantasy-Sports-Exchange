@@ -19,6 +19,7 @@ import { calculatePlayerScore, calculateLineupScore } from "./scoring.js";
 import { loadApiFootballGameweekScoringContext, resolveApiFootballGameweekPlayer, type ApiFootballGameweekScoringContext } from "./apiFootballScoringBridge.js";
 import { diagnoseApiFootballPlayerMatch } from "./apiFootballPlayerDirectory.js";
 import { createNotificationOnce, notifyGameweekEntriesClosed } from "./notifications.js";
+import { gameweekSettlementReadiness } from "./gameweekSettlementReady.js";
 
 const RARITY_PRESTIGE: Record<string, number> = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };
 const SCORE_REFRESH_INTERVAL_MS = Math.max(
@@ -419,9 +420,12 @@ export class ScoreUpdateService {
     return Number.isFinite(settlement.getTime()) ? settlement : null;
   }
 
-  private isSettlementFinal(competition: any) {
+  private isSettlementFinal(competition: any, fixtures: any[]) {
     const settlement = this.settlementDeadline(competition);
-    return Boolean(settlement && Date.now() >= settlement.getTime());
+    if (!settlement) return false;
+    return gameweekSettlementReadiness(
+      fixtures, Number(competition?.gameWeek || competition?.game_week || 0), settlement,
+    ).ready;
   }
 
   private currentOrNextGameweek(bootstrap: any) {
@@ -722,7 +726,7 @@ export class ScoreUpdateService {
         const event = this.eventForGameweek(bootstrap, gameWeek);
         const deadline = this.entryDeadline(competition, event, fixtures);
         const startTime = new Date(String(competition?.startDate || competition?.start_date || 0)).getTime();
-        const final = this.isSettlementFinal(competition);
+        const final = this.isSettlementFinal(competition, fixtures);
         let status = String(competition?.status || "upcoming");
         const manualStatus = this.adminStatusOverride(competition);
         if (manualStatus) {
@@ -798,7 +802,7 @@ export class ScoreUpdateService {
         if(!item.final)await this.sendPostScoreAlerts(item.competition,bootstrap,fixtures);
         if (item.final && result.complete) await this.setCompetitionStatus(Number(item.competition.id), "closed");
       }
-      console.log(`✅ Updated ${updatedEntries} tournament entries; Tuesday-finalized snapshots remain immutable.`);
+      console.log(`✅ Updated ${updatedEntries} tournament entries; final-whistle verified snapshots remain immutable.`);
     } catch (error) { console.error("Failed to update competition scores:", error); throw error; }
   }
 
@@ -848,7 +852,9 @@ export class ScoreUpdateService {
       if (unfinishedFixtures.length) throw new Error("Eligible Premier League fixtures are still unfinished");
     }
 
-    const final = !liveWhileOpen && (forceFinal || this.isSettlementFinal(comp));
+    // Manual settle cannot override an unfinished match or the scheduled
+    // after-final-match window. Provider-verified scores still gate payout.
+    const final = !liveWhileOpen && this.isSettlementFinal(comp, fixtures);
     const currentGameweek = this.currentOrNextGameweek(bootstrap);
     const result = await this.scoreCompetitionEntries(comp, await loadApiFootballGameweekScoringContext(gameWeek), final, final || gameWeek === currentGameweek);
     if(!final)await this.sendPostScoreAlerts(comp,bootstrap,fixtures);

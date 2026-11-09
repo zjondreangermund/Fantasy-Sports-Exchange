@@ -25,6 +25,7 @@ const sidebar = read("client/src/components/app-sidebar.tsx");
 const footer = read("client/src/components/SiteFooter.tsx");
 const myEntries = read("client/src/pages/my-entries.tsx");
 const competitions = read("client/src/pages/competitions.tsx");
+const vaultPage = read("client/src/pages/competitions-vault.tsx");
 const adminTournaments = read("client/src/components/admin/AdminTournamentManager.tsx");
 const sharedRules = read("shared/game-rules.ts");
 const calendarPatch = read("scripts/apply-official-tournament-calendar.mjs");
@@ -36,13 +37,13 @@ includesAll(sync, [
   "resolveEnumSchema",
   "competition_status",
   "created_by_user_id is null",
-  "catEndOfFollowingDay",
+  "expectedPostMatchCutoff",
   "eligibleKickoffs",
   "nextFirst",
   "platform_fee_rate = 0",
   "platform_fee_total = 0",
   "current/future official GW/rarity slots",
-  "day after the last eligible Premier League fixture",
+  "after the last Premier League fixture finishes",
   "postponed fixture assignment(s)",
   "FA Cup",
 ], "Official tournament sync");
@@ -54,6 +55,7 @@ includesAll(scoreUpdater, [
   "entryDeadline",
   "settlementDeadline",
   "isSettlementFinal",
+  "gameweekSettlementReadiness",
   "activateCompetitionAtDeadline",
   "tiebreakMeta: { ...asObject(entry?.tiebreakMeta), scoring: snapshot }",
   "version: 7",
@@ -123,20 +125,22 @@ includesAll(preflight, [
 
 includesAll(competitions, [
   "tournamentSettlementLabel",
-  "Day after the last eligible Premier League fixture",
-  "gameweek settlement cutoff",
-  "FA Cup",
-  "postponed fixtures played after the next gameweek starts",
+  "After final Premier League match",
   "submissionClosesAt",
 ], "Tournament page");
+includesAll(vaultPage, [
+  "final-match settlement cutoff",
+  "FA Cup",
+  "Postponed fixtures played after the next gameweek starts",
+], "Play tournament page");
 includesAll(adminTournaments, [
-  "Settlement cutoff — day after last eligible PL match",
+  "Final Premier League match settlement cutoff",
   "Manual Settle Now",
   "Settle Tournament",
   "MANUAL EARLY SETTLEMENT",
   "/api/admin/competitions/settle/",
   "postponed Premier League fixture does not count",
-  "common: 1.7, rare: 1.6, unique: 1.5, epic: 1.4, legendary: 1.3",
+  "common: 2.0, rare: 1.8, unique: 1.7, epic: 1.6, legendary: 1.5",
   "const scheduled = officialCompetitions.find",
 ], "Admin tournament manager");
 
@@ -169,8 +173,8 @@ includesAll(sharedRules, [
   "common: 1",
   "legendary: 1",
   "SUBMITTED_LINEUPS_ARE_FINAL = true",
-  'TOURNAMENT_SETTLEMENT_DAY = "day-after-last-eligible-fixture"',
-  'TOURNAMENT_SETTLEMENT_TIME_CAT = "23:59"',
+  'TOURNAMENT_SETTLEMENT_DAY = "After final eligible Premier League match"',
+  'TOURNAMENT_SETTLEMENT_TIME_CAT = "Post-match, once fixtures and player statistics are verified"',
   "CUP_FIXTURES_COUNT = false",
   "POST_SETTLEMENT_FIXTURES_COUNT = false",
   "POSTPONED_AFTER_NEXT_GAMEWEEK_START_COUNT = false",

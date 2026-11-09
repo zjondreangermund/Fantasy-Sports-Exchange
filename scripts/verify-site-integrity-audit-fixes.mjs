@@ -47,8 +47,8 @@ check(routes.includes("TOURNAMENT_DATA_CONTRACT_LIVE_HUB_V2"), "Server must expo
 check(routes.includes('app.get("/api/live/hub"'), "Live hub endpoint is missing");
 check(routes.includes("select count(*)::int as count"), "Live hub must count current open/active tournaments directly from the database");
 check(routes.includes("updatedAt: new Date().toISOString()"), "Live hub must return a freshness timestamp");
-check(routes.includes("SITE_AUDIT_SETTLEMENT_CLOCK_V1"), "Server must calculate the Tuesday CAT settlement clock");
-check(routes.includes("const settlementAt = catTuesdaySettlementAfterKickoff(new Date(submissionClosesAt));"), "Competition API must expose calculated settlementAt");
+check(routes.includes("const settlementAt = comp.endDate || comp.end_date || null;"), "Settlement must use the saved official last-fixture cutoff");
+check(!routes.includes("const settlementAt = catTuesdaySettlementAfterKickoff(new Date(submissionClosesAt));"), "Competition API must not invent a Tuesday settlement cutoff");
 check(routes.includes("submissionClosesAt, settlementAt, entryOpen"), "Competition response must return entry lock and settlement together");
 check(routes.includes("GW1_EFFECTIVE_OPEN_STATUS_V1"), "GW1 temporary extension must expose effective open status until the requested cutoff");
 check(routes.includes("USER_SCOPED_MY_ENTRIES_API_V2"), "My entries API must be private and user scoped");

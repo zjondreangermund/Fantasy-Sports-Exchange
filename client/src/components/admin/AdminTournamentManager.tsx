@@ -107,8 +107,11 @@ export default function AdminTournamentManager() {
       const next: any = { ...prev, [key]: value };
       if (key === "gameWeek") {
         const gw = Number(value || 1);
-        next.startDate = defaultStartForGw(gw);
-        next.endDate = defaultEndForGw(gw);
+        const scheduled = officialCompetitions.find((comp: any) =>
+          Number(comp.gameWeek || comp.game_week || 0) === gw &&
+          String(comp.prizeKey || comp.prize_key || "") === "ladder");
+        next.startDate = scheduled ? isoLocal(scheduled.startDate || scheduled.start_date) : defaultStartForGw(gw);
+        next.endDate = scheduled ? isoLocal(scheduled.endDate || scheduled.end_date) : defaultEndForGw(gw);
       }
       if (key === "rewardMode" && value === "card") {
         next.tier = "common";
@@ -199,7 +202,7 @@ export default function AdminTournamentManager() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/tournament-financials"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
       void auditGw();
-      toast({ title: "Tournament settled", description: "Tuesday-frozen scores, ranks and prizes are now final." });
+      toast({ title: "Tournament settled", description: "Final-match verified scores, ranks and prizes are now final." });
     },
     onError: (error: any) => {
       const raw = String(error?.message || "Unable to settle tournament");
@@ -386,7 +389,7 @@ export default function AdminTournamentManager() {
               {isCardPrize ? <><b>FREE card prize:</b> N$0 entry using {cap(form.tier)} cards. 1st receives a weighted-rarity Premier League card; 2nd and 3rd receive Common cards.</> : <><b>Admin Prize Ladder:</b> {form.tier.toUpperCase()} ladder. First unlock: {nextPrize ? `${nextPrize.title} at ${nextPrize.requiredEntrants} entries` : "loading..."}. Margin: {marginByRarity[form.tier] || 1.8}x.</>}
             </div>
             <label className="space-y-1 text-sm"><span className="text-white/55">Entries open from</span><Input type="datetime-local" value={form.startDate} onChange={(e) => setField("startDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
-            <label className="space-y-1 text-sm"><span className="text-white/55">Tuesday settlement cutoff</span><Input type="datetime-local" value={form.endDate} onChange={(e) => setField("endDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
+            <label className="space-y-1 text-sm"><span className="text-white/55">Final Premier League match settlement cutoff</span><Input type="datetime-local" value={form.endDate} onChange={(e) => setField("endDate", e.target.value)} className="border-white/10 bg-black/40 text-white" /></label>
             <div className="md:col-span-2 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs text-amber-100">Only Fantasy Arena points from linked Premier League match actions recorded before this settlement cutoff count. FA Cup matches are excluded, and a postponed Premier League fixture does not count if it is played after the next gameweek has started.</div>
           </div>
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full rounded-xl bg-yellow-300 font-black text-slate-950 hover:bg-yellow-200"><Save className="mr-2 h-4 w-4" />{saveMutation.isPending ? "Saving..." : form.id ? "Save Changes" : isCardPrize ? "Create FREE Card Cup" : "Create Prize Ladder Tournament"}</Button>

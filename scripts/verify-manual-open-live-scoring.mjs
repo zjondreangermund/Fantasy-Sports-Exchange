@@ -6,6 +6,11 @@ import ts from 'typescript';
 // Exercise the real scheduler and single-tournament path with provider/storage
 // fixtures; no live database, points fabrication, or changes to entry status.
 const source = fs.readFileSync('server/services/scoreUpdater.ts', 'utf8');
+const settlementHelper = { exports: {} };
+vm.runInNewContext(ts.transpileModule(
+  fs.readFileSync('server/services/gameweekSettlementReady.ts', 'utf8'),
+  { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+).outputText, settlementHelper);
 const fixture = { event: 6, kickoff_time: '2026-01-02T12:00:00Z', started: true };
 const bootstrap = { events: [{ id: 6, is_current: true, deadline_time: '2026-01-02T10:00:00Z' }] };
 const calls = [];
@@ -25,6 +30,7 @@ const sandbox = {
       statusWrites.push(args);
       return { rows: [] };
     } } };
+    if (name === './gameweekSettlementReady.js') return settlementHelper.exports;
     if (name === './fplApi.js') return { fplApi: { bootstrap: async () => bootstrap, fixturesLive: async () => [fixture] } };
     if (name === './apiFootballScoringBridge.js') return { loadApiFootballGameweekScoringContext: async () => ({ available: true }) };
     return {};

@@ -43,11 +43,11 @@ function catTuesdayBefore(date) {
   return new Date(shifted.getTime() - CAT_OFFSET_MS);
 }
 
-function catEndOfFollowingDay(date) {
-  const shifted = new Date(date.getTime() + CAT_OFFSET_MS);
-  shifted.setUTCDate(shifted.getUTCDate() + 1);
-  shifted.setUTCHours(23, 59, 0, 0);
-  return new Date(shifted.getTime() - CAT_OFFSET_MS);
+// The end of the last fixture is not a fixed clock time. Allow 3 hours
+// after its scheduled kickoff, then verify that every eligible match is FT.
+// The score service will postpone finalization if football runs longer.
+function expectedPostMatchCutoff(lastKickoff) {
+  return new Date(lastKickoff.getTime() + 3 * 60 * 60 * 1000);
 }
 
 function fallbackFirstKickoff(gw) {
@@ -157,7 +157,7 @@ async function main() {
         ? eligibleKickoffs[eligibleKickoffs.length - 1]
         : fallbackLastKickoff(gw);
       const start = catTuesdayBefore(first);
-      const settlement = catEndOfFollowingDay(last);
+      const settlement = expectedPostMatchCutoff(last);
       windows.push({
         gw,
         first,
@@ -200,6 +200,7 @@ async function main() {
     let preservedEntries = 0;
     let excludedPostponed = 0;
     let fallbackWindows = 0;
+    let migratedUnsettledHistoricalCutoffs = 0;
 
     // Past official weeks are historical only. Close stale rows, but never recreate
     // a past tournament that an admin intentionally deleted.
@@ -215,6 +216,24 @@ async function main() {
       [SEASON, currentGw],
     );
 
+    // Recover unsettled earlier GWs (including GW10) without touching any
+    // completed, cancelled, or manually controlled historical competition.
+    // Never shorten dates when only a fallback fixture schedule is available.
+    for (const window of windows) {
+      if (window.gw >= currentGw || window.usedFallback) continue;
+      const migrated = await client.query(
+        `update app.competitions
+            set end_date=$3
+          where season=$1 and game_week=$2
+            and created_by_user_id is null
+            and coalesce(prize_key,'') in ('ladder','free-weighted-card')
+            and status::text not in ('completed','cancelled')
+            and admin_status_override is null and end_date>$3`,
+        [SEASON, window.gw, window.settlement],
+      );
+      migratedUnsettledHistoricalCutoffs += migrated.rowCount || 0;
+    }
+
     for (const window of windows) {
       if (window.gw < currentGw) continue;
       const status = plannedStatus({ ...window, now });
@@ -223,7 +242,7 @@ async function main() {
       for (const rarity of RARITIES) {
         const name = `GW${window.gw} ${title(rarity.tier)} Prize Ladder`;
         const dateSource = window.usedFallback ? "Temporary fallback dates are in use and will refresh from live FPL fixtures on the next successful sync." : "Dates are synced from live FPL fixtures.";
-        const scheduleNote = `${title(rarity.tier)} Prize Vault ladder. Entries lock at the first Premier League kickoff. Scores freeze at 23:59 CAT on the day after the last eligible Premier League fixture in this gameweek. A postponed fixture moved to or beyond the start of the next gameweek is excluded. FA Cup matches do not count. ${dateSource}`;
+        const scheduleNote = `${title(rarity.tier)} Prize Vault ladder. Entries lock at the first Premier League kickoff. Scores become eligible for final verification after the last Premier League fixture finishes (allowing approximately 3 hours after scheduled kickoff). Settlement waits for all eligible fixtures to be confirmed finished and API-Football player statistics to be verified. A postponed fixture moved to or beyond the start of the next gameweek is excluded. FA Cup matches do not count. ${dateSource}`;
 
         const existing = await client.query(
           `select c.id, c.status::text as status, c.start_date as existing_start_date,
@@ -356,10 +375,11 @@ async function main() {
     console.log("Deleted past official tournaments are not recreated.");
     console.log("Explicit admin status overrides are preserved; startup schedule sync only controls tournaments still in automatic status mode.");
     console.log(`Preserved ${preservedEntries} existing official tournament entries; startup sync did not delete user teams.`);
+    console.log(`Updated ${migratedUnsettledHistoricalCutoffs} past unsettled official cup cutoff(s) using verified scheduled fixture windows; completed history was preserved.`);
     console.log(`Excluded ${excludedPostponed} postponed fixture assignment(s) that fall on or after the next gameweek starts.`);
     console.log(`${fallbackWindows} gameweek window(s) used fallback dates because live FPL fixture data was unavailable/incomplete; these refresh automatically on the next successful sync.`);
     console.log("Official/admin Prize Ladder tournaments use a 0% platform fee. User-created cash tournaments keep their separate creator fee rules.");
-    console.log("Official scores freeze at 23:59 CAT on the day after the last eligible Premier League fixture; FA Cup and late postponed fixtures are excluded.");
+    console.log("Official settlement is eligible after the final Premier League match is confirmed finished and final API-Football statistics are verified; late postponed fixtures moved beyond the next gameweek are excluded.");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;
