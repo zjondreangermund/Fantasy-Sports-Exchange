@@ -312,7 +312,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
     const providerEvidence = await loadVerifiedFinalFixtureEvidence(gw, fplFixtures, fplBootstrap);
     const sourceKickoffById = new Map<number,number>((Array.isArray(fplFixtures) ? fplFixtures : [])
       .filter((f: any) => Number(f?.event) === gw)
-      .map((f: any) => [Number(f?.id || 0), Date.parse(String(f?.kickoff_time || ""))]));
+      .map((f: any): [number, number] => [Number(f?.id || 0), Date.parse(String(f?.kickoff_time || ""))]));
     const eligibleFixtureIds = [...new Set(providerEvidence.fixtures.filter((fixture) => {
       const kickoff = sourceKickoffById.get(fixture.fplFixtureId) ?? NaN;
       return Number.isFinite(kickoff) && kickoff >= gwWindow.start - 3 * 60 * 60_000
