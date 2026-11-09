@@ -67,7 +67,8 @@ includesAll(scoreUpdater, [
   "captainMultiplier: 1.1",
   "unresolvedCardIds",
   "MANUAL_TOURNAMENT_SETTLEMENT_V1",
-  "Eligible Premier League fixtures are still unfinished",
+  "loadVerifiedFinalFixtureIds",
+  "gameweekSettlementReadiness",
 ], "Score updater");
 expect(!scoreUpdater.includes("isGameweekFinal"), "Tournament finalization must use the configured gameweek settlement cutoff, not the FPL event-finished flag");
 expect(!scoreUpdater.includes("resetForNewGameweek"), "Score updater must not reset historical gameweek scores");

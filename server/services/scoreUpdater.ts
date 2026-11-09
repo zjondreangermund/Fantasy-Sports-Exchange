@@ -19,7 +19,8 @@ import { calculatePlayerScore, calculateLineupScore } from "./scoring.js";
 import { loadApiFootballGameweekScoringContext, resolveApiFootballGameweekPlayer, type ApiFootballGameweekScoringContext } from "./apiFootballScoringBridge.js";
 import { diagnoseApiFootballPlayerMatch } from "./apiFootballPlayerDirectory.js";
 import { createNotificationOnce, notifyGameweekEntriesClosed } from "./notifications.js";
-import { gameweekSettlementReadiness } from "./gameweekSettlementReady.js";
+import { gameweekFixtureWindow, gameweekSettlementReadiness } from "./gameweekSettlementReady.js";
+import { loadVerifiedFinalFixtureIds } from "./verifiedMatchFinish.js";
 
 const RARITY_PRESTIGE: Record<string, number> = { common: 1, rare: 3, epic: 7, unique: 15, legendary: 30 };
 const SCORE_REFRESH_INTERVAL_MS = Math.max(
@@ -420,12 +421,15 @@ export class ScoreUpdateService {
     return Number.isFinite(settlement.getTime()) ? settlement : null;
   }
 
-  private isSettlementFinal(competition: any, fixtures: any[]) {
+  private isSettlementFinal(competition: any, fixtures: any[], bootstrap?: any, confirmedFinalFixtureIds?: ReadonlySet<number>) {
     const settlement = this.settlementDeadline(competition);
     if (!settlement) return false;
-    return gameweekSettlementReadiness(
-      fixtures, Number(competition?.gameWeek || competition?.game_week || 0), settlement,
-    ).ready;
+    const gameWeek = Number(competition?.gameWeek || competition?.game_week || 0);
+    const deadlineTime = this.eventForGameweek(bootstrap, gameWeek)?.deadline_time;
+    return gameweekSettlementReadiness(fixtures, gameWeek, settlement, Date.now(), {
+      deadlineTime, confirmedFinalFixtureIds,
+      useFixtureCutoff: competition.createdByUserId == null && competition.created_by_user_id == null,
+    }).ready;
   }
 
   private currentOrNextGameweek(bootstrap: any) {
@@ -726,7 +730,7 @@ export class ScoreUpdateService {
         const event = this.eventForGameweek(bootstrap, gameWeek);
         const deadline = this.entryDeadline(competition, event, fixtures);
         const startTime = new Date(String(competition?.startDate || competition?.start_date || 0)).getTime();
-        const final = this.isSettlementFinal(competition, fixtures);
+        const final = this.isSettlementFinal(competition, fixtures, bootstrap);
         let status = String(competition?.status || "upcoming");
         const manualStatus = this.adminStatusOverride(competition);
         if (manualStatus) {
@@ -783,7 +787,11 @@ export class ScoreUpdateService {
 
       const apiContextByGameweek = new Map<number, Promise<ApiFootballGameweekScoringContext>>();
       const apiContextFor = (gameWeek: number) => {
-        if (!apiContextByGameweek.has(gameWeek)) apiContextByGameweek.set(gameWeek, loadApiFootballGameweekScoringContext(gameWeek));
+        if (!apiContextByGameweek.has(gameWeek)) {
+          const deadline = this.eventForGameweek(bootstrap, gameWeek)?.deadline_time;
+          const window = gameweekFixtureWindow(fixtures, gameWeek, deadline);
+          apiContextByGameweek.set(gameWeek, loadApiFootballGameweekScoringContext(gameWeek, window?.end));
+        }
         return apiContextByGameweek.get(gameWeek)!;
       };
 
@@ -838,25 +846,22 @@ export class ScoreUpdateService {
     if (!["active", "closed"].includes(String(comp.status)) && !liveWhileOpen) throw new Error(`Competition ${competitionId} cannot be scored (status: ${comp.status})`);
     if (forceFinal && liveWhileOpen) throw new Error("Close tournament entries before manual settlement");
 
-    // MANUAL_TOURNAMENT_SETTLEMENT_V1
-    if (forceFinal) {
-      const settlement = this.settlementDeadline(comp);
-      const eligibleFixtures = this.fixturesForGameweek(fixtures, gameWeek).filter((fixture: any) => {
-        if (!fixture?.kickoff_time) return false;
-        const kickoff = new Date(String(fixture.kickoff_time));
-        if (!Number.isFinite(kickoff.getTime())) return false;
-        return !settlement || kickoff.getTime() <= settlement.getTime();
+    // The FPL full-time flag can lag behind API-Football; accept only
+    // exactly matched Premier League fixtures that API-Football verifies FT.
+    const verifiedFinalIds = await loadVerifiedFinalFixtureIds(gameWeek, fixtures, bootstrap);
+    const readiness = gameweekSettlementReadiness(fixtures, gameWeek,
+      this.settlementDeadline(comp), Date.now(), {
+        deadlineTime: event?.deadline_time,
+        confirmedFinalFixtureIds: verifiedFinalIds,
+        useFixtureCutoff: comp.createdByUserId == null && comp.created_by_user_id == null,
       });
-      if (!eligibleFixtures.length) throw new Error("No eligible Premier League fixtures are available for manual settlement");
-      const unfinishedFixtures = eligibleFixtures.filter((fixture: any) => !fixture?.finished && !fixture?.finished_provisional);
-      if (unfinishedFixtures.length) throw new Error("Eligible Premier League fixtures are still unfinished");
-    }
-
-    // Manual settle cannot override an unfinished match or the scheduled
-    // after-final-match window. Provider-verified scores still gate payout.
-    const final = !liveWhileOpen && this.isSettlementFinal(comp, fixtures);
+    if (forceFinal && !readiness.ready) throw new Error(readiness.message);
+    // MANUAL_TOURNAMENT_SETTLEMENT_V1
+    // Never force a completed snapshot while real eligible fixtures are live.
+    const final = !liveWhileOpen && readiness.ready;
     const currentGameweek = this.currentOrNextGameweek(bootstrap);
-    const result = await this.scoreCompetitionEntries(comp, await loadApiFootballGameweekScoringContext(gameWeek), final, final || gameWeek === currentGameweek);
+    const window = gameweekFixtureWindow(fixtures, gameWeek, event?.deadline_time);
+    const result = await this.scoreCompetitionEntries(comp, await loadApiFootballGameweekScoringContext(gameWeek, window?.end), final, final || gameWeek === currentGameweek);
     if(!final)await this.sendPostScoreAlerts(comp,bootstrap,fixtures);
     if (final && result.complete) await this.setCompetitionStatus(Number(comp.id), "closed");
     return result;

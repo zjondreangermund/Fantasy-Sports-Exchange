@@ -34,4 +34,48 @@ assert.equal(postponedCheck.excludedLatePostponements, 1);
 const delayed = fixture(5,gw,"2026-11-09T20:00:00Z",false);
 assert.equal(check([early, {...last, finished:true}, delayed, next], gw, afterKickoff, start + 7200_000).ready, false, "Late matches still inside the GW must finish");
 
-console.log("Verified gameweek cutoff requires final FT, honors scheduled grace and excludes only late postponed fixtures.");
+
+const followingWeek = fixture(6, gw, "2026-11-16T16:00:00Z", false);
+const nextDelayedGw = fixture(7, gw+1, "2026-11-21T15:00:00Z", false);
+const originalDeadline = "2026-11-06T18:30:00Z";
+const onePlayed = fixture(8, gw, "2026-11-08T16:00:00Z", true);
+const outside = check([onePlayed, followingWeek, nextDelayedGw], gw, afterKickoff, start+7200_000, {
+  deadlineTime: originalDeadline, useFixtureCutoff: true,
+});
+assert.equal(outside.ready, true, "A game moved past the original seven-day GW must be excluded even before the next GW kicks off");
+assert.equal(outside.excludedLatePostponements, 1);
+assert.equal(outside.eligibleMatches, 1);
+const noDate = fixture(9, gw, null, false);
+assert.equal(check([onePlayed,noDate,nextDelayedGw],gw,afterKickoff,Date.parse("2026-11-09T12:00:00Z"),{
+  deadlineTime:originalDeadline,useFixtureCutoff:true,
+}).ready,false,"Unassigned postponed fixture must not be ignored before the GW window ends");
+assert.equal(check([onePlayed,noDate,nextDelayedGw],gw,afterKickoff,Date.parse("2026-11-14T12:00:00Z"),{
+  deadlineTime:originalDeadline,useFixtureCutoff:true,
+}).excludedLatePostponements,1,"Unscheduled postponement moves out of original GW once its seven-day window expires");
+const pending = {...onePlayed, finished:false};
+assert.equal(check([pending,nextDelayedGw],gw,afterKickoff,Date.parse("2026-11-09T12:00:00Z"),{
+  deadlineTime:originalDeadline,useFixtureCutoff:true,
+}).ready,false,"No early settlement without verified full-time evidence");
+assert.equal(check([pending,nextDelayedGw],gw,afterKickoff,Date.parse("2026-11-09T12:00:00Z"),{
+  deadlineTime:originalDeadline,useFixtureCutoff:true,confirmedFinalFixtureIds:new Set([pending.id]),
+}).ready,true,"A securely cross-matched API-Football FT result may confirm a stale FPL fixture flag");
+
+const finishSource = fs.readFileSync("server/services/verifiedMatchFinish.ts","utf8");
+const finishSandbox = { exports: {}, require: () => ({}) };
+vm.runInNewContext(ts.transpileModule(finishSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText, finishSandbox);
+const matching = finishSandbox.exports.matchVerifiedFinalFixtures;
+const fplTeams = { teams: [{ id:1,name:"Manchester United" },{id:2,name:"Aston Villa"}] };
+const fplMatch = { id:77,event:gw,team_h:1,team_a:2,kickoff_time:"2026-11-08T16:30:00Z",finished:false };
+assert.equal(matching([fplMatch],fplTeams,[{
+  homeTeamName:"Man United",awayTeamName:"Aston Villa",kickoffAt:"2026-11-08T16:30:00Z",statusShort:"FT",
+}]).has(77),true,"Provider FT must match both teams and gameweek match time");
+assert.equal(matching([fplMatch],fplTeams,[{
+  homeTeamName:"Man United",awayTeamName:"Manchester City",kickoffAt:"2026-11-08T16:30:00Z",statusShort:"FT",
+}]).has(77),false,"Different opponent is not evidence of FT");
+assert.equal(matching([fplMatch],fplTeams,[{
+  homeTeamName:"Man United",awayTeamName:"Aston Villa",kickoffAt:"2026-11-08T16:30:00Z",statusShort:"NS",
+}]).has(77),false,"Unplayed matches must never count as finished");
+
+console.log("Verified seven-day GW exclusion, unassigned postponements, strict API-Football full-time match identity and final-scoring safety.");
