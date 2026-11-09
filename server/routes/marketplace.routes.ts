@@ -10,6 +10,7 @@ import { registerTournamentCreatorRoutes } from "./tournamentCreator.routes.js";
 import { ensureTournamentSchema } from "./tournamentSchema.ensure.js";
 import { applyMarketplaceTradeLedger } from "../services/walletLedger.js";
 import { fplApi } from "../services/fplApi.js";
+import { buildGameweekFixtureStatus, clubMatchKey } from "../services/gameweekPlayerFixtures.js";
 import { buildFplPlayerIndex, overallFromFplElement } from "../services/fplPlayerIdentity.js";
 import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "../services/apiFootballPlayerDirectory.js";
 import { calculatePlayerScore, mapFplStatsToPlayerStats, mergePlayerStatsWithDetailedStats } from "../services/scoring.js";
@@ -21,11 +22,14 @@ interface RegisterMarketplaceRoutesDeps { requireAuth: any; }
 // Submitted teams in the same gameweek share in-flight provider/SQL reads.
 // No completed results, user entries or scores are cached here.
 const loadEnteredTeamContext = coalesceConcurrentRead(async (gameWeek: number) => {
-  const [apiScoringContext, entryBootstrap] = await Promise.all([
+  const [apiScoringContext, entryBootstrap, fixtureFeed] = await Promise.all([
     loadApiFootballGameweekScoringContext(gameWeek).catch(() => null),
     fplApi.bootstrap().catch(() => null),
+    fplApi.fixturesLive().catch(() => []),
   ]);
-  return { apiScoringContext, entryBootstrap };
+  return { apiScoringContext, entryBootstrap, fixtureStatus: entryBootstrap
+    ? buildGameweekFixtureStatus(fixtureFeed, entryBootstrap, gameWeek)
+    : null };
 });
 
 
@@ -281,7 +285,9 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         join app.players p on p.id = pc.player_id
         order by ordered.ordinality asc
       `);
-      const { apiScoringContext, entryBootstrap } = await contextRead;
+      const { apiScoringContext, entryBootstrap, fixtureStatus } = await contextRead;
+      const fplElements = new Map<number,any>((Array.isArray(entryBootstrap?.elements) ? entryBootstrap.elements : [])
+        .map((element: any) => [Number(element.id), element]));
       const positionFor = createTournamentPositionResolver(entryBootstrap);
       const targetEvent = entryBootstrap?.events?.find((event: any) => Number(event.id) === Number(entry.gameWeek));
       const awaitingGameweek = Boolean(targetEvent?.deadline_time && new Date(String(targetEvent.deadline_time)).getTime() > Date.now());
@@ -299,6 +305,14 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           ? resolveApiFootballGameweekPlayer(card, apiScoringContext)
           : null;
         const apiPlayer = resolved?.player || resolveApiFootballPlayer(card, apiFootballDirectory);
+        const teamId = Number(fplElements.get(Number(card.fplId || 0))?.team || 0);
+        const teamKey = clubMatchKey(apiPlayer?.team || card.team);
+        const fixtureClub = fixtureStatus?.clubs?.find((club: any) =>
+          teamId ? club.teamId === teamId : teamKey && club.teamKey === teamKey);
+        // If a postponed GW fixture moves outside its original week, the
+        // original week's team score is zero; this does NOT rewrite a settled
+        // historical snapshot or remove the card itself.
+        const postponedOutsideWeek = Boolean(fixtureClub?.postponedOutsideGameweek);
         const position = positionFor(card, apiPlayer?.position);
         // Match-stat scoring remains API-Football based; it must not overwrite the fantasy roster label.
         const scoringPosition = apiPlayer?.position || String(card.position || "") || "MID";
@@ -338,7 +352,18 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           identityStatus = "identity-unlinked";
           identityMessage = `${String(card.name || "This player")}: player link needs checking; points are pending verification.`;
         }
-        const points = Number(saved?.score ?? calculated?.total_score ?? 0);
+        if (postponedOutsideWeek && snapshot?.final !== true) {
+          const excluded = fixtureClub?.affectedFixtures?.[0];
+          const opponent = excluded ? `${excluded.homeTeam} v ${excluded.awayTeam}` : fixtureClub?.team || "Match";
+          const movedDate = excluded?.kickoffTime
+            ? new Date(excluded.kickoffTime).toLocaleString("en-NA", {
+              timeZone: "Africa/Windhoek", dateStyle:"medium", timeStyle:"short",
+            }) : "new kickoff not confirmed";
+          identityStatus = "postponed-outside-gameweek";
+          identityMessage = `${opponent} was postponed or moved outside GW${Number(entry.gameWeek)}. This player's match cannot score for GW${Number(entry.gameWeek)}, even when it is played later. New date: ${movedDate} (Namibia time). Choose a player with an in-week fixture.`;
+        }
+        const points = postponedOutsideWeek && snapshot?.final !== true
+          ? 0 : Number(saved?.score ?? calculated?.total_score ?? 0);
         const captain = Number(card.cardId) === captainId;
         const calculatedCaptainBonus = Math.round(points * 0.1 * 10000) / 10000;
         const captainBonus = captain
@@ -363,6 +388,8 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           elementId: null,
           identityStatus,
           identityMessage,
+          fixturePostponedOutsideGameweek: postponedOutsideWeek && snapshot?.final !== true,
+          excludedFixtureIds: postponedOutsideWeek ? (fixtureClub?.affectedFixtures || []).map((f: any) => Number(f.id)) : [],
           identityProvider: "api-football",
           captain,
           points,
@@ -377,7 +404,9 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
               ? calculated.reasons
               : [],
           minutes: Number(saved?.minutesPlayed ?? resolved?.stats?.minutes ?? 0),
-          source: saved ? "official-gameweek-snapshot" : calculated ? "api-football-live-stats" : "awaiting-api-football-stats",
+          source: postponedOutsideWeek && snapshot?.final !== true
+            ? "postponed-outside-gameweek" : saved ? "official-gameweek-snapshot"
+            : calculated ? "api-football-live-stats" : "awaiting-api-football-stats",
         };
       });
       const calculatedTotalScore = Math.round(
