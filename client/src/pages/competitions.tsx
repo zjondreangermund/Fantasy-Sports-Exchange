@@ -67,9 +67,9 @@ function tournamentCountdown(comp: CompetitionWithEntries) {
 }
 function tournamentSettlementLabel(comp: CompetitionWithEntries) {
   const raw = comp.settlementAt || (comp as any).endDate || (comp as any).end_date;
-  if (!raw) return "Tuesday after the gameweek begins";
+  if (!raw) return "After final Premier League match";
   const date = new Date(String(raw));
-  if (!Number.isFinite(date.getTime())) return "Tuesday after the gameweek begins";
+  if (!Number.isFinite(date.getTime())) return "After final Premier League match";
   return new Intl.DateTimeFormat("en-NA", {
     timeZone: "Africa/Windhoek",
     weekday: "short",
