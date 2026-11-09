@@ -159,7 +159,10 @@ async function main() {
       const eligibleKickoffs = scheduledKickoffs.filter((kickoff) =>
         kickoff.getTime() >= weekStart - 3 * 60 * 60 * 1000 && kickoff.getTime() < weekEnd);
       const first = eligibleKickoffs[0] || scheduledKickoffs[0] || fallbackFirstKickoff(gw);
-      const liveWindowCompleteEnough = eligibleKickoffs.length >= 5;
+      // Several genuine postponements can leave fewer than five in-week
+      // matches. That is NOT an incomplete schedule when the provider still
+      // lists the other (moved) fixtures for the round.
+      const liveWindowCompleteEnough = scheduledKickoffs.length >= 5 && eligibleKickoffs.length > 0;
       const last = liveWindowCompleteEnough
         ? eligibleKickoffs[eligibleKickoffs.length - 1]
         : fallbackLastKickoff(gw);
