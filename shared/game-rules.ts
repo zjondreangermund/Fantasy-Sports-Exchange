@@ -13,6 +13,7 @@ export const TOURNAMENT_SETTLEMENT_DAY = "After final eligible Premier League ma
 export const TOURNAMENT_SETTLEMENT_TIME_CAT = "Post-match, once fixtures and player statistics are verified";
 export const CUP_FIXTURES_COUNT = false;
 export const POST_SETTLEMENT_FIXTURES_COUNT = false;
+export const POSTPONED_AFTER_NEXT_GAMEWEEK_START_COUNT = false;
 export const SUBMITTED_LINEUPS_ARE_FINAL = true;
 export const MULTIPLE_ENTRIES_ALLOWED = true;
 export const REUSE_CARDS_WITHIN_TOURNAMENT = false;
