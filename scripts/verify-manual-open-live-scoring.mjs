@@ -31,6 +31,7 @@ const sandbox = {
       return { rows: [] };
     } } };
     if (name === './gameweekSettlementReady.js') return settlementHelper.exports;
+    if (name === './verifiedMatchFinish.js') return { loadVerifiedFinalFixtureIds: async () => new Set() };
     if (name === './fplApi.js') return { fplApi: { bootstrap: async () => bootstrap, fixturesLive: async () => [fixture] } };
     if (name === './apiFootballScoringBridge.js') return { loadApiFootballGameweekScoringContext: async () => ({ available: true }) };
     return {};
