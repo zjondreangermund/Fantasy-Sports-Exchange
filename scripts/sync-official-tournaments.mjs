@@ -150,7 +150,14 @@ async function main() {
     for (let gw = 1; gw <= 38; gw += 1) {
       const scheduledKickoffs = [...(byGw.get(gw) || [])].sort((a, b) => a.getTime() - b.getTime());
       const nextFirst = firstKickoffByGw.get(gw + 1) || null;
-      const eligibleKickoffs = scheduledKickoffs.filter((kickoff) => !nextFirst || kickoff.getTime() < nextFirst.getTime());
+      const deadline = Date.parse(String(events.find((e) => Number(e?.id) === gw)?.deadline_time || ""));
+      const weekStart = Number.isFinite(deadline) ? deadline
+        : scheduledKickoffs[0]?.getTime() || fallbackFirstKickoff(gw).getTime();
+      // A postponed match may keep its original FPL event number even though
+      // its new kickoff is weeks later. Only this GW's seven-day window counts.
+      const weekEnd = Math.min(weekStart + 7 * DAY_MS, nextFirst?.getTime() || Infinity);
+      const eligibleKickoffs = scheduledKickoffs.filter((kickoff) =>
+        kickoff.getTime() >= weekStart - 3 * 60 * 60 * 1000 && kickoff.getTime() < weekEnd);
       const first = eligibleKickoffs[0] || scheduledKickoffs[0] || fallbackFirstKickoff(gw);
       const liveWindowCompleteEnough = eligibleKickoffs.length >= 5;
       const last = liveWindowCompleteEnough
@@ -242,7 +249,7 @@ async function main() {
       for (const rarity of RARITIES) {
         const name = `GW${window.gw} ${title(rarity.tier)} Prize Ladder`;
         const dateSource = window.usedFallback ? "Temporary fallback dates are in use and will refresh from live FPL fixtures on the next successful sync." : "Dates are synced from live FPL fixtures.";
-        const scheduleNote = `${title(rarity.tier)} Prize Vault ladder. Entries lock at the first Premier League kickoff. Scores become eligible for final verification after the last Premier League fixture finishes (allowing approximately 3 hours after scheduled kickoff). Settlement waits for all eligible fixtures to be confirmed finished and API-Football player statistics to be verified. A postponed fixture moved to or beyond the start of the next gameweek is excluded. FA Cup matches do not count. ${dateSource}`;
+        const scheduleNote = `${title(rarity.tier)} Prize Vault ladder. Entries lock at the first Premier League kickoff. Scores become eligible for final verification after the last Premier League fixture finishes (allowing approximately 3 hours after scheduled kickoff). Settlement waits for all eligible fixtures to be confirmed finished and API-Football player statistics to be verified. A postponed fixture rescheduled outside its original seven-day gameweek window is excluded, even when the next gameweek starts later. FA Cup matches do not count. ${dateSource}`;
 
         const existing = await client.query(
           `select c.id, c.status::text as status, c.start_date as existing_start_date,
@@ -376,10 +383,10 @@ async function main() {
     console.log("Explicit admin status overrides are preserved; startup schedule sync only controls tournaments still in automatic status mode.");
     console.log(`Preserved ${preservedEntries} existing official tournament entries; startup sync did not delete user teams.`);
     console.log(`Updated ${migratedUnsettledHistoricalCutoffs} past unsettled official cup cutoff(s) using verified scheduled fixture windows; completed history was preserved.`);
-    console.log(`Excluded ${excludedPostponed} postponed fixture assignment(s) that fall on or after the next gameweek starts.`);
+    console.log(`Excluded ${excludedPostponed} postponed fixture assignment(s) moved outside their original seven-day gameweek windows.`);
     console.log(`${fallbackWindows} gameweek window(s) used fallback dates because live FPL fixture data was unavailable/incomplete; these refresh automatically on the next successful sync.`);
     console.log("Official/admin Prize Ladder tournaments use a 0% platform fee. User-created cash tournaments keep their separate creator fee rules.");
-    console.log("Official settlement is eligible after the final Premier League match is confirmed finished and final API-Football statistics are verified; late postponed fixtures moved beyond the next gameweek are excluded.");
+    console.log("Official settlement is eligible after the final Premier League match is confirmed finished and final API-Football statistics are verified; fixtures postponed outside their original gameweek are excluded.");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;
