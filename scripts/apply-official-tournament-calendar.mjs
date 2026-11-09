@@ -110,7 +110,7 @@ if (patchFile("client/src/components/admin/AdminTournamentManager.tsx", (input) 
     "const scheduled = officialCompetitions.find",
   );
   source = source.replaceAll("Tuesday-frozen scores", "Fixture-window frozen scores");
-  source = source.replaceAll("Tuesday settlement cutoff", "Settlement cutoff — day after last eligible PL match");
+  source = source.replaceAll("Tuesday settlement cutoff", "Settlement cutoff — after the final eligible PL match");
   source = source.replaceAll("Settle Tuesday Results", "Settle Results");
   source = source.replace(
     "Only Premier League FPL points recorded before this settlement cutoff count. FA Cup matches and Premier League fixtures played later are excluded.",
@@ -121,8 +121,8 @@ if (patchFile("client/src/components/admin/AdminTournamentManager.tsx", (input) 
 
 function patchTournamentCopy(input) {
   let source = input;
-  source = source.replaceAll("Tuesday after the gameweek begins", "Day after the last eligible Premier League fixture");
-  source = source.replaceAll("Tuesday 23:59 CAT", "23:59 CAT on the day after the last eligible Premier League fixture");
+  source = source.replaceAll("Tuesday after the gameweek begins", "After the final eligible Premier League match");
+  source = source.replaceAll("Tuesday 23:59 CAT", "After final Premier League match + verified full time");
   source = source.replaceAll("before Tuesday settlement count", "before the gameweek settlement cutoff count");
   source = source.replaceAll("before Tuesday settlement", "before the gameweek settlement cutoff");
   source = source.replaceAll("Tuesday settlement cutoff", "gameweek settlement cutoff");
