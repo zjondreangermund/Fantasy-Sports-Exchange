@@ -78,4 +78,28 @@ assert.equal(matching([fplMatch],fplTeams,[{
   homeTeamName:"Man United",awayTeamName:"Aston Villa",kickoffAt:"2026-11-08T16:30:00Z",statusShort:"NS",
 }]).has(77),false,"Unplayed matches must never count as finished");
 
-console.log("Verified seven-day GW exclusion, unassigned postponements, strict API-Football full-time match identity and final-scoring safety.");
+const fixture98 = { ...fplMatch, id:98, finished:false };
+const manUtdVilla = {
+  fixtureId: 1456789, homeTeamName: "Man Utd", awayTeamName:"Aston Villa",
+  kickoffAt:"2026-11-08T16:30:00Z", statusShort:"FT", round:"Regular Season - 9",
+  homeScore:4, awayScore:4, updatedAt:"2026-11-09T00:10:00Z", statsSyncedAt:null,
+};
+assert.equal(matching([fixture98],fplTeams,[manUtdVilla]).has(98),true,
+  "A verified 4-4 Manchester United/Aston Villa FT must count even if the provider round label differs");
+const evidence = finishSandbox.exports.describeFinalFixtureEvidence([fixture98],fplTeams,[manUtdVilla]);
+assert.equal(evidence.finalFixtureIds.has(98),true);
+assert.equal(evidence.fixtures[0].apiFootballFixtureId,1456789);
+assert.equal(evidence.fixtures[0].apiFootballHomeScore,4);
+assert.equal(evidence.fixtures[0].apiFootballAwayScore,4);
+assert.equal(evidence.fixtures[0].apiFootballStatsReady,false,"An FT result without verified player stats must not imply paid settlement readiness");
+const notYet = finishSandbox.exports.describeFinalFixtureEvidence([fixture98],fplTeams,[{...manUtdVilla,statusShort:"NS"}]);
+assert.equal(notYet.finalFixtureIds.has(98),false,"A provider match that has not reached full time never unlocks the GW");
+assert.equal(notYet.fixtures[0].failureReason,"provider-not-final");
+assert.equal(finishSandbox.exports.describeFinalFixtureEvidence([fixture98],fplTeams,[]).fixtures[0].failureReason,"no-provider-fixture");
+assert.equal(matching([fixture98],fplTeams,[{...manUtdVilla,awayTeamName:"Brentford"}]).has(98),false,"Do not mistake a different 4-4 match for the correct fixture");
+assert.equal(matching([fixture98],fplTeams,[{...manUtdVilla,kickoffAt:"2026-11-12T16:30:00Z"}]).has(98),false,"Do not trust another date's match as the original GW");
+const admin = fs.readFileSync("client/src/components/admin/AdminTournamentManager.tsx","utf8");
+assert.ok(admin.includes("/api/admin/live-data/sync/fixtures") && admin.includes("/api/admin/live-data/sync/completed_stats"),"Admin must offer an authenticated provider recheck without forced prizes");
+const settleRoute = fs.readFileSync("server/routes/economyIntegrity.routes.ts","utf8");
+assert.ok(settleRoute.includes('runApiFootballSync("fixtures")'),"The admin settlement should retry authoritative fixture status before blocking a completed match");
+console.log("Verified seven-day GW exclusions, provider-rerun diagnostic and matching 4-4 Man Utd/Villa final-whistle regression.");

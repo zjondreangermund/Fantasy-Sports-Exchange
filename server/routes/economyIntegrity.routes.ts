@@ -14,7 +14,7 @@ import { ScoreUpdateService } from "../services/scoreUpdater.js";
 import { runApiFootballSync } from "../services/apiFootballSync.js";
 import { gameweekSettlementReadiness } from "../services/gameweekSettlementReady.js";
 import { buildGameweekFixtureStatus } from "../services/gameweekPlayerFixtures.js";
-import { loadVerifiedFinalFixtureIds } from "../services/verifiedMatchFinish.js";
+import { loadVerifiedFinalFixtureEvidence, loadVerifiedFinalFixtureIds } from "../services/verifiedMatchFinish.js";
 import { rankCompetitionEntries } from "../services/tournamentRules.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
@@ -747,7 +747,8 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       ]);
       const deadlineTime = (Array.isArray(officialBootstrap?.events) ? officialBootstrap.events : [])
         .find((event: any) => Number(event?.id) === gameWeek)?.deadline_time;
-      const confirmedFinalFixtureIds = await loadVerifiedFinalFixtureIds(gameWeek, fixtureFeed, officialBootstrap);
+      const finalEvidence = await loadVerifiedFinalFixtureEvidence(gameWeek, fixtureFeed, officialBootstrap);
+      const confirmedFinalFixtureIds = finalEvidence.finalFixtureIds;
       const matchInfo = buildGameweekFixtureStatus(fixtureFeed, officialBootstrap, gameWeek);
       const tournaments = records.map((row: any) => {
         const readiness = gameweekSettlementReadiness(fixtureFeed, gameWeek, row.endDate, Date.now(), {
@@ -760,11 +761,21 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           fixtureReadiness: readiness,
           unfinishedFixtureDetails: readiness.unfinishedFixtures.map((fixture: any) => {
             const live = matchInfo.fixtures.find((f: any) => Number(f.id) === fixture.id);
+            const provider = finalEvidence.fixtures.find((f: any) => Number(f.fplFixtureId) === fixture.id);
             return {
               ...fixture,
               homeTeam: live?.homeTeam || "Unknown home team",
               awayTeam: live?.awayTeam || "Unknown away team",
               verifiedByApiFootball: confirmedFinalFixtureIds.has(fixture.id),
+              apiFootballMatched: Boolean(provider?.apiFootballMatched),
+              apiFootballFixtureId: provider?.apiFootballFixtureId || null,
+              apiFootballStatus: provider?.apiFootballStatus || null,
+              apiFootballRound: provider?.apiFootballRound || null,
+              apiFootballHomeScore: provider?.apiFootballHomeScore ?? null,
+              apiFootballAwayScore: provider?.apiFootballAwayScore ?? null,
+              apiFootballUpdatedAt: provider?.apiFootballUpdatedAt || null,
+              apiFootballStatsReady: Boolean(provider?.apiFootballStatsReady),
+              providerFailureReason: provider?.failureReason || "no-provider-fixture",
               status: live?.reason || "unverified",
             };
           }),
@@ -778,6 +789,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         };
       });
       return res.json({ gameWeek, readOnly: true, tournaments, originalGameweekWindowEnd: matchInfo.windowEnd,
+        sourceFixtureEvidence: finalEvidence.fixtures,
         notice: "This audit does not update scoring, unlock cards, reopen completed cups or reissue any awards." });
     } catch (error) {
       console.error("[gw-recovery-audit] failed:", error);
@@ -1275,7 +1287,28 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       ]);
       const deadlineTime = (Array.isArray(officialBootstrap?.events) ? officialBootstrap.events : [])
         .find((event: any) => Number(event?.id) === gameWeek)?.deadline_time;
-      const confirmedFinalFixtureIds = await loadVerifiedFinalFixtureIds(gameWeek, fixtures, officialBootstrap);
+      let confirmedFinalFixtureIds = await loadVerifiedFinalFixtureIds(gameWeek, fixtures, officialBootstrap);
+      // An official match can have finished while the FPL finished flag or
+      // saved provider round/status lags. On an explicit admin settlement,
+      // refresh the authoritative API-Football fixture feed ONCE before
+      // returning a misleading "unfinished" result. This never issues awards
+      // or overrides required verified player statistics.
+      const unconfirmedPastFixtures = fixtures.filter((fixture: any) => (
+        Number(fixture?.event) === gameWeek &&
+        fixture?.finished !== true &&
+        Number.isFinite(Date.parse(String(fixture?.kickoff_time || ""))) &&
+        Date.parse(String(fixture?.kickoff_time)) < Date.now() - 3 * 3600_000 &&
+        !confirmedFinalFixtureIds.has(Number(fixture?.id || 0))
+      ));
+      if (unconfirmedPastFixtures.length) {
+        try {
+          const refresh = await runApiFootballSync("fixtures");
+          console.info(`[settlement] refreshed GW${gameWeek} completed-match evidence: ${refresh.message}`);
+          confirmedFinalFixtureIds = await loadVerifiedFinalFixtureIds(gameWeek, fixtures, officialBootstrap);
+        } catch (error) {
+          console.warn(`[settlement] GW${gameWeek} provider FT refresh unavailable; keeping settlement blocked:`, error);
+        }
+      }
 
       for (const cup of cups) {
         const id = Number(cup.id);
