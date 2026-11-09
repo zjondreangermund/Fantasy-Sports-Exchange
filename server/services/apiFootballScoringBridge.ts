@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { fplApi } from "./fplApi.js";
 import { gameweekFixtureWindow } from "./gameweekSettlementReady.js";
+import { loadVerifiedFinalFixtureEvidence } from "./verifiedMatchFinish.js";
 import {
   loadApiFootballPlayerDirectory,
   resolveApiFootballPlayer,
@@ -293,15 +294,32 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
     // A fixture can remain tagged to its original EPL round after being moved
     // weeks later. Do not score that delayed match inside this GW, regardless
     // of what the provider's round string says.
-    let endMs = Number(eligibleWindowEndMs);
-    if (!Number.isFinite(endMs) || endMs <= 0) {
-      const [fixtures, bootstrap] = await Promise.all([fplApi.fixturesLive(), fplApi.bootstrap()]);
-      const deadline = (Array.isArray(bootstrap?.events) ? bootstrap.events : [])
-        .find((e: any) => Number(e?.id) === gw)?.deadline_time;
-      endMs = gameweekFixtureWindow(fixtures, gw, deadline)?.end || NaN;
-    }
-    if (!Number.isFinite(endMs)) return empty(directory); // No verified week boundary: never award late points.
+    const [fplFixtures, fplBootstrap] = await Promise.all([fplApi.fixturesLive(), fplApi.bootstrap()]);
+    const deadline = (Array.isArray(fplBootstrap?.events) ? fplBootstrap.events : [])
+      .find((e: any) => Number(e?.id) === gw)?.deadline_time;
+    const gwWindow = gameweekFixtureWindow(fplFixtures, gw, deadline);
+    if (!gwWindow) return empty(directory); // No verified fixture schedule: never invent points.
+    const configuredEndMs = Number(eligibleWindowEndMs);
+    const endMs = Number.isFinite(configuredEndMs) && configuredEndMs > 0
+      ? Math.min(configuredEndMs, gwWindow.end) : gwWindow.end;
     const windowEnd = new Date(endMs);
+
+    // API-Football's round field is NOT a reliable join key. Match the actual
+    // FPL GW's Premier League fixtures by both clubs, kickoff and season.
+    // A legitimately played GW10 Manchester United v Aston Villa must never
+    // vanish merely because the provider records an earlier/different round.
+    // Postponed fixtures moved outside this week's window never score here.
+    const providerEvidence = await loadVerifiedFinalFixtureEvidence(gw, fplFixtures, fplBootstrap);
+    const sourceKickoffById = new Map<number,number>((Array.isArray(fplFixtures) ? fplFixtures : [])
+      .filter((f: any) => Number(f?.event) === gw)
+      .map((f: any) => [Number(f?.id || 0), Date.parse(String(f?.kickoff_time || ""))]));
+    const eligibleFixtureIds = [...new Set(providerEvidence.fixtures.filter((fixture) => {
+      const kickoff = sourceKickoffById.get(fixture.fplFixtureId) ?? NaN;
+      return Number.isFinite(kickoff) && kickoff >= gwWindow.start - 3 * 60 * 60_000
+        && kickoff < endMs && Number(fixture.apiFootballFixtureId || 0) > 0;
+    }).map(fixture => Number(fixture.apiFootballFixtureId)))];
+    if (!eligibleFixtureIds.length) return empty(directory); // Missing provider gameweek evidence is not zero points.
+    const fixtureIdsParam = `{${eligibleFixtureIds.join(",")}}`;
     const seasonRow = rowsOf(await db.execute(sql`
       select max(season)::int as season
       from app.api_football_fixtures
@@ -310,7 +328,6 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
     const season = Number(seasonRow?.season || 0);
     if (!season) return empty(directory);
 
-    const roundPattern = `(^|[^0-9])${gw}$`;
     const fixtureRows = rowsOf(await db.execute(sql`
       select api_fixture_id as "fixtureId", home_team_id as "homeTeamId",
              away_team_id as "awayTeamId", kickoff_at as "kickoffAt",
@@ -319,7 +336,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
       from app.api_football_fixtures
       where league_id=${LEAGUE_ID}
         and season=${season}
-        and coalesce(round,'') ~ ${roundPattern}
+        and api_fixture_id = any(${fixtureIdsParam}::int[])
         and kickoff_at < ${windowEnd}
       order by kickoff_at asc, api_fixture_id asc
     `));
@@ -355,7 +372,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
       left join app.api_football_teams t on t.api_team_id=s.api_team_id
       where f.league_id=${LEAGUE_ID}
         and f.season=${season}
-        and coalesce(f.round,'') ~ ${roundPattern}
+        and f.api_fixture_id = any(${fixtureIdsParam}::int[])
         and f.kickoff_at < ${windowEnd}
         and s.statistics <> '{}'::jsonb
       order by f.kickoff_at asc, s.api_fixture_id asc
@@ -392,7 +409,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
       left join app.api_football_teams t on t.api_team_id=l.api_team_id
       where f.league_id=${LEAGUE_ID}
         and f.season=${season}
-        and coalesce(f.round,'') ~ ${roundPattern}
+        and f.api_fixture_id = any(${fixtureIdsParam}::int[])
     `));
 
     // Injured players can legitimately be absent from both the current squad
