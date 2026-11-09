@@ -91,6 +91,27 @@ export default function AdminTournamentManager() {
     enabled: false,
     staleTime: 0,
   });
+  // Refresh provider fixtures and full player statistics without settling prizes.
+  const refreshGameweekProvider = useMutation({
+    mutationFn: async () => {
+      const fixtureResponse = await apiRequest("POST", "/api/admin/live-data/sync/fixtures", {});
+      const fixtureRun = await fixtureResponse.json();
+      const statsResponse = await apiRequest("POST", "/api/admin/live-data/sync/completed_stats", {});
+      const statsRun = await statsResponse.json();
+      return { fixtureRun, statsRun };
+    },
+    onSuccess: (result: any) => {
+      void auditGw();
+      toast({
+        title: `GW${targetGameWeek} provider refresh complete`,
+        description: `Fixture sync: ${result.fixtureRun?.message || "checked"}. Player stats: ${result.statsRun?.message || "checked"}. Recheck audit before settling.`,
+      });
+    },
+    onError: (error: any) => {
+      void auditGw();
+      toast({ title: "Provider refresh incomplete", description: String(error?.message || "Check API-Football quota and Sync Centre"), variant:"destructive" });
+    },
+  });
   const prizesByRarity = useMemo(() => {
     const groups: Record<string, any[]> = {};
     for (const rarity of rarityOptions) groups[rarity] = [];
@@ -332,10 +353,18 @@ export default function AdminTournamentManager() {
       <section className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-400/[.04] p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><h3 className="font-black text-amber-100">GW{targetGameWeek} settlement recovery audit</h3><p className="mt-1 text-xs text-white/60">Review original scoring, locks, payouts and prizes here. For a Closed cup, use Settle Gameweek above; completed cups remain protected against duplicate awards.</p></div>
-          <Button type="button" variant="outline" disabled={gwAuditing} onClick={() => { void auditGw(); }} className="border-amber-300/30 text-amber-100"><RefreshCw className={`mr-2 h-4 w-4 ${gwAuditing ? "animate-spin" : ""}`} />{gwAuditing ? `Checking GW${targetGameWeek}…` : `Audit GW${targetGameWeek}`}</Button>
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <Button type="button" variant="outline" disabled={gwAuditing || refreshGameweekProvider.isPending} onClick={() => { void auditGw(); }} className="flex-1 border-amber-300/30 text-amber-100 sm:flex-none"><RefreshCw className={`mr-1.5 h-4 w-4 ${gwAuditing ? "animate-spin" : ""}`} />{gwAuditing ? "Checking…" : `Audit GW${targetGameWeek}`}</Button>
+            <Button type="button" variant="outline" disabled={refreshGameweekProvider.isPending || gwAuditing} onClick={() => refreshGameweekProvider.mutate()} className="flex-1 border-cyan-300/30 text-cyan-100 sm:flex-none"><RefreshCw className={`mr-1.5 h-4 w-4 ${refreshGameweekProvider.isPending ? "animate-spin" : ""}`} />{refreshGameweekProvider.isPending ? "Syncing match data…" : "Refresh match & player stats"}</Button>
+          </div>
         </div>
         {gwRecovery ? <div className="mt-3 space-y-2">{gwRecovery.tournaments?.length ? gwRecovery.tournaments.map((cup: any) => <div key={cup.id} className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><b className="text-white">{cup.name}</b><Badge variant="outline">{cup.status}</Badge></div><div className="mt-2 text-white/65">{cup.entryCount} entries · {cup.unverifiedEntries} unverified snapshots · {cup.activeCardLocks} active card locks · {cup.paidEntryCount} cash payouts · {cup.mintedPrizeCount} minted cards · {cup.prizeAwardCount} award records ({cup.unclaimedAwardCount} pending claims)</div><p className="mt-1 text-amber-100">{cup.recoveryStatus}</p>
-            {cup.unfinishedFixtureDetails?.length ? <div className="mt-2 space-y-2">{cup.unfinishedFixtureDetails.map((fixture: any) => <div key={fixture.id} className="rounded-lg border border-orange-300/20 bg-orange-400/10 p-2 text-xs text-orange-100"><b>{fixture.homeTeam} vs {fixture.awayTeam}</b> · Fixture #{fixture.id}<div className="mt-0.5">Scheduled: {fixture.kickoffTime ? settlementLabel(fixture.kickoffTime) : "Date not supplied"} · FPL FT: {fixture.fplFinished ? "Yes" : "No"} · API-Football matched FT: {fixture.verifiedByApiFootball ? "Yes" : "No"}</div><p className="mt-0.5 text-orange-100/75">Not verified final; not necessarily postponed. Check the official match result before excluding it.</p></div>)}</div> : null}
+            {cup.unfinishedFixtureDetails?.length ? <div className="mt-2 space-y-2">{cup.unfinishedFixtureDetails.map((fixture: any) => <div key={fixture.id} className="rounded-lg border border-orange-300/20 bg-orange-400/10 p-2 text-xs text-orange-100"><b>{fixture.homeTeam} vs {fixture.awayTeam}</b> · Fixture #{fixture.id}<div className="mt-0.5">Scheduled: {fixture.kickoffTime ? settlementLabel(fixture.kickoffTime) : "Date not supplied"} · FPL FT: {fixture.fplFinished ? "Yes" : "No"} · API-Football matched FT: {fixture.verifiedByApiFootball ? "Yes" : "No"}
+              <div className="mt-1 rounded-md border border-white/10 bg-black/25 p-2 text-[11px] leading-5 text-white/85">
+                {fixture.apiFootballMatched
+                  ? <>Provider fixture #{fixture.apiFootballFixtureId} · status <b>{fixture.apiFootballStatus || "unknown"}</b>{fixture.apiFootballRound ? ` · round ${fixture.apiFootballRound}` : ""}{fixture.apiFootballHomeScore != null && fixture.apiFootballAwayScore != null ? ` · score ${fixture.apiFootballHomeScore}–${fixture.apiFootballAwayScore}` : ""}{fixture.apiFootballUpdatedAt ? ` · updated ${settlementLabel(fixture.apiFootballUpdatedAt)}` : ""} · player statistics: {fixture.apiFootballStatsReady ? "synced" : "not fully verified"}</>
+                  : "No same-teams, same-kickoff Premier League fixture was found in the saved API-Football feed."}
+              </div></div><p className="mt-0.5 text-orange-100/75">This is a data-source verification issue, not proof of postponement. Refresh match & player stats, then audit again. Do not award prizes while player statistics are incomplete.</p></div>)}</div> : null}
             {cup.postponedFixtureDetails?.length ? <div className="mt-2 rounded-lg border border-sky-300/20 bg-sky-400/10 p-2 text-xs text-sky-100"><b>Moved outside this GW (excluded from points):</b>{cup.postponedFixtureDetails.map((fixture: any) => <p key={fixture.id} className="mt-1">#{fixture.id}: {fixture.homeTeam} vs {fixture.awayTeam} · {fixture.kickoffTime ? settlementLabel(fixture.kickoffTime) : "Rescheduled date not confirmed"}</p>)}</div> : null}{String(cup.status).toLowerCase() === "closed" ? <Button type="button" disabled={settleMutation.isPending || Number(cup.unverifiedEntries || 0) > 0} onClick={() => requestSettlement(cup)} className="mt-3 w-full bg-emerald-300 font-black text-slate-950 hover:bg-emerald-200"><CheckCircle2 className="mr-2 h-4 w-4" />{settleMutation.isPending ? "Settling…" : Number(cup.unverifiedEntries || 0) > 0 ? "Waiting for verified scores" : `Settle GW${targetGameWeek} — finalize prizes & unlock cards`}</Button> : null}</div>) : <p className="text-sm text-white/60">No tournaments found for GW{targetGameWeek}.</p>}<p className="text-xs text-white/50">Completed tournaments cannot be safely settled a second time without reconciling original rewards. A zero-point player is not automatically an unverified player.</p></div> : null}
       </section>
 
