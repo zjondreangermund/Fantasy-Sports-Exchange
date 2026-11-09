@@ -1,6 +1,7 @@
 import { normalizeFootballData, uniqueFootballRows, footballFixtureKey } from "../../shared/football-data.js";
 import type { Express } from "express";
 import { fplApi } from "../services/fplApi.js";
+import { buildGameweekFixtureStatus } from "../services/gameweekPlayerFixtures.js";
 import { db } from "../db.js";
 import { sql } from "drizzle-orm";
 
@@ -176,6 +177,22 @@ export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreU
     } catch (error: any) {
       console.error("Failed to load EPL standings:", error);
       return res.status(500).json({ message: error?.message || "Failed to load standings" });
+    }
+  });
+
+  // Original gameweek fixtures, postponed matches and per-team lineup notices.
+  // Read-only with 2-minute client caching; no per-player provider requests.
+  app.get("/api/epl/gameweek-status/:gameWeek", async (req, res) => {
+    const gameWeek = Number(req.params.gameWeek);
+    if (!Number.isInteger(gameWeek) || gameWeek < 1 || gameWeek > 38)
+      return res.status(400).json({ message: "Valid gameweek required" });
+    try {
+      const [fixtures, bootstrap] = await Promise.all([fplApi.fixturesLive(), fplApi.bootstrap()]);
+      res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=60");
+      return res.json(buildGameweekFixtureStatus(fixtures, bootstrap, gameWeek));
+    } catch (error) {
+      console.warn("[gw-fixtures] Provider not available:", error);
+      return res.status(503).json({ available: false, gameWeek, message: "Fixture schedule unavailable; do not assume a match is postponed." });
     }
   });
 
