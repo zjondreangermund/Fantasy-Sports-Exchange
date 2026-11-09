@@ -5,6 +5,7 @@ import type { Express } from "express";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { createNotificationOnce, enqueueSignupWelcomeDeliveries, ensureNotificationsSchema } from "../services/notifications.js";
+import { GW11_OPEN_TITLE, GW11_OPEN_MESSAGE, runGw11OpeningCycle } from "../services/gameweekBreakNotice.js";
 import {
   claimReplacementCard,
   ensurePlayerTransferMonitoringSchema,
@@ -91,8 +92,9 @@ async function syncGameweekNotifications(userId: string) {
     if (openRows.length) {
       await createNotificationOnce(db, {
         userId,
-        title: `Gameweek ${nextGameweek} entries are open`,
-        message: `Gameweek ${nextGameweek} tournaments are open. Open Play to review the rarity card requirements and submit your five-card lineup before the deadline.`,
+        title: nextGameweek === 11 ? GW11_OPEN_TITLE : `Gameweek ${nextGameweek} entries are open`,
+        message: nextGameweek === 11 ? GW11_OPEN_MESSAGE
+          : `Gameweek ${nextGameweek} tournaments are open. Open Play to review the rarity card requirements and submit your five-card lineup before the deadline.`,
         dedupeKey: `gameweek:${nextGameweek}:entries-open`,
       });
     }
@@ -221,6 +223,13 @@ async function syncSubscribedUserNotifications() {
   subscribedNotificationSyncRunning = true;
   try {
     await ensureNotificationsSchema();
+    // Open GW11 at 18:00 CAT on 9 Nov once GW10 has fully settled; queue
+    // one international-break opening note for every registered account,
+    // even users who did not enter any cups. Never delay other notifications
+    // if rollover or announcement verification fails.
+    await runGw11OpeningCycle().catch((error) => {
+      console.error("Scheduled GW11 opening/announcement check failed:", error);
+    });
     await reportNotificationHealth().catch(error => console.error("Notification health report failed:", error?.message));
     // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1
     // Create/remind pending departure claims and auto-mint only after the
