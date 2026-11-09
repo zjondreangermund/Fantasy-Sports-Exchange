@@ -118,9 +118,13 @@ patchFile("server/routes/prizeVault.routes.ts", (original) => {
 patchFile("server/routes.ts", (original) => {
   let source = original;
 
-  const fallbackAnchor = 'function fallbackGameweekKickoff(gameWeek: number) { const start = new Date("2026-08-14T19:00:00+02:00"); start.setDate(start.getDate() + (Math.max(1, Number(gameWeek) || 1) - 1) * 7); return start; }';
-  const settlementHelper = `\n// SITE_AUDIT_SETTLEMENT_CLOCK_V1\nfunction catTuesdaySettlementAfterKickoff(kickoff: Date) {\n  const CAT_OFFSET_MS = 2 * 60 * 60 * 1000;\n  const shifted = new Date(kickoff.getTime() + CAT_OFFSET_MS);\n  const day = shifted.getUTCDay();\n  let daysForward = (2 - day + 7) % 7;\n  if (daysForward === 0) daysForward = 7;\n  shifted.setUTCDate(shifted.getUTCDate() + daysForward);\n  shifted.setUTCHours(23, 59, 0, 0);\n  return new Date(shifted.getTime() - CAT_OFFSET_MS);\n}`;
-  source = insertAfter(source, fallbackAnchor, settlementHelper, "SITE_AUDIT_SETTLEMENT_CLOCK_V1", "Tuesday settlement helper");
+  // SETTLEMENT_CLOCK_FROM_SAVED_GAMEWEEK_V1
+  // Never recompute settlement as the Tuesday after the first kickoff.
+  // The official calendar uses the final eligible match and persists end_date.
+  source = source.replace(
+    "const settlementAt = catTuesdaySettlementAfterKickoff(new Date(submissionClosesAt));",
+    "const settlementAt = comp.endDate || comp.end_date || null;",
+  );
 
   const competitionReturnFrom = `        const submissionClosesAt = await getCompetitionSubmissionCloseAt(comp);\n        const normalized = normalizeCompetitionRow({ ...comp, entryCount: entries.length });\n        return { ...normalized, submissionClosesAt, entryOpen: comp.status === "open" && Date.now() < new Date(submissionClosesAt).getTime(), entries, entryCount: entries.length, winner: comp.status === "completed" && entries[0] ? { userId: entries[0].userId, userName: entries[0].userName, totalScore: Number(entries[0].totalScore || 0), prizeAmount: Number(entries[0].prizeAmount || 0), prizeCardId: entries[0].prizeCardId || null, tiebreak: entries[0].tiebreak || null } : null };`;
   const competitionReturnTo = `        const submissionClosesAt = await getCompetitionSubmissionCloseAt(comp);\n        const settlementAt = catTuesdaySettlementAfterKickoff(new Date(submissionClosesAt));\n        const normalized = normalizeCompetitionRow({ ...comp, entryCount: entries.length });\n        return { ...normalized, submissionClosesAt, settlementAt, entryOpen: comp.status === "open" && Date.now() < new Date(submissionClosesAt).getTime(), entries, entryCount: entries.length, winner: comp.status === "completed" && entries[0] ? { userId: entries[0].userId, userName: entries[0].userName, totalScore: Number(entries[0].totalScore || 0), prizeAmount: Number(entries[0].prizeAmount || 0), prizeCardId: entries[0].prizeCardId || null, tiebreak: entries[0].tiebreak || null } : null };`;
