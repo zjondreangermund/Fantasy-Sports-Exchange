@@ -748,7 +748,10 @@ export class ScoreUpdateService {
           competition.status = manualStatus;
         }
 
-        if (!manualStatus && status === "upcoming" && Number.isFinite(startTime) && now >= startTime) {
+        if (!manualStatus && status === "upcoming" && Number.isFinite(startTime) && now >= startTime
+          // The GW10->11 international-break rollout is conditional on verified
+          // GW10 settlement and is owned by the scheduled opening worker.
+          && !(gameWeek === 11 && String(competition?.season || "") === "2026-27")) {
           await this.setCompetitionStatus(Number(competition.id), "open");
           status = "open";
           competition.status = "open";
