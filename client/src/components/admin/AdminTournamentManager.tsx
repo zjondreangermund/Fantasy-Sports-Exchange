@@ -107,8 +107,11 @@ export default function AdminTournamentManager() {
       const next: any = { ...prev, [key]: value };
       if (key === "gameWeek") {
         const gw = Number(value || 1);
-        next.startDate = defaultStartForGw(gw);
-        next.endDate = defaultEndForGw(gw);
+        const scheduled = officialCompetitions.find((comp: any) =>
+          Number(comp.gameWeek || comp.game_week || 0) === gw &&
+          String(comp.prizeKey || comp.prize_key || "") === "ladder");
+        next.startDate = scheduled ? isoLocal(scheduled.startDate || scheduled.start_date) : defaultStartForGw(gw);
+        next.endDate = scheduled ? isoLocal(scheduled.endDate || scheduled.end_date) : defaultEndForGw(gw);
       }
       if (key === "rewardMode" && value === "card") {
         next.tier = "common";
