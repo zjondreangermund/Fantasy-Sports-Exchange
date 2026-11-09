@@ -129,7 +129,7 @@ includesAll(competitions, [
   "submissionClosesAt",
 ], "Tournament page");
 includesAll(vaultPage, [
-  "gameweek final-match settlement cutoff",
+  "final-match settlement cutoff",
   "FA Cup",
   "Postponed fixtures played after the next gameweek starts",
 ], "Play tournament page");
