@@ -1258,7 +1258,6 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           results.push({ id, name, result: "already_completed", message: "Existing settlement and prizes preserved" });
           continue;
         }
-        const cutoff = Date.parse(String(cup.endDate || ""));
         const readiness = gameweekSettlementReadiness(fixtures, gameWeek, cup.endDate);
         if (!readiness.ready) {
           results.push({ id, name, result: "blocked", message: readiness.message, code: readiness.code, cutoffAt: String(cup.endDate || "") });
