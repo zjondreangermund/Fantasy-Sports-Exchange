@@ -19,6 +19,7 @@ import CardPlayerImage from "../CardPlayerImage";
 import { apiRequest, queryClient } from "../../lib/queryClient";
 import { currentArenaDisplayWeek } from "../../lib/arena-current-gameweek";
 import { useToast } from "../../hooks/use-toast";
+import { findClubNotice, postponementWarning, useGameweekFixtureNotices } from "../../lib/gameweekPostponement";
 import type { CompetitionEntry, PlayerCardWithPlayer } from "../../../../shared/schema";
 import {
   getTournamentRarityRequirement,
@@ -235,6 +236,12 @@ export default function NativePlayPage() {
   const cardById = React.useMemo(() => new Map(cards.map((card) => [Number(card.id), card])), [cards]);
   const selectedCards = selectedIds.map((id) => id ? cardById.get(Number(id)) || null : null);
   const selectedTournamentId = Number(selected?.id || 0);
+  const selectedGameweek = Number(selected?.gameWeek ?? selected?.game_week ?? 0);
+  const { data: fixtureNotices } = useGameweekFixtureNotices(selectedGameweek, Boolean(selected));
+  const warnForCard = (card: PlayerCardWithPlayer | null) => card
+    ? postponementWarning(findClubNotice(fixtureNotices, card), selectedGameweek) : null;
+  const affectedCards = selectedCards.filter(Boolean)
+    .map(card => ({ card, warning: warnForCard(card) })).filter(row => Boolean(row.warning));
   const selectedTier = normalizeTournamentRarity(selected?.tier);
   const usedInTournament = React.useMemo(() => {
     const used = new Set<number>();
@@ -411,11 +418,12 @@ export default function NativePlayPage() {
                 const card = selectedCards[index];
                 return <button key={slot.label} onClick={() => setActiveSlot(index)} className={`min-w-0 rounded-2xl border p-1.5 text-center ${activeSlot === index ? "border-cyan-300/45 bg-cyan-300/[.08]" : "border-white/[.07] bg-white/[.025]"}`}>
                   <div className="relative mx-auto h-10 w-10 overflow-hidden rounded-xl bg-white/5">{card ? <CardPlayerImage card={card} alt={card.player?.name || slot.label} className="h-full w-full object-cover object-top" /> : <span className="grid h-full w-full place-items-center text-[10px] font-black text-slate-600">{slot.label}</span>}</div>
-                  <p className={`mt-1 truncate text-[9px] font-black ${card ? "text-white" : "text-slate-600"}`}>{card ? card.player?.name?.split(" ").slice(-1)[0] : slot.label}</p>
+                  <p className={`mt-1 truncate text-[9px] font-black ${card ? "text-white" : "text-slate-600"}`}>{card ? card.player?.name?.split(" ").slice(-1)[0] : slot.label}</p>{card && warnForCard(card) ? <span className="mt-1 block text-[8px] font-black text-orange-300">POSTPONED</span> : null}
                 </button>;
               })}
             </div>
 
+            {affectedCards.length ? <div role="status" className="mt-3 space-y-2">{affectedCards.map(row => <p key={row.card?.id} className="rounded-xl border border-orange-300/30 bg-orange-500/10 p-2.5 text-[11px] leading-4 text-orange-100"><b>{row.card?.player?.name}: </b>{row.warning}</p>)}</div> : null}
             {complete ? (
               <section className="mt-3 rounded-2xl border border-amber-300/15 bg-amber-300/[.05] p-3">
                 <div className="flex items-center gap-2"><Crown className="h-4 w-4 text-amber-300" /><p className="text-xs font-black">Choose your captain</p></div>
@@ -433,9 +441,10 @@ export default function NativePlayPage() {
             <div className="mt-2 space-y-2">
               {candidateCards.length ? candidateCards.map((card) => {
                 const tone = toneFor(card.rarity);
+                const fixtureWarning = warnForCard(card);
                 return <button key={card.id} onClick={() => chooseCard(card)} className={`flex w-full items-center gap-3 rounded-2xl border ${tone.border} ${tone.soft} ${tone.glow} p-2.5 text-left active:scale-[.995]`}>
                   <div className="relative h-14 w-12 shrink-0 overflow-hidden rounded-xl bg-slate-900"><CardPlayerImage card={card} alt={card.player?.name || "Player"} className="h-full w-full object-cover object-top" /></div>
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{card.player?.name || "Player"}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">{cardPosition(card)} · {card.player?.team || "Premier League"}</p><div className="mt-1 flex items-center gap-1.5"><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${tone.soft} ${tone.text}`}>{card.rarity}</span><span className="text-[9px] font-bold text-cyan-200">{Number((card as any).currentGameweekPoints || 0).toFixed(2)} PTS</span></div></div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{card.player?.name || "Player"}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">{cardPosition(card)} · {card.player?.team || "Premier League"}</p><div className="mt-1 flex items-center gap-1.5"><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${tone.soft} ${tone.text}`}>{card.rarity}</span><span className="text-[9px] font-bold text-cyan-200">{Number((card as any).currentGameweekPoints || 0).toFixed(2)} PTS</span></div>{fixtureWarning ? <p className="mt-1.5 line-clamp-3 text-[10px] leading-4 font-semibold text-orange-200">{fixtureWarning}</p> : null}</div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-slate-600" />
                 </button>;
               }) : <NativeEmpty title={`No eligible ${currentSlot.label} card found.`} compact />}
