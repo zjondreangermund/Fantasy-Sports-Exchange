@@ -200,6 +200,7 @@ async function main() {
     let preservedEntries = 0;
     let excludedPostponed = 0;
     let fallbackWindows = 0;
+    let migratedUnsettledHistoricalCutoffs = 0;
 
     // Past official weeks are historical only. Close stale rows, but never recreate
     // a past tournament that an admin intentionally deleted.
@@ -214,6 +215,24 @@ async function main() {
         returning id`,
       [SEASON, currentGw],
     );
+
+    // Recover unsettled earlier GWs (including GW10) without touching any
+    // completed, cancelled, or manually controlled historical competition.
+    // Never shorten dates when only a fallback fixture schedule is available.
+    for (const window of windows) {
+      if (window.gw >= currentGw || window.usedFallback) continue;
+      const migrated = await client.query(
+        `update app.competitions
+            set end_date=$3
+          where season=$1 and game_week=$2
+            and created_by_user_id is null
+            and coalesce(prize_key,'') in ('ladder','free-weighted-card')
+            and status::text not in ('completed','cancelled')
+            and admin_status_override is null and end_date>$3`,
+        [SEASON, window.gw, window.settlement],
+      );
+      migratedUnsettledHistoricalCutoffs += migrated.rowCount || 0;
+    }
 
     for (const window of windows) {
       if (window.gw < currentGw) continue;
@@ -356,6 +375,7 @@ async function main() {
     console.log("Deleted past official tournaments are not recreated.");
     console.log("Explicit admin status overrides are preserved; startup schedule sync only controls tournaments still in automatic status mode.");
     console.log(`Preserved ${preservedEntries} existing official tournament entries; startup sync did not delete user teams.`);
+    console.log(`Updated ${migratedUnsettledHistoricalCutoffs} past unsettled official cup cutoff(s) using verified scheduled fixture windows; completed history was preserved.`);
     console.log(`Excluded ${excludedPostponed} postponed fixture assignment(s) that fall on or after the next gameweek starts.`);
     console.log(`${fallbackWindows} gameweek window(s) used fallback dates because live FPL fixture data was unavailable/incomplete; these refresh automatically on the next successful sync.`);
     console.log("Official/admin Prize Ladder tournaments use a 0% platform fee. User-created cash tournaments keep their separate creator fee rules.");
