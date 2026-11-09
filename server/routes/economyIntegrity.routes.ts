@@ -13,6 +13,7 @@ import { loadApiFootballGameweekScoringContext } from "../services/apiFootballSc
 import { ScoreUpdateService } from "../services/scoreUpdater.js";
 import { runApiFootballSync } from "../services/apiFootballSync.js";
 import { gameweekSettlementReadiness } from "../services/gameweekSettlementReady.js";
+import { buildGameweekFixtureStatus } from "../services/gameweekPlayerFixtures.js";
 import { loadVerifiedFinalFixtureIds } from "../services/verifiedMatchFinish.js";
 import { rankCompetitionEntries } from "../services/tournamentRules.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
@@ -747,6 +748,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const deadlineTime = (Array.isArray(officialBootstrap?.events) ? officialBootstrap.events : [])
         .find((event: any) => Number(event?.id) === gameWeek)?.deadline_time;
       const confirmedFinalFixtureIds = await loadVerifiedFinalFixtureIds(gameWeek, fixtureFeed, officialBootstrap);
+      const matchInfo = buildGameweekFixtureStatus(fixtureFeed, officialBootstrap, gameWeek);
       const tournaments = records.map((row: any) => {
         const readiness = gameweekSettlementReadiness(fixtureFeed, gameWeek, row.endDate, Date.now(), {
           deadlineTime, confirmedFinalFixtureIds, useFixtureCutoff: !row.createdByUserId,
@@ -756,6 +758,17 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           ...row,
           settlementCutoffPassed,
           fixtureReadiness: readiness,
+          unfinishedFixtureDetails: readiness.unfinishedFixtures.map((fixture: any) => {
+            const live = matchInfo.fixtures.find((f: any) => Number(f.id) === fixture.id);
+            return {
+              ...fixture,
+              homeTeam: live?.homeTeam || "Unknown home team",
+              awayTeam: live?.awayTeam || "Unknown away team",
+              verifiedByApiFootball: confirmedFinalFixtureIds.has(fixture.id),
+              status: live?.reason || "unverified",
+            };
+          }),
+          postponedFixtureDetails: matchInfo.fixtures.filter((fixture: any) => fixture.excluded),
           recoveryStatus: row.status === "completed"
             ? "Completed — preserve existing payouts and prizes; review mismatches before changes"
             : row.status === "cancelled" ? "Cancelled — do not resettle"
@@ -764,7 +777,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             : "Settlement cutoff passed; confirm final fixture coverage and use normal settlement",
         };
       });
-      return res.json({ gameWeek, readOnly: true, tournaments,
+      return res.json({ gameWeek, readOnly: true, tournaments, originalGameweekWindowEnd: matchInfo.windowEnd,
         notice: "This audit does not update scoring, unlock cards, reopen completed cups or reissue any awards." });
     } catch (error) {
       console.error("[gw-recovery-audit] failed:", error);
