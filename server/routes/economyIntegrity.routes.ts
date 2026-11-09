@@ -1287,7 +1287,28 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       ]);
       const deadlineTime = (Array.isArray(officialBootstrap?.events) ? officialBootstrap.events : [])
         .find((event: any) => Number(event?.id) === gameWeek)?.deadline_time;
-      const confirmedFinalFixtureIds = await loadVerifiedFinalFixtureIds(gameWeek, fixtures, officialBootstrap);
+      let confirmedFinalFixtureIds = await loadVerifiedFinalFixtureIds(gameWeek, fixtures, officialBootstrap);
+      // An official match can have finished while the FPL finished flag or
+      // saved provider round/status lags. On an explicit admin settlement,
+      // refresh the authoritative API-Football fixture feed ONCE before
+      // returning a misleading "unfinished" result. This never issues awards
+      // or overrides required verified player statistics.
+      const unconfirmedPastFixtures = fixtures.filter((fixture: any) => (
+        Number(fixture?.event) === gameWeek &&
+        fixture?.finished !== true &&
+        Number.isFinite(Date.parse(String(fixture?.kickoff_time || ""))) &&
+        Date.parse(String(fixture?.kickoff_time)) < Date.now() - 3 * 3600_000 &&
+        !confirmedFinalFixtureIds.has(Number(fixture?.id || 0))
+      ));
+      if (unconfirmedPastFixtures.length) {
+        try {
+          const refresh = await runApiFootballSync("fixtures");
+          console.info(`[settlement] refreshed GW${gameWeek} completed-match evidence: ${refresh.message}`);
+          confirmedFinalFixtureIds = await loadVerifiedFinalFixtureIds(gameWeek, fixtures, officialBootstrap);
+        } catch (error) {
+          console.warn(`[settlement] GW${gameWeek} provider FT refresh unavailable; keeping settlement blocked:`, error);
+        }
+      }
 
       for (const cup of cups) {
         const id = Number(cup.id);
