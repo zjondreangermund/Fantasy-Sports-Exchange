@@ -36,13 +36,13 @@ includesAll(sync, [
   "resolveEnumSchema",
   "competition_status",
   "created_by_user_id is null",
-  "catEndOfFollowingDay",
+  "expectedPostMatchCutoff",
   "eligibleKickoffs",
   "nextFirst",
   "platform_fee_rate = 0",
   "platform_fee_total = 0",
   "current/future official GW/rarity slots",
-  "day after the last eligible Premier League fixture",
+  "after the last Premier League fixture finishes",
   "postponed fixture assignment(s)",
   "FA Cup",
 ], "Official tournament sync");
@@ -54,6 +54,7 @@ includesAll(scoreUpdater, [
   "entryDeadline",
   "settlementDeadline",
   "isSettlementFinal",
+  "gameweekSettlementReadiness",
   "activateCompetitionAtDeadline",
   "tiebreakMeta: { ...asObject(entry?.tiebreakMeta), scoring: snapshot }",
   "version: 7",
@@ -123,14 +124,14 @@ includesAll(preflight, [
 
 includesAll(competitions, [
   "tournamentSettlementLabel",
-  "Day after the last eligible Premier League fixture",
+  "After the final eligible Premier League match",
   "gameweek settlement cutoff",
   "FA Cup",
   "postponed fixtures played after the next gameweek starts",
   "submissionClosesAt",
 ], "Tournament page");
 includesAll(adminTournaments, [
-  "Settlement cutoff — day after last eligible PL match",
+  "Final Premier League match settlement cutoff",
   "Manual Settle Now",
   "Settle Tournament",
   "MANUAL EARLY SETTLEMENT",
