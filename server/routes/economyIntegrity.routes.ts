@@ -18,7 +18,7 @@ import { loadVerifiedFinalFixtureEvidence, loadVerifiedFinalFixtureIds } from ".
 import { rankCompetitionEntries } from "../services/tournamentRules.js";
 import { getActivePrizeForEntries } from "../services/prizeEngine.js";
 import { createNotificationOnce, ensureNotificationsSchema } from "../services/notifications.js";
-import { notifyGw10InternationalBreakIfSettled } from "../services/gameweekBreakNotice.js";
+import { notifyGw10EntrantsSettlementIfSettled } from "../services/gameweekBreakNotice.js";
 import { openNextGameweekIfComplete } from "../services/gameweekRollover.js";
 import { TOURNAMENT_REQUIRED_POSITIONS, TOURNAMENT_UTILITY_POSITIONS, validateTournamentRarityLineup } from "../../shared/game-rules.js";
 import {
@@ -1268,7 +1268,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       let breakNotice: any = null;
       if (!req.skipNextGameweekRollover) {
         try {
-          breakNotice = await notifyGw10InternationalBreakIfSettled(Number(preview.gameWeek || 0));
+          breakNotice = await notifyGw10EntrantsSettlementIfSettled(Number(preview.gameWeek || 0));
         } catch (noticeError) {
           console.error("[gw10-break] Tournament settled but break notification could not be sent:", noticeError);
         }
@@ -1431,7 +1431,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       let breakNotice: any = null;
       if (failed === 0) {
         try {
-          breakNotice = await notifyGw10InternationalBreakIfSettled(gameWeek);
+          breakNotice = await notifyGw10EntrantsSettlementIfSettled(gameWeek);
         } catch (noticeError) {
           console.error("[gw10-break] Gameweek settled but international-break notifications could not be queued:", noticeError);
         }
