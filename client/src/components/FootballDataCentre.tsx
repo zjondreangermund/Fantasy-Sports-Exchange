@@ -156,6 +156,21 @@ export default function FootballDataCentre() {
 
   const selectedCompetition = COMPETITIONS.find((item) => item.key === leagueKey) || COMPETITIONS[0];
 
+  // Provider outages and subscription warnings are operational diagnostics, not player-facing content.
+  // Only a positively verified admin session may see them. A failed/unauthenticated check fails closed.
+  const adminCheck = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/admin/check"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/check", { credentials: "include" });
+      if (!response.ok) return { isAdmin: false };
+      const payload = await response.json().catch(() => ({}));
+      return { isAdmin: payload?.isAdmin === true };
+    },
+    retry: false,
+    staleTime: 60_000,
+  });
+  const showProviderDiagnostics = adminCheck.data?.isAdmin === true;
+
   const coverage = useQuery<any>({
     queryKey: ["api-football-coverage", leagueKey],
     queryFn: () => getJson(`/api/football/coverage/${leagueKey}`),
@@ -302,7 +317,7 @@ export default function FootballDataCentre() {
             {COMPETITIONS.map((competition) => <Button key={competition.key} size="sm" variant={competition.key === leagueKey ? "default" : "outline"} onClick={() => selectLeague(competition.key)}>{competition.name}</Button>)}
           </div>
         </div>
-        <div className="mt-4">{coverage.isLoading ? <Skeleton className="h-7 w-full" /> : <CoverageStrip data={coverage.data} />}</div>
+        {showProviderDiagnostics ? <div className="mt-4">{coverage.isLoading ? <Skeleton className="h-7 w-full" /> : <CoverageStrip data={coverage.data} />}</div> : null}
       </Card>
 
       <Tabs defaultValue="matches" className="w-full">
@@ -330,7 +345,7 @@ export default function FootballDataCentre() {
             </div>
           </div>
 
-          {fixtures.data?.warning ? (
+          {showProviderDiagnostics && fixtures.data?.warning ? (
             <Card className="flex items-start gap-3 border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
               <div>
@@ -339,13 +354,13 @@ export default function FootballDataCentre() {
                 <Button size="sm" variant="outline" className="mt-3" onClick={() => { void fixtures.refetch(); }}>Check feed again</Button>
               </div>
             </Card>
-          ) : fixtures.data?.providerStatus === "supplemented" ? (
+          ) : showProviderDiagnostics && fixtures.data?.providerStatus === "supplemented" ? (
             <div className="rounded-lg border border-cyan-400/15 bg-cyan-400/[.045] px-3 py-2 text-xs text-cyan-100/75" role="status">
               Official Premier League live scores are filling gaps while API-Football match details catch up.
             </div>
           ) : null}
 
-          {fixtures.isError && fixtureRows.length > 0 ? (
+          {showProviderDiagnostics && fixtures.isError && fixtureRows.length > 0 ? (
             <Card className="flex items-center justify-between gap-3 border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
               <span>Live match updates are temporarily unavailable. Previously loaded matches are still shown.</span>
               <Button size="sm" variant="outline" onClick={() => fixtures.refetch()}>Retry</Button>
@@ -363,21 +378,30 @@ export default function FootballDataCentre() {
                   <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground"><Clock className="h-3 w-3" />{formatDate(fixture.kickoffTime)}</div>
                 </button>
               )) : fixtures.isError ? (
-                <Card className="space-y-3 border-amber-500/30 bg-amber-500/10 p-5 text-sm">
-                  <div className="flex items-center gap-2 font-semibold text-amber-200"><AlertTriangle className="h-4 w-4" /> Live match feed unavailable</div>
-                  <p className="text-muted-foreground">{fixtureError}</p>
-                  <Button size="sm" variant="outline" onClick={() => fixtures.refetch()}>Retry live feed</Button>
-                </Card>
+                showProviderDiagnostics ? (
+                  <Card className="space-y-3 border-amber-500/30 bg-amber-500/10 p-5 text-sm">
+                    <div className="flex items-center gap-2 font-semibold text-amber-200"><AlertTriangle className="h-4 w-4" /> Live match feed unavailable</div>
+                    <p className="text-muted-foreground">{fixtureError}</p>
+                    <Button size="sm" variant="outline" onClick={() => fixtures.refetch()}>Retry live feed</Button>
+                  </Card>
+                ) : (
+                  <Card className="space-y-3 p-5 text-sm text-muted-foreground">
+                    <p>Fixtures are not available at the moment.</p>
+                    <Button size="sm" variant="outline" onClick={() => fixtures.refetch()}>Try again</Button>
+                  </Card>
+                )
               ) : <Card className="p-6 text-sm text-muted-foreground">{fixtureStatus === "live" && !selectedRound ? "No live Premier League matches are currently in progress." : "No fixtures returned for this selection."}</Card>}
             </div>
             {match.isError && !match.data ? (
-              <Card className="flex min-h-[18rem] flex-col items-center justify-center gap-3 border-amber-500/30 p-8 text-center">
-                <AlertTriangle className="h-6 w-6 text-amber-300" />
-                <div className="font-semibold">Detailed match intelligence is temporarily unavailable.</div>
-                <div className="text-sm text-muted-foreground">{match.error instanceof Error ? match.error.message : "The live provider could not return this fixture."}</div>
-                <Button size="sm" variant="outline" onClick={() => match.refetch()}>Retry match details</Button>
+              <Card className={showProviderDiagnostics
+                ? "flex min-h-[18rem] flex-col items-center justify-center gap-3 border-amber-500/30 p-8 text-center"
+                : "flex min-h-[18rem] flex-col items-center justify-center gap-3 p-8 text-center"}>
+                {showProviderDiagnostics ? <AlertTriangle className="h-6 w-6 text-amber-300" /> : null}
+                <div className="font-semibold">{showProviderDiagnostics ? "Detailed match intelligence is temporarily unavailable." : "Match details are unavailable right now."}</div>
+                {showProviderDiagnostics ? <div className="text-sm text-muted-foreground">{match.error instanceof Error ? match.error.message : "The live provider could not return this fixture."}</div> : null}
+                <Button size="sm" variant="outline" onClick={() => match.refetch()}>{showProviderDiagnostics ? "Retry match details" : "Try again"}</Button>
               </Card>
-            ) : <MatchIntelligence data={match.data} loading={match.isLoading} onPlayer={(id) => setSelectedPlayerId(id)} />}
+            ) : <MatchIntelligence data={match.data} loading={match.isLoading} onPlayer={(id) => setSelectedPlayerId(id)} showProviderDiagnostics={showProviderDiagnostics} />}
           </div>
           {selectedPlayerId ? <PlayerProfile data={playerProfile.data} loading={playerProfile.isLoading} /> : null}
         </TabsContent>
@@ -387,7 +411,7 @@ export default function FootballDataCentre() {
         </TabsContent>
 
         <TabsContent value="availability">
-          <AvailabilityCentre data={availability.data} loading={availability.isLoading} disabled={coverage.data?.coverage?.injuries === false} />
+          <AvailabilityCentre data={availability.data} loading={availability.isLoading} disabled={coverage.data?.coverage?.injuries === false} showProviderDiagnostics={showProviderDiagnostics} />
         </TabsContent>
 
         <TabsContent value="leaders">
@@ -426,7 +450,7 @@ export default function FootballDataCentre() {
   );
 }
 
-function MatchIntelligence({ data, loading, onPlayer }: { data: any; loading: boolean; onPlayer: (id: number) => void }) {
+function MatchIntelligence({ data, loading, onPlayer, showProviderDiagnostics }: { data: any; loading: boolean; onPlayer: (id: number) => void; showProviderDiagnostics: boolean }) {
   data=normalizeFootballData(data);
   if (loading) return <Skeleton className="min-h-[28rem] w-full" />;
   if (!data?.fixture) return <Card className="flex min-h-[18rem] items-center justify-center p-8 text-center text-muted-foreground">Select a fixture to open full API-Football match intelligence.</Card>;
@@ -447,7 +471,7 @@ function MatchIntelligence({ data, loading, onPlayer }: { data: any; loading: bo
 
   return (
     <Card className="space-y-5 overflow-hidden p-4 sm:p-5">
-      {data.warning ? (
+      {showProviderDiagnostics && data.warning ? (
         <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
           <span>{data.warning}</span>
@@ -521,9 +545,9 @@ function HistoricalAvailability({data,filter=""}:{data:any;filter?:string}) {
   return <FootballTeamGroups title="Earlier / other fixture reports" count={rows.length} forceOpen={Boolean(query)}><p className="text-xs text-muted-foreground">These reports relate to other fixtures or were superseded by a confirmed lineup. They do not establish an absence from the current fixture.</p>{groupAvailabilityByTeam(rows).map(team=><FootballTeamGroups key={team.key} title={team.name} count={team.players.length} forceOpen={Boolean(query)}>{team.players.map((row:any)=><div key={footballPlayerKey(row)} className="rounded-lg border border-white/10 p-2 text-xs"><div className="font-bold">{row.player?.name}</div><div className="text-muted-foreground">Other fixture report: {row.player?.reason||row.player?.type} · {formatDate(row.fixture?.date)}</div></div>)}</FootballTeamGroups>)}</FootballTeamGroups>;
 }
 
-function AvailabilityCentre({ data, loading, disabled }: { data: any; loading: boolean; disabled: boolean }) {
+function AvailabilityCentre({ data, loading, disabled, showProviderDiagnostics }: { data: any; loading: boolean; disabled: boolean; showProviderDiagnostics: boolean }) {
   const [filter, setFilter] = useState("");
-  if (disabled) return <Card className="p-8 text-center text-muted-foreground">API-Football marks injury coverage as unavailable for this competition/season.</Card>;
+  if (disabled) return <Card className="p-8 text-center text-muted-foreground">{showProviderDiagnostics ? "API-Football marks injury coverage as unavailable for this competition/season." : "Player availability details are not available right now."}</Card>;
   if (loading) return <Skeleton className="h-80 w-full" />;
   const rows = dedupeAvailability([...(Array.isArray(data?.injuries)?data.injuries:[]),...(Array.isArray(data?.confirmedAvailable)?data.confirmedAvailable:[])]);
   if (!rows.length) return <div className="space-y-3"><LongListFilter value={filter} onChange={setFilter} placeholder="Filter injuries, players or clubs"/><Card className="p-8 text-center text-muted-foreground">No absences or returning-player lineup updates were verified for upcoming/current fixtures. Earlier reports are not proof of current injury, and missing reports do not confirm fitness.</Card><HistoricalAvailability data={data} filter={filter}/></div>;
