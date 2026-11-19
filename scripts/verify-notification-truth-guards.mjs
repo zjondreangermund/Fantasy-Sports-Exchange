@@ -29,6 +29,9 @@ need(notifier, "FROM app.competition_entries ce", "entrant-only recipient list")
 need(notifier, "JOIN app.competitions c ON c.id = ce.competition_id", "registered cup linkage");
 need(notifier, "NOT EXISTS (", "already-notified recipients excluded");
 need(notifier, "gameweek:${season}:${gameWeek}:entries-closed-good-luck", "per-season per-week dedupe");
+need(notifier, "FINAL_GAMEWEEK_TEAM_LOCKED_V1", "final kickoff notification must be labelled Team Locked");
+need(notifier, "GW${gameWeek} Team Locked — Good Luck!", "final kickoff notification title");
+need(notifier, "No further team or captain edits are possible this gameweek", "final kickoff team-lock copy");
 need(notifier, "createNotificationOnce(db", "persistent Inbox and push delivery jobs");
 need(scorer, "await notifyGameweekEntriesClosed(fixtures, now)", "dispatch at cutoff and crash retry");
 need(routes, "Suppress the old separate 'GW is live' push", "no redundant second live push");
