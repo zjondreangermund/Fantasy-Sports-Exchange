@@ -48,19 +48,19 @@ export default function LoginPendingCardMintDialog() {
   const ready=Boolean(userId && onboarding?.completed === true);
   const weeklyQuery=useQuery<WeeklyMintStatus>({
     queryKey:["/api/rewards/daily-login"],enabled:ready,staleTime:0,
-    queryFn:()=>getExisting("/api/rewards/daily-login"),
+    queryFn:()=>getExisting<WeeklyMintStatus>("/api/rewards/daily-login"),
   });
   const recoveryQuery=useQuery<MissedMintStatus>({
     queryKey:["/api/rewards/november-recovery"],enabled:ready,staleTime:0,
-    queryFn:()=>getExisting("/api/rewards/november-recovery"),
+    queryFn:()=>getExisting<MissedMintStatus>("/api/rewards/november-recovery"),
   });
   const replacementQuery=useQuery<ReplacementData>({
     queryKey:["/api/player-replacements"],enabled:ready,staleTime:15_000,
-    queryFn:()=>getExisting("/api/player-replacements"),
+    queryFn:()=>getExisting<ReplacementData>("/api/player-replacements"),
   });
   const prizeQuery=useQuery<TrophyData>({
     queryKey:["/api/trophy-cabinet"],enabled:ready,staleTime:15_000,
-    queryFn:()=>getExisting("/api/trophy-cabinet"),
+    queryFn:()=>getExisting<TrophyData>("/api/trophy-cabinet"),
   });
 
   // Respect the existing welcome / tournament prize / departure choice popup:
