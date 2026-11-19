@@ -37,6 +37,9 @@ if (patchFile("client/src/components/MobileNavDock.tsx", (input) => input
   ))) changed += 1;
 
 if (patchFile("client/src/pages/account.tsx", (input) => {
+  // The new Inbox owns its native actions and controlled tab/deep-link state.
+  // Never overwrite those with the older full-list generator during CI builds.
+  if (input.includes("INBOX_RECOVERY_ACTIONS_V1")) return input;
   let source = input;
   if (!source.includes("CheckCircle2")) source = source.replace("Mail, Gift,", "Mail, CheckCircle2, Gift,");
   source = source.replace(
