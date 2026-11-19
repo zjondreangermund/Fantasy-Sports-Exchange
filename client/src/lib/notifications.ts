@@ -101,7 +101,11 @@ export function notificationDestination(notification: ArenaNotification): string
   }
   if (replacementKey.startsWith("replacement-complete:")) return "/collection";
   // Prize claims live in the Trophy Cabinet; the existing Inbox record remains.
-  if (/^competition:\d+:entry:\d+:(free-card-claim-ready|free-card-claimed|cash-congratulations)$/.test(replacementKey)) return "/trophy-cabinet";
+  // A specific won-card notice opens THAT entry's existing prize mint popup.
+  // Claimed prizes remain viewable in Trophy Cabinet; never remint those.
+  const prizeReady = replacementKey.match(/^competition:\d+:entry:(\d+):free-card-claim-ready$/);
+  if (prizeReady) return `/trophy-cabinet?mintPrizeEntry=${prizeReady[1]}`;
+  if (/^competition:\d+:entry:\d+:(free-card-claimed|cash-congratulations)$/.test(replacementKey)) return "/trophy-cabinet";
   if (String(notification.dedupeKey || "").startsWith("booking:")) return "/live-lineup";
   const decider = String(notification.dedupeKey || "").match(/^competition:(\d+):decider:/);
   if (decider) return `/competitions?leaderboard=${decider[1]}`;
