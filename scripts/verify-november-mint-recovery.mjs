@@ -48,7 +48,8 @@ need(inbox,'Mint {String(note.replacementRarity',"Replacement must preserve rari
 need(popup,"Keep original card until player returns","Loan owners must retain their keep-card choice within the mint popup");
 need(inbox,"Open mentioned message","Mention notifications must remain actionable");
 need(inbox,'new URLSearchParams(window.location.search).get("tab") === "inbox"',"Inbound notification links must open Inbox");
-need(destinations,'replacementKey.startsWith("card:weekly-ready:")',"Old mint reminders must open Inbox");
+need(destinations,"INBOX_MINT_DEEPLINK_V1","Old mint reminders must open the exact Inbox mint dialog");
+need(destinations,'mint=1',"Mintable notification deep links must request a popup");
 need(notify,"notifyNovemberMintInterruption()","One-off announcement should run via durable notification worker");
 need(legacy,'if (input.includes("INBOX_RECOVERY_ACTIONS_V1")) return input',"Old build generator must not overwrite current Inbox");
 console.log("November mint recovery static invariants verified; existing reward integration tests must also pass.");
