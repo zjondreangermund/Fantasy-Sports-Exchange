@@ -10,6 +10,7 @@ const account=read("client/src/pages/account.tsx");
 const routes=read("client/src/lib/notifications.ts");
 const prize=read("client/src/components/PendingPrizeClaimPopup.tsx");
 const weekly=read("client/src/components/WeeklyCommonMintDialog.tsx");
+const nativeClub=read("client/src/components/native/NativeClubPage.tsx");
 const policy=read("server/services/weeklyRewardOutageRecovery.ts");
 const requireText=(source,token,msg)=>assert.ok(source.includes(token),msg);
 for(const term of [
@@ -30,6 +31,7 @@ requireText(account,'params.get("mint")!=="1"',"Push deep link must be opt-in");
 requireText(account,'note=inbox.notifications.find(row=>row.id===id)',"Only owned Inbox rows may trigger popup");
 requireText(routes,"INBOX_MINT_DEEPLINK_V1","Push/web notifications must deep-link to correct popup");
 requireText(routes,"&mint=1","Explicit card popup link missing");
+requireText(nativeClub,'target.includes("mint=1") || target.includes("mintPrizeEntry=")',"Native Inbox must open the same per-card modal on tap");
 requireText(routes,"mintPrizeEntry=","Trophy prize must open specific entry popup");
 requireText(prize,"Number(a.entryId)===requestedEntryId","Prize popup must honor exact entry ID");
 requireText(prize,"shouldPromptPrizeMint(a)","No already claimed prize must be offered again");
