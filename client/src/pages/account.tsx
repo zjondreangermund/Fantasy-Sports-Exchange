@@ -394,7 +394,7 @@ export default function AccountPage() {
   {note.replacementClaimId && !note.replacementCardId && note.replacementDecision !== "keep" && (
     <>
       <Button size="sm" onClick={()=>openInboxNotification(note)}>
-        Open {String(note.replacementRarity || "same-rarity")} {String(note.replacementSourcePosition || "same-position").toUpperCase()} mint popup
+        Mint {String(note.replacementRarity || "same-rarity")} {String(note.replacementSourcePosition || "same-position").toUpperCase()} replacement
       </Button>
       {note.replacementAutoMintAt && note.replacementDepartureKind !== "real_life_loan" && (
         <p className="max-w-[190px] text-right text-xs text-white/45">
