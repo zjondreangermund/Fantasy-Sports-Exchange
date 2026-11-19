@@ -22,7 +22,7 @@ const isSnoozed=(key:string)=>{try{return localStorage.getItem(key)==="later";}c
 
 export default function PendingPrizeClaimPopup() {
   const { user } = useAuth();
-  const [location, navigate] = useLocation();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const [localDismissed,setLocalDismissed]=React.useState<number[]>([]);
   const [revealed,setRevealed]=React.useState<RevealedCard|null>(null);
@@ -48,10 +48,11 @@ export default function PendingPrizeClaimPopup() {
   // overrides a previous "Later" snooze only for the selected entry.
   const requestedEntryId = typeof window === "undefined" ? 0
     : Number(new URLSearchParams(window.location.search).get("mintPrizeEntry") || 0);
-  const eligibleAwards=(Array.isArray(history?.awards)?history.awards:[]).filter(a=>
-    a.kind==="card" && shouldPromptPrizeMint(a) && Boolean(userId)
-    && !localDismissed.includes(a.entryId)
-  );
+  const eligibleAwards=(Array.isArray(history?.awards)?history.awards:[]).filter(a=>{
+    if(!shouldPromptPrizeMint(a))return false;
+    return a.kind==="card" && Boolean(userId)
+      && !localDismissed.includes(a.entryId);
+  });
   const award=requestedEntryId>0
     ? eligibleAwards.find(a=>Number(a.entryId)===requestedEntryId)||null
     : eligibleAwards.find(a=>!isSnoozed(onceKey(userId,a.entryId)))||null;
