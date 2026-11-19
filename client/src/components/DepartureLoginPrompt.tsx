@@ -9,9 +9,14 @@ export default function DepartureLoginPrompt() {
   const { user } = useAuth();
   const [reviewed, setReviewed] = React.useState<string[]>([]);
   const [error, setError] = React.useState("");
+  React.useEffect(()=>{setReviewed([]);setError("");},[user?.id]);
   const {data} = useQuery<{claims:any[]}>({queryKey:["/api/player-replacements"],enabled:Boolean(user),staleTime:0,refetchInterval:30000});
-  const claim = data?.claims?.find(c=>!c.replacementCardId && !c.claimedAt && c.decision!=="keep" && !reviewed.includes(`${user?.id}:${c.id}`));
-  const dismiss=()=>{if(claim)setReviewed(list=>[...list,`${user?.id}:${claim.id}`]);setError("");};
+  // LOGIN_PENDING_MINT_POPUPS_V1: per-login review, not permanent suppression.
+  const reviewKey=(id:number)=>`fa:login-replacement-reviewed:${user?.id}:${id}`;
+  const wasReviewed=(id:number)=>{try{return sessionStorage.getItem(reviewKey(id))==="later";}catch{return false;}};
+  const claim = data?.claims?.find(c=>!c.replacementCardId && !c.claimedAt && c.decision!=="keep"
+    && !reviewed.includes(`${user?.id}:${c.id}`) && !wasReviewed(Number(c.id)));
+  const dismiss=()=>{if(claim){setReviewed(list=>[...list,`${user?.id}:${claim.id}`]);try{sessionStorage.setItem(reviewKey(Number(claim.id)),"later");}catch{}}setError("");};
   const action=useMutation({mutationFn:async(kind:"claim"|"keep")=>{
     const response=await apiRequest("POST",`/api/player-replacements/${claim.id}/${kind}`,{});return response.json();
   },onSuccess:async()=>{dismiss();await Promise.all(["/api/player-replacements","/api/user/cards","/api/notifications"].map(key=>queryClient.invalidateQueries({queryKey:[key]})));},onError:(e:any)=>setError(e.message || "Your claim remains available. Please try again.")});
