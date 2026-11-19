@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { createNotificationOnce, enqueueSignupWelcomeDeliveries, ensureNotificationsSchema } from "../services/notifications.js";
 import { GW11_OPEN_TITLE, GW11_OPEN_MESSAGE, runGw11OpeningCycle } from "../services/gameweekBreakNotice.js";
+import {notifyNovemberMintInterruption} from "../services/weeklyRewardOutageRecovery.js";
 import {
   claimReplacementCard,
   ensurePlayerTransferMonitoringSchema,
@@ -229,6 +230,9 @@ async function syncSubscribedUserNotifications() {
     // if rollover or announcement verification fails.
     await runGw11OpeningCycle().catch((error) => {
       console.error("Scheduled GW11 opening/announcement check failed:", error);
+    });
+    await notifyNovemberMintInterruption().catch(error => {
+      console.error("November card-recovery announcement could not be queued:",error);
     });
     await reportNotificationHealth().catch(error => console.error("Notification health report failed:", error?.message));
     // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1
