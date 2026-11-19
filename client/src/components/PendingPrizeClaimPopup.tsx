@@ -11,14 +11,14 @@ import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 
 /** Tournament prizes are not weekly gifts: present each WON card exactly once
- * per device until the manager chooses to mint or snooze it. No auto-minting.
+ * per login session until the manager chooses to mint or snooze it. No auto-minting.
  * This works equally in the browser, installed PWA and native Android shell.
  */
 type Award = {entryId:number;competitionName:string;gameWeek:number;rank:number;kind:string;rarity?:string;status:string};
 type TrophyData = {awards:Award[]};
 type RevealedCard={id:number;rarity:string;playerName?:string;playerTeam?:string;replayed?:boolean};
 const onceKey=(userId:string,entryId:number)=>`fa:won-prize-prompt:${userId}:${entryId}`;
-const isSnoozed=(key:string)=>{try{return localStorage.getItem(key)==="later";}catch{return false;}};
+const isSnoozed=(key:string)=>{try{return sessionStorage.getItem(key)==="later";}catch{return false;}};
 
 export default function PendingPrizeClaimPopup() {
   const { user } = useAuth();
@@ -60,7 +60,7 @@ export default function PendingPrizeClaimPopup() {
     if(revealed){setRevealed(null);return;}
     if(!award)return;
     setLocalDismissed(prev=>prev.includes(award.entryId)?prev:[...prev,award.entryId]);
-    try{localStorage.setItem(onceKey(userId,award.entryId),"later");}catch{}
+    try{sessionStorage.setItem(onceKey(userId,award.entryId),"later");}catch{}
     // Clear the one-use prize deep link so the same popup does not repeat.
     if(requestedEntryId>0)navigate("/trophy-cabinet");
   };
@@ -69,7 +69,7 @@ export default function PendingPrizeClaimPopup() {
     setPendingChoice(false);
     if(award){
       setLocalDismissed(prev=>prev.includes(award.entryId)?prev:[...prev,award.entryId]);
-      try{localStorage.setItem(onceKey(userId,award.entryId),"later");}catch{}
+      try{sessionStorage.setItem(onceKey(userId,award.entryId),"later");}catch{}
     }
     navigate(path);
   };
