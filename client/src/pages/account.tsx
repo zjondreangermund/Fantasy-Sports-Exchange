@@ -1,5 +1,6 @@
 import ArenaNotificationPreferences from "../components/notifications/ArenaNotificationPreferences";
-import { useEffect, useState } from "react";
+import InboxMintActionDialog, {isInboxMintNotice, type InboxMintNote} from "../components/InboxMintActionDialog";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
@@ -85,6 +86,8 @@ export default function AccountPage() {
   const { toast } = useToast();
   const [teamNameInput, setTeamNameInput] = useState("");
   const [copyingLink, setCopyingLink] = useState(false);
+  const [selectedMintNote, setSelectedMintNote] = useState<InboxMintNote | null>(null);
+  const lastOpenedDeepLink = useRef("");
   const [location, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState(() =>
     typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "inbox" ? "inbox" : "profile");
@@ -146,6 +149,22 @@ export default function AccountPage() {
     const node=document.getElementById(`inbox-note-${requestedInboxNote}`);
     if(node)node.scrollIntoView({behavior:"smooth",block:"center"});
   },[activeTab,inbox?.notifications,requestedInboxNote]);
+  // A phone push/toast may open /account?tab=inbox&notification=ID&mint=1.
+  // Reuse the user's own Inbox row; never trust a raw URL as an entitlement.
+  useEffect(()=>{
+    if(activeTab!=="inbox"||!inbox?.notifications?.length)return;
+    const params=new URLSearchParams(window.location.search);
+    if(params.get("mint")!=="1")return;
+    const id=Number(params.get("notification")||0);
+    if(!Number.isInteger(id)||id<=0)return;
+    const note=inbox.notifications.find(row=>row.id===id);
+    if(!note||!isInboxMintNotice(note))return;
+    const signature=`${id}:${note.dedupeKey||""}`;
+    if(lastOpenedDeepLink.current===signature)return;
+    lastOpenedDeepLink.current=signature;
+    setSelectedMintNote(note);
+  },[location,activeTab,inbox?.notifications]);
+
   const { data: recovery, isLoading: recoveryLoading } = useQuery<MissedRewardStatus>({
     queryKey:["/api/rewards/november-recovery"],
     queryFn:async()=>{
@@ -156,55 +175,37 @@ export default function AccountPage() {
     staleTime:15_000,
   });
   const { data: weekly } = useQuery<CurrentWeeklyStatus>({queryKey:["/api/rewards/daily-login"]});
-  const recoverMutation=useMutation({
-    mutationFn:async(windowStart:string)=>{
-      const res=await fetch(`/api/rewards/november-recovery/${encodeURIComponent(windowStart)}/claim`,{method:"POST",credentials:"include"});
-      const data=await res.json().catch(()=>({}));
-      if(!res.ok)throw new Error(data.message||"Could not claim recovered card");
-      return data as {claimed:boolean;alreadyClaimed:boolean;playerName:string};
-    },
-    onSuccess:async(result)=>{
-      await Promise.all([
-        queryClient.invalidateQueries({queryKey:["/api/rewards/november-recovery"]}),
-        queryClient.invalidateQueries({queryKey:["/api/rewards/daily-login"]}),
-        queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),
-        queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
-      ]);
-      toast({title:result.alreadyClaimed?"Already recovered":"Common card recovered",
-        description:`${result.playerName} is in your Collection.`});
-    },
-    onError:(error:Error)=>toast({title:"Reward remains available",description:error.message,variant:"destructive"}),
-  });
-  const mintCurrentMutation=useMutation({
-    mutationFn:async()=>{
-      const res=await fetch("/api/rewards/daily-login/claim",{method:"POST",credentials:"include"});
-      const data=await res.json().catch(()=>({}));
-      if(!res.ok)throw new Error(data.message||"Could not mint current weekly card");
-      return data as {claimed:boolean;alreadyClaimed?:boolean;card?:{player?:{name?:string}}};
-    },
-    onSuccess:async(result)=>{
-      await Promise.all([
-        queryClient.invalidateQueries({queryKey:["/api/rewards/daily-login"]}),
-        queryClient.invalidateQueries({queryKey:["/api/rewards/november-recovery"]}),
-        queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),
-        queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
-      ]);
-      toast({title:result.claimed?"Weekly Common card minted":result.alreadyClaimed?"Already claimed":"No new card minted",
-        description:result.card?.player?.name ? `${result.card.player.name} was added to your Collection.` : "Your weekly status has been refreshed."});
-    },
-    onError:(error:Error)=>toast({title:"Weekly mint unavailable",description:error.message,variant:"destructive"}),
-  });
   const openInboxNotification=(note:NotificationItem)=>{
     if(note.communityMessageId){void openCommunityMention(note);return;}
     if(!note.read)markOneMutation.mutate(note.id);
-    const destination=notificationDestination(note);
-    if(destination.startsWith("/account?tab=inbox")){
+    if(isInboxMintNotice(note)){
       setActiveTab("inbox");
-      // The existing replacement-claim dialog reads the notification query param.
-      navigate(destination);
+      setSelectedMintNote(note);
+      lastOpenedDeepLink.current=`${note.id}:${note.dedupeKey||""}`;
+      navigate(`/account?tab=inbox&notification=${note.id}&mint=1`);
       return;
     }
+    const destination=notificationDestination(note);
+    if(destination.startsWith("/account?tab=inbox"))setActiveTab("inbox");
     navigate(destination);
+  };
+  const closeMintPopup=()=>{
+    setSelectedMintNote(null);
+    // Clearing the one-time URL trigger prevents a reopen on tab refresh.
+    const params=new URLSearchParams(window.location.search);
+    if(params.get("mint")==="1"){
+      params.delete("mint");
+      navigate(`/account?${params.toString()||"tab=inbox"}`);
+    }
+  };
+  const reviewCurrentCommon=()=>{
+    if(!weekly?.eligibleFrom)return;
+    setSelectedMintNote({id:0,title:"Your current Weekly Common",message:"",
+      dedupeKey:`card:weekly-ready:${weekly.eligibleFrom}`});
+  };
+  const reviewMissedCommon=(windowStart:string)=>{
+    setSelectedMintNote({id:0,title:`Missed Weekly Common ${windowStart}`,message:"",
+      dedupeKey:`card:weekly-ready:${windowStart}`});
   };
 
   const { data: referralData, isLoading: referralLoading } = useQuery<ReferralMeResponse>({
@@ -254,37 +255,6 @@ export default function AccountPage() {
       toast({ title: "Inbox updated", description: "All notifications marked as read." });
     },
     onError: () => toast({ title: "Error", description: "Could not mark notifications as read.", variant: "destructive" }),
-  });
-
-  const replacementMutation=useMutation({
-    mutationFn:async(claimId:number)=>{
-      const res=await fetch(`/api/player-replacements/${claimId}/claim`,{method:"POST",credentials:"include"});
-      const data=await res.json().catch(()=>({}));
-      if(!res.ok)throw new Error(data.message||"Could not mint replacement");
-      return data;
-    },
-    onSuccess:async()=>{
-      await Promise.all([queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
-        queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),
-        queryClient.invalidateQueries({queryKey:["/api/player-replacements"]})]);
-      toast({title:"Replacement minted",description:"The replacement card has been added to your Collection."});
-    },
-    onError:(error:Error)=>toast({title:"Replacement unavailable",description:error.message,variant:"destructive"}),
-  });
-  const keepRealLifeLoanMutation=useMutation({
-    mutationFn:async(claimId:number)=>{
-      const res=await fetch(`/api/player-replacements/${claimId}/keep`,{method:"POST",credentials:"include"});
-      const data=await res.json().catch(()=>({}));
-      if(!res.ok)throw new Error(data.message||"Could not keep original card");
-      return data;
-    },
-    onSuccess:async()=>{
-      await Promise.all([queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
-        queryClient.invalidateQueries({queryKey:["/api/player-replacements"]}),
-        queryClient.invalidateQueries({queryKey:["/api/user/cards"]})]);
-      toast({title:"Card retained",description:"You'll keep the original card until its player returns."});
-    },
-    onError:(error:Error)=>toast({title:"Choice unavailable",description:error.message,variant:"destructive"}),
   });
 
   const copyReferralLink = async () => {
@@ -395,8 +365,7 @@ export default function AccountPage() {
             <h2 className="text-lg font-semibold">Weekly Common rewards</h2>
             <p className="mt-1 text-sm text-white/60">Read messages remain accessible. Minting is a separate action and a card is never granted twice.</p>
             {weekly?.canClaim && !weekly?.capReached && (
-              <Button className="mt-3" disabled={mintCurrentMutation.isPending}
-                onClick={()=>mintCurrentMutation.mutate()}>Mint current weekly Common card</Button>
+              <Button className="mt-3" onClick={reviewCurrentCommon}>Review & Mint current weekly Common card</Button>
             )}
             <h3 className="mt-4 text-sm font-bold text-white/85">Missed during the November football-data interruption</h3>
             {recoveryLoading?<p className="mt-2 text-sm text-white/50">Checking your reward windows...</p>:
@@ -405,9 +374,8 @@ export default function AccountPage() {
                  {recovery!.pendingWindows.map(windowStart=>(
                    <div key={windowStart} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/25 p-3">
                      <span className="text-sm">Unclaimed week starting {windowStart}</span>
-                     <Button size="sm" disabled={recoverMutation.isPending||recovery?.capReached}
-                       onClick={()=>recoverMutation.mutate(windowStart)}>
-                       {recoverMutation.isPending&&recoverMutation.variables===windowStart?"Minting...":"Mint missed Common"}
+                     <Button size="sm" onClick={()=>reviewMissedCommon(windowStart)}>
+                       Review & Mint missed Common
                      </Button>
                    </div>
                  ))}
@@ -425,14 +393,9 @@ export default function AccountPage() {
   </Button>
   {note.replacementClaimId && !note.replacementCardId && note.replacementDecision !== "keep" && (
     <>
-      <Button size="sm" onClick={()=>replacementMutation.mutate(Number(note.replacementClaimId))}
-        disabled={replacementMutation.isPending||keepRealLifeLoanMutation.isPending}>
-        Mint {String(note.replacementRarity || "same-rarity")} {String(note.replacementSourcePosition || "same-position").toUpperCase()} replacement
+      <Button size="sm" onClick={()=>openInboxNotification(note)}>
+        Open {String(note.replacementRarity || "same-rarity")} {String(note.replacementSourcePosition || "same-position").toUpperCase()} mint popup
       </Button>
-      {note.replacementDepartureKind === "real_life_loan" && (
-        <Button size="sm" variant="outline" onClick={()=>keepRealLifeLoanMutation.mutate(Number(note.replacementClaimId))}
-          disabled={replacementMutation.isPending||keepRealLifeLoanMutation.isPending}>Keep until return</Button>
-      )}
       {note.replacementAutoMintAt && note.replacementDepartureKind !== "real_life_loan" && (
         <p className="max-w-[190px] text-right text-xs text-white/45">
           Automatic replacement scheduled for {new Date(note.replacementAutoMintAt).toLocaleDateString()} if still unclaimed.
@@ -458,6 +421,15 @@ export default function AccountPage() {
           </Card>
         </TabsContent>
       </Tabs>
+      {selectedMintNote && (
+        <InboxMintActionDialog
+          key={`${selectedMintNote.id}:${selectedMintNote.dedupeKey||""}`}
+          note={selectedMintNote}
+          weekly={weekly}
+          recovery={recovery}
+          onClose={closeMintPopup}
+        />
+      )}
     </LivePageShell>
   );
 }
