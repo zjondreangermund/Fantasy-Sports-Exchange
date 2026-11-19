@@ -47,19 +47,19 @@ export default function LoginPendingCardMintDialog() {
   });
   const ready=Boolean(userId && onboarding?.completed === true);
   const weeklyQuery=useQuery<WeeklyMintStatus>({
-    queryKey:["/api/rewards/daily-login"],enabled:ready,staleTime:0,
+    queryKey:["/api/rewards/daily-login","login-pending",userId],enabled:ready,staleTime:0,
     queryFn:()=>getExisting<WeeklyMintStatus>("/api/rewards/daily-login"),
   });
   const recoveryQuery=useQuery<MissedMintStatus>({
-    queryKey:["/api/rewards/november-recovery"],enabled:ready,staleTime:0,
+    queryKey:["/api/rewards/november-recovery","login-pending",userId],enabled:ready,staleTime:0,
     queryFn:()=>getExisting<MissedMintStatus>("/api/rewards/november-recovery"),
   });
   const replacementQuery=useQuery<ReplacementData>({
-    queryKey:["/api/player-replacements"],enabled:ready,staleTime:15_000,
+    queryKey:["/api/player-replacements","login-pending",userId],enabled:ready,staleTime:15_000,
     queryFn:()=>getExisting<ReplacementData>("/api/player-replacements"),
   });
   const prizeQuery=useQuery<TrophyData>({
-    queryKey:["/api/trophy-cabinet"],enabled:ready,staleTime:15_000,
+    queryKey:["/api/trophy-cabinet","login-pending",userId],enabled:ready,staleTime:15_000,
     queryFn:()=>getExisting<TrophyData>("/api/trophy-cabinet"),
   });
 
