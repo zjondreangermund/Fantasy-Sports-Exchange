@@ -14,6 +14,7 @@ function requireSignedIn(req: any, res: any, next: any) {
 }
 
 export function registerDailyLoginRewardRoutes(app: Express) {
+  // Keep the existing API path for backwards compatibility; the reward cadence is weekly.
   // Outage recovery is separate from ordinary weekly claims and never auto-mints.
   app.get("/api/rewards/november-recovery", requireSignedIn, async (req:any,res) => {
     try {
@@ -35,7 +36,6 @@ export function registerDailyLoginRewardRoutes(app: Express) {
     }
   });
 
-  // Keep the existing API path for backwards compatibility; the reward cadence is weekly.
   app.get("/api/rewards/daily-login", requireSignedIn, async (req: any, res) => {
     try {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
