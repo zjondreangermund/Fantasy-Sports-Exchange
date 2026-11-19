@@ -11,7 +11,7 @@ import { Bell, User as UserIcon, Mail, CheckCircle2, Gift, Copy, Link2, Shield, 
 import { useToast } from "../hooks/use-toast";
 import { queryClient } from "../lib/queryClient";
 import { Link, useLocation } from "wouter";
-import { notificationDestination } from "../lib/notifications";
+import { notificationDestination, openCommunityMention } from "../lib/notifications";
 import { LiveHero, LivePageShell, LiveStatCard } from "../components/layout/LivePageShell";
 
 type NotificationItem = {
@@ -24,6 +24,13 @@ type NotificationItem = {
   createdAt: string | null;
   dedupeKey?: string | null;
   replacementClaimId?: number | null;
+  communityMessageId?: number | null;
+  replacementRarity?: string | null;
+  replacementSourcePlayerName?: string | null;
+  replacementSourcePosition?: string | null;
+  replacementCardId?: number | null;
+  replacementDecision?: string | null;
+  replacementDepartureKind?: string | null;
 };
 
 type MissedRewardStatus = {
@@ -72,6 +79,7 @@ function listFromCards(data: UserCardResponse | undefined) {
   return Array.isArray(data?.cards) ? data.cards : [];
 }
 
+// INBOX_RECOVERY_ACTIONS_V1 — durable message actions, not legacy read-only list.
 export default function AccountPage() {
   const { toast } = useToast();
   const [teamNameInput, setTeamNameInput] = useState("");
@@ -179,6 +187,7 @@ export default function AccountPage() {
     onError:(error:Error)=>toast({title:"Weekly mint unavailable",description:error.message,variant:"destructive"}),
   });
   const openInboxNotification=(note:NotificationItem)=>{
+    if(note.communityMessageId){void openCommunityMention(note);return;}
     if(!note.read)markOneMutation.mutate(note.id);
     const destination=notificationDestination(note);
     if(destination.startsWith("/account?tab=inbox")){
@@ -237,6 +246,37 @@ export default function AccountPage() {
       toast({ title: "Inbox updated", description: "All notifications marked as read." });
     },
     onError: () => toast({ title: "Error", description: "Could not mark notifications as read.", variant: "destructive" }),
+  });
+
+  const replacementMutation=useMutation({
+    mutationFn:async(claimId:number)=>{
+      const res=await fetch(`/api/player-replacements/${claimId}/claim`,{method:"POST",credentials:"include"});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(data.message||"Could not mint replacement");
+      return data;
+    },
+    onSuccess:async()=>{
+      await Promise.all([queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
+        queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),
+        queryClient.invalidateQueries({queryKey:["/api/player-replacements"]})]);
+      toast({title:"Replacement minted",description:"The replacement card has been added to your Collection."});
+    },
+    onError:(error:Error)=>toast({title:"Replacement unavailable",description:error.message,variant:"destructive"}),
+  });
+  const keepRealLifeLoanMutation=useMutation({
+    mutationFn:async(claimId:number)=>{
+      const res=await fetch(`/api/player-replacements/${claimId}/keep`,{method:"POST",credentials:"include"});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(data.message||"Could not keep original card");
+      return data;
+    },
+    onSuccess:async()=>{
+      await Promise.all([queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
+        queryClient.invalidateQueries({queryKey:["/api/player-replacements"]}),
+        queryClient.invalidateQueries({queryKey:["/api/user/cards"]})]);
+      toast({title:"Card retained",description:"You'll keep the original card until its player returns."});
+    },
+    onError:(error:Error)=>toast({title:"Choice unavailable",description:error.message,variant:"destructive"}),
   });
 
   const copyReferralLink = async () => {
@@ -371,7 +411,24 @@ export default function AccountPage() {
           <Card className="border-white/10 bg-white/[0.06] p-5 text-white backdrop-blur-xl">
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold">Notifications</h2><Button variant="outline" size="sm" onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending}>Mark all read</Button></div>
             {inboxLoading ? <div className="space-y-3"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div> : inbox?.notifications?.length ? (
-              <div className="space-y-3">{inbox.notifications.map((note) => <div key={note.id} className={`rounded-xl border border-white/10 p-3 ${note.read ? "bg-black/20 opacity-80" : "bg-primary/10"}`}><div className="flex items-start justify-between gap-3"><button type="button" onClick={()=>openInboxNotification(note)} className="min-w-0 flex-1 text-left hover:text-cyan-100 focus-visible:outline-2 focus-visible:outline-cyan-300" aria-label={`Open ${note.title}`}><p className="font-medium text-sm">{note.title}</p><p className="text-sm text-white/55 mt-1">{note.message}</p><p className="text-xs text-white/40 mt-2">{note.createdAt ? new Date(note.createdAt).toLocaleString() : ""}</p></button><div className="flex shrink-0 flex-col items-end gap-1"><Button size="sm" variant="outline" onClick={()=>openInboxNotification(note)}>Open</Button>{!note.read && <Button size="sm" variant="ghost" onClick={() => markOneMutation.mutate(note.id)}><CheckCircle2 className="w-4 h-4 mr-1" />Read</Button>}</div></div></div>)}</div>
+              <div className="space-y-3">{inbox.notifications.map((note) => <div key={note.id} className={`rounded-xl border border-white/10 p-3 ${note.read ? "bg-black/20 opacity-80" : "bg-primary/10"}`}><div className="flex items-start justify-between gap-3"><button type="button" onClick={()=>openInboxNotification(note)} className="min-w-0 flex-1 text-left hover:text-cyan-100 focus-visible:outline-2 focus-visible:outline-cyan-300" aria-label={`Open ${note.title}`}><p className="font-medium text-sm">{note.title}</p><p className="text-sm text-white/55 mt-1">{note.message}</p><p className="text-xs text-white/40 mt-2">{note.createdAt ? new Date(note.createdAt).toLocaleString() : ""}</p></button><div className="flex shrink-0 flex-col items-end gap-1">
+  <Button size="sm" variant="outline" onClick={()=>openInboxNotification(note)}>
+    {note.communityMessageId?"Open mentioned message":"Open"}
+  </Button>
+  {note.replacementClaimId && !note.replacementCardId && note.replacementDecision !== "keep" && (
+    <>
+      <Button size="sm" onClick={()=>replacementMutation.mutate(Number(note.replacementClaimId))}
+        disabled={replacementMutation.isPending||keepRealLifeLoanMutation.isPending}>
+        Mint replacement
+      </Button>
+      {note.replacementDepartureKind === "real_life_loan" && (
+        <Button size="sm" variant="outline" onClick={()=>keepRealLifeLoanMutation.mutate(Number(note.replacementClaimId))}
+          disabled={replacementMutation.isPending||keepRealLifeLoanMutation.isPending}>Keep until return</Button>
+      )}
+    </>
+  )}
+  {!note.read && <Button size="sm" variant="ghost" onClick={() => markOneMutation.mutate(note.id)}><CheckCircle2 className="w-4 h-4 mr-1" />Read</Button>}
+</div></div></div>)}</div>
             ) : <p className="text-sm text-white/50">No notifications yet.</p>}
           </Card>
         </TabsContent>
