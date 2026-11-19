@@ -186,7 +186,7 @@ export async function notifyNovemberMintInterruption(){
     const note=await createNotificationOnce(db,{
       userId:String(row.userId),
       title:"Football-data interruption — missed Common rewards",
-      message:"During the November international break, football-data access was interrupted and some card mints could not complete. Your Inbox now lets you reopen card actions and claim any eligible expired weekly Common reward that was missed during this interruption. A reward is issued only after current Premier League membership can be verified. Already claimed cards will not be repeated.",
+      message:"During the November international break, football-data access was interrupted and some card mints could not complete. Your Inbox now lets you reopen card actions and claim any eligible expired weekly Common reward that was missed during this interruption. A reward is issued only after current Premier League membership can be verified. Already claimed cards will not be repeated. Eligible missed rewards must be claimed by 9 December 2026 (Namibia time); your usual weekly reward schedule remains separate.",
       dedupeKey:MINT_RECOVERY_NOTICE_KEY,
     });
     if(note?.id)sent++;
