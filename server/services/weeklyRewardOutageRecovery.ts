@@ -121,7 +121,7 @@ export async function claimOutageWeeklyCard(userId:string,windowStart:string){
       AND p.position::text IN ('GK','DEF','MID','FWD')
       GROUP BY p.position::text
     `));
-    const tally=new Map(positions.map(p=>[String(p.position),Number(p.count)]));
+    const tally=new Map<string,number>(positions.map(p=>[String(p.position),Number(p.count)] as [string,number]));
     const priority=['GK','DEF','MID','FWD'].sort((a,b)=>(tally.get(a)||0)-(tally.get(b)||0));
     let chosen:any=null;
     for(const position of priority){
@@ -169,6 +169,10 @@ export async function claimOutageWeeklyCard(userId:string,windowStart:string){
 /** One stable key per user, every attempt safe to retry. Never auto-mints. */
 export async function notifyNovemberMintInterruption(){
   await ensureOutageRecoverySchema();
+  // Do not announce claim recovery until the authoritative active EPL roster
+  // is healthy. A paid API-Football subscription alone is not verification.
+  // The normal claim continues to recheck eligibility in its own transaction.
+  await currentPremierLeagueMintIds(db);
   const recipients=rows(await db.execute(sql`
     SELECT u.id AS "userId" FROM app.users u
     WHERE COALESCE(u.is_banned,false)=false
