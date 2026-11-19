@@ -7,6 +7,7 @@ const read=(path)=>readFileSync(path,"utf8");
 const service=read("server/services/weeklyRewardOutageRecovery.ts");
 const routes=read("server/routes/dailyLoginReward.routes.ts");
 const inbox=read("client/src/pages/account.tsx");
+const popup=read("client/src/components/InboxMintActionDialog.tsx");
 const notify=read("server/routes/notifications.routes.ts");
 const destinations=read("client/src/lib/notifications.ts");
 const legacy=read("scripts/apply-player-transfer-notifications.mjs");
@@ -44,7 +45,7 @@ need(inbox,'Mint current weekly Common card',"Current weekly card must remain ac
 need(inbox,'Mint missed Common',"Historical recovery mint must require a click");
 need(inbox,'openInboxNotification(note)',"Messages must be clickable after being read");
 need(inbox,'Mint {String(note.replacementRarity',"Replacement must preserve rarity");
-need(inbox,"Keep until return","Loan owners must retain the choice to keep their card");
+need(popup,"Keep original card until player returns","Loan owners must retain their keep-card choice within the mint popup");
 need(inbox,"Open mentioned message","Mention notifications must remain actionable");
 need(inbox,'new URLSearchParams(window.location.search).get("tab") === "inbox"',"Inbound notification links must open Inbox");
 need(destinations,'replacementKey.startsWith("card:weekly-ready:")',"Old mint reminders must open Inbox");
