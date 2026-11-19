@@ -139,6 +139,13 @@ export default function AccountPage() {
   });
 
   const { data: inbox, isLoading: inboxLoading } = useQuery<NotificationResponse>({ queryKey: ["/api/notifications"] });
+  const requestedInboxNote=typeof window!=="undefined"
+    ? Number(new URLSearchParams(window.location.search).get("notification")||0):0;
+  useEffect(()=>{
+    if(activeTab!=="inbox"||!inbox?.notifications?.length||!requestedInboxNote)return;
+    const node=document.getElementById(`inbox-note-${requestedInboxNote}`);
+    if(node)node.scrollIntoView({behavior:"smooth",block:"center"});
+  },[activeTab,inbox?.notifications,requestedInboxNote]);
   const { data: recovery, isLoading: recoveryLoading } = useQuery<MissedRewardStatus>({
     queryKey:["/api/rewards/november-recovery"],
     queryFn:async()=>{
@@ -412,7 +419,7 @@ export default function AccountPage() {
           <Card className="border-white/10 bg-white/[0.06] p-5 text-white backdrop-blur-xl">
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold">Notifications</h2><Button variant="outline" size="sm" onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending}>Mark all read</Button></div>
             {inboxLoading ? <div className="space-y-3"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div> : inbox?.notifications?.length ? (
-              <div className="space-y-3">{inbox.notifications.map((note) => <div key={note.id} className={`rounded-xl border border-white/10 p-3 ${note.read ? "bg-black/20 opacity-80" : "bg-primary/10"}`}><div className="flex items-start justify-between gap-3"><button type="button" onClick={()=>openInboxNotification(note)} className="min-w-0 flex-1 text-left hover:text-cyan-100 focus-visible:outline-2 focus-visible:outline-cyan-300" aria-label={`Open ${note.title}`}><p className="font-medium text-sm">{note.title}</p><p className="text-sm text-white/55 mt-1">{note.message}</p><p className="text-xs text-white/40 mt-2">{note.createdAt ? new Date(note.createdAt).toLocaleString() : ""}</p></button><div className="flex shrink-0 flex-col items-end gap-1">
+              <div className="space-y-3">{inbox.notifications.map((note) => <div id={`inbox-note-${note.id}`} key={note.id} className={`rounded-xl border border-white/10 p-3 ${note.read ? "bg-black/20 opacity-80" : "bg-primary/10"}`}><div className="flex items-start justify-between gap-3"><button type="button" onClick={()=>openInboxNotification(note)} className="min-w-0 flex-1 text-left hover:text-cyan-100 focus-visible:outline-2 focus-visible:outline-cyan-300" aria-label={`Open ${note.title}`}><p className="font-medium text-sm">{note.title}</p><p className="text-sm text-white/55 mt-1">{note.message}</p><p className="text-xs text-white/40 mt-2">{note.createdAt ? new Date(note.createdAt).toLocaleString() : ""}</p></button><div className="flex shrink-0 flex-col items-end gap-1">
   <Button size="sm" variant="outline" onClick={()=>openInboxNotification(note)}>
     {note.communityMessageId?"Open mentioned message":"Open"}
   </Button>
