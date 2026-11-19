@@ -44,6 +44,13 @@ export default function PendingPrizeClaimPopup() {
     queryFn:async()=>{const r=await fetch("/api/user/cards",{credentials:"include"});const data=r.ok?await r.json():[];return Array.isArray(data)?data:Array.isArray(data?.cards)?data.cards:[];},
   });
   const userId=String(user?.id||"");
+  // On a genuine logout/login cycle, don't retain the previous session's
+  // dismissed prize cards in React memory.
+  React.useEffect(()=>{
+    setLocalDismissed([]);
+    setRevealed(null);
+    setPendingChoice(false);
+  },[userId]);
   // Exact, opt-in mint deep link from a prize-ready Inbox message. This
   // overrides a previous "Later" snooze only for the selected entry.
   const requestedEntryId = typeof window === "undefined" ? 0
