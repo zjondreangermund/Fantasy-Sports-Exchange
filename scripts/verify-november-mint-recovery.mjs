@@ -29,7 +29,7 @@ for(const token of [
   "ORDER BY w.window_start",
   "createNotificationOnce(tx",
   "MINT_RECOVERY_NOTICE_KEY",
-  "not exists",
+  "NOT EXISTS",
 ]) need(service,token,`Lost November reward recovery safety: ${token}`);
 assert.ok(!service.includes("claimDailyLoginReward(userId)"),"Recovery must not silently consume a current weekly reward");
 need(service,"!available.includes(windowStart)","Historical window must be rechecked within the claim transaction");
