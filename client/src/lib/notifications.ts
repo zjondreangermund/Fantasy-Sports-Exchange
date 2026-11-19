@@ -77,10 +77,15 @@ export function notificationDestination(notification: ArenaNotification): string
   }
   if (/^gameweek:(?:\d+:)?\d+:entries-open$/.test(replacementKey)) return "/competitions";
   if (/^gameweek:2026-27:10:international-break$/.test(replacementKey)) return "/competitions";
-  if (replacementKey.startsWith("card:weekly-ready:") ||
-      replacementKey.startsWith("card:weekly-expiring:") ||
-      replacementKey.startsWith("card:outage-recovered:") ||
-      replacementKey === "football-data:2026-11:missed-weekly-recovery:v1") return "/account?tab=inbox";
+  // INBOX_MINT_DEEPLINK_V1: exact notification ID + verified server-side
+  // entitlement. Old weekly notifications cannot mint the newest week.
+  if (/^card:weekly-(?:ready|expiring):\d{4}-\d{2}-\d{2}$/.test(replacementKey) ||
+      replacementKey === "football-data:2026-11:missed-weekly-recovery:v1") {
+    const id = Number(notification.id || 0);
+    return id > 0 ? `/account?tab=inbox&notification=${id}&mint=1` : "/account?tab=inbox";
+  }
+  if (replacementKey.startsWith("card:outage-recovered:") ||
+      replacementKey.startsWith("card:weekly-minted:")) return "/collection";
   if (replacementKey.startsWith("prize-level:")) return "/prize-vault";
   if (replacementKey.startsWith("prize-award:")) return "/trophy-cabinet";
   if (replacementKey.startsWith("player-availability:")) return "/my-entries";
@@ -91,12 +96,16 @@ export function notificationDestination(notification: ArenaNotification): string
   if (notification.replacementClaimId || replacementKey.startsWith("replacement-claim:") || replacementKey.startsWith("replacement-reminder:")) {
     const notificationId = Number(notification.id || 0);
     return notificationId > 0
-      ? `/account?tab=inbox&notification=${notificationId}`
+      ? `/account?tab=inbox&notification=${notificationId}&mint=1`
       : "/account?tab=inbox";
   }
   if (replacementKey.startsWith("replacement-complete:")) return "/collection";
   // Prize claims live in the Trophy Cabinet; the existing Inbox record remains.
-  if (/^competition:\d+:entry:\d+:(free-card-claim-ready|free-card-claimed|cash-congratulations)$/.test(replacementKey)) return "/trophy-cabinet";
+  // A specific won-card notice opens THAT entry's existing prize mint popup.
+  // Claimed prizes remain viewable in Trophy Cabinet; never remint those.
+  const prizeReady = replacementKey.match(/^competition:\d+:entry:(\d+):free-card-claim-ready$/);
+  if (prizeReady) return `/trophy-cabinet?mintPrizeEntry=${prizeReady[1]}`;
+  if (/^competition:\d+:entry:\d+:(free-card-claimed|cash-congratulations)$/.test(replacementKey)) return "/trophy-cabinet";
   if (String(notification.dedupeKey || "").startsWith("booking:")) return "/live-lineup";
   const decider = String(notification.dedupeKey || "").match(/^competition:(\d+):decider:/);
   if (decider) return `/competitions?leaderboard=${decider[1]}`;

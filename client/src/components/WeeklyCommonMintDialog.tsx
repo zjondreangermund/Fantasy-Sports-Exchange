@@ -147,7 +147,12 @@ export default function WeeklyCommonMintDialog() {
   if (!previouslyDismissed && promptKey && typeof window !== "undefined") {
     try { previouslyDismissed = window.localStorage.getItem(promptKey) === "later"; } catch { /* memory-only fallback */ }
   }
-  const waitingToMint = Boolean(status?.canClaim && !status.capReached && !previouslyDismissed && !tournamentPromptActive);
+  // The Inbox now has its own targeted mint dialog. Avoid stacking the
+  // auto-popup behind an explicitly opened notification/card claim.
+  const inboxOpen = typeof window !== "undefined" &&
+    window.location.pathname === "/account" &&
+    new URLSearchParams(window.location.search).get("tab") === "inbox";
+  const waitingToMint = Boolean(status?.canClaim && !status.capReached && !previouslyDismissed && !tournamentPromptActive && !inboxOpen);
   const open = waitingToMint || Boolean(revealedCard);
   const dismissPrompt = () => {
     if (revealedCard) { setRevealedCard(null); return; }
