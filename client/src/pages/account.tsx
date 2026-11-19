@@ -28,6 +28,7 @@ type NotificationItem = {
   replacementRarity?: string | null;
   replacementSourcePlayerName?: string | null;
   replacementSourcePosition?: string | null;
+  replacementAutoMintAt?: string | null;
   replacementCardId?: number | null;
   replacementDecision?: string | null;
   replacementDepartureKind?: string | null;
@@ -419,11 +420,19 @@ export default function AccountPage() {
     <>
       <Button size="sm" onClick={()=>replacementMutation.mutate(Number(note.replacementClaimId))}
         disabled={replacementMutation.isPending||keepRealLifeLoanMutation.isPending}>
-        Mint replacement
+        Mint {String(note.replacementRarity || "same-rarity")} {String(note.replacementSourcePosition || "same-position").toUpperCase()} replacement
       </Button>
       {note.replacementDepartureKind === "real_life_loan" && (
         <Button size="sm" variant="outline" onClick={()=>keepRealLifeLoanMutation.mutate(Number(note.replacementClaimId))}
           disabled={replacementMutation.isPending||keepRealLifeLoanMutation.isPending}>Keep until return</Button>
+      )}
+      {note.replacementAutoMintAt && note.replacementDepartureKind !== "real_life_loan" && (
+        <p className="max-w-[190px] text-right text-xs text-white/45">
+          Automatic replacement scheduled for {new Date(note.replacementAutoMintAt).toLocaleDateString()} if still unclaimed.
+        </p>
+      )}
+      {note.replacementDepartureKind === "real_life_loan" && (
+        <p className="max-w-[190px] text-right text-xs text-white/45">No 14-day auto-mint for real-life loans.</p>
       )}
     </>
   )}
