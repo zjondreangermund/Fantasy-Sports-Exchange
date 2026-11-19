@@ -51,7 +51,7 @@ export default function PendingPrizeClaimPopup() {
   const eligibleAwards=(Array.isArray(history?.awards)?history.awards:[]).filter(a=>{
     if(!shouldPromptPrizeMint(a))return false;
     return a.kind==="card" && Boolean(userId)
-      && !localDismissed.includes(a.entryId);
+      && (!localDismissed.includes(a.entryId) || (requestedEntryId>0 && Number(a.entryId)===requestedEntryId));
   });
   const award=requestedEntryId>0
     ? eligibleAwards.find(a=>Number(a.entryId)===requestedEntryId)||null
