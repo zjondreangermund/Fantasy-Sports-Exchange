@@ -79,7 +79,7 @@ export function notificationDestination(notification: ArenaNotification): string
   if (/^gameweek:2026-27:10:international-break$/.test(replacementKey)) return "/competitions";
   // INBOX_MINT_DEEPLINK_V1: exact notification ID + verified server-side
   // entitlement. Old weekly notifications cannot mint the newest week.
-  if (/^card:weekly-(?:ready|expiring):\\d{4}-\\d{2}-\\d{2}$/.test(replacementKey) ||
+  if (/^card:weekly-(?:ready|expiring):\d{4}-\d{2}-\d{2}$/.test(replacementKey) ||
       replacementKey === "football-data:2026-11:missed-weekly-recovery:v1") {
     const id = Number(notification.id || 0);
     return id > 0 ? `/account?tab=inbox&notification=${id}&mint=1` : "/account?tab=inbox";
