@@ -22,7 +22,7 @@ const isSnoozed=(key:string)=>{try{return localStorage.getItem(key)==="later";}c
 
 export default function PendingPrizeClaimPopup() {
   const { user } = useAuth();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { toast } = useToast();
   const [localDismissed,setLocalDismissed]=React.useState<number[]>([]);
   const [revealed,setRevealed]=React.useState<RevealedCard|null>(null);
@@ -44,15 +44,24 @@ export default function PendingPrizeClaimPopup() {
     queryFn:async()=>{const r=await fetch("/api/user/cards",{credentials:"include"});const data=r.ok?await r.json():[];return Array.isArray(data)?data:Array.isArray(data?.cards)?data.cards:[];},
   });
   const userId=String(user?.id||"");
-  const award=(Array.isArray(history?.awards)?history.awards:[]).find(a=>{
-    if(a.kind!=="card"||!shouldPromptPrizeMint(a)||!userId||localDismissed.includes(a.entryId))return false;
-    return !isSnoozed(onceKey(userId,a.entryId));
-  })||null;
+  // Exact, opt-in mint deep link from a prize-ready Inbox message. This
+  // overrides a previous "Later" snooze only for the selected entry.
+  const requestedEntryId = typeof window === "undefined" ? 0
+    : Number(new URLSearchParams(window.location.search).get("mintPrizeEntry") || 0);
+  const eligibleAwards=(Array.isArray(history?.awards)?history.awards:[]).filter(a=>
+    a.kind==="card" && shouldPromptPrizeMint(a) && Boolean(userId)
+    && !localDismissed.includes(a.entryId)
+  );
+  const award=requestedEntryId>0
+    ? eligibleAwards.find(a=>Number(a.entryId)===requestedEntryId)||null
+    : eligibleAwards.find(a=>!isSnoozed(onceKey(userId,a.entryId)))||null;
   const dismiss=()=>{
     if(revealed){setRevealed(null);return;}
     if(!award)return;
     setLocalDismissed(prev=>prev.includes(award.entryId)?prev:[...prev,award.entryId]);
     try{localStorage.setItem(onceKey(userId,award.entryId),"later");}catch{}
+    // Clear the one-use prize deep link so the same popup does not repeat.
+    if(requestedEntryId>0)navigate("/trophy-cabinet");
   };
   const openPage=(path:string)=>{
     setRevealed(null);
