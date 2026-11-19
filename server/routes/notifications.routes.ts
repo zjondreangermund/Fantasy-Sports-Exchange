@@ -114,36 +114,41 @@ async function syncGameweekNotifications(userId: string) {
     // for the 2026/27 season, so an existing reminder is never replayed.
     const confirmedKickoff = Boolean(earliest?.fixtureStart);
     const hasEntered = gameweekRows.some((competition) => Boolean(competition.entered));
-    const season = String(earliest?.season || "2026-27");
+    const kickoffDate = new Date(earliest?.fixtureStart);
+    const kickoffYear = kickoffDate.getUTCFullYear();
+    const seasonStart = kickoffYear - (kickoffDate.getUTCMonth() < 6 ? 1 : 0);
+    const derivedSeason = Number.isFinite(kickoffYear)
+      ? `${seasonStart}-${String((seasonStart + 1) % 100).padStart(2, "0")}` : "unknown";
+    const season = String(earliest?.season || derivedSeason);
     const reminderKey = season === "2026-27"
       ? `gameweek:${nextGameweek}` : `gameweek:${season}:${nextGameweek}`;
-    const beforeKickoff = openRows.length && confirmedKickoff
-      && typeof minutes === "number" && minutes > 0;
     const prepared = hasEntered
       ? "Check your five-player lineup, captain, injuries and any moved fixtures in My Entries. You can still edit submitted teams until the first Premier League kickoff."
       : "Your Fantasy Arena cups are open! Pick five eligible cards, choose your captain and enter before the first Premier League kickoff.";
 
-    if (beforeKickoff && minutes <= 30) {
-      await createNotificationOnce(db, {
-        userId,
-        title: `🚨 GW${nextGameweek} is about to go down! FINAL CALL!`,
-        message: `Less than 30 minutes until Gameweek ${nextGameweek} kicks off! 🔥 ${prepared} All entries and edits lock at first kickoff. Let's go! ⚽🏆`,
-        dedupeKey: `${reminderKey}:locks-within-30m`,
-      });
-    } else if (beforeKickoff && minutes <= 120) {
-      await createNotificationOnce(db, {
-        userId,
-        title: `⏳ GW${nextGameweek} almost here — lineup lock approaching!`,
-        message: `The Premier League is back in less than 2 hours! ⚽ ${prepared} Gameweek ${nextGameweek} locks at first kickoff. Bring your best team! 🔥`,
-        dedupeKey: `${reminderKey}:locks-within-2h`,
-      });
-    } else if (beforeKickoff && minutes <= 24 * 60) {
-      await createNotificationOnce(db, {
-        userId,
-        title: `🔥 GW${nextGameweek} is about to go down!`,
-        message: `Gameweek ${nextGameweek} kicks off within 24 hours! ⚽🏆 ${prepared} Get ready — it's almost game time!`,
-        dedupeKey: `${reminderKey}:locks-within-24h`,
-      });
+    if (openRows.length && confirmedKickoff && typeof minutes === "number" && minutes > 0) {
+      if (minutes <= 30) {
+        await createNotificationOnce(db, {
+          userId,
+          title: `🚨 GW${nextGameweek} is about to go down! FINAL CALL!`,
+          message: `Within 30 minutes, Gameweek ${nextGameweek} kicks off! 🔥 ${prepared} All entries and edits lock at first kickoff. Let's go! ⚽🏆`,
+          dedupeKey: `${reminderKey}:locks-within-30m`,
+        });
+      } else if (minutes <= 120) {
+        await createNotificationOnce(db, {
+          userId,
+          title: `⏳ GW${nextGameweek} almost here — lineup lock approaching!`,
+          message: `The Premier League is back within 2 hours! ⚽ ${prepared} Gameweek ${nextGameweek} locks at first kickoff. Bring your best team! 🔥`,
+          dedupeKey: `${reminderKey}:locks-within-2h`,
+        });
+      } else if (minutes <= 24 * 60) {
+        await createNotificationOnce(db, {
+          userId,
+          title: `🔥 GW${nextGameweek} is about to go down!`,
+          message: `Gameweek ${nextGameweek} kicks off within 24 hours! ⚽🏆 ${prepared} Get ready — it's almost game time!`,
+          dedupeKey: `${reminderKey}:locks-within-24h`,
+        });
+      }
     }
   }
 
