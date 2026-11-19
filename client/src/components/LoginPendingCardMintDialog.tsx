@@ -37,6 +37,7 @@ export default function LoginPendingCardMintDialog() {
   const {user}=useAuth();
   const userId=String(user?.id || "");
   const [location]=useLocation();
+  const previousAuthenticatedId=React.useRef(userId);
   const [active,setActive]=React.useState<Prompt|null>(null);
   const [reviewedInMemory,setReviewedInMemory]=React.useState<string[]>([]);
   const [otherModalOpen,setOtherModalOpen]=React.useState(true);
@@ -132,7 +133,25 @@ export default function LoginPendingCardMintDialog() {
      weeklyQuery.isPending,recoveryQuery.isPending,prizeQuery.isPending,
      replacementQuery.isPending,pending,reviewedInMemory,userId,location]);
 
+  // A genuine logout followed by a new login should offer still-unminted
+  // rewards again, even if the same browser tab remains open.
   React.useEffect(()=>{
+    const oldId=previousAuthenticatedId.current;
+    if(oldId && !userId){
+      const prefixes=[
+        `fa:login-unminted-card:${oldId}:`,
+        `fa:login-replacement-reviewed:${oldId}:`,
+        `fa:won-prize-prompt:${oldId}:`,
+      ];
+      try{
+        for(let i=window.sessionStorage.length-1;i>=0;i--){
+          const key=window.sessionStorage.key(i);
+          if(key && prefixes.some(prefix=>key.startsWith(prefix)))
+            window.sessionStorage.removeItem(key);
+        }
+      }catch{/* private mode: in-memory gate still applies */}
+    }
+    previousAuthenticatedId.current=userId;
     setActive(null);
     setReviewedInMemory([]);
   },[userId]);
