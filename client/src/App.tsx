@@ -29,6 +29,7 @@ import GuidedHoverHelp from "./components/GuidedHoverHelp";
 import GlobalActionToasts from "./components/GlobalActionToasts";
 import CommonCardRewardChoiceDialog from "./components/CommonCardRewardChoiceDialog";
 import PendingPrizeClaimPopup from "./components/PendingPrizeClaimPopup";
+import LoginPendingCardMintDialog from "./components/LoginPendingCardMintDialog";
 import SignupWelcomePopup from "./components/SignupWelcomePopup";
 import { useAuth } from "./hooks/use-auth";
 import { useScrollRepair } from "./hooks/use-scroll-repair";
@@ -252,6 +253,7 @@ export default function App() {
           <AppErrorBoundary scope="SignupWelcomePopup" optional><SignupWelcomePopup /></AppErrorBoundary>
           <AppErrorBoundary scope="PendingPrizeClaimPopup" optional><PendingPrizeClaimPopup /></AppErrorBoundary>
           <AppErrorBoundary scope="DepartureLoginPrompt" optional><DepartureLoginPrompt /></AppErrorBoundary>
+          <AppErrorBoundary scope="LoginPendingCardMintDialog" optional><LoginPendingCardMintDialog /></AppErrorBoundary>
           <AppErrorBoundary scope="CommonCardRewardChoiceDialog" optional><CommonCardRewardChoiceDialog /></AppErrorBoundary>
           <AppErrorBoundary scope="GlobalActionToasts" optional><GlobalActionToasts /></AppErrorBoundary>
           <Toaster />
