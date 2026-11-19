@@ -10,7 +10,8 @@ import { Skeleton } from "../components/ui/skeleton";
 import { Bell, User as UserIcon, Mail, CheckCircle2, Gift, Copy, Link2, Shield, Gavel, Users, Banknote, Trophy, Medal, Sparkles, Crown } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { queryClient } from "../lib/queryClient";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { notificationDestination, openCommunityMention } from "../lib/notifications";
 import { LiveHero, LivePageShell, LiveStatCard } from "../components/layout/LivePageShell";
 
 type NotificationItem = {
@@ -21,8 +22,26 @@ type NotificationItem = {
   message: string;
   read: boolean;
   createdAt: string | null;
+  dedupeKey?: string | null;
+  replacementClaimId?: number | null;
+  communityMessageId?: number | null;
+  replacementRarity?: string | null;
+  replacementSourcePlayerName?: string | null;
+  replacementSourcePosition?: string | null;
+  replacementAutoMintAt?: string | null;
+  replacementCardId?: number | null;
+  replacementDecision?: string | null;
+  replacementDepartureKind?: string | null;
 };
 
+type MissedRewardStatus = {
+  pendingWindows: string[];
+  cap: number;
+  commonCount: number;
+  capReached: boolean;
+  claimDeadline: string;
+};
+type CurrentWeeklyStatus = {canClaim:boolean;capReached:boolean;commonCount:number;cap:number;eligibleFrom?:string};
 type NotificationResponse = {
   notifications: NotificationItem[];
   unreadCount: number;
@@ -61,10 +80,18 @@ function listFromCards(data: UserCardResponse | undefined) {
   return Array.isArray(data?.cards) ? data.cards : [];
 }
 
+// INBOX_RECOVERY_ACTIONS_V1 — durable message actions, not legacy read-only list.
 export default function AccountPage() {
   const { toast } = useToast();
   const [teamNameInput, setTeamNameInput] = useState("");
   const [copyingLink, setCopyingLink] = useState(false);
+  const [location, navigate] = useLocation();
+  const [activeTab, setActiveTab] = useState(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "inbox" ? "inbox" : "profile");
+  useEffect(() => {
+    const tab = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("tab");
+    if (tab === "inbox" || tab === "profile" || tab === "referrals") setActiveTab(tab);
+  }, [location]);
 
   const { data: user, isLoading: userLoading } = useQuery<UserProfile>({ queryKey: ["/api/user"] });
 
@@ -112,6 +139,73 @@ export default function AccountPage() {
   });
 
   const { data: inbox, isLoading: inboxLoading } = useQuery<NotificationResponse>({ queryKey: ["/api/notifications"] });
+  const requestedInboxNote=typeof window!=="undefined"
+    ? Number(new URLSearchParams(window.location.search).get("notification")||0):0;
+  useEffect(()=>{
+    if(activeTab!=="inbox"||!inbox?.notifications?.length||!requestedInboxNote)return;
+    const node=document.getElementById(`inbox-note-${requestedInboxNote}`);
+    if(node)node.scrollIntoView({behavior:"smooth",block:"center"});
+  },[activeTab,inbox?.notifications,requestedInboxNote]);
+  const { data: recovery, isLoading: recoveryLoading } = useQuery<MissedRewardStatus>({
+    queryKey:["/api/rewards/november-recovery"],
+    queryFn:async()=>{
+      const res=await fetch("/api/rewards/november-recovery",{credentials:"include"});
+      if(!res.ok)throw new Error("Could not load missed rewards");
+      return res.json();
+    },
+    staleTime:15_000,
+  });
+  const { data: weekly } = useQuery<CurrentWeeklyStatus>({queryKey:["/api/rewards/daily-login"]});
+  const recoverMutation=useMutation({
+    mutationFn:async(windowStart:string)=>{
+      const res=await fetch(`/api/rewards/november-recovery/${encodeURIComponent(windowStart)}/claim`,{method:"POST",credentials:"include"});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(data.message||"Could not claim recovered card");
+      return data as {claimed:boolean;alreadyClaimed:boolean;playerName:string};
+    },
+    onSuccess:async(result)=>{
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey:["/api/rewards/november-recovery"]}),
+        queryClient.invalidateQueries({queryKey:["/api/rewards/daily-login"]}),
+        queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),
+        queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
+      ]);
+      toast({title:result.alreadyClaimed?"Already recovered":"Common card recovered",
+        description:`${result.playerName} is in your Collection.`});
+    },
+    onError:(error:Error)=>toast({title:"Reward remains available",description:error.message,variant:"destructive"}),
+  });
+  const mintCurrentMutation=useMutation({
+    mutationFn:async()=>{
+      const res=await fetch("/api/rewards/daily-login/claim",{method:"POST",credentials:"include"});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(data.message||"Could not mint current weekly card");
+      return data as {claimed:boolean;alreadyClaimed?:boolean;card?:{player?:{name?:string}}};
+    },
+    onSuccess:async(result)=>{
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey:["/api/rewards/daily-login"]}),
+        queryClient.invalidateQueries({queryKey:["/api/rewards/november-recovery"]}),
+        queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),
+        queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
+      ]);
+      toast({title:result.claimed?"Weekly Common card minted":result.alreadyClaimed?"Already claimed":"No new card minted",
+        description:result.card?.player?.name ? `${result.card.player.name} was added to your Collection.` : "Your weekly status has been refreshed."});
+    },
+    onError:(error:Error)=>toast({title:"Weekly mint unavailable",description:error.message,variant:"destructive"}),
+  });
+  const openInboxNotification=(note:NotificationItem)=>{
+    if(note.communityMessageId){void openCommunityMention(note);return;}
+    if(!note.read)markOneMutation.mutate(note.id);
+    const destination=notificationDestination(note);
+    if(destination.startsWith("/account?tab=inbox")){
+      setActiveTab("inbox");
+      // The existing replacement-claim dialog reads the notification query param.
+      navigate(destination);
+      return;
+    }
+    navigate(destination);
+  };
 
   const { data: referralData, isLoading: referralLoading } = useQuery<ReferralMeResponse>({
     queryKey: ["/api/referrals/me"],
@@ -162,6 +256,37 @@ export default function AccountPage() {
     onError: () => toast({ title: "Error", description: "Could not mark notifications as read.", variant: "destructive" }),
   });
 
+  const replacementMutation=useMutation({
+    mutationFn:async(claimId:number)=>{
+      const res=await fetch(`/api/player-replacements/${claimId}/claim`,{method:"POST",credentials:"include"});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(data.message||"Could not mint replacement");
+      return data;
+    },
+    onSuccess:async()=>{
+      await Promise.all([queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
+        queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),
+        queryClient.invalidateQueries({queryKey:["/api/player-replacements"]})]);
+      toast({title:"Replacement minted",description:"The replacement card has been added to your Collection."});
+    },
+    onError:(error:Error)=>toast({title:"Replacement unavailable",description:error.message,variant:"destructive"}),
+  });
+  const keepRealLifeLoanMutation=useMutation({
+    mutationFn:async(claimId:number)=>{
+      const res=await fetch(`/api/player-replacements/${claimId}/keep`,{method:"POST",credentials:"include"});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(data.message||"Could not keep original card");
+      return data;
+    },
+    onSuccess:async()=>{
+      await Promise.all([queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
+        queryClient.invalidateQueries({queryKey:["/api/player-replacements"]}),
+        queryClient.invalidateQueries({queryKey:["/api/user/cards"]})]);
+      toast({title:"Card retained",description:"You'll keep the original card until its player returns."});
+    },
+    onError:(error:Error)=>toast({title:"Choice unavailable",description:error.message,variant:"destructive"}),
+  });
+
   const copyReferralLink = async () => {
     const url = String(referralData?.url || "").trim();
     if (!url) {
@@ -191,7 +316,10 @@ export default function AccountPage() {
         <LiveStatCard label="Win Rate" value={`${winRate}%`} helper={`${tournamentWins} wins`} />
       </LiveHero>
 
-      <Tabs defaultValue="profile" className="w-full">
+      <Tabs value={activeTab} onValueChange={value=>{
+        setActiveTab(value);
+        navigate(value==="profile"?"/account":`/account?tab=${encodeURIComponent(value)}`);
+      }} className="w-full">
         <TabsList className="grid h-auto w-full max-w-2xl grid-cols-3 rounded-2xl border border-white/10 bg-black/30 p-1 backdrop-blur-xl">
           <TabsTrigger value="profile" className="flex items-center gap-2 rounded-xl"><UserIcon className="w-4 h-4" />Profile</TabsTrigger>
           <TabsTrigger value="inbox" className="flex items-center gap-2 rounded-xl"><Bell className="w-4 h-4" />Inbox{!!inbox?.unreadCount && <Badge>{inbox.unreadCount}</Badge>}</TabsTrigger>
@@ -263,10 +391,60 @@ export default function AccountPage() {
 
         <TabsContent value="inbox" className="mt-4">
           <ArenaNotificationPreferences />
+          <Card id="missed-weekly-cards" className="mb-4 border-cyan-300/20 bg-cyan-400/[0.05] p-5 text-white">
+            <h2 className="text-lg font-semibold">Weekly Common rewards</h2>
+            <p className="mt-1 text-sm text-white/60">Read messages remain accessible. Minting is a separate action and a card is never granted twice.</p>
+            {weekly?.canClaim && !weekly?.capReached && (
+              <Button className="mt-3" disabled={mintCurrentMutation.isPending}
+                onClick={()=>mintCurrentMutation.mutate()}>Mint current weekly Common card</Button>
+            )}
+            <h3 className="mt-4 text-sm font-bold text-white/85">Missed during the November football-data interruption</h3>
+            {recoveryLoading?<p className="mt-2 text-sm text-white/50">Checking your reward windows...</p>:
+             (recovery?.pendingWindows?.length || 0)>0 ? (
+               <div className="mt-2 space-y-2">
+                 {recovery!.pendingWindows.map(windowStart=>(
+                   <div key={windowStart} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/25 p-3">
+                     <span className="text-sm">Unclaimed week starting {windowStart}</span>
+                     <Button size="sm" disabled={recoverMutation.isPending||recovery?.capReached}
+                       onClick={()=>recoverMutation.mutate(windowStart)}>
+                       {recoverMutation.isPending&&recoverMutation.variables===windowStart?"Minting...":"Mint missed Common"}
+                     </Button>
+                   </div>
+                 ))}
+                 {recovery?.capReached&&<p className="text-sm text-amber-200">Your Common collection is at its 20-card cap. Your missed claim stays pending; make room before minting.</p>}
+               </div>
+             ) : <p className="mt-2 text-sm text-white/50">No expired, unclaimed weekly rewards from this interruption are currently available.</p>}
+            <p className="mt-2 text-xs text-white/50">Missed rewards can be claimed through 9 December 2026. Current weekly rewards and departure replacements have their own claim actions.</p>
+          </Card>
           <Card className="border-white/10 bg-white/[0.06] p-5 text-white backdrop-blur-xl">
             <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold">Notifications</h2><Button variant="outline" size="sm" onClick={() => markAllMutation.mutate()} disabled={markAllMutation.isPending}>Mark all read</Button></div>
             {inboxLoading ? <div className="space-y-3"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div> : inbox?.notifications?.length ? (
-              <div className="space-y-3">{inbox.notifications.map((note) => <div key={note.id} className={`rounded-xl border border-white/10 p-3 ${note.read ? "bg-black/20 opacity-80" : "bg-primary/10"}`}><div className="flex items-start justify-between gap-3"><div><p className="font-medium text-sm">{note.title}</p><p className="text-sm text-white/55 mt-1">{note.message}</p><p className="text-xs text-white/40 mt-2">{note.createdAt ? new Date(note.createdAt).toLocaleString() : ""}</p></div>{!note.read && <Button size="sm" variant="ghost" onClick={() => markOneMutation.mutate(note.id)}><CheckCircle2 className="w-4 h-4 mr-1" />Read</Button>}</div></div>)}</div>
+              <div className="space-y-3">{inbox.notifications.map((note) => <div id={`inbox-note-${note.id}`} key={note.id} className={`rounded-xl border border-white/10 p-3 ${note.read ? "bg-black/20 opacity-80" : "bg-primary/10"}`}><div className="flex items-start justify-between gap-3"><button type="button" onClick={()=>openInboxNotification(note)} className="min-w-0 flex-1 text-left hover:text-cyan-100 focus-visible:outline-2 focus-visible:outline-cyan-300" aria-label={`Open ${note.title}`}><p className="font-medium text-sm">{note.title}</p><p className="text-sm text-white/55 mt-1">{note.message}</p><p className="text-xs text-white/40 mt-2">{note.createdAt ? new Date(note.createdAt).toLocaleString() : ""}</p></button><div className="flex shrink-0 flex-col items-end gap-1">
+  <Button size="sm" variant="outline" onClick={()=>openInboxNotification(note)}>
+    {note.communityMessageId?"Open mentioned message":"Open"}
+  </Button>
+  {note.replacementClaimId && !note.replacementCardId && note.replacementDecision !== "keep" && (
+    <>
+      <Button size="sm" onClick={()=>replacementMutation.mutate(Number(note.replacementClaimId))}
+        disabled={replacementMutation.isPending||keepRealLifeLoanMutation.isPending}>
+        Mint {String(note.replacementRarity || "same-rarity")} {String(note.replacementSourcePosition || "same-position").toUpperCase()} replacement
+      </Button>
+      {note.replacementDepartureKind === "real_life_loan" && (
+        <Button size="sm" variant="outline" onClick={()=>keepRealLifeLoanMutation.mutate(Number(note.replacementClaimId))}
+          disabled={replacementMutation.isPending||keepRealLifeLoanMutation.isPending}>Keep until return</Button>
+      )}
+      {note.replacementAutoMintAt && note.replacementDepartureKind !== "real_life_loan" && (
+        <p className="max-w-[190px] text-right text-xs text-white/45">
+          Automatic replacement scheduled for {new Date(note.replacementAutoMintAt).toLocaleDateString()} if still unclaimed.
+        </p>
+      )}
+      {note.replacementDepartureKind === "real_life_loan" && (
+        <p className="max-w-[190px] text-right text-xs text-white/45">No 14-day auto-mint for real-life loans.</p>
+      )}
+    </>
+  )}
+  {!note.read && <Button size="sm" variant="ghost" onClick={() => markOneMutation.mutate(note.id)}><CheckCircle2 className="w-4 h-4 mr-1" />Read</Button>}
+</div></div></div>)}</div>
             ) : <p className="text-sm text-white/50">No notifications yet.</p>}
           </Card>
         </TabsContent>

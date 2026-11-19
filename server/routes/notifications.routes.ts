@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { createNotificationOnce, enqueueSignupWelcomeDeliveries, ensureNotificationsSchema } from "../services/notifications.js";
 import { GW11_OPEN_TITLE, GW11_OPEN_MESSAGE, runGw11OpeningCycle } from "../services/gameweekBreakNotice.js";
+import {notifyNovemberMintInterruption} from "../services/weeklyRewardOutageRecovery.js";
 import {
   claimReplacementCard,
   ensurePlayerTransferMonitoringSchema,
@@ -51,6 +52,7 @@ async function syncGameweekNotifications(userId: string) {
   const competitions = rowsOf(await db.execute(sql`
     select c.id, c.name, c.status::text as status, c.game_week as "gameWeek",
       c.start_date as "startDate", c.fixture_window_start as "fixtureStart",
+      c.season as "season",
       exists (
         select 1 from app.competition_entries ce
         where ce.competition_id = c.id and ce.user_id = ${userId}
@@ -86,7 +88,10 @@ async function syncGameweekNotifications(userId: string) {
   if (nextGameweek > 0) {
     const gameweekRows = upcoming.filter((competition) => Number(competition.gameWeek || 0) === nextGameweek);
     const openRows = gameweekRows.filter((competition) => String(competition.status) === "open");
-    const earliest = [...gameweekRows].sort((a, b) => new Date(a.fixtureStart || a.startDate).getTime() - new Date(b.fixtureStart || b.startDate).getTime())[0];
+    const confirmed = gameweekRows.filter((row) =>
+      row.fixtureStart && Number.isFinite(new Date(row.fixtureStart).getTime()));
+    const earliest = [...(confirmed.length ? confirmed : gameweekRows)].sort((a, b) =>
+      new Date(a.fixtureStart || a.startDate).getTime() - new Date(b.fixtureStart || b.startDate).getTime())[0];
     const minutes = minutesUntil(earliest?.fixtureStart || earliest?.startDate);
 
     if (openRows.length) {
@@ -99,24 +104,51 @@ async function syncGameweekNotifications(userId: string) {
       });
     }
 
-    // PRODUCTION_NOTIFICATION_TIMING_V1: the first 24-hour reminder is explicitly a lineup-lock warning.
-    // The scheduler runs every 15 minutes and createNotificationOnce keeps it exactly-once per gameweek.
-    if (openRows.length && typeof minutes === "number" && minutes > 0 && minutes <= 24 * 60) {
-      await createNotificationOnce(db, {
-        userId,
-        title: `Gameweek ${nextGameweek} lineup locks within 24 hours`,
-        message: `Gameweek ${nextGameweek} locks within 24 hours. Review your submitted teams and captains, or complete any remaining tournament entries before the deadline.`,
-        dedupeKey: `gameweek:${nextGameweek}:locks-within-24h`,
-      });
-    }
+    // GAMEWEEK_HYPE_REMINDERS_V1
+    // Notify ALL eligible managers once per milestone (even without an entry).
+    // Only the *current* time bucket is queued: a late login must never flood
+    // someone's phone with 24h + 2h + 30m reminders at the same instant.
+    // Start-date is the Tuesday entry-opening date, NOT the fixture kickoff.
+    // A verified fixture_start is mandatory for clock-based reminders.
+    // PRODUCTION_NOTIFICATION_TIMING_V1: preserve the original 24h and 2h keys
+    // for the 2026/27 season, so an existing reminder is never replayed.
+    const confirmedKickoff = Boolean(earliest?.fixtureStart);
+    const hasEntered = gameweekRows.some((competition) => Boolean(competition.entered));
+    const kickoffDate = new Date(earliest?.fixtureStart);
+    const kickoffYear = kickoffDate.getUTCFullYear();
+    const seasonStart = kickoffYear - (kickoffDate.getUTCMonth() < 6 ? 1 : 0);
+    const derivedSeason = Number.isFinite(kickoffYear)
+      ? `${seasonStart}-${String((seasonStart + 1) % 100).padStart(2, "0")}` : "unknown";
+    const season = String(earliest?.season || derivedSeason);
+    const reminderKey = season === "2026-27"
+      ? `gameweek:${nextGameweek}` : `gameweek:${season}:${nextGameweek}`;
+    const prepared = hasEntered
+      ? "Check your five-player lineup, captain, injuries and any moved fixtures in My Entries. You can still edit submitted teams until the first Premier League kickoff."
+      : "Your Fantasy Arena cups are open! Pick five eligible cards, choose your captain and enter before the first Premier League kickoff.";
 
-    if (openRows.length && typeof minutes === "number" && minutes > 0 && minutes <= 120) {
-      await createNotificationOnce(db, {
-        userId,
-        title: `Gameweek ${nextGameweek} lineup lock approaching`,
-        message: `Gameweek ${nextGameweek} locks within two hours. Complete any remaining tournament entries before the deadline. Submitted teams cannot be changed.`,
-        dedupeKey: `gameweek:${nextGameweek}:locks-within-2h`,
-      });
+    if (openRows.length && confirmedKickoff && typeof minutes === "number" && minutes > 0) {
+      if (minutes <= 30) {
+        await createNotificationOnce(db, {
+          userId,
+          title: `🚨 GW${nextGameweek} is about to go down! FINAL CALL!`,
+          message: `Within 30 minutes, Gameweek ${nextGameweek} kicks off! 🔥 ${prepared} All entries and edits lock at first kickoff. Let's go! ⚽🏆`,
+          dedupeKey: `${reminderKey}:locks-within-30m`,
+        });
+      } else if (minutes <= 120) {
+        await createNotificationOnce(db, {
+          userId,
+          title: `⏳ GW${nextGameweek} almost here — lineup lock approaching!`,
+          message: `The Premier League is back within 2 hours! ⚽ ${prepared} Gameweek ${nextGameweek} locks at first kickoff. Bring your best team! 🔥`,
+          dedupeKey: `${reminderKey}:locks-within-2h`,
+        });
+      } else if (minutes <= 24 * 60) {
+        await createNotificationOnce(db, {
+          userId,
+          title: `🔥 GW${nextGameweek} is about to go down!`,
+          message: `Gameweek ${nextGameweek} kicks off within 24 hours! ⚽🏆 ${prepared} Get ready — it's almost game time!`,
+          dedupeKey: `${reminderKey}:locks-within-24h`,
+        });
+      }
     }
   }
 
@@ -229,6 +261,9 @@ async function syncSubscribedUserNotifications() {
     // if rollover or announcement verification fails.
     await runGw11OpeningCycle().catch((error) => {
       console.error("Scheduled GW11 opening/announcement check failed:", error);
+    });
+    await notifyNovemberMintInterruption().catch(error => {
+      console.error("November card-recovery announcement could not be queued:",error);
     });
     await reportNotificationHealth().catch(error => console.error("Notification health report failed:", error?.message));
     // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1

@@ -300,8 +300,11 @@ export async function notifyGameweekEntriesClosed(fixtures: any[], nowMs = Date.
       const teamCount = Number(recipient.teamCount || 0);
       const notification = await createNotificationOnce(db, {
         userId: String(recipient.userId || ""),
-        title: `🔒 GW${gameWeek} Entries Closed — Good Luck!`,
-        message: `Gameweek ${gameWeek} entries are now closed. Your ${teamCount} ${teamCount === 1 ? "team is" : "teams are"} locked in. Good luck! ⚽🏆 Follow your live points and leaderboard in My Entries.`,
+        // FINAL_GAMEWEEK_TEAM_LOCKED_V1: single final notification, sent only at
+        // verified first kickoff to managers who actually entered. Preserve the
+        // existing dedupe key so copy changes never resend old alerts.
+        title: `🔒 GW${gameWeek} Team Locked — Good Luck!`,
+        message: `Gameweek ${gameWeek} has kicked off! Your ${teamCount} ${teamCount === 1 ? "team is" : "teams are"} now locked. No further team or captain edits are possible this gameweek. Good luck! ⚽🏆 Follow your live points and leaderboard in My Entries.`,
         dedupeKey,
       });
       if (notification?.id) sent += 1;
