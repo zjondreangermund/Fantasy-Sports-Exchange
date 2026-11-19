@@ -70,6 +70,11 @@ export function notificationDestination(notification: ArenaNotification): string
   if(notification.communityMessageId||replacementKey.startsWith("community-mention:"))return communityMentionDestination(replacementKey,notification.id,notification.communityMessageId);
   // Match the native Android and Web Push deep link for the once-per-GW close alert.
   if (replacementKey.startsWith("gameweek:") && replacementKey.endsWith(":entries-closed-good-luck")) return "/my-entries";
+  // Each pre-kickoff reminder opens the relevant action, not a generic profile page.
+  if (/^gameweek:(?:(?:20\d{2}-\d{2}):)?\d+:locks-within-(?:24h|2h|30m)$/.test(replacementKey)) {
+    return String(notification.message || "").includes("Check your five-player lineup")
+      ? "/my-entries" : "/competitions";
+  }
   if (/^gameweek:(?:\d+:)?\d+:entries-open$/.test(replacementKey)) return "/competitions";
   if (/^gameweek:2026-27:10:international-break$/.test(replacementKey)) return "/competitions";
   if (replacementKey.startsWith("card:weekly-ready:") ||
