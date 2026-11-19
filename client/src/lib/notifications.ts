@@ -72,6 +72,10 @@ export function notificationDestination(notification: ArenaNotification): string
   if (replacementKey.startsWith("gameweek:") && replacementKey.endsWith(":entries-closed-good-luck")) return "/my-entries";
   if (/^gameweek:(?:\d+:)?\d+:entries-open$/.test(replacementKey)) return "/competitions";
   if (/^gameweek:2026-27:10:international-break$/.test(replacementKey)) return "/competitions";
+  if (replacementKey.startsWith("card:weekly-ready:") ||
+      replacementKey.startsWith("card:weekly-expiring:") ||
+      replacementKey.startsWith("card:outage-recovered:") ||
+      replacementKey === "football-data:2026-11:missed-weekly-recovery:v1") return "/account?tab=inbox";
   if (replacementKey.startsWith("prize-level:")) return "/prize-vault";
   if (replacementKey.startsWith("prize-award:")) return "/trophy-cabinet";
   if (replacementKey.startsWith("player-availability:")) return "/my-entries";
