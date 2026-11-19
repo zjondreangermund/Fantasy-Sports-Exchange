@@ -13,12 +13,12 @@ const requireText=(src,term,description)=>assert.ok(src.includes(term),descripti
 requireText(app,'<LoginPendingCardMintDialog />',"Global pending-card prompts must mount after login");
 requireText(queue,"LOGIN_PENDING_MINT_POPUPS_V1","Missing login popup policy marker");
 requireText(queue,'onboarding?.completed === true',"Do not prompt unauthenticated/unonboarded users");
-requireText(queue,'queryKey:["/api/rewards/november-recovery"]',"Existing recovery entitlement must load");
-requireText(queue,'queryKey:["/api/rewards/daily-login"]',"Existing weekly entitlement must load");
-requireText(queue,'queryKey:["/api/trophy-cabinet"]',"Pending tournament prizes must take precedence");
-requireText(queue,'queryKey:["/api/player-replacements"]',"Pending departures must take precedence");
+requireText(queue,'queryKey:["/api/rewards/november-recovery","login-pending",userId]',"Existing recovery entitlement must load");
+requireText(queue,'queryKey:["/api/rewards/daily-login","login-pending",userId]',"Existing weekly entitlement must load");
+requireText(queue,'queryKey:["/api/trophy-cabinet","login-pending",userId]',"Pending tournament prizes must take precedence");
+requireText(queue,'queryKey:["/api/player-replacements","login-pending",userId]',"Pending departures must take precedence");
 requireText(queue,'shouldPromptPrizeMint(award)',"Prize eligibility must stay server-backed");
-requireText(queue,'prizePending || departurePending',"Do not layer weekly dialog over a prize/departure");
+requireText(queue,'prizePending || departurePending',"Do not layer weekly dialog over a prize/departure");\nrequireText(queue,'"login-pending",userId',"Cache must be isolated per signed-in player");
 requireText(queue,'otherModalOpen || explicitMint',"Do not layer over existing modal/Inbox");
 requireText(queue,'pendingWindows',"Each recoverable missed week must be independently offered");
 requireText(queue,'token:`recovery:${week}`',"Distinct recovered-week tracking required");
