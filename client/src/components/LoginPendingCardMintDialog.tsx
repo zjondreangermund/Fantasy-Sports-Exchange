@@ -79,8 +79,9 @@ export default function LoginPendingCardMintDialog() {
   // Auto-prompts must not replace a card's deliberate, already-open Inbox popup.
   const explicitMint=typeof window!=="undefined" && (() => {
     const params=new URLSearchParams(window.location.search);
-    return params.get("mint")==="1" || params.has("mintPrizeEntry")
-      || (window.location.pathname==="/account" && params.get("tab")==="inbox");
+    // An Inbox tab is still a legitimate login landing page. Only a
+    // deliberate per-notification mint popup should suppress auto reminders.
+    return params.get("mint")==="1" || params.has("mintPrizeEntry");
   })();
 
   const prizePending=Array.isArray(prizeQuery.data?.awards)

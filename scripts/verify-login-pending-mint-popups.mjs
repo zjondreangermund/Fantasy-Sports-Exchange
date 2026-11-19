@@ -20,7 +20,9 @@ requireText(queue,'queryKey:["/api/player-replacements","login-pending",userId]'
 requireText(queue,'shouldPromptPrizeMint(award)',"Prize eligibility must stay server-backed");
 requireText(queue,'prizePending || departurePending',"Do not layer weekly dialog over a prize/departure");
 requireText(queue,'"login-pending",userId',"Cache must be isolated per signed-in player");
-requireText(queue,'otherModalOpen || explicitMint',"Do not layer over existing modal/Inbox");
+requireText(queue,'otherModalOpen || explicitMint',"Do not layer over existing modal or deliberate mint popup");
+assert.ok(!queue.includes('window.location.pathname==="/account" && params.get("tab")==="inbox"'),
+  "Direct login to Inbox must still show eligible unclaimed-card popups");
 requireText(queue,'pendingWindows',"Each recoverable missed week must be independently offered");
 requireText(queue,'token:`recovery:${week}`',"Distinct recovered-week tracking required");
 requireText(queue,'token:`weekly:${current}`',"Current week must be its own claim");
