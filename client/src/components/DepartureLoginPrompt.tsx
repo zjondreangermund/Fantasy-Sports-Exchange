@@ -9,6 +9,7 @@ export default function DepartureLoginPrompt() {
   const { user } = useAuth();
   const [reviewed, setReviewed] = React.useState<string[]>([]);
   const [error, setError] = React.useState("");
+  React.useEffect(()=>{setReviewed([]);setError("");},[user?.id]);
   const {data} = useQuery<{claims:any[]}>({queryKey:["/api/player-replacements"],enabled:Boolean(user),staleTime:0,refetchInterval:30000});
   // LOGIN_PENDING_MINT_POPUPS_V1: per-login review, not permanent suppression.
   const reviewKey=(id:number)=>`fa:login-replacement-reviewed:${user?.id}:${id}`;
