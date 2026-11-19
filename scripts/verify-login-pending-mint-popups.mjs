@@ -18,7 +18,8 @@ requireText(queue,'queryKey:["/api/rewards/daily-login","login-pending",userId]'
 requireText(queue,'queryKey:["/api/trophy-cabinet","login-pending",userId]',"Pending tournament prizes must take precedence");
 requireText(queue,'queryKey:["/api/player-replacements","login-pending",userId]',"Pending departures must take precedence");
 requireText(queue,'shouldPromptPrizeMint(award)',"Prize eligibility must stay server-backed");
-requireText(queue,'prizePending || departurePending',"Do not layer weekly dialog over a prize/departure");\nrequireText(queue,'"login-pending",userId',"Cache must be isolated per signed-in player");
+requireText(queue,'prizePending || departurePending',"Do not layer weekly dialog over a prize/departure");
+requireText(queue,'"login-pending",userId',"Cache must be isolated per signed-in player");
 requireText(queue,'otherModalOpen || explicitMint',"Do not layer over existing modal/Inbox");
 requireText(queue,'pendingWindows',"Each recoverable missed week must be independently offered");
 requireText(queue,'token:`recovery:${week}`',"Distinct recovered-week tracking required");
