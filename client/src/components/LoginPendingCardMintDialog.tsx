@@ -98,8 +98,9 @@ export default function LoginPendingCardMintDialog() {
     const seen=new Set<string>();
     // Older outage windows first, each selected independently. Never
     // substitute the current week's card for a different historical week.
-    const missed=Array.isArray(recoveryQuery.data?.pendingWindows)
-      ? [...new Set(recoveryQuery.data.pendingWindows)].sort():[];
+    const pendingWindows=recoveryQuery.data?.pendingWindows;
+    const missed=Array.isArray(pendingWindows)
+      ? [...new Set(pendingWindows)].sort():[];
     for(const week of missed){
       if(!/^\d{4}-\d{2}-\d{2}$/.test(week) || seen.has(week))continue;
       seen.add(week);
