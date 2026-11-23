@@ -44,7 +44,7 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
     const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
     const detailedStats = liveElement ? resolveDetailedStatsForPlayer(canonical || matchedElement, detailedScoringContext) : null;
     const verifiedPosition = String(canonical?.position || currentPosition || (detailedStats as any)?.api_position || "MID");
-    const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), verifiedPosition)?.total_score || 0) : 0;
+    const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), verifiedPosition, currentGameweek)?.total_score || 0) : 0;
     const officialFplSeasonPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
     const totalPoints = identityVerified ? currentGameweekPoints : null;
     const form = identityVerified ? currentGameweekPoints : null;
