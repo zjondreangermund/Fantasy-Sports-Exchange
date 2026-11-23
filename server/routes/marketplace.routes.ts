@@ -317,7 +317,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         // Match-stat scoring remains API-Football based; it must not overwrite the fantasy roster label.
         const scoringPosition = apiPlayer?.position || String(card.position || "") || "MID";
         const calculated = resolved?.stats
-          ? calculatePlayerScore(resolved.stats, scoringPosition)
+          ? calculatePlayerScore(resolved.stats, scoringPosition, Number(entry.gameWeek || 0), apiScoringContext?.season ?? 2026)
           : null;
         const storedScore = savedScores.get(Number(card.cardId));
         const saved = storedScore && snapshot ? storedScore : null;
@@ -467,7 +467,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         const position = canonical?.position || String(storedPlayer.position || "") || apiFootballPlayer?.position || "MID";
         const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
         const detailedStats = liveElement && detailedScoringContext ? resolveDetailedStatsForPlayer({ ...storedPlayer, ...(canonical || {}) }, detailedScoringContext) : null;
-        const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), position).total_score || 0) : 0;
+        const currentGameweekPoints = liveElement ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), position, currentGameweek).total_score || 0) : 0;
         const officialFplSeasonPoints = matchedElement ? Number(matchedElement.total_points || 0) : null;
         const totalPoints = identityVerified ? currentGameweekPoints : null;
         const officialOverall = matchedElement ? overallFromFplElement(matchedElement) : null;
