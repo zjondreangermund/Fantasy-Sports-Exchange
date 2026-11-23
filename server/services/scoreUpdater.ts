@@ -219,7 +219,7 @@ export class ScoreUpdateService {
         };
       }
 
-      const score = calculatePlayerScore(stats, apiPlayer.position);
+      const score = calculatePlayerScore(stats, apiPlayer.position, context.gameWeek, context.season ?? 2026);
       const identityReady = !fixtureFinished || fixture.statsReady;
       return {
         ...score,
