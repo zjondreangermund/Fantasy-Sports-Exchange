@@ -110,7 +110,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         const detailedStats = resolveDetailedStatsForPlayer(canonical, detailedScoringContext);
         const combinedStats = mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(element), detailedStats);
         scoreByElementId.set(elementId,
-          Number(calculatePlayerScore(combinedStats, String(canonical.position || 'MID'))?.total_score || 0));
+          Number(calculatePlayerScore(combinedStats, String(canonical.position || 'MID'), gameweek)?.total_score || 0));
       }
       const liveAvailable = Array.isArray(liveData?.elements);
       const scoreUpdatedAt = new Date().toISOString();
@@ -437,7 +437,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       const detailedStats = liveElement && detailedScoringContext ? resolveDetailedStatsForPlayer({ ...player, ...(canonical || {}) }, detailedScoringContext) : null;
       const scoringPosition = String(canonical?.position || player.position || (detailedStats as any)?.api_position || "MID");
       const arenaGameweekPoints = liveElement
-        ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), scoringPosition).total_score || 0)
+        ? Number(calculatePlayerScore(mergePlayerStatsWithDetailedStats(mapFplStatsToPlayerStats(liveElement), detailedStats), scoringPosition, currentGameweek).total_score || 0)
         : 0;
       const summary = await fplApi.playerSummary(Number(matchedElement.id));
       const history = Array.isArray(summary?.history) ? summary.history : [];
@@ -446,7 +446,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         gameweek: Number(row.round || row.event || 0),
         opponent: teamShortById.get(Number(row.opponent_team)) || `T${row.opponent_team}`,
         points: Number(verifiedApiHistory.get(Number(row.round || row.event || 0))?.points
-          ?? calculatePlayerScore(mapFplStatsToPlayerStats({ stats: row }), scoringPosition).total_score
+          ?? calculatePlayerScore(mapFplStatsToPlayerStats({ stats: row }), scoringPosition, Number(row.round || row.event || 0)).total_score
           ?? 0),
         minutes: Number(row.minutes || 0),
         goals: Number(row.goals_scored || 0),
