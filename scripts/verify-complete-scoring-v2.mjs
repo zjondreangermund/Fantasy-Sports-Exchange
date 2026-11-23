@@ -30,7 +30,7 @@ includesAll(rules, [
 ], "Shared scoring rules");
 
 includesAll(scoring, [
-  'import { PLAYER_SCORE_RULES, SCORE_PRECISION_DECIMALS } from "../../shared/game-rules.js"',
+  'import { ALL_GOALS_CONCEDED_PENALTY_FROM, PLAYER_SCORE_RULES, SCORE_PRECISION_DECIMALS } from "../../shared/game-rules.js"',
   "Key / crucial passes",
   "stats.detailed_stats_available",
   "mapApiFootballStatisticsToDetailedStats",
