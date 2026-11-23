@@ -224,6 +224,13 @@ export const PLAYER_SCORE_RULES = {
   },
 } as const;
 
+// 2026/27 scoring-policy boundary: GW11 and earlier must remain unchanged
+// even when historical competition scores are refreshed or re-settled.
+export const ALL_GOALS_CONCEDED_PENALTY_FROM = {
+  seasonStartYear: 2026,
+  gameWeek: 12,
+} as const;
+
 export const RARITY_ENTRY_FEES = {
   common: 10,
   rare: 50,

@@ -1,4 +1,4 @@
-import { PLAYER_SCORE_RULES, SCORE_PRECISION_DECIMALS } from "../../shared/game-rules.js";
+import { ALL_GOALS_CONCEDED_PENALTY_FROM, PLAYER_SCORE_RULES, SCORE_PRECISION_DECIMALS } from "../../shared/game-rules.js";
 
 /**
  * Canonical Fantasy Arena scoring engine.
@@ -129,7 +129,8 @@ export const SCORE_RULES = {
     { event: "Red card", points: `${n.redCard}` },
     { event: "Own goal", points: `${n.ownGoal}` },
     { event: "Penalty missed", points: `${n.penaltyMissed}` },
-    { event: "GK/DEF goals conceded after first", points: `${n.extraGoalConcededGoalkeeperOrDefender} each` },
+    { event: "GK/DEF goals conceded (GW12 2026/27 onward)", points: `${n.extraGoalConcededGoalkeeperOrDefender} each, including the first` },
+    { event: "GK/DEF extra goals conceded (through GW11 2026/27)", points: `${n.extraGoalConcededGoalkeeperOrDefender} each after first` },
   ],
   caps: [
     { category: "Decisive", cap: `${c.decisiveMin} to ${c.decisiveMax}` },
@@ -161,7 +162,7 @@ function addReason(reasons: ScoringReason[], label: string, points: number, cate
   reasons.push({ label, points: rounded, category });
 }
 
-export function calculatePlayerScore(stats: PlayerStats, position: string): ScoringResult {
+export function calculatePlayerScore(stats: PlayerStats, position: string, gameWeek?: number, seasonStartYear = new Date().getUTCFullYear() - (new Date().getUTCMonth() < 6 ? 1 : 0)): ScoringResult {
   let decisive = 0;
   let performance = 0;
   let penalties = 0;
@@ -258,10 +259,19 @@ export function calculatePlayerScore(stats: PlayerStats, position: string): Scor
   addReason(reasons, `${numberOf(stats.red_cards)} red card(s)`, redPenalty, "penalty");
 
   if (normalizedPosition === "GK" || normalizedPosition === "DEF") {
-    const excessConceded = Math.max(numberOf(stats.goals_conceded) - 1, 0);
-    const concededPenalty = excessConceded * n.extraGoalConcededGoalkeeperOrDefender;
+    // Rule changes by the fixture's season/GW, never by the date we rescore it.
+    // Unknown gameweeks stay on the legacy rule rather than silently changing a historical result.
+    const usesAllGoalsRule = Number.isInteger(gameWeek) && Number(gameWeek) > 0 && (
+      seasonStartYear > ALL_GOALS_CONCEDED_PENALTY_FROM.seasonStartYear ||
+      (seasonStartYear === ALL_GOALS_CONCEDED_PENALTY_FROM.seasonStartYear &&
+        Number(gameWeek) >= ALL_GOALS_CONCEDED_PENALTY_FROM.gameWeek)
+    );
+    const countedConceded = Math.max(numberOf(stats.goals_conceded) - (usesAllGoalsRule ? 0 : 1), 0);
+    const concededPenalty = countedConceded * n.extraGoalConcededGoalkeeperOrDefender;
     penalties += concededPenalty;
-    addReason(reasons, `${excessConceded} extra goal(s) conceded`, concededPenalty, "penalty");
+    addReason(reasons, usesAllGoalsRule
+      ? `${countedConceded} goal(s) conceded`
+      : `${countedConceded} extra goal(s) conceded`, concededPenalty, "penalty");
   }
   penalties = clamp(round(penalties), c.penaltiesMin, c.penaltiesMax);
 

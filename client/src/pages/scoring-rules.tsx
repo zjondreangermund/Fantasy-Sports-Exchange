@@ -4,6 +4,7 @@ import {
   CAPTAIN_BONUS_PERCENT,
   PLAYER_SCORE_RULES,
   SCORE_PRECISION_DECIMALS,
+  ALL_GOALS_CONCEDED_PENALTY_FROM,
 } from "../../../shared/game-rules";
 
 type ScoreRow = {
@@ -56,7 +57,8 @@ const rows: ScoreRow[] = [
   { group: "Penalties", event: "Red card", applies: "All positions", points: String(n.redCard) },
   { group: "Penalties", event: "Own goal", applies: "All positions", points: String(n.ownGoal) },
   { group: "Penalties", event: "Penalty missed", applies: "All positions", points: String(n.penaltyMissed) },
-  { group: "Penalties", event: "Each additional goal conceded after the first", applies: "Goalkeeper or Defender", points: String(n.extraGoalConcededGoalkeeperOrDefender) },
+  { group: "Penalties", event: "Every goal conceded (including the first)", applies: "Goalkeeper or Defender", points: String(n.extraGoalConcededGoalkeeperOrDefender), note: `Effective from GW${ALL_GOALS_CONCEDED_PENALTY_FROM.gameWeek} of the 2026/27 season onward. The existing rule remains in place for GW11 and earlier; settled scores and standings are unchanged.` },
+  { group: "Penalties", event: "Additional goals conceded after the first (legacy)", applies: "Goalkeeper or Defender", points: String(n.extraGoalConcededGoalkeeperOrDefender), note: "GW11 of 2026/27 and earlier: first goal conceded has no penalty. This rule is preserved for historical scoring." },
 ];
 
 export default function ScoringRulesPage() {
@@ -80,7 +82,7 @@ export default function ScoringRulesPage() {
               <div className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200/70">Fantasy Arena Trust Centre</div>
               <h1 className="mt-2 text-3xl font-black sm:text-5xl">Scoring Rules</h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-white/55">Fantasy Arena scores five-card lineups from official Premier League data. Every minute, completed pass and verified match action contributes to a precise four-decimal score.</p>
-              <div className="mt-3 text-xs text-white/35">Last updated: 20 September 2026</div>
+              <div className="mt-3 text-xs text-white/35">Scoring update: 23 November 2026 · Effective from GW12 (2026/27)</div>
             </div>
           </div>
         </section>
