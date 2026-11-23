@@ -29,7 +29,7 @@ for (const [source, required, label] of [
   [updater, "scoringPrecision: 4", "Precise tournament scoring snapshots"],
   [updater, "loadApiFootballGameweekScoringContext", "API-Football gameweek scoring context"],
   [updater, "resolveApiFootballGameweekPlayer(card.player, context)", "Verified API-Football player matching"],
-  [updater, "calculatePlayerScore(stats, apiPlayer.position)", "Canonical API-Football player position and identity"],
+  [updater, "calculatePlayerScore(stats, apiPlayer.position, context.gameWeek, context.season ?? 2026)", "Gameweek-specific official scoring policy"],
   [updater, "identityStatus: String(score?.identity_status", "Player identity status in official scoring snapshots"],
   [updater, "Recovered verified player points", "Automatic recovered-points diagnostics"],
   [bridge, "api_position: match.position", "Verified API-Football player position"],
@@ -58,6 +58,9 @@ const rulesObjectStart = rulesStart + rulesMarker.length;
 const rulesObjectEnd = shared.indexOf("\n} as const;", rulesObjectStart);
 check(rulesObjectEnd >= 0, "Shared player-score rules could not be isolated.");
 const scoreRules = vm.runInNewContext(`(${shared.slice(rulesObjectStart, rulesObjectEnd + 2)})`);
+const policyMatch = shared.match(/export const ALL_GOALS_CONCEDED_PENALTY_FROM = (\{[\s\S]*?\}) as const;/);
+check(policyMatch, "GW12 conceded-goals scoring boundary is missing.");
+const goalConcededPolicy = vm.runInNewContext(`(${policyMatch[1]})`);
 
 const engineStart = scoring.indexOf("const p = PLAYER_SCORE_RULES");
 const engineEnd = scoring.indexOf("function emptyDetailedStats()");
@@ -68,12 +71,12 @@ const executableEngine = scoring.slice(engineStart, engineEnd)
   .replace("function round(value: number, decimals = SCORE_PRECISION_DECIMALS)", "function round(value, decimals = SCORE_PRECISION_DECIMALS)")
   .replace("function clamp(value: number, min: number, max: number)", "function clamp(value, min, max)")
   .replace('function addReason(reasons: ScoringReason[], label: string, points: number, category: ScoringReason["category"])', "function addReason(reasons, label, points, category)")
-  .replace("export function calculatePlayerScore(stats: PlayerStats, position: string): ScoringResult", "function calculatePlayerScore(stats, position)")
+  .replace("export function calculatePlayerScore(stats: PlayerStats, position: string, gameWeek?: number, seasonStartYear = new Date().getUTCFullYear() - (new Date().getUTCMonth() < 6 ? 1 : 0)): ScoringResult", "function calculatePlayerScore(stats, position, gameWeek, seasonStartYear = 2026)")
   .replace("export function calculateLineupScore(cardScores: ScoringResult[], captainId: number): number", "function calculateLineupScore(cardScores, captainId)")
   .replace("const reasons: ScoringReason[] = [];", "const reasons = [];")
   .replace(/\] as const;/g, "];");
 
-const context = { PLAYER_SCORE_RULES: scoreRules, SCORE_PRECISION_DECIMALS: 4 };
+const context = { PLAYER_SCORE_RULES: scoreRules, SCORE_PRECISION_DECIMALS: 4, ALL_GOALS_CONCEDED_PENALTY_FROM: goalConcededPolicy };
 vm.runInNewContext(`${executableEngine}\nglobalThis.scorePlayer = calculatePlayerScore;\nglobalThis.scoreLineup = calculateLineupScore;`, context);
 
 const player = {
@@ -120,6 +123,19 @@ check(coreOnlyWithHigherProxy.total_score === coreOnly.total_score, "ICT, BPS an
 check(goalkeeperTwoSaves.total_score > goalkeeperOneSave.total_score, "Every individual goalkeeper save must affect scoring.");
 check(base.football_metrics.completed_passes === 18, "Player scoring must retain verified completed passes for tie-breakers.");
 
+// 2026/27 GW11 must remain exactly as previously scored, even on a later recalculation.
+const fourConceded = { ...player, goals_conceded: 4, detailed_stats_available: false };
+const oldDefender = context.scorePlayer(fourConceded, "DEF", 11, 2026);
+const newDefender = context.scorePlayer(fourConceded, "DEF", 12, 2026);
+check(oldDefender.breakdown.penalties === -6, "GW11 defender must keep -6 for four conceded goals.");
+check(newDefender.breakdown.penalties === -8, "GW12 defender must lose -8 for four conceded goals.");
+check(oldDefender.reasons.some((reason) => reason.label === "3 extra goal(s) conceded"), "GW11 explanation must remain legacy.");
+check(newDefender.reasons.some((reason) => reason.label === "4 goal(s) conceded"), "GW12 explanation must show all goals.");
+check(context.scorePlayer({ ...fourConceded, goals_conceded: 1 }, "GK", 12, 2026).breakdown.penalties === -2, "GW12 goalkeeper must lose points for the first goal.");
+check(context.scorePlayer(fourConceded, "GK", 11, 2026).breakdown.penalties === -6, "GW11 goalkeeper must retain legacy scoring.");
+check(context.scorePlayer(fourConceded, "MID", 12, 2026).breakdown.penalties === 0, "Midfielders must not receive GK/DEF conceded-goal penalties.");
+check(context.scorePlayer(fourConceded, "DEF", 1, 2027).breakdown.penalties === -8, "The new rule must continue next season.");
+check(context.scorePlayer(fourConceded, "DEF", 11, 2026).total_score === oldDefender.total_score, "Historical recalculation must stay deterministic.");
 const lineup = context.scoreLineup([{ ...base, card_id: 101 }, { ...oneMorePass, card_id: 102 }], 101);
 check(!Number.isInteger(lineup), "A lineup with fractional player scores must retain fractional points.");
 check(lineup === Math.round((base.total_score * 1.1 + oneMorePass.total_score) * 10000) / 10000,
