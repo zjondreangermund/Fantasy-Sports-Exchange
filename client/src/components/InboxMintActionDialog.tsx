@@ -103,6 +103,7 @@ export default function InboxMintActionDialog({
   const activeWeek = summary ? chosenWeek : requestedWeek;
   const isCurrent = Boolean(activeWeek && activeWeek === weekly?.eligibleFrom);
   const isRecoverable = Boolean(activeWeek && weeks.includes(activeWeek));
+  React.useEffect(()=>{setReplaceCardId(0);},[note.id,activeWeek]);
   const rewardStatus=isRecoverable?recovery:weekly;
   const commonCount=Number(rewardStatus?.commonCount ?? weekly?.commonCount ?? recovery?.commonCount ?? 0);
   const commonCap=Number(rewardStatus?.cap || 10);
@@ -110,7 +111,6 @@ export default function InboxMintActionDialog({
   const collectionOverCap=commonCount>commonCap;
   const eligibleWeeklyReward=Boolean((isCurrent && weekly?.canClaim)||isRecoverable);
   const replacementAvailable=commonCount===commonCap && eligibleWeeklyReward;
-  React.useEffect(()=>{setReplaceCardId(0);},[note.id,activeWeek]);
   const canMintCurrent=Boolean(isCurrent && weekly?.canClaim && !collectionOverCap && (!collectionFull||replaceCardId));
   const canRecover=Boolean(isRecoverable && !collectionOverCap && (!collectionFull||replaceCardId));
 
