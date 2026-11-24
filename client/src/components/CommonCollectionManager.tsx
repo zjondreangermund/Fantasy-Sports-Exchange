@@ -9,14 +9,14 @@ import { useAuth } from '../hooks/use-auth';
 import { COMMON_KEEP_SLOTS, commonKeepSlotAccepts, validateCommonKeepTeams } from '../../../shared/common-collection';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
-type Card = {id:number;name:string;position:string;team:string;overall:number;level:number;xp:number;blocked:boolean;imageUrl?:string|null};
+type Card = {id:number;name:string;position:string;team:string;overall:number;level:number;xp:number;blocked:boolean;replacementBlocked?:boolean;imageUrl?:string|null};
 type Plan = {cap:number;excess:number;cards:Card[]};
 export function CommonReplacementSelect({value,onChange}:{value:number;onChange:(id:number)=>void}) {
   const {data}=useQuery<Plan>({queryKey:['/api/common-collection'],staleTime:0});
   return <label className="block space-y-2 text-sm">Choose the Common card to sacrifice and replace
     <select aria-label="Common card to replace" value={value} onChange={e=>onChange(Number(e.target.value))} className="w-full rounded-lg border border-white/20 bg-slate-950 p-3 text-white">
       <option value={0}>Select a card…</option>
-      {data?.cards.map(card=><option key={card.id} value={card.id} disabled={card.blocked}>{card.name} · {card.position} · Lv {card.level}{card.blocked?' (protected)':''}</option>)}
+      {data?.cards.map(card=><option key={card.id} value={card.id} disabled={card.replacementBlocked ?? card.blocked}>{card.name} · {card.position} · Lv {card.level}{(card.replacementBlocked ?? card.blocked)?' (protected)':''}</option>)}
     </select><p className="text-xs text-white/60">Confirming permanently sacrifices this card. A random current Premier League Common of the same position replaces it, retaining level and XP. Player ratings and performance belong to the new player.</p>
   </label>;
 }
@@ -64,6 +64,7 @@ export default function CommonCollectionManager() {
   const [activeSlot,setActiveSlot]=React.useState(0);
   const [search,setSearch]=React.useState('');
   const [confirmed,setConfirmed]=React.useState(false);
+  const [submissionIssue,setSubmissionIssue]=React.useState('');
   const selected=teams.flat().filter(Boolean);
   const kept=data?.cards.filter(c=>selected.includes(c.id)) || [];
   const burned=data?.cards.filter(c=>!selected.includes(c.id)) || [];
@@ -75,7 +76,14 @@ export default function CommonCollectionManager() {
   },onSuccess:async()=>{setTeams(emptyTeams());setConfirmed(false);await Promise.all(['/api/common-collection','/api/user/cards','/api/rewards/daily-login'].map(key=>queryClient.invalidateQueries({queryKey:[key]})));}});
   // Nothing is preselected, including protected cards. Refetches never choose for the user.
   React.useEffect(()=>{setTeams(emptyTeams());setActiveTeam(0);setActiveSlot(0);setSearch('');setConfirmed(false);},[user?.id,Boolean(data?.excess)]);
-  React.useEffect(()=>{setConfirmed(false);},[teams]);
+  React.useEffect(()=>{setConfirmed(false);setSubmissionIssue('');},[teams]);
+  const submitReduction=()=>{
+    if(mutation.isPending)return;
+    if(!confirmed){setSubmissionIssue('Tick the confirmation box first.');return;}
+    if(teamError){setSubmissionIssue(teamError);return;}
+    if(protectedMissing.length){setSubmissionIssue(`These cards are still protected: ${protectedMissing.map(card=>card.name).join(', ')}. Keep them or ask admin to remove their submitted entries, then recheck card locks.`);return;}
+    setSubmissionIssue('');mutation.mutate();
+  };
   if(!user || adminCheck.isPending || (adminCheck.data?.isAdmin === true && !manualReduction) || !data?.excess)return null;
   const activeId=teams[activeTeam][activeSlot];
   const activePosition=COMMON_KEEP_SLOTS[activeSlot];
@@ -116,8 +124,9 @@ export default function CommonCollectionManager() {
       </div>}
       <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-white/20 p-2 text-xs"><input id="common-burn-acknowledgement" type="checkbox" className="h-5 w-5 shrink-0 accent-cyan-300" disabled={mutation.isPending} checked={confirmed} aria-describedby={!ready?'common-burn-blocker':undefined} onChange={e=>setConfirmed(e.target.checked)}/>Keep these two teams and permanently burn my other {data.excess} Common cards.</label>
       {protectedMissing.length>0 && <Button type="button" variant="ghost" className="h-8 w-full text-xs text-cyan-200" disabled={mutation.isPending||collectionFetching} onClick={()=>{void refreshCollection();}}>{collectionFetching?'Checking card locks…':'Recheck card locks after admin removes entries'}</Button>}
+      {submissionIssue&&<p role="alert" className="max-h-24 overflow-auto rounded-lg border border-amber-300/30 p-2 text-xs text-amber-100">{submissionIssue}</p>}
       {mutation.isError&&<p role="alert" className="text-xs text-red-300">{String((mutation.error as Error).message)}</p>}
-      <Button className="h-10 w-full text-sm" disabled={!ready||!confirmed||mutation.isPending} onClick={()=>mutation.mutate()}>{mutation.isPending?'Updating collection…':`Keep two teams & burn ${data.excess} others`}</Button>
+      <Button className="h-10 w-full text-sm" disabled={!confirmed||mutation.isPending} onClick={submitReduction}>{mutation.isPending?'Updating collection…':`Keep two teams & burn ${data.excess} others`}</Button>
     </div>
   </DialogContent></Dialog>;
 }

@@ -24,11 +24,13 @@ try{
  CREATE TABLE app.real_life_player_loans(app_player_id int,active boolean);
  CREATE TABLE app.player_cards(id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,player_id int REFERENCES app.players(id),owner_id varchar(255),rarity text,serial_id text,serial_number int,max_supply int,level int,xp int,decisive_score int,last_5_scores jsonb,for_sale boolean,price real,acquired_at timestamptz default now());
  CREATE TABLE app.notifications(user_id text,type text,title text,message text);
- CREATE TABLE app.card_locks(card_id int,expires_at timestamptz);
+ CREATE TABLE app.card_locks(card_id int,expires_at timestamptz,reason text default 'security_review',ref_id text);
  CREATE TABLE app.auctions(card_id int,status text);
  CREATE TABLE app.swap_offers(offered_card_id int,requested_card_id int,status text);
  CREATE TABLE app.card_loans(card_id int,status text);
- CREATE TABLE app.lineups(user_id text,card_ids jsonb);
+ CREATE TABLE app.lineups(user_id text,card_ids jsonb,captain_id int);
+ CREATE TABLE IF NOT EXISTS app.competitions(id integer PRIMARY KEY,name text,status text,tier text,entry_fee real,prize_key text);
+ CREATE TABLE app.competition_entries(id integer PRIMARY KEY,user_id text,rank int,prize_card_id int,competition_id int,tiebreak_meta jsonb,lineup_card_ids jsonb);
  CREATE TABLE app.audit_logs(user_id text,action text,meta jsonb);
  INSERT INTO app.users VALUES('weekly',now()-interval '30 days'),('prize',now()-interval '30 days');`);
  for(let i=1;i<=20;i++)await pg.query('INSERT INTO app.api_football_fixtures VALUES($1,$2,39,$3)',[i,i%20+1,season]);
@@ -70,6 +72,21 @@ try{
  await assert.rejects(reduceCommonCollection('reduce',reductionCards.slice(0,9).map(c=>c.id),true),/exactly 10/);
  await assert.rejects(reduceCommonCollection('reduce',[issuedId,...reductionCards.slice(1,10).map(c=>c.id)],true),/exactly 10/);
  const keepIds=reductionCards.slice(1).map(c=>c.id);
+ await pg.query("INSERT INTO app.lineups VALUES('reduce',$1::jsonb,$2)",[JSON.stringify([reductionCards[0].id,keepIds[0]]),reductionCards[0].id]);
+ const {getCommonCollectionPlan}=await import(path.join(temp,'server/services/commonCollectionPolicy.mjs'));
+ assert.equal((await getCommonCollectionPlan('reduce')).cards.find(c=>c.id===reductionCards[0].id).blocked,false,'A saved draft must not block reduction');
+ assert.equal((await getCommonCollectionPlan('reduce')).cards.find(c=>c.id===reductionCards[0].id).replacementBlocked,true,'A saved draft still needs explicit clearing before ordinary replacement');
+ await pg.exec("INSERT INTO app.competitions VALUES(776,'Old Common','completed','common',0,'free-common')");
+ await pg.query("INSERT INTO app.card_locks(card_id,expires_at,reason,ref_id) VALUES($1,null,'competition','776')",[reductionCards[0].id]);
+ assert.equal((await getCommonCollectionPlan('reduce')).cards.find(c=>c.id===reductionCards[0].id).blocked,false,'A completed-tournament lock must not prevent reduction');
+ await pg.exec("DELETE FROM app.card_locks; DELETE FROM app.competitions WHERE id=776");
+
+ await pg.exec("INSERT INTO app.competitions VALUES(777,'Active Common','open','common',0,'free-common')");
+ await pg.query("INSERT INTO app.competition_entries(id,user_id,competition_id,lineup_card_ids) VALUES(778,'reduce',777,$1::jsonb)",[JSON.stringify([reductionCards[0].id])]);
+ assert.equal((await getCommonCollectionPlan('reduce')).cards.find(c=>c.id===reductionCards[0].id).blocked,true,'Submitted entry must stay protected even without a lock row');
+ await assert.rejects(reduceCommonCollection('reduce',keepIds,true),/protected use/);
+ await pg.exec("DELETE FROM app.competition_entries WHERE id=778; DELETE FROM app.competitions WHERE id=777");
+
  const keepTeams=[[keepIds[0],keepIds[1],keepIds[5],keepIds[7],keepIds[2]],[keepIds[9],keepIds[3],keepIds[6],keepIds[8],keepIds[4]]];
  await assert.rejects(reduceCommonCollection('reduce',keepIds,true,[keepTeams[0],keepTeams[0]]),/ten different cards/);
  const wrongSlots=keepTeams.map(team=>[...team]);[wrongSlots[0][0],wrongSlots[0][1]]=[wrongSlots[0][1],wrongSlots[0][0]];
@@ -80,6 +97,9 @@ try{
  await reduceCommonCollection('reduce',keepIds,true,keepTeams);
  const savedTeams=(await pg.query("SELECT meta->'teamCardIds' as teams FROM app.audit_logs WHERE user_id='reduce' AND action='collection.common_limit.sacrificed'")).rows[0].teams;
  assert.deepEqual(savedTeams,keepTeams);
+ const draftAfter=(await pg.query("SELECT card_ids,captain_id FROM app.lineups WHERE user_id='reduce'")).rows[0];
+ assert.deepEqual(draftAfter.card_ids,[keepIds[0]]);assert.equal(draftAfter.captain_id,null);
+ console.log('Draft/entry protection tests passed: saved drafts can be reduced, submitted entries stay protected, and burned draft IDs/captain are cleared.');
  assert.deepEqual((await pg.query("SELECT id FROM app.player_cards WHERE owner_id='reduce' ORDER BY id")).rows.map(c=>c.id),keepIds);
  assert.equal((await pg.query('SELECT owner_id FROM app.player_cards WHERE id=$1',[reductionCards[0].id])).rows[0].owner_id,null);
  assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,10);
@@ -118,7 +138,7 @@ try{
  for(let i=0;i<12;i++)await pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity) VALUES(1,'capped','rare')");
  assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='capped' AND rarity='rare'")).rows[0].n,12);
  // GW11 remains unchanged; GW12 Common tournaments enforce two entries.
- await pg.exec("CREATE TABLE app.competition_entries(user_id text,competition_id int); INSERT INTO app.competition_entries VALUES('capped',12),('capped',12)");
+ await pg.exec("DELETE FROM app.competition_entries; INSERT INTO app.competition_entries(user_id,competition_id,id) VALUES('capped',12,91),('capped',12,92)");
  const {assertCommonEntryPolicy}=await import(path.join(temp,'server/services/commonEntryPolicy.mjs'));
  await assertCommonEntryPolicy(db,'capped',{id:12,tier:'common',gameWeek:11});
  await assertCommonEntryPolicy(db,'capped',{id:12,tier:'rare',gameWeek:12});
@@ -138,8 +158,8 @@ try{
  const fn=ts.transpileModule(source.slice(start,end),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
  const {resolveFreeCupClaimRarity}=await import(path.join(temp,'server/services/freeCupPrizes.mjs'));
  const {sql}=await import('drizzle-orm');const claimPrize=new Function('sql','rowsOf','awardedPrizeCardId','COMMON_COLLECTION_CAP','CARD_SUPPLY_CAP_BY_RARITY','currentPremierLeagueMintIds','createNotificationOnce','ensureCommonCardChoiceSchema','resolveFreeCupClaimRarity','lockCommonCollection',fn+';return claimFreeCommonCupCard;')(sql,r=>r.rows,a=>Number(a.prizeCardId||0),10,{common:1000,rare:100,unique:10,epic:3,legendary:1},currentPremierLeagueMintIds,async()=>{},async()=>{},resolveFreeCupClaimRarity,(await import(path.join(temp,'server/services/commonCollectionPolicy.mjs'))).lockCommonCollection);
- await pg.exec(`CREATE TABLE app.competitions(id integer PRIMARY KEY,name text,status text,tier text,entry_fee real,prize_key text);
- CREATE TABLE app.competition_entries(id integer PRIMARY KEY,user_id text,rank int,prize_card_id int,competition_id int,tiebreak_meta jsonb);
+ await pg.exec(`CREATE TABLE IF NOT EXISTS app.competitions(id integer PRIMARY KEY,name text,status text,tier text,entry_fee real,prize_key text);
+ CREATE TABLE app.competition_entries(id integer PRIMARY KEY,user_id text,rank int,prize_card_id int,competition_id int,tiebreak_meta jsonb,lineup_card_ids jsonb);
  CREATE TABLE app.competition_prize_awards(entry_id int,user_id text,prize_category text,status text,metadata jsonb,updated_at timestamptz);
  INSERT INTO app.competitions VALUES(1,'Free cup','completed','common',0,'free-common');
  INSERT INTO app.competition_entries VALUES(1,'prize',1,null,1,'{"settlement":{}}'),(2,'prize',2,null,1,'{"settlement":{}}'),(3,'prize',2,null,1,'{"settlement":{"prizeAward":{"rarity":"rare"}}}'),(4,'prize',3,null,1,'{"settlement":{"prizeAward":{"rarity":"rare"}}}');`);

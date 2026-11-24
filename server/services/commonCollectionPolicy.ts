@@ -20,15 +20,17 @@ export async function loadCommonCollection(tx:any,userId:string) {
   `));
 }
 
-export async function assertCommonCardsRemovable(tx:any,userId:string,ids:number[]) {
-  if ((await findBlockedCards(tx,userId,ids)).length)
+export async function assertCommonCardsRemovable(tx:any,userId:string,ids:number[],ignoreSavedDraft=false) {
+  if ((await findBlockedCards(tx,userId,ids,!ignoreSavedDraft)).length)
     throw new Error('A selected card is in a lineup, loan, auction or swap. Remove it from protected use first.');
 }
 
 export async function getCommonCollectionPlan(userId:string) {
   const cards=await loadCommonCollection(db,userId);
-  const blocked=new Set((await findBlockedCards(db,userId,cards.map(c=>Number(c.id)))).map(c=>Number(c.cardId)));
-  return {cap:COMMON_COLLECTION_CAP,cards:cards.map(card=>({...card,blocked:blocked.has(Number(card.id))||Boolean(card.forSale)})),
+  const protections=await findBlockedCards(db,userId,cards.map(c=>Number(c.id)));
+  const blocked=new Set(protections.filter(row=>row.reason!=='active_lineup').map(row=>Number(row.cardId)));
+  const replacementBlocked=new Set(protections.map(row=>Number(row.cardId)));
+  return {cap:COMMON_COLLECTION_CAP,cards:cards.map(card=>({...card,blocked:blocked.has(Number(card.id))||Boolean(card.forSale),replacementBlocked:replacementBlocked.has(Number(card.id))||Boolean(card.forSale)})),
     excess:Math.max(0,cards.length-COMMON_COLLECTION_CAP)};
 }
 
@@ -45,7 +47,7 @@ export async function reduceCommonCollection(userId:string,raw:unknown, selectKe
     const ids=selectKept ? cards.filter(c=>!selection.includes(Number(c.id))).map(c=>Number(c.id)) : selection;
     if(ids.length!==cards.length-COMMON_COLLECTION_CAP)throw new Error(`Select exactly ${cards.length-COMMON_COLLECTION_CAP} cards to keep your best 10.`);
     if(ids.some(id=>!cards.some(c=>Number(c.id)===id&&!c.forSale)))throw new Error('Only your unlisted Common cards can be sacrificed.');
-    await assertCommonCardsRemovable(tx,userId,ids);
+    await assertCommonCardsRemovable(tx,userId,ids,true);
     const eligibleIds=new Set(await currentPremierLeagueMintIds(tx));
     const kept=cards.filter(c=>!ids.includes(Number(c.id))).map(c=>({...c,eligible:eligibleIds.has(Number(c.playerId))}));
     if(teamCardIds !== undefined) {
@@ -53,6 +55,18 @@ export async function reduceCommonCollection(userId:string,raw:unknown, selectKe
       if(teamError) throw new Error(teamError + ' No cards were sacrificed.');
     }
     if(!supportsTwoCommonTeams(kept))throw new Error('Keep two GK, two DEF, two MID, two FWD and two extra outfield cards, all current Premier League players, for two teams. No cards were sacrificed.');
+    // Saved default lineups are drafts, not tournament entries. Remove only
+    // discarded IDs from that draft; submitted teams remain protected above.
+    const discardedIds=`{${ids.join(',')}}`;
+    await tx.execute(sql`
+      UPDATE app.lineups SET card_ids=COALESCE((
+        SELECT jsonb_agg(draft.value::int ORDER BY draft.ordinality)
+        FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(card_ids)='array' THEN card_ids ELSE '[]'::jsonb END)
+          WITH ORDINALITY AS draft(value,ordinality)
+        WHERE NOT (draft.value::int=ANY(${discardedIds}::int[]))
+      ),'[]'::jsonb), captain_id=CASE WHEN captain_id=ANY(${discardedIds}::int[]) THEN NULL ELSE captain_id END
+      WHERE user_id=${userId}
+    `);
     // Retain historical rows and reward references; sacrifice removes ownership.
     await tx.execute(sql`update app.player_cards set owner_id=null,for_sale=false,price=0 where owner_id=${userId} and id=any(${`{${ids.join(',')}}`}::int[])`);
     await tx.execute(sql`insert into app.audit_logs(user_id,action,meta) values(${userId},'collection.common_limit.sacrificed',${JSON.stringify({cardIds:ids,keptCardIds:kept.map(c=>c.id),teamCardIds:teamCardIds || null})}::jsonb)`);
