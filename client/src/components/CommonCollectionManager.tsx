@@ -28,7 +28,7 @@ function KeepCard({card,kept,disabled,onToggle}:{card:Card;kept:boolean;disabled
     (b.gameweek-a.gameweek) || String(b.kickoffTime||'').localeCompare(String(a.kickoffTime||''))).slice(0,5) : [];
   return <article className={`rounded-2xl border p-3 ${kept?'border-emerald-300 bg-emerald-400/10':'border-white/15 bg-white/[.03]'}`}>
     <button type="button" aria-pressed={kept} disabled={disabled} onClick={onToggle} className="flex w-full items-center gap-3 text-left disabled:opacity-60">
-      <CardPlayerImage card={{id:card.id,player:{name:card.name,imageUrl:card.imageUrl}} as any} alt={card.name} className="h-20 w-16 rounded-lg object-contain"/>
+      <span data-common-card-portrait className="relative block h-20 w-16 shrink-0 overflow-hidden rounded-lg"><CardPlayerImage card={{id:card.id,player:{name:card.name,imageUrl:card.imageUrl}} as any} alt={card.name} className="h-full w-full object-contain"/></span>
       <span className="min-w-0 flex-1"><strong className="block">{card.name}</strong><span className="block text-xs text-white/60">{card.team} · {card.position} · COMMON · Lv {card.level}</span><span className={`mt-2 block text-xs font-bold ${kept?'text-emerald-200':'text-amber-200'}`}>{kept?'✓ KEEP':'Will be burned'}{card.blocked?' · Protected — must keep':''}</span></span>
     </button>
     <p className="mt-3 text-xs font-bold text-cyan-100">Previous game points</p>
@@ -53,10 +53,11 @@ export default function CommonCollectionManager() {
   // Protected cards are always retained. Users explicitly choose all other keepers.
   React.useEffect(()=>{if(data)setSelected(old=>Array.from(new Set([...old.filter(id=>data.cards.some(c=>c.id===id)),...data.cards.filter(c=>c.blocked).map(c=>c.id)])));},[data]);
   if(!user || !data?.excess)return null;
-  return <Dialog open onOpenChange={()=>{}}><DialogContent onEscapeKeyDown={event=>event.preventDefault()} onPointerDownOutside={event=>event.preventDefault()} onInteractOutside={event=>event.preventDefault()} className="[&>button.absolute]:hidden z-[160] max-h-[92dvh] w-[min(96vw,900px)] max-w-4xl overflow-y-auto bg-slate-950 text-white">
-    <DialogHeader><DialogTitle>Choose your best 10 Common cards to keep</DialogTitle><DialogDescription>Required for GW12: select 10 Common players to KEEP. Other rarities have no 10-card limit. The remaining {data.excess} cards will be permanently burned only after confirmation. Compare previous game points below. Keep 2 GK, 2 DEF, 2 MID, 2 FWD and 2 extra outfield players for two teams.</DialogDescription></DialogHeader>
-    <div className="sticky top-0 z-10 rounded-xl bg-slate-900 p-3 text-sm font-bold">Keeping {kept.length}/10 · To burn {burned.length} · {['GK','DEF','MID','FWD'].map(p=>`${p}: ${kept.filter(c=>c.position===p).length}`).join(' · ')}</div>
-    <div className="grid gap-3 sm:grid-cols-2">{data.cards.map(card=><KeepCard key={card.id} card={card} kept={selected.includes(card.id)} disabled={mutation.isPending||card.blocked||(!selected.includes(card.id)&&selected.length>=data.cap)} onToggle={()=>setSelected(old=>old.includes(card.id)?old.filter(id=>id!==card.id):[...old,card.id])}/>)}</div>
+  return <Dialog open onOpenChange={()=>{}}><DialogContent onEscapeKeyDown={event=>event.preventDefault()} onPointerDownOutside={event=>event.preventDefault()} onInteractOutside={event=>event.preventDefault()} data-common-reduction-dialog className="[&>button.absolute]:hidden z-[160] flex h-[92dvh] max-h-[92dvh] w-[min(96vw,900px)] max-w-4xl flex-col overflow-hidden bg-slate-950 text-white">
+    <DialogHeader className="shrink-0 pr-0"><DialogTitle>Choose your best 10 Common cards to keep</DialogTitle><DialogDescription>Required for GW12: select 10 Common players to KEEP. Other rarities have no 10-card limit. The remaining {data.excess} cards will be permanently burned only after confirmation. Compare previous game points below. Keep 2 GK, 2 DEF, 2 MID, 2 FWD and 2 extra outfield players for two teams.</DialogDescription></DialogHeader>
+    <div data-common-selection-summary className="shrink-0 rounded-xl bg-slate-900 p-3 text-sm font-bold">Keeping {kept.length}/10 · To burn {burned.length} · {['GK','DEF','MID','FWD'].map(p=>`${p}: ${kept.filter(c=>c.position===p).length}`).join(' · ')}</div>
+    <div data-common-reduction-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+    <div className="grid items-start gap-3 sm:grid-cols-2">{data.cards.map(card=><KeepCard key={card.id} card={card} kept={selected.includes(card.id)} disabled={mutation.isPending||card.blocked||(!selected.includes(card.id)&&selected.length>=data.cap)} onToggle={()=>setSelected(old=>old.includes(card.id)?old.filter(id=>id!==card.id):[...old,card.id])}/>)}</div>
     <p className="text-xs text-white/60">Protected cards are automatically kept. The server verifies current Premier League eligibility and two-team structure before burning anything. Points are historical player performance, not a guarantee of future scores.</p>
     {!supportsTwoCommonTeams(kept)&&<p className="text-sm text-amber-200">Your kept players still need the positions for two complete teams.</p>}
     {kept.length===data.cap&&<div className="rounded-xl border border-amber-300/30 p-3 text-sm"><strong>Cards to burn ({burned.length}):</strong> {burned.map(c=>c.name).join(', ')}</div>}
@@ -64,5 +65,6 @@ export default function CommonCollectionManager() {
     {mutation.isError&&<p role="alert" className="text-red-300">{String((mutation.error as Error).message)}</p>}
     <Button disabled={!ready||!confirmed||mutation.isPending} onClick={()=>mutation.mutate()}>{mutation.isPending?'Updating collection…':`Keep selected 10 & burn ${data.excess} other cards`}</Button>
 
+    </div>
   </DialogContent></Dialog>;
 }
