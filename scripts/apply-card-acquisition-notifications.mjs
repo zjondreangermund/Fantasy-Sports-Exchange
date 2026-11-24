@@ -234,7 +234,7 @@ export async function notifyWeeklyCommonRewardWindows() {
     WHERE today >= first_eligible_day
       AND today >= window_start
       AND today < window_end
-      AND common_count < \${DAILY_LOGIN_COMMON_CARD_CAP}
+      AND common_count <= \${DAILY_LOGIN_COMMON_CARD_CAP}
       AND NOT EXISTS (
         SELECT 1
         FROM app.daily_login_rewards dlr

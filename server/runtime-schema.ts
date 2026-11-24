@@ -1,3 +1,4 @@
+import { ensureCommonCollectionCapSchema } from "./services/commonCollectionCapSchema.js";
 import { sql } from "drizzle-orm";
 import { db } from "./db.js";
 import { ensureCompetitionCancellationSchema } from "./services/competitionCancellation.js";
@@ -30,6 +31,7 @@ export async function ensureRuntimeSchema() {
   await ensureForgeOperationSchema();
   await ensureSecurityControlSchema();
   await ensureDailyLoginRewardSchema();
+  await ensureCommonCollectionCapSchema();
 
   // Seeding runs only after this function completes. Canonicalize serials here so
   // legacy duplicate or missing values cannot crash the seed path first.

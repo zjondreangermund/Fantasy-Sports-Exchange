@@ -185,7 +185,7 @@ export default function WeeklyCommonMintDialog() {
           </div>
           <DialogTitle className="flex items-start gap-3 text-2xl font-black">
             <Gift className="mt-0.5 h-7 w-7 shrink-0 text-cyan-300" />
-            {player ? "Your Common card is minted" : "Your weekly card is ready"}
+            {player ? "Your Common card is minted" : status?.capReached ? "Replace a Common with your weekly card?" : "Your weekly card is ready"}
           </DialogTitle>
           <DialogDescription className="text-sm leading-6 text-white/60">
             {player

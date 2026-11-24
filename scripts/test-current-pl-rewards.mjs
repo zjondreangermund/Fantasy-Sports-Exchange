@@ -39,7 +39,7 @@ try{
  const execute=async statement=>{const query=dialect.sqlToQuery(statement);return pg.query(query.sql,query.params);};
  const db={execute,transaction:fn=>pg.transaction(async tx=>fn({execute:statement=>{const query=dialect.sqlToQuery(statement);return tx.query(query.sql,query.params);}}))};globalThis.__mintFixture.db=db;
  const stubs={notifications:'export const ensureNotificationsSchema=async()=>{};export const createNotificationOnce=async()=>true;',db:'export const db=globalThis.__mintFixture.db;',fpl:'export const fplApi={mintBootstrap:async()=>globalThis.__mintFixture.bootstrap()};',directory:`export const apiFootballSeasonNow=()=>globalThis.__mintFixture.season;export const apiFootballPhotoUrl=(id)=>id>0?'https://media.api-sports.io/football/players/'+id+'.png':'';export const loadApiFootballPlayerDirectory=async()=>globalThis.__mintFixture.directory();export const resolveApiFootballPlayer=(p,dir)=>dir.find(x=>x.name.toLowerCase()===p.name.toLowerCase()&&x.team===p.team)||null;`};
- await build({entryPoints:['server/services/currentPremierLeagueMintPool.ts','server/services/dailyLoginReward.ts','server/services/freeCupPrizes.ts','server/services/commonCollectionPolicy.ts'],outdir:temp,outbase:'.',outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm',plugins:[{name:'mint-fixtures',setup(b){for(const [filter,name] of [[/\/notifications\.js$/,'notifications'],[/\/db\.js$/,'db'],[/\/fplApi\.js$/,'fpl'],[/\/apiFootballPlayerDirectory\.js$/,'directory']])b.onResolve({filter},args=>args.importer.includes('node_modules')?undefined:({path:name,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:stubs[a.path],loader:'js'}));}}]});
+ await build({entryPoints:['server/services/currentPremierLeagueMintPool.ts','server/services/dailyLoginReward.ts','server/services/freeCupPrizes.ts','server/services/commonCollectionPolicy.ts','server/services/commonCollectionCapSchema.ts','server/services/commonEntryPolicy.ts'],outdir:temp,outbase:'.',outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm',plugins:[{name:'mint-fixtures',setup(b){for(const [filter,name] of [[/\/notifications\.js$/,'notifications'],[/\/db\.js$/,'db'],[/\/fplApi\.js$/,'fpl'],[/\/apiFootballPlayerDirectory\.js$/,'directory']])b.onResolve({filter},args=>args.importer.includes('node_modules')?undefined:({path:name,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:stubs[a.path],loader:'js'}));}}]});
  const {currentPremierLeagueMintIds}=await import(path.join(temp,'server/services/currentPremierLeagueMintPool.mjs'));const {claimDailyLoginReward}=await import(path.join(temp,'server/services/dailyLoginReward.mjs'));
  assert.deepEqual((await currentPremierLeagueMintIds(db)).sort(),[1,2,3,4]); // Injury does not mean departure.
  let result=await claimDailyLoginReward('weekly');assert(result.claimed);assert([1,2,3,4].includes(result.card.playerId));const issuedId=result.card.id;
@@ -74,6 +74,26 @@ try{
  assert.deepEqual((await pg.query("SELECT id FROM app.player_cards WHERE owner_id='reduce' ORDER BY id")).rows.map(c=>c.id),keepIds);
  assert.equal((await pg.query('SELECT owner_id FROM app.player_cards WHERE id=$1',[reductionCards[0].id])).rows[0].owner_id,null);
  assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,10);
+ // Enforce acquisition limits only for Common; existing excess is not auto-burned.
+ const {ensureCommonCollectionCapSchema}=await import(path.join(temp,'server/services/commonCollectionCapSchema.mjs'));
+ await pg.exec("INSERT INTO app.users VALUES('legacy',now()-interval '30 days')");
+ for(let i=0;i<11;i++)await pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity) VALUES(1,'legacy','common')");
+ await ensureCommonCollectionCapSchema();
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='legacy'")).rows[0].n,11);
+ await assert.rejects(pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity) VALUES(1,'capped','common')"),/limit is 10/);
+ for(let i=0;i<12;i++)await pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity) VALUES(1,'capped','rare')");
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='capped' AND rarity='rare'")).rows[0].n,12);
+ // GW11 remains unchanged; GW12 Common tournaments enforce two entries.
+ await pg.exec("CREATE TABLE app.competition_entries(user_id text,competition_id int); INSERT INTO app.competition_entries VALUES('capped',12),('capped',12)");
+ const {assertCommonEntryPolicy}=await import(path.join(temp,'server/services/commonEntryPolicy.mjs'));
+ await assertCommonEntryPolicy(db,'capped',{id:12,tier:'common',gameWeek:11});
+ await assertCommonEntryPolicy(db,'capped',{id:12,tier:'rare',gameWeek:12});
+ await assert.rejects(assertCommonEntryPolicy(db,'capped',{id:12,tier:'common',gameWeek:12}),/at most two teams/);
+ await assertCommonEntryPolicy(db,'weekly',{id:12,tier:'common',gameWeek:12});
+ await assert.rejects(assertCommonEntryPolicy(db,'legacy',{id:12,tier:'common',gameWeek:12}),/best 10 Common/);
+ await assertCommonEntryPolicy(db,'legacy',{id:12,tier:'rare',gameWeek:12});
+ await pg.exec('DROP TABLE app.competition_entries');
+ console.log('GW12 entry and Common-only acquisition tests passed; 12 Rare cards remain allowed.');
  console.log('Common policy transaction tests passed: cap, ownership, protected cards, same-position rarity and progression, claim replay, two-team sacrifice and rollback.');
  const original=bootstrap;bootstrap=null;
  result=await claimDailyLoginReward('weekly');assert.equal(result.alreadyClaimed,true);assert.equal(result.card.id,issuedId); // Replays do not reroll or need a working roster.
@@ -83,13 +103,28 @@ try{
  const source=await readFile('server/routes/economyIntegrity.routes.ts','utf8');const start=source.indexOf('async function claimFreeCommonCupCard('),end=source.indexOf('\nasync function notifyEntryAdmins',start);
  const fn=ts.transpileModule(source.slice(start,end),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
  const {resolveFreeCupClaimRarity}=await import(path.join(temp,'server/services/freeCupPrizes.mjs'));
- const {sql}=await import('drizzle-orm');const claimPrize=new Function('sql','rowsOf','awardedPrizeCardId','COMMON_COLLECTION_CAP','CARD_SUPPLY_CAP_BY_RARITY','currentPremierLeagueMintIds','createNotificationOnce','ensureCommonCardChoiceSchema','resolveFreeCupClaimRarity',fn+';return claimFreeCommonCupCard;')(sql,r=>r.rows,a=>Number(a.prizeCardId||0),20,{common:1000,rare:100,unique:10,epic:3,legendary:1},currentPremierLeagueMintIds,async()=>{},async()=>{},resolveFreeCupClaimRarity);
+ const {sql}=await import('drizzle-orm');const claimPrize=new Function('sql','rowsOf','awardedPrizeCardId','COMMON_COLLECTION_CAP','CARD_SUPPLY_CAP_BY_RARITY','currentPremierLeagueMintIds','createNotificationOnce','ensureCommonCardChoiceSchema','resolveFreeCupClaimRarity','lockCommonCollection',fn+';return claimFreeCommonCupCard;')(sql,r=>r.rows,a=>Number(a.prizeCardId||0),10,{common:1000,rare:100,unique:10,epic:3,legendary:1},currentPremierLeagueMintIds,async()=>{},async()=>{},resolveFreeCupClaimRarity,(await import(path.join(temp,'server/services/commonCollectionPolicy.mjs'))).lockCommonCollection);
  await pg.exec(`CREATE TABLE app.competitions(id integer PRIMARY KEY,name text,status text,tier text,entry_fee real,prize_key text);
  CREATE TABLE app.competition_entries(id integer PRIMARY KEY,user_id text,rank int,prize_card_id int,competition_id int,tiebreak_meta jsonb);
  CREATE TABLE app.competition_prize_awards(entry_id int,user_id text,prize_category text,status text,metadata jsonb,updated_at timestamptz);
  INSERT INTO app.competitions VALUES(1,'Free cup','completed','common',0,'free-common');
  INSERT INTO app.competition_entries VALUES(1,'prize',1,null,1,'{"settlement":{}}'),(2,'prize',2,null,1,'{"settlement":{}}'),(3,'prize',2,null,1,'{"settlement":{"prizeAward":{"rarity":"rare"}}}'),(4,'prize',3,null,1,'{"settlement":{"prizeAward":{"rarity":"rare"}}}');`);
  for(const entry of [1,2,3,4]){const prize=await db.transaction(tx=>claimPrize(tx,'prize',entry));assert.equal(prize.rarity,entry===2?'common':'rare');assert([1,2,3,4].includes(Number((await pg.query('SELECT player_id FROM app.player_cards WHERE id=$1',[prize.id])).rows[0].player_id)));const replay=await db.transaction(tx=>claimPrize(tx,'prize',entry));assert.equal(replay.id,prize.id);assert(replay.replayed);}
+
+ // A won Common at ten creates a durable choice instead of an eleventh card.
+ await pg.exec("INSERT INTO app.users VALUES('won',now()-interval '30 days'); INSERT INTO app.competition_entries VALUES(6,'won',2,null,1,'{\"settlement\":{}}'); CREATE TABLE app.common_card_reward_choices(id serial PRIMARY KEY,user_id text,competition_entry_id int UNIQUE,status text default 'pending',replacement_card_id int,replaced_card_id int,created_at timestamptz default now(),resolved_at timestamptz)");
+ for(let i=0;i<10;i++)await pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity,level,xp,for_sale) VALUES(5,'won','common',3,42,false)");
+ const wonSource=(await pg.query("SELECT id FROM app.player_cards WHERE owner_id='won' ORDER BY id LIMIT 1")).rows[0].id;
+ const pendingPrize=await db.transaction(tx=>claimPrize(tx,'won',6));assert.equal(pendingPrize.pendingChoice,true);
+ const choiceStart=source.indexOf('async function resolveCommonCardChoice('),choiceEnd=source.indexOf('\nasync function claimFreeCommonCupCard(',choiceStart);
+ const choiceJs=ts.transpileModule(source.slice(choiceStart,choiceEnd),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+ const policy=await import(path.join(temp,'server/services/commonCollectionPolicy.mjs'));
+ const choose=new Function('sql','rowsOf','awardedPrizeCardId','COMMON_COLLECTION_CAP','currentPremierLeagueMintIds','createNotificationOnce','ensureCommonCardChoiceSchema','lockCommonCollection','assertCommonCardsRemovable',choiceJs+';return resolveCommonCardChoice;')(sql,r=>r.rows,a=>Number(a.prizeCardId||0),10,currentPremierLeagueMintIds,async()=>{},async()=>{},policy.lockCommonCollection,policy.assertCommonCardsRemovable);
+ const won=await db.transaction(tx=>choose(tx,'won',pendingPrize.choiceId,'replace',wonSource));assert.equal(won.status,'replaced');
+ const wonCard=(await pg.query('SELECT pc.level,pc.xp,pc.rarity,p.position FROM app.player_cards pc JOIN app.players p ON p.id=pc.player_id WHERE pc.id=$1',[won.card.id])).rows[0];assert.deepEqual(wonCard,{level:3,xp:42,rarity:'common',position:'GK'});
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='won'")).rows[0].n,10);
+ const wonReplay=await db.transaction(tx=>choose(tx,'won',pendingPrize.choiceId,'replace',wonSource));assert.equal(wonReplay.alreadyResolved,true);
+ console.log('Won Common replacement passed: pending choice at ten, same position/rarity/progression, count stays ten and replay does not mint again.');
  bootstrap=null;await pg.exec("INSERT INTO app.competition_entries VALUES(5,'prize',3,null,1,'{\"settlement\":{}}')");await assert.rejects(db.transaction(tx=>claimPrize(tx,'prize',5)),/No card was minted/);assert.equal((await pg.query('SELECT prize_card_id FROM app.competition_entries WHERE id=5')).rows[0].prize_card_id,null);bootstrap=original;
  // Exercise the real PL/pgSQL guard, not a JS approximation, including a transfer
  // arriving after candidate selection and the first grant of unowned inventory.

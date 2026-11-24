@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '../lib/queryClient';
-import { useLocation, useSearch } from 'wouter';
 import type { CardProfileData } from './cards/CardProfileModal';
 import CardPlayerImage from './CardPlayerImage';
 import { useAuth } from '../hooks/use-auth';
@@ -39,12 +38,9 @@ function KeepCard({card,kept,disabled,onToggle}:{card:Card;kept:boolean;disabled
 }
 export default function CommonCollectionManager() {
   const {user}=useAuth();
-  const [location]=useLocation();
-  const search=useSearch();
   const {data}=useQuery<Plan>({queryKey:['/api/common-collection'],enabled:Boolean(user),staleTime:0,refetchInterval:60_000});
   const [selected,setSelected]=React.useState<number[]>([]);
   const [confirmed,setConfirmed]=React.useState(false);
-  const [snoozed,setSnoozed]=React.useState(false);
   const kept=data?.cards.filter(c=>selected.includes(c.id)) || [];
   const burned=data?.cards.filter(c=>!selected.includes(c.id)) || [];
   const protectedKept=burned.every(card=>!card.blocked);
@@ -52,15 +48,13 @@ export default function CommonCollectionManager() {
   const mutation=useMutation({mutationFn:async()=>{
     const response=await apiRequest('POST','/api/common-collection/sacrifice',{keepCardIds:selected});return response.json();
   },onSuccess:async()=>{setSelected([]);setConfirmed(false);await Promise.all(['/api/common-collection','/api/user/cards','/api/rewards/daily-login'].map(key=>queryClient.invalidateQueries({queryKey:[key]})));}});
-  React.useEffect(()=>{setSelected([]);setConfirmed(false);setSnoozed(false);},[user?.id]);
+  React.useEffect(()=>{setSelected([]);setConfirmed(false);},[user?.id]);
   React.useEffect(()=>{setConfirmed(false);},[selected]);
-  React.useEffect(()=>{if(location==='/collection' && new URLSearchParams(search).get('reduceCommons')==='1')setSnoozed(false);},[location,search]);
   // Protected cards are always retained. Users explicitly choose all other keepers.
   React.useEffect(()=>{if(data)setSelected(old=>Array.from(new Set([...old.filter(id=>data.cards.some(c=>c.id===id)),...data.cards.filter(c=>c.blocked).map(c=>c.id)])));},[data]);
-  const inCollection=location==='/collection';
-  if(!user || !data?.excess || snoozed)return null;
-  return <Dialog open onOpenChange={open=>{if(!open&&!mutation.isPending)setSnoozed(true);}}><DialogContent className="z-[160] max-h-[92dvh] w-[min(96vw,900px)] max-w-4xl overflow-y-auto bg-slate-950 text-white">
-    <DialogHeader><DialogTitle>Choose your best 10 Common cards to keep</DialogTitle><DialogDescription>Select 10 players to KEEP. The remaining {data.excess} cards will be permanently burned only after confirmation. Compare previous game points below. Keep 2 GK, 2 DEF, 2 MID, 2 FWD and 2 extra outfield players for two teams.</DialogDescription></DialogHeader>
+  if(!user || !data?.excess)return null;
+  return <Dialog open onOpenChange={()=>{}}><DialogContent onEscapeKeyDown={event=>event.preventDefault()} onPointerDownOutside={event=>event.preventDefault()} onInteractOutside={event=>event.preventDefault()} className="[&>button.absolute]:hidden z-[160] max-h-[92dvh] w-[min(96vw,900px)] max-w-4xl overflow-y-auto bg-slate-950 text-white">
+    <DialogHeader><DialogTitle>Choose your best 10 Common cards to keep</DialogTitle><DialogDescription>Required for GW12: select 10 Common players to KEEP. Other rarities have no 10-card limit. The remaining {data.excess} cards will be permanently burned only after confirmation. Compare previous game points below. Keep 2 GK, 2 DEF, 2 MID, 2 FWD and 2 extra outfield players for two teams.</DialogDescription></DialogHeader>
     <div className="sticky top-0 z-10 rounded-xl bg-slate-900 p-3 text-sm font-bold">Keeping {kept.length}/10 · To burn {burned.length} · {['GK','DEF','MID','FWD'].map(p=>`${p}: ${kept.filter(c=>c.position===p).length}`).join(' · ')}</div>
     <div className="grid gap-3 sm:grid-cols-2">{data.cards.map(card=><KeepCard key={card.id} card={card} kept={selected.includes(card.id)} disabled={mutation.isPending||card.blocked||(!selected.includes(card.id)&&selected.length>=data.cap)} onToggle={()=>setSelected(old=>old.includes(card.id)?old.filter(id=>id!==card.id):[...old,card.id])}/>)}</div>
     <p className="text-xs text-white/60">Protected cards are automatically kept. The server verifies current Premier League eligibility and two-team structure before burning anything. Points are historical player performance, not a guarantee of future scores.</p>
@@ -69,6 +63,6 @@ export default function CommonCollectionManager() {
     <label className="flex gap-2 text-sm"><input type="checkbox" disabled={!ready||mutation.isPending} checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Keep my selected 10 and permanently burn the other {data.excess} Common cards.</label>
     {mutation.isError&&<p role="alert" className="text-red-300">{String((mutation.error as Error).message)}</p>}
     <Button disabled={!ready||!confirmed||mutation.isPending} onClick={()=>mutation.mutate()}>{mutation.isPending?'Updating collection…':`Keep selected 10 & burn ${data.excess} other cards`}</Button>
-    <Button variant="outline" disabled={mutation.isPending} onClick={()=>setSnoozed(true)}>{inCollection?'Review later':'Review later in Collection'}</Button>
+
   </DialogContent></Dialog>;
 }
