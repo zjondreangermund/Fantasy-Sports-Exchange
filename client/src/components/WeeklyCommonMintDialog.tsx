@@ -137,6 +137,8 @@ export default function WeeklyCommonMintDialog() {
     }),
   });
 
+  React.useEffect(()=>{setReplaceCardId(0);},[user?.id,rewardQuery.data?.eligibleFrom]);
+
   if (authLoading || onboardingLoading || !user || onboarding?.completed !== true) return null;
 
   const status = rewardQuery.data;
@@ -160,6 +162,7 @@ export default function WeeklyCommonMintDialog() {
   const dismissPrompt = () => {
     if (revealedCard) { setRevealedCard(null); return; }
     if (!promptKey) return;
+    setReplaceCardId(0);
     setDismissedPromptKey(promptKey);
     try { window.localStorage.setItem(promptKey, "later"); } catch { /* memory-only fallback */ }
   };
@@ -171,7 +174,7 @@ export default function WeeklyCommonMintDialog() {
   const count = Math.max(0, Number(status?.commonCount || 0));
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) dismissPrompt(); }}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen && !claimMutation.isPending) dismissPrompt(); }}>
       <DialogContent
         data-weekly-common-mint-dialog
         className="z-[125] max-h-[92dvh] max-w-lg overflow-y-auto border-cyan-300/30 bg-[#070b16] text-white shadow-2xl"
@@ -216,7 +219,7 @@ export default function WeeklyCommonMintDialog() {
           </div>
         )}
 
-        {!player && status?.capReached && <CommonReplacementSelect value={replaceCardId} onChange={setReplaceCardId} />}
+        {!player && status?.capReached && <><Button type="button" variant="outline" className="w-full" disabled={claimMutation.isPending} onClick={dismissPrompt}>Keep my current squads</Button><CommonReplacementSelect key={promptKey} value={replaceCardId} onChange={setReplaceCardId} disabled={claimMutation.isPending}/><p className="text-xs text-white/55">No card is minted or burned if you keep your squads. This reward remains in Inbox until it expires.</p></>}
 
         {player ? (
           <Button
@@ -226,7 +229,7 @@ export default function WeeklyCommonMintDialog() {
           >
             Continue to Fantasy Arena
           </Button>
-        ) : (
+        ) : (!status?.capReached || Boolean(replaceCardId)) ? (
           <Button
             type="button"
             data-weekly-common-mint-button
@@ -235,11 +238,11 @@ export default function WeeklyCommonMintDialog() {
             className="h-12 w-full bg-cyan-300 text-base font-black text-slate-950 hover:bg-cyan-200"
           >
             <Sparkles className="mr-2 h-5 w-5" />
-            {claimMutation.isPending ? "Minting your random Common…" : "Mint Random Common Card"}
+            {claimMutation.isPending ? "Minting your random Common…" : status?.capReached ? "Replace selected Common & mint" : "Mint Random Common Card"}
           </Button>
-        )}
+        ) : null}
 
-        {!player ? <Button type="button" variant="outline" onClick={dismissPrompt} className="mt-2 h-11 w-full border-white/20 bg-white/5 text-white">Later — remind me in Inbox</Button> : null}
+        {!player ? <Button type="button" variant="outline" disabled={claimMutation.isPending} onClick={dismissPrompt} className="mt-2 h-11 w-full border-white/20 bg-white/5 text-white">Later — remind me in Inbox</Button> : null}
 
         {!player ? (
           <p className="text-center text-[11px] leading-5 text-white/40">The card is created only after you press Mint. No automatic background minting.</p>
