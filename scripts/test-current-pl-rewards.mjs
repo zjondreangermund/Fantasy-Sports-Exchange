@@ -70,7 +70,16 @@ try{
  await assert.rejects(reduceCommonCollection('reduce',reductionCards.slice(0,9).map(c=>c.id),true),/exactly 10/);
  await assert.rejects(reduceCommonCollection('reduce',[issuedId,...reductionCards.slice(1,10).map(c=>c.id)],true),/exactly 10/);
  const keepIds=reductionCards.slice(1).map(c=>c.id);
- await reduceCommonCollection('reduce',keepIds,true);
+ const keepTeams=[[keepIds[0],keepIds[1],keepIds[5],keepIds[7],keepIds[2]],[keepIds[9],keepIds[3],keepIds[6],keepIds[8],keepIds[4]]];
+ await assert.rejects(reduceCommonCollection('reduce',keepIds,true,[keepTeams[0],keepTeams[0]]),/ten different cards/);
+ const wrongSlots=keepTeams.map(team=>[...team]);[wrongSlots[0][0],wrongSlots[0][1]]=[wrongSlots[0][1],wrongSlots[0][0]];
+ await assert.rejects(reduceCommonCollection('reduce',keepIds,true,wrongSlots),/needs GK/);
+ const keeperUtility=keepTeams.map(team=>[...team]);[keeperUtility[1][0],keeperUtility[0][4]]=[keeperUtility[0][4],keeperUtility[1][0]];
+ await assert.rejects(reduceCommonCollection('reduce',keepIds,true,keeperUtility),/needs UTILITY/);
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,11);
+ await reduceCommonCollection('reduce',keepIds,true,keepTeams);
+ const savedTeams=(await pg.query("SELECT meta->'teamCardIds' as teams FROM app.audit_logs WHERE user_id='reduce' AND action='collection.common_limit.sacrificed'")).rows[0].teams;
+ assert.deepEqual(savedTeams,keepTeams);
  assert.deepEqual((await pg.query("SELECT id FROM app.player_cards WHERE owner_id='reduce' ORDER BY id")).rows.map(c=>c.id),keepIds);
  assert.equal((await pg.query('SELECT owner_id FROM app.player_cards WHERE id=$1',[reductionCards[0].id])).rows[0].owner_id,null);
  assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,10);

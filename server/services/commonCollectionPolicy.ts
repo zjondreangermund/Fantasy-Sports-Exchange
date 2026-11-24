@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
-import { COMMON_COLLECTION_CAP, supportsTwoCommonTeams } from '../../shared/common-collection.js';
+import { COMMON_COLLECTION_CAP, supportsTwoCommonTeams, validateCommonKeepTeams } from '../../shared/common-collection.js';
 import { findBlockedCards } from './commonCardProtection.js';
 import { createNotificationOnce, ensureNotificationsSchema } from './notifications.js';
 import { currentPremierLeagueMintIds } from './currentPremierLeagueMintPool.js';
@@ -32,7 +32,7 @@ export async function getCommonCollectionPlan(userId:string) {
     excess:Math.max(0,cards.length-COMMON_COLLECTION_CAP)};
 }
 
-export async function reduceCommonCollection(userId:string,raw:unknown, selectKept = false) {
+export async function reduceCommonCollection(userId:string,raw:unknown, selectKept = false, teamCardIds?: unknown) {
   if(!Array.isArray(raw)||raw.some(id=>!Number.isInteger(id)||id<=0)||new Set(raw).size!==raw.length)
     throw new Error('Select the Common cards you want to sacrifice.');
   const selection=raw as number[];
@@ -48,10 +48,14 @@ export async function reduceCommonCollection(userId:string,raw:unknown, selectKe
     await assertCommonCardsRemovable(tx,userId,ids);
     const eligibleIds=new Set(await currentPremierLeagueMintIds(tx));
     const kept=cards.filter(c=>!ids.includes(Number(c.id))).map(c=>({...c,eligible:eligibleIds.has(Number(c.playerId))}));
+    if(teamCardIds !== undefined) {
+      const teamError = validateCommonKeepTeams(kept, teamCardIds);
+      if(teamError) throw new Error(teamError + ' No cards were sacrificed.');
+    }
     if(!supportsTwoCommonTeams(kept))throw new Error('Keep two GK, two DEF, two MID, two FWD and two extra outfield cards, all current Premier League players, for two teams. No cards were sacrificed.');
     // Retain historical rows and reward references; sacrifice removes ownership.
     await tx.execute(sql`update app.player_cards set owner_id=null,for_sale=false,price=0 where owner_id=${userId} and id=any(${`{${ids.join(',')}}`}::int[])`);
-    await tx.execute(sql`insert into app.audit_logs(user_id,action,meta) values(${userId},'collection.common_limit.sacrificed',${JSON.stringify({cardIds:ids,keptCardIds:kept.map(c=>c.id)})}::jsonb)`);
+    await tx.execute(sql`insert into app.audit_logs(user_id,action,meta) values(${userId},'collection.common_limit.sacrificed',${JSON.stringify({cardIds:ids,keptCardIds:kept.map(c=>c.id),teamCardIds:teamCardIds || null})}::jsonb)`);
     return {sacrificed:ids.length,commonCount:COMMON_COLLECTION_CAP};
   });
 }
