@@ -25,7 +25,7 @@ export function registerDailyLoginRewardRoutes(app: Express) {
     catch(error:any) { return res.status(500).json({message:"Could not load Common collection"}); }
   });
   app.post("/api/common-collection/sacrifice", requireSignedIn, async (req:any,res) => {
-    try { return res.json(await reduceCommonCollection(req.authUserId, req.body?.keepCardIds ?? req.body?.cardIds, req.body?.keepCardIds !== undefined)); }
+    try { return res.json(await reduceCommonCollection(req.authUserId, req.body?.keepCardIds ?? req.body?.cardIds, req.body?.keepCardIds !== undefined, req.body?.teamCardIds)); }
     catch(error:any) { return res.status(409).json({message:error.message}); }
   });
   const runWeeklyRewardNotifications = () => {

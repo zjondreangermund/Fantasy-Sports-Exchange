@@ -10,7 +10,7 @@ function visit(node){
   const parent=node.parent;
   assert(ts.isJsxElement(parent),'Absolute portrait must have a containing element');
   const classes=String(attr(parent.openingElement,'className')).split(/\s+/);
-  for(const token of ['relative','h-20','w-16','shrink-0','overflow-hidden'])assert(classes.includes(token),`Portrait container requires ${token}`);
+  for(const token of ['relative','h-12','w-10','shrink-0','overflow-hidden'])assert(classes.includes(token),`Portrait container requires ${token}`);
  }
  if(ts.isJsxOpeningElement(node)&&attr(node,'data-common-reduction-scroll')){
   scrolls++;const classes=String(attr(node,'className'));
