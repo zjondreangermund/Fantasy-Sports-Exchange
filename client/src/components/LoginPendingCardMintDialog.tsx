@@ -111,7 +111,7 @@ export default function LoginPendingCardMintDialog() {
       }});
     }
     const current=String(weeklyQuery.data?.eligibleFrom || "");
-    if(weeklyQuery.data?.canClaim && !weeklyQuery.data.capReached
+    if(weeklyQuery.data?.canClaim
         && /^\d{4}-\d{2}-\d{2}$/.test(current) && !seen.has(current)){
       eligible.push({token:`weekly:${current}`,note:{
         id:0,title:`Your weekly Common card — ${current}`,

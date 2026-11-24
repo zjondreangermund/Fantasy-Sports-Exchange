@@ -1,3 +1,5 @@
+import CommonCollectionManager from "./components/CommonCollectionManager";
+import WeeklyCommonMintDialog from "./components/WeeklyCommonMintDialog";
 import InteractionActivityTracker from "./components/InteractionActivityTracker";
 import {captureCommunityLink} from "./lib/community-intent";
 import PageActivityTracker from "./components/PageActivityTracker";
@@ -254,7 +256,9 @@ export default function App() {
           <AppErrorBoundary scope="PendingPrizeClaimPopup" optional><PendingPrizeClaimPopup /></AppErrorBoundary>
           <AppErrorBoundary scope="DepartureLoginPrompt" optional><DepartureLoginPrompt /></AppErrorBoundary>
           <AppErrorBoundary scope="LoginPendingCardMintDialog" optional><LoginPendingCardMintDialog /></AppErrorBoundary>
-          <AppErrorBoundary scope="CommonCardRewardChoiceDialog" optional><CommonCardRewardChoiceDialog /></AppErrorBoundary>
+          <AppErrorBoundary scope="CommonCardRewardChoiceDialog" optional><CommonCardRewardChoiceDialog />
+          <WeeklyCommonMintDialog />
+          <CommonCollectionManager /></AppErrorBoundary>
           <AppErrorBoundary scope="GlobalActionToasts" optional><GlobalActionToasts /></AppErrorBoundary>
           <Toaster />
         </TooltipProvider>

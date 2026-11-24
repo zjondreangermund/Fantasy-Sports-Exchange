@@ -1,3 +1,5 @@
+import { assertCommonEntryPolicy } from "../services/commonEntryPolicy.js";
+import { assertCommonCardsRemovable, lockCommonCollection } from "../services/commonCollectionPolicy.js";
 import {currentPremierLeagueMintIds} from "../services/currentPremierLeagueMintPool.js";
 import type { Express } from "express";
 import { sql } from "drizzle-orm";
@@ -35,7 +37,7 @@ const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 const PREMIER_LEAGUE_KEYS = new Set(["premierleague", "englishpremierleague", "epl"]);
 let cardLockGuardPromise: Promise<void> | null = null;
 let prizeAwardSchemaPromise: Promise<void> | null = null;
-const COMMON_COLLECTION_CAP = 20;
+const COMMON_COLLECTION_CAP = 10;
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];
@@ -212,15 +214,19 @@ async function resolveCommonCardChoice(tx:any,userId:string,choiceId:number,acti
     return {status:"forfeited",keptExisting:true};
   }
   if(action!=="replace"||!Number.isInteger(replaceCardId)||replaceCardId<=0)throw new Error("Choose an eligible Common card to replace");
+  await lockCommonCollection(tx,userId);
   const commonCount=Number(rowsOf(await tx.execute(sql`select count(*)::int as count from app.player_cards where owner_id=${userId} and rarity::text='common'`))[0]?.count||0);
+  if(commonCount>COMMON_COLLECTION_CAP)throw new Error("Reduce to 10 Commons in Collection before replacing a won card");
   if(commonCount<COMMON_COLLECTION_CAP)throw new Error("Your collection is below the Common card cap; claim the prize normally");
-  const source=rowsOf(await tx.execute(sql`select id from app.player_cards where id=${replaceCardId} and owner_id=${userId} and rarity::text='common' and for_sale=false for update`))[0];
+  const source=rowsOf(await tx.execute(sql`select pc.id,pc.level,pc.xp,p.position::text as position from app.player_cards pc join app.players p on p.id=pc.player_id where pc.id=${replaceCardId} and pc.owner_id=${userId} and pc.rarity::text='common' and pc.for_sale=false for update of pc`))[0];
   if(!source)throw new Error("That Common card cannot be replaced");
+  await assertCommonCardsRemovable(tx,userId,[replaceCardId]);
   const mintEligiblePlayerIds=await currentPremierLeagueMintIds(tx);
   const candidate=rowsOf(await tx.execute(sql`
     select p.id as "playerId",p.name as "playerName",p.team as "playerTeam" from app.players p
     where regexp_replace(lower(coalesce(p.league,'')), '[^a-z0-9]+', '', 'g') in ('premierleague','englishpremierleague','epl')
       and p.id=any(${`{${mintEligiblePlayerIds.join(",")}}`}::int[])
+      and p.position::text=${String(source.position)}
       and coalesce(p.fpl_id,0)>0 and lower(coalesce(p.status,'')) not in ('departed','superseded','unlinked','archived')
       and not exists(select 1 from app.player_cards owned where owned.owner_id=${userId} and owned.player_id=p.id and owned.rarity::text='common')
       and (select count(*) from app.player_cards supply where supply.player_id=p.id and supply.rarity::text='common')<1000
@@ -237,7 +243,7 @@ async function resolveCommonCardChoice(tx:any,userId:string,choiceId:number,acti
   const serialId=`${initials}-C-${playerId}-${String(nextSerial).padStart(4,"0")}`;
   const card=rowsOf(await tx.execute(sql`
     insert into app.player_cards (player_id,owner_id,rarity,serial_id,serial_number,max_supply,level,xp,decisive_score,last_5_scores,for_sale,price,acquired_at)
-    values (${playerId},${userId},'common',${serialId},${nextSerial},1000,1,0,35,'[0,0,0,0,0]'::jsonb,false,0,now()) returning id,rarity::text as rarity
+    values (${playerId},${userId},'common',${serialId},${nextSerial},1000,${Number(source.level||1)},${Number(source.xp||0)},35,'[0,0,0,0,0]'::jsonb,false,0,now()) returning id,rarity::text as rarity
   `))[0];
   const entryId=Number(choice.entryId);
   await tx.execute(sql`update app.competition_entries set prize_card_id=${Number(card.id)} where id=${entryId} and prize_card_id is null`);
@@ -298,6 +304,7 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
   const rarity = resolveFreeCupClaimRarity(rank, recordedRarity);
   const maxSupply = CARD_SUPPLY_CAP_BY_RARITY[rarity as keyof typeof CARD_SUPPLY_CAP_BY_RARITY];
   if(rarity==="common"){
+    await lockCommonCollection(tx,userId);
     const commonCount=Number(rowsOf(await tx.execute(sql`select count(*)::int as count from app.player_cards where owner_id=${userId} and rarity::text='common'`))[0]?.count||0);
     if(commonCount>=COMMON_COLLECTION_CAP){
       await ensureCommonCardChoiceSchema(tx);
@@ -460,6 +467,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         if (String(competition.status) !== "open") throw new Error("Tournament is not open for entries");
         if (req.body?.assistantExpectedEntryFee != null && Number(req.body.assistantExpectedEntryFee) !== Number(competition.entryFee)) throw new Error("Entry fee changed; prepare a new team preview");
         if (Date.now() >= entryDeadline.getTime()) throw new Error("Gameweek entries are closed");
+        await assertCommonEntryPolicy(tx,userId,competition);
 
         await tx.execute(sql`
           select pg_advisory_xact_lock(87421, selected.card_id)

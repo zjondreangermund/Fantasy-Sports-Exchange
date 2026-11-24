@@ -1,9 +1,11 @@
+import { COMMON_COLLECTION_CAP } from "../../shared/common-collection.js";
+import { lockCommonCollection, loadCommonCollection, assertCommonCardsRemovable, notifyCommonLimitChange } from "./commonCollectionPolicy.js";
 import {currentPremierLeagueMintIds} from "./currentPremierLeagueMintPool.js";
 import { apiFootballPhotoUrl, loadApiFootballPlayerDirectory, resolveApiFootballPlayer } from "./apiFootballPlayerDirectory.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 
-export const DAILY_LOGIN_COMMON_CARD_CAP = 20;
+export const DAILY_LOGIN_COMMON_CARD_CAP = COMMON_COLLECTION_CAP;
 export const WEEKLY_COMMON_REWARD_INTERVAL_DAYS = 7;
 
 function rowsOf(result: any): any[] {
@@ -48,7 +50,7 @@ function commonRewardTargetTeams(commonCountAfterReward: number): number {
   // Balance toward the next five-card milestone immediately. Starting from the
   // Starter 5, this gives each 5-card block enough rewards to fill all four
   // mandatory positions before 10, 15 and 20 Common cards are reached.
-  return Math.min(4, Math.max(1, Math.ceil(Math.max(1, commonCountAfterReward) / 5)));
+  return Math.min(2, Math.max(1, Math.ceil(Math.max(1, commonCountAfterReward) / 5)));
 }
 
 function commonRewardPositionPriority(
@@ -265,7 +267,7 @@ export async function getDailyLoginRewardStatus(userId: string) {
   const capReached = commonCount >= DAILY_LOGIN_COMMON_CARD_CAP;
   const rewardDay = String(row.rewardDay || "");
   const claimedToday = Boolean(eligibility.lastRewardDay && eligibility.lastRewardDay === rewardDay);
-  const canClaim = eligibility.eligibleForWeeklyReward && !capReached;
+  const canClaim = eligibility.eligibleForWeeklyReward && commonCount <= DAILY_LOGIN_COMMON_CARD_CAP;
   return {
     cap: DAILY_LOGIN_COMMON_CARD_CAP,
     cadenceDays: WEEKLY_COMMON_REWARD_INTERVAL_DAYS,
@@ -290,9 +292,16 @@ export async function getDailyLoginRewardStatus(userId: string) {
 
 export async function claimDailyLoginReward(userId: string) {
   await ensureDailyLoginRewardSchema();
+  return claimWeeklyCommonReward(userId);
+}
+
+export async function claimWeeklyCommonReward(userId: string, replaceCardId?: number) {
+  await ensureDailyLoginRewardSchema();
 
   return await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`weekly-common:${userId}`}))`);
+
+    await lockCommonCollection(tx, userId);
 
     const dayRow = rowsOf(await tx.execute(sql`
       SELECT to_char((now() AT TIME ZONE 'Africa/Windhoek')::date, 'YYYY-MM-DD') AS "rewardDay"
@@ -362,7 +371,7 @@ export async function claimDailyLoginReward(userId: string) {
       };
     }
 
-    if (commonCount >= DAILY_LOGIN_COMMON_CARD_CAP) {
+    if (commonCount > DAILY_LOGIN_COMMON_CARD_CAP || (commonCount === DAILY_LOGIN_COMMON_CARD_CAP && !replaceCardId)) {
       return {
         claimed: false,
         alreadyClaimed: false,
@@ -386,10 +395,18 @@ export async function claimDailyLoginReward(userId: string) {
       };
     }
 
+    let source: any = null;
+    if (replaceCardId !== undefined) {
+      if (!Number.isInteger(replaceCardId) || replaceCardId <= 0 || commonCount !== DAILY_LOGIN_COMMON_CARD_CAP)
+        throw new Error("Select a Common replacement only when your collection has 10 cards.");
+      source = (await loadCommonCollection(tx, userId)).find(card => Number(card.id) === replaceCardId && !card.forSale);
+      if (!source) throw new Error("Choose one of your unlisted Common cards.");
+      await assertCommonCardsRemovable(tx, userId, [replaceCardId]);
+    }
     const mintEligiblePlayerIds = await currentPremierLeagueMintIds(tx);
     const positionCountsBefore = await loadCommonPositionCounts(tx, userId);
-    const commonCountAfterReward = commonCount + 1;
-    const positionPriority = commonRewardPositionPriority(positionCountsBefore, commonCountAfterReward);
+    const commonCountAfterReward = commonCount + (source ? 0 : 1);
+    const positionPriority = source ? [source.position as CommonTournamentPosition] : commonRewardPositionPriority(positionCountsBefore, commonCountAfterReward);
 
     let player: any = null;
 
@@ -399,7 +416,7 @@ export async function claimDailyLoginReward(userId: string) {
     // identity rather than issuing a surplus position that cannot form a team.
     for (const position of positionPriority) {
       player = await findWeeklyCommonPlayerForPosition(tx, userId, position, true, mintEligiblePlayerIds);
-      if (!player) player = await findWeeklyCommonPlayerForPosition(tx, userId, position, false, mintEligiblePlayerIds);
+      if (!player && !source) player = await findWeeklyCommonPlayerForPosition(tx, userId, position, false, mintEligiblePlayerIds);
       if (player) break;
     }
 
@@ -407,9 +424,12 @@ export async function claimDailyLoginReward(userId: string) {
       throw new Error("No eligible Premier League GK/DEF/MID/FWD player is available for the weekly Common reward");
     }
 
+    if (source) {
+      await tx.execute(sql`UPDATE app.player_cards SET owner_id=null,for_sale=false,price=0 WHERE id=${replaceCardId!} AND owner_id=${userId}`);
+    }
     const card = rowsOf(await tx.execute(sql`
       INSERT INTO app.player_cards (player_id, owner_id, rarity, level, xp, decisive_score, for_sale, price)
-      VALUES (${Number(player.id)}, ${userId}, 'common', 1, 0, 35, false, 0)
+      VALUES (${Number(player.id)}, ${userId}, 'common', ${source ? Number(source.level || 1) : 1}, ${source ? Number(source.xp || 0) : 0}, 35, false, 0)
       RETURNING id
     `))[0];
     if (!card?.id) throw new Error("Weekly reward card could not be created");
@@ -434,11 +454,11 @@ export async function claimDailyLoginReward(userId: string) {
       VALUES (
         ${userId},
         'reward.weekly_common.claimed',
-        ${JSON.stringify({ rewardDay, cardId: Number(card.id), playerId: Number(player.id), commonCountAfter: commonCount + 1, cap: DAILY_LOGIN_COMMON_CARD_CAP, cadenceDays: WEEKLY_COMMON_REWARD_INTERVAL_DAYS })}::jsonb
+        ${JSON.stringify({ rewardDay, cardId: Number(card.id), playerId: Number(player.id), replacedCardId: source?.id || null, commonCountAfter: commonCountAfterReward, cap: DAILY_LOGIN_COMMON_CARD_CAP, cadenceDays: WEEKLY_COMMON_REWARD_INTERVAL_DAYS })}::jsonb
       )
     `);
 
-    const commonCountAfter = commonCount + 1;
+    const commonCountAfter = commonCountAfterReward;
     const nextEligibility = await weeklyEligibility(tx, userId);
     return {
       claimed: true,
