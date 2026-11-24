@@ -1,3 +1,4 @@
+import { commonCollectionPortraitCard } from "../lib/common-collection-portrait";
 import { useLocation, useSearch } from "wouter";
 import * as React from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -29,7 +30,7 @@ function PlayerRow({card,assignment,disabled,onSelect}:{card:Card;assignment:str
     (b.gameweek-a.gameweek) || String(b.kickoffTime||'').localeCompare(String(a.kickoffTime||''))).slice(0,3) : [];
   return <button type="button" data-common-player-row aria-pressed={Boolean(assignment)} disabled={disabled} onClick={onSelect}
     className={`flex w-full items-center gap-2 border-b px-2 py-2 text-left disabled:opacity-50 ${assignment?'border-emerald-300/20 bg-emerald-400/10':'border-white/10 hover:bg-white/5'}`}>
-    <span data-common-card-portrait className="relative block h-12 w-10 shrink-0 overflow-hidden rounded-md"><CardPlayerImage card={{id:card.id,player:{name:card.name,imageUrl:card.imageUrl}} as any} alt={card.name} className="h-full w-full object-contain"/></span>
+    <span data-common-card-portrait className="relative block h-12 w-10 shrink-0 overflow-hidden rounded-md"><CardPlayerImage card={commonCollectionPortraitCard(card,data) as any} alt={card.name} className="h-full w-full object-contain"/></span>
     <span className="min-w-0 flex-1">
       <strong className="block truncate text-sm">{card.name}</strong>
       <span className="block truncate text-[10px] text-white/55">{card.team} · {card.position} · Lv {card.level}{card.blocked?' · Protected':''}</span>
