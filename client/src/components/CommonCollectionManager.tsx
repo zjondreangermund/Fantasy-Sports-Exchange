@@ -1,3 +1,4 @@
+import { useLocation, useSearch } from "wouter";
 import * as React from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '../lib/queryClient';
@@ -40,6 +41,9 @@ function PlayerRow({card,assignment,disabled,onSelect}:{card:Card;assignment:str
 const emptyTeams = ():number[][] => [Array(5).fill(0),Array(5).fill(0)];
 export default function CommonCollectionManager() {
   const {user}=useAuth();
+  const [location,navigate]=useLocation();
+  const searchParams=useSearch();
+  const manualReduction=location==='/collection' && new URLSearchParams(searchParams).get('reduceCommons')==='1';
   // Scope the role check to this account so a cached admin result cannot
   // suppress a regular user's mandatory reduction after switching accounts.
   const adminCheck=useQuery<{isAdmin:boolean}>({
@@ -71,7 +75,7 @@ export default function CommonCollectionManager() {
   // Nothing is preselected, including protected cards. Refetches never choose for the user.
   React.useEffect(()=>{setTeams(emptyTeams());setActiveTeam(0);setActiveSlot(0);setSearch('');setConfirmed(false);},[user?.id,Boolean(data?.excess)]);
   React.useEffect(()=>{setConfirmed(false);},[teams]);
-  if(!user || adminCheck.isPending || adminCheck.data?.isAdmin === true || !data?.excess)return null;
+  if(!user || adminCheck.isPending || (adminCheck.data?.isAdmin === true && !manualReduction) || !data?.excess)return null;
   const activeId=teams[activeTeam][activeSlot];
   const activePosition=COMMON_KEEP_SLOTS[activeSlot];
   const candidates=data.cards.filter(card=>commonKeepSlotAccepts(activePosition,card.position)
@@ -89,6 +93,7 @@ export default function CommonCollectionManager() {
     }
   };
   return <Dialog open onOpenChange={()=>{}}><DialogContent onEscapeKeyDown={event=>event.preventDefault()} onPointerDownOutside={event=>event.preventDefault()} onInteractOutside={event=>event.preventDefault()} data-common-reduction-dialog className="[&>button.absolute]:hidden z-[160] flex h-[92dvh] max-h-[92dvh] w-[min(96vw,900px)] max-w-4xl flex-col gap-2 overflow-hidden bg-slate-950 p-3 text-white">
+    {adminCheck.data?.isAdmin===true && <button type="button" disabled={mutation.isPending} onClick={()=>navigate('/admin')} className="shrink-0 text-left text-xs text-cyan-200">Back to Admin — manage protected entries</button>}
     <DialogHeader className="shrink-0 pr-0"><DialogTitle>Choose two Common teams to keep</DialogTitle><DialogDescription className="text-xs">Start with empty teams. Choose GK, DEF, MID, FWD and an outfield Utility for each. Your other {data.excess} Common cards will be burned after confirmation.</DialogDescription></DialogHeader>
     <div data-common-selection-summary className="shrink-0 space-y-2">
       <div className="flex items-center gap-2">{[0,1].map(team=><button type="button" key={team} disabled={mutation.isPending} onClick={()=>{setActiveTeam(team);setActiveSlot(Math.max(0,teams[team].findIndex(id=>!id)));setSearch('');}} className={`flex-1 rounded-lg border p-2 text-xs font-bold ${activeTeam===team?'border-cyan-300 bg-cyan-300/15':'border-white/15'}`}>Team {team+1} · {teams[team].filter(Boolean).length}/5</button>)}<span className="text-xs">{selected.length}/10</span></div>

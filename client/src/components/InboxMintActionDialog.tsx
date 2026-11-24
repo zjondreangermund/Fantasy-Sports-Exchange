@@ -1,3 +1,4 @@
+import { useLocation } from "wouter";
 import { CommonReplacementSelect } from "./CommonCollectionManager";
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -86,6 +87,7 @@ export default function InboxMintActionDialog({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const [,navigate]=useLocation();
   const key = String(note.dedupeKey || "");
   const requestedWeek = readWindow(note);
   const isReplacement = REPLACEMENT_KEY.test(key) && Number(note.replacementClaimId || 0) > 0;
@@ -101,9 +103,14 @@ export default function InboxMintActionDialog({
   const activeWeek = summary ? chosenWeek : requestedWeek;
   const isCurrent = Boolean(activeWeek && activeWeek === weekly?.eligibleFrom);
   const isRecoverable = Boolean(activeWeek && weeks.includes(activeWeek));
-  const collectionFull = Boolean(recovery?.capReached || weekly?.capReached);
-  const canMintCurrent = Boolean(isCurrent && weekly?.canClaim && (!collectionFull || Boolean(replaceCardId)));
-  const canRecover = Boolean(isRecoverable && !collectionFull);
+  const rewardStatus=isRecoverable?recovery:weekly;
+  const commonCount=Number(rewardStatus?.commonCount ?? weekly?.commonCount ?? recovery?.commonCount ?? 0);
+  const commonCap=Number(rewardStatus?.cap || 10);
+  const collectionFull=commonCount>=commonCap;
+  const collectionOverCap=commonCount>commonCap;
+  const replacementAvailable=commonCount===commonCap && (isCurrent||isRecoverable);
+  const canMintCurrent=Boolean(isCurrent && weekly?.canClaim && !collectionOverCap && (!collectionFull||replaceCardId));
+  const canRecover=Boolean(isRecoverable && !collectionOverCap && (!collectionFull||replaceCardId));
 
   const replacementQuery = useQuery<ReplacementData>({
     queryKey:["/api/player-replacements"],
@@ -132,7 +139,7 @@ export default function InboxMintActionDialog({
       if(!activeWeek)throw new Error("Select the weekly reward you want to mint.");
       if(canRecover){
         return {mode:"recovery" as const,response:await postJson(
-          `/api/rewards/november-recovery/${encodeURIComponent(activeWeek)}/claim`)};
+          `/api/rewards/november-recovery/${encodeURIComponent(activeWeek)}/claim`,{replaceCardId:collectionFull?replaceCardId:undefined})};
       }
       if(canMintCurrent){
         // The weekly API also verifies the current signup-anchored window, the
@@ -144,6 +151,7 @@ export default function InboxMintActionDialog({
     onSuccess:async ({mode,response})=>{
       await Promise.all([
         queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),
+        queryClient.invalidateQueries({queryKey:["/api/common-collection"]}),
         queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
         queryClient.invalidateQueries({queryKey:["/api/rewards/daily-login"]}),
         queryClient.invalidateQueries({queryKey:["/api/rewards/november-recovery"]}),
@@ -174,6 +182,7 @@ export default function InboxMintActionDialog({
         queryClient.invalidateQueries({queryKey:["/api/notifications"]}),
         queryClient.invalidateQueries({queryKey:["/api/player-replacements"]}),
         queryClient.invalidateQueries({queryKey:["/api/user/cards"]}),
+        queryClient.invalidateQueries({queryKey:["/api/common-collection"]}),
       ]);
       setFailure("");
       setReveal({name:String(replacement?.sourcePlayerName||note.replacementSourcePlayerName||"Original player"),kept:true});
@@ -201,7 +210,7 @@ export default function InboxMintActionDialog({
               {isReplacement ? rarity+" replacement" : "Weekly Common"}
             </Badge>
             {!isReplacement && <Badge className="bg-white/10 text-white/70">
-              {Number(weekly?.commonCount || recovery?.commonCount || 0)}/{Number(weekly?.cap || recovery?.cap || 10)} Common
+              {commonCount}/{commonCap} Common
             </Badge>}
           </div>
           <DialogTitle className="flex items-start gap-2 text-xl font-black">
@@ -261,12 +270,13 @@ export default function InboxMintActionDialog({
                    matchingCurrentWeek && weekly?.claimedThisWeek ? "You have already claimed this week's card." :
                    "This specific reward window is already claimed, expired without recovery eligibility, or not currently available."}
                 </p>
-                {blocked && <p className="mt-3 text-sm text-amber-200">Your Common collection is full. Select a card to replace for the current weekly reward. Collections above 10 must first be reduced in Collection. No claim has been lost.</p>}
-                {isCurrent && collectionFull && <CommonReplacementSelect value={replaceCardId} onChange={setReplaceCardId} />}
+                {blocked && <p className="mt-3 text-sm text-amber-200">{collectionOverCap?`You have ${commonCount} Common cards. Choose your ${commonCap} to keep first, then return to mint this reward. Your claim remains reserved.`:'Choose one eligible Common below to replace with a random player of the same position and rarity, retaining its level and XP.'}</p>}
+                {collectionOverCap && <Button className="mt-3 w-full" disabled={busy} onClick={()=>{onClose();navigate('/collection?reduceCommons=1');}}>Choose my 10 Common cards</Button>}
+                {replacementAvailable && <CommonReplacementSelect value={replaceCardId} onChange={setReplaceCardId} />}
                 <Button data-inbox-mint-confirm className="mt-4 w-full bg-cyan-300 font-bold text-slate-950 hover:bg-cyan-200"
                   disabled={busy || (!canMintCurrent && !canRecover)}
                   onClick={()=>mint.mutate()}>
-                  {busy?"Minting...":"Mint Random Common Card"}
+                  {busy?"Minting...":replacementAvailable?"Replace selected Common & mint":"Mint Random Common Card"}
                 </Button>
                 {summary && chosenWeek && <Button variant="ghost" className="mt-2 w-full" disabled={busy} onClick={()=>setChosenWeek(null)}>Choose another missed week</Button>}
               </div>

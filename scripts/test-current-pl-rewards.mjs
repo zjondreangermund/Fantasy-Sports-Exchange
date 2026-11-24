@@ -39,7 +39,7 @@ try{
  const execute=async statement=>{const query=dialect.sqlToQuery(statement);return pg.query(query.sql,query.params);};
  const db={execute,transaction:fn=>pg.transaction(async tx=>fn({execute:statement=>{const query=dialect.sqlToQuery(statement);return tx.query(query.sql,query.params);}}))};globalThis.__mintFixture.db=db;
  const stubs={notifications:'export const ensureNotificationsSchema=async()=>{};export const createNotificationOnce=async()=>true;',db:'export const db=globalThis.__mintFixture.db;',fpl:'export const fplApi={mintBootstrap:async()=>globalThis.__mintFixture.bootstrap()};',directory:`export const apiFootballSeasonNow=()=>globalThis.__mintFixture.season;export const apiFootballPhotoUrl=(id)=>id>0?'https://media.api-sports.io/football/players/'+id+'.png':'';export const loadApiFootballPlayerDirectory=async()=>globalThis.__mintFixture.directory();export const resolveApiFootballPlayer=(p,dir)=>dir.find(x=>x.name.toLowerCase()===p.name.toLowerCase()&&x.team===p.team)||null;`};
- await build({entryPoints:['server/services/currentPremierLeagueMintPool.ts','server/services/dailyLoginReward.ts','server/services/freeCupPrizes.ts','server/services/commonCollectionPolicy.ts','server/services/commonCollectionCapSchema.ts','server/services/commonEntryPolicy.ts'],outdir:temp,outbase:'.',outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm',plugins:[{name:'mint-fixtures',setup(b){for(const [filter,name] of [[/\/notifications\.js$/,'notifications'],[/\/db\.js$/,'db'],[/\/fplApi\.js$/,'fpl'],[/\/apiFootballPlayerDirectory\.js$/,'directory']])b.onResolve({filter},args=>args.importer.includes('node_modules')?undefined:({path:name,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:stubs[a.path],loader:'js'}));}}]});
+ await build({entryPoints:['server/services/currentPremierLeagueMintPool.ts','server/services/dailyLoginReward.ts','server/services/freeCupPrizes.ts','server/services/commonCollectionPolicy.ts','server/services/commonCollectionCapSchema.ts','server/services/commonEntryPolicy.ts','server/services/weeklyRewardOutageRecovery.ts'],outdir:temp,outbase:'.',outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm',plugins:[{name:'mint-fixtures',setup(b){for(const [filter,name] of [[/\/notifications\.js$/,'notifications'],[/\/db\.js$/,'db'],[/\/fplApi\.js$/,'fpl'],[/\/apiFootballPlayerDirectory\.js$/,'directory']])b.onResolve({filter},args=>args.importer.includes('node_modules')?undefined:({path:name,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:stubs[a.path],loader:'js'}));}}]});
  const {currentPremierLeagueMintIds}=await import(path.join(temp,'server/services/currentPremierLeagueMintPool.mjs'));const {claimDailyLoginReward}=await import(path.join(temp,'server/services/dailyLoginReward.mjs'));
  assert.deepEqual((await currentPremierLeagueMintIds(db)).sort(),[1,2,3,4]); // Injury does not mean departure.
  let result=await claimDailyLoginReward('weekly');assert(result.claimed);assert([1,2,3,4].includes(result.card.playerId));const issuedId=result.card.id;
@@ -83,6 +83,31 @@ try{
  assert.deepEqual((await pg.query("SELECT id FROM app.player_cards WHERE owner_id='reduce' ORDER BY id")).rows.map(c=>c.id),keepIds);
  assert.equal((await pg.query('SELECT owner_id FROM app.player_cards WHERE id=$1',[reductionCards[0].id])).rows[0].owner_id,null);
  assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,10);
+ // Expired November rewards offer the same opt-in replacement at ten.
+ await pg.exec("ALTER TABLE app.users ADD COLUMN is_banned boolean default false; INSERT INTO app.users VALUES('recovery',now()-interval '30 days',false)");
+ for(let i=0;i<11;i++)await pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity,level,xp,for_sale) VALUES(5,'recovery','common',6,250,false)");
+ const {getOutageRecoveryStatus,claimOutageWeeklyCard}=await import(path.join(temp,'server/services/weeklyRewardOutageRecovery.mjs'));
+ const recoveryStatus=await getOutageRecoveryStatus('recovery');assert(recoveryStatus.pendingWindows.length>0);
+ const recoveryWindow=recoveryStatus.pendingWindows[0];
+ await assert.rejects(claimOutageWeeklyCard('recovery',recoveryWindow),/Choose your 10/);
+ const recoverySources=(await pg.query("SELECT id FROM app.player_cards WHERE owner_id='recovery' ORDER BY id")).rows.map(c=>c.id);
+ await pg.query('UPDATE app.player_cards SET owner_id=null WHERE id=$1',[recoverySources[10]]);
+ await assert.rejects(claimOutageWeeklyCard('recovery',recoveryWindow),/Select a Common card/);
+ await assert.rejects(claimOutageWeeklyCard('recovery',recoveryWindow,issuedId),/unlisted Common/);
+ await pg.query('INSERT INTO app.card_locks VALUES($1,null)',[recoverySources[0]]);
+ await assert.rejects(claimOutageWeeklyCard('recovery',recoveryWindow,recoverySources[0]),/protected use/);
+ await pg.exec('DELETE FROM app.card_locks');
+ const recoveryRoster=bootstrap;bootstrap=null;
+ await assert.rejects(claimOutageWeeklyCard('recovery',recoveryWindow,recoverySources[0]),/No card was minted/);bootstrap=recoveryRoster;
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.weekly_reward_recovery WHERE user_id='recovery'")).rows[0].n,0);
+ assert.equal((await pg.query('SELECT owner_id FROM app.player_cards WHERE id=$1',[recoverySources[0]])).rows[0].owner_id,'recovery');
+ const recovered=await claimOutageWeeklyCard('recovery',recoveryWindow,recoverySources[0]);assert.equal(recovered.claimed,true);
+ const recoveredCard=(await pg.query('SELECT pc.rarity,pc.level,pc.xp,p.position FROM app.player_cards pc JOIN app.players p ON p.id=pc.player_id WHERE pc.id=$1',[recovered.cardId])).rows[0];
+ assert.deepEqual(recoveredCard,{rarity:'common',level:6,xp:250,position:'GK'});
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='recovery'")).rows[0].n,10);
+ const recoveredAgain=await claimOutageWeeklyCard('recovery',recoveryWindow,recoverySources[1]);assert.equal(recoveredAgain.alreadyClaimed,true);assert.equal(recoveredAgain.cardId,recovered.cardId);
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.daily_login_rewards WHERE user_id='recovery'")).rows[0].n,0);
+ console.log('Missed weekly replacement tests passed: above-cap guidance, explicit selection, owned/unprotected card, rollback, same position/rarity/progression, cap ten and exact-window replay.');
  // Enforce acquisition limits only for Common; existing excess is not auto-burned.
  const {ensureCommonCollectionCapSchema}=await import(path.join(temp,'server/services/commonCollectionCapSchema.mjs'));
  await pg.exec("INSERT INTO app.users VALUES('legacy',now()-interval '30 days')");
