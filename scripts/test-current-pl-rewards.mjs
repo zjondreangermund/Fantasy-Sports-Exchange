@@ -67,7 +67,12 @@ try{
  await assert.rejects(reduceCommonCollection('reduce',[reductionCards.find(c=>c.player_id===3).id]),/Keep two GK/);
  assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,11);
  await assert.rejects(reduceCommonCollection('reduce',[issuedId]),/Only your/);
- await reduceCommonCollection('reduce',[reductionCards[0].id]);
+ await assert.rejects(reduceCommonCollection('reduce',reductionCards.slice(0,9).map(c=>c.id),true),/exactly 10/);
+ await assert.rejects(reduceCommonCollection('reduce',[issuedId,...reductionCards.slice(1,10).map(c=>c.id)],true),/exactly 10/);
+ const keepIds=reductionCards.slice(1).map(c=>c.id);
+ await reduceCommonCollection('reduce',keepIds,true);
+ assert.deepEqual((await pg.query("SELECT id FROM app.player_cards WHERE owner_id='reduce' ORDER BY id")).rows.map(c=>c.id),keepIds);
+ assert.equal((await pg.query('SELECT owner_id FROM app.player_cards WHERE id=$1',[reductionCards[0].id])).rows[0].owner_id,null);
  assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,10);
  console.log('Common policy transaction tests passed: cap, ownership, protected cards, same-position rarity and progression, claim replay, two-team sacrifice and rollback.');
  const original=bootstrap;bootstrap=null;

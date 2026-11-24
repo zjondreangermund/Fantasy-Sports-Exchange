@@ -183,6 +183,7 @@ export async function disableNativePushSubscription(userId: string, tokenValue: 
 
 function notificationUrl(dedupeKey: unknown, notificationId?: unknown): string {
   const key = String(dedupeKey || "");
+  if (key.startsWith("collection:common-limit-10:")) return "/collection?reduceCommons=1";
   if (key === "digest") return "/account?tab=inbox";
   if (/^gameweek:(?:\d+:)?\d+:entries-open$/.test(key)) return "/competitions";
   if (/^gameweek:2026-27:10:international-break$/.test(key)) return "/competitions";

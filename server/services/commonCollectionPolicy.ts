@@ -14,7 +14,7 @@ export async function lockCommonCollection(tx:any,userId:string) {
 export async function loadCommonCollection(tx:any,userId:string) {
   return rowsOf(await tx.execute(sql`
     select pc.id,pc.player_id as "playerId",pc.level,pc.xp,pc.for_sale as "forSale",
-      p.name,p.position::text as position,p.team,p.overall,p.status
+      p.name,p.position::text as position,p.team,p.overall,p.status,p.image_url as "imageUrl"
     from app.player_cards pc join app.players p on p.id=pc.player_id
     where pc.owner_id=${userId} and pc.rarity::text='common' order by pc.id
   `));
@@ -32,14 +32,17 @@ export async function getCommonCollectionPlan(userId:string) {
     excess:Math.max(0,cards.length-COMMON_COLLECTION_CAP)};
 }
 
-export async function reduceCommonCollection(userId:string,raw:unknown) {
+export async function reduceCommonCollection(userId:string,raw:unknown, selectKept = false) {
   if(!Array.isArray(raw)||raw.some(id=>!Number.isInteger(id)||id<=0)||new Set(raw).size!==raw.length)
     throw new Error('Select the Common cards you want to sacrifice.');
-  const ids=raw as number[];
+  const selection=raw as number[];
   return db.transaction(async tx=>{
     await lockCommonCollection(tx,userId);
     const cards=await loadCommonCollection(tx,userId);
     if(cards.length<=COMMON_COLLECTION_CAP)throw new Error('Your Common collection is already within the limit.');
+    if(selectKept && (selection.length!==COMMON_COLLECTION_CAP || selection.some(id=>!cards.some(c=>Number(c.id)===id))))
+      throw new Error('Choose exactly 10 of your Common cards to keep.');
+    const ids=selectKept ? cards.filter(c=>!selection.includes(Number(c.id))).map(c=>Number(c.id)) : selection;
     if(ids.length!==cards.length-COMMON_COLLECTION_CAP)throw new Error(`Select exactly ${cards.length-COMMON_COLLECTION_CAP} cards to keep your best 10.`);
     if(ids.some(id=>!cards.some(c=>Number(c.id)===id&&!c.forSale)))throw new Error('Only your unlisted Common cards can be sacrificed.');
     await assertCommonCardsRemovable(tx,userId,ids);
@@ -58,6 +61,6 @@ export async function notifyCommonLimitChange() {
   const users=rowsOf(await db.execute(sql`select owner_id as id from app.player_cards where owner_id is not null and rarity::text='common' group by owner_id having count(*)>${COMMON_COLLECTION_CAP}`));
   for(const user of users)await createNotificationOnce(db,{userId:String(user.id),type:'system',
     title:'Common card limit is changing to 10',
-    message:'The Common card limit is changing to 10 per user. Keep your best players and choose which extra Common cards to sacrifice in Collection. Keep at least 2 GK, 2 DEF, 2 MID, 2 FWD and 2 extra outfield players so you can enter two teams. The app checks your selection before any sacrifice. At the limit, your weekly mint can replace a selected Common with a random Premier League player of the same position and rarity, retaining its level and XP.',
+    message:'The Common card limit is changing to 10 per user. Open this message to choose your best 10 Common cards to keep. Review previous game points on each player card; the remaining cards will be burned only after you confirm. Keep at least 2 GK, 2 DEF, 2 MID, 2 FWD and 2 extra outfield players so you can enter two teams. The app checks your selection before any sacrifice. At the limit, your weekly mint can replace a selected Common with a random Premier League player of the same position and rarity, retaining its level and XP.',
     dedupeKey:'collection:common-limit-10:2026-11:v1'});
 }
