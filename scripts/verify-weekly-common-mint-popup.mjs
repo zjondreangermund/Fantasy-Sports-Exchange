@@ -15,7 +15,7 @@ expect(popup.includes('data-weekly-common-mint-button'), "Weekly Common mint but
 expect(popup.includes('Mint Random Common Card'), "Weekly Common popup needs an explicit mint button");
 expect(popup.includes('POST", "/api/rewards/daily-login/claim"'), "Mint button must call the weekly Common claim endpoint");
 expect(popup.includes('enabled: Boolean(user) && onboarding?.completed === true'), "Weekly Common popup must wait for an authenticated, onboarded user");
-expect(popup.includes('status?.canClaim && !status.capReached'), "Weekly Common popup must open when a reward can be claimed");
+expect(popup.includes('status?.canClaim && status.commonCount <= status.cap'), "Weekly Common popup must open when a reward can be claimed");
 expect(popup.includes('setRevealedCard(result.card)'), "Successful weekly mint must reveal the minted card");
 expect(popup.includes('<CardPlayerImage'), "Minted weekly card must be visually revealed");
 expect(popup.includes("WEEKLY_MINT_POPUP_SNOOZE_V1"), "Weekly mint prompt must be dismissible and not return every minute");

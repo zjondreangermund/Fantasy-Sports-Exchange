@@ -1,3 +1,4 @@
+import { CommonReplacementSelect } from "./CommonCollectionManager";
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Gift, Sparkles } from "lucide-react";
@@ -60,6 +61,7 @@ function expiryLabel(value?: string | null) {
 export default function WeeklyCommonMintDialog() {
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  const [replaceCardId, setReplaceCardId] = React.useState(0);
   const [revealedCard, setRevealedCard] = React.useState<WeeklyRewardCard | null>(null);
   const [dismissedPromptKey, setDismissedPromptKey] = React.useState("");
 
@@ -99,12 +101,13 @@ export default function WeeklyCommonMintDialog() {
 
   const claimMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/rewards/daily-login/claim", {});
+      const response = await apiRequest("POST", "/api/rewards/daily-login/claim", {replaceCardId: rewardQuery.data?.capReached ? replaceCardId : undefined});
       return response.json() as Promise<WeeklyRewardStatus>;
     },
     onSuccess: async (result) => {
       queryClient.setQueryData(WEEKLY_REWARD_KEY, result);
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/common-collection"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/user/cards"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/rewards/daily-login"] }),
@@ -122,7 +125,7 @@ export default function WeeklyCommonMintDialog() {
       toast({
         title: result.capReached ? "Common collection full" : "Weekly card not available",
         description: result.capReached
-          ? `You already have the maximum of ${result.cap || 20} Common cards.`
+          ? `You already have the maximum of ${result.cap || 10} Common cards.`
           : "This weekly Common card could not be minted. Please try again.",
         variant: result.capReached ? "default" : "destructive",
       });
@@ -152,7 +155,7 @@ export default function WeeklyCommonMintDialog() {
   const inboxOpen = typeof window !== "undefined" &&
     window.location.pathname === "/account" &&
     new URLSearchParams(window.location.search).get("tab") === "inbox";
-  const waitingToMint = Boolean(status?.canClaim && !status.capReached && !previouslyDismissed && !tournamentPromptActive && !inboxOpen);
+  const waitingToMint = Boolean(status?.canClaim && status.commonCount <= status.cap && !previouslyDismissed && !tournamentPromptActive && !inboxOpen);
   const open = waitingToMint || Boolean(revealedCard);
   const dismissPrompt = () => {
     if (revealedCard) { setRevealedCard(null); return; }
@@ -164,7 +167,7 @@ export default function WeeklyCommonMintDialog() {
 
   const card = revealedCard;
   const player = card?.player;
-  const cap = Math.max(1, Number(status?.cap || 20));
+  const cap = Math.max(1, Number(status?.cap || 10));
   const count = Math.max(0, Number(status?.commonCount || 0));
 
   return (
@@ -213,6 +216,8 @@ export default function WeeklyCommonMintDialog() {
           </div>
         )}
 
+        {!player && status?.capReached && <CommonReplacementSelect value={replaceCardId} onChange={setReplaceCardId} />}
+
         {player ? (
           <Button
             type="button"
@@ -226,7 +231,7 @@ export default function WeeklyCommonMintDialog() {
             type="button"
             data-weekly-common-mint-button
             onClick={() => claimMutation.mutate()}
-            disabled={claimMutation.isPending || rewardQuery.isFetching}
+            disabled={claimMutation.isPending || rewardQuery.isFetching || Boolean(status?.capReached && !replaceCardId)}
             className="h-12 w-full bg-cyan-300 text-base font-black text-slate-950 hover:bg-cyan-200"
           >
             <Sparkles className="mr-2 h-5 w-5" />

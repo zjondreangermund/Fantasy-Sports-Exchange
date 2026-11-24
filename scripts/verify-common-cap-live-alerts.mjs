@@ -4,13 +4,13 @@ const scoring=fs.readFileSync("server/services/scoreUpdater.ts","utf8");
 const app=fs.readFileSync("client/src/App.tsx","utf8");
 const dialog=fs.readFileSync("client/src/components/CommonCardRewardChoiceDialog.tsx","utf8");
 function need(source,token,label){if(!source.includes(token))throw new Error(label);}
-need(economy,"COMMON_COLLECTION_CAP = 20","Common collection cap must be 20");
+need(economy,"COMMON_COLLECTION_CAP = 10","Common collection cap must be 10");
 need(economy,"common_card_reward_choices","Durable reward choices are missing");
 need(economy,"pg_advisory_xact_lock","Replacement must be concurrency locked");
 need(economy,"owner_id=null","Old ownership must change in the mint transaction");
 need(economy,"No non-duplicate Premier League Common card","Duplicate-player guard is missing");
 need(economy,"/api/common-card-reward-choices/:choiceId","Replacement endpoint is missing");
-need(dialog,"Keep my current 20","Keep option is missing");
+need(dialog,"Keep my current cards","Keep option is missing");
 need(dialog,"Replace selected card","Replace option is missing");
 need(app,"<CommonCardRewardChoiceDialog />","Global replacement choice UI is missing");
 need(scoring,"sendLiveLeaderboardImpactAlerts","Live leaderboard alerts are missing");
@@ -24,4 +24,4 @@ need(scoring,"goal:${metrics.goals}","Goal alerts must be deduplicated by the ac
 need(scoring,"assist:${metrics.assists}","Assist alerts must be deduplicated by the actual scoring event count");
 need(scoring,"save-tier:${Math.floor(metrics.saves/3)}","Save alerts must be deduplicated by the scoring milestone");
 if(scoring.includes("live-impact:${sequence}"))throw new Error("Sequence-based live alert dedupe can spam users on every refresh");
-console.log("Common 20-card cap, atomic replacement choice and live leaderboard-impact alerts verified.");
+console.log("Common 10-card cap, atomic replacement choice and live leaderboard-impact alerts verified.");

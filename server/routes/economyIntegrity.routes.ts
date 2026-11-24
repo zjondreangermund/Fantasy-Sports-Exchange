@@ -35,7 +35,7 @@ const DEFAULT_ADMIN_EMAIL = "lbcplaya@gmail.com";
 const PREMIER_LEAGUE_KEYS = new Set(["premierleague", "englishpremierleague", "epl"]);
 let cardLockGuardPromise: Promise<void> | null = null;
 let prizeAwardSchemaPromise: Promise<void> | null = null;
-const COMMON_COLLECTION_CAP = 20;
+const COMMON_COLLECTION_CAP = 10;
 
 function rowsOf(result: any): any[] {
   return Array.isArray(result?.rows) ? result.rows : [];

@@ -1,3 +1,4 @@
+import { CommonReplacementSelect } from "./CommonCollectionManager";
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Gift, Sparkles, ShieldCheck, CheckCircle2, Clock3 } from "lucide-react";
@@ -69,8 +70,8 @@ function errorMessage(value: unknown): string {
   return value instanceof Error ? value.message : "The card could not be minted; the claim remains available if eligible.";
 }
 
-async function postJson(url: string): Promise<any> {
-  const response = await fetch(url, { method:"POST", credentials:"include" });
+async function postJson(url: string, body?: any): Promise<any> {
+  const response = await fetch(url, { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body || {}) });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(String(data.message || "Unable to process this mint. Please retry."));
   return data;
@@ -89,6 +90,7 @@ export default function InboxMintActionDialog({
   const requestedWeek = readWindow(note);
   const isReplacement = REPLACEMENT_KEY.test(key) && Number(note.replacementClaimId || 0) > 0;
   const summary = key === NOVEMBER_NOTICE_KEY;
+  const [replaceCardId,setReplaceCardId] = React.useState(0);
   const [chosenWeek, setChosenWeek] = React.useState<string | null>(null);
   const [reveal, setReveal] = React.useState<{ name:string; cardId?:number; kept?:boolean } | null>(null);
   const [failure, setFailure] = React.useState("");
@@ -100,7 +102,7 @@ export default function InboxMintActionDialog({
   const isCurrent = Boolean(activeWeek && activeWeek === weekly?.eligibleFrom);
   const isRecoverable = Boolean(activeWeek && weeks.includes(activeWeek));
   const collectionFull = Boolean(recovery?.capReached || weekly?.capReached);
-  const canMintCurrent = Boolean(isCurrent && weekly?.canClaim && !collectionFull);
+  const canMintCurrent = Boolean(isCurrent && weekly?.canClaim && (!collectionFull || Boolean(replaceCardId)));
   const canRecover = Boolean(isRecoverable && !collectionFull);
 
   const replacementQuery = useQuery<ReplacementData>({
@@ -135,7 +137,7 @@ export default function InboxMintActionDialog({
       if(canMintCurrent){
         // The weekly API also verifies the current signup-anchored window, the
         // 20-card cap, current EPL membership, and the user's previous claims.
-        return {mode:"weekly" as const,response:await postJson("/api/rewards/daily-login/claim")};
+        return {mode:"weekly" as const,response:await postJson("/api/rewards/daily-login/claim", {replaceCardId: collectionFull ? replaceCardId : undefined})};
       }
       throw new Error("This notification's specific card was already claimed or is not currently eligible.");
     },
@@ -199,7 +201,7 @@ export default function InboxMintActionDialog({
               {isReplacement ? rarity+" replacement" : "Weekly Common"}
             </Badge>
             {!isReplacement && <Badge className="bg-white/10 text-white/70">
-              {Number(weekly?.commonCount || recovery?.commonCount || 0)}/{Number(weekly?.cap || recovery?.cap || 20)} Common
+              {Number(weekly?.commonCount || recovery?.commonCount || 0)}/{Number(weekly?.cap || recovery?.cap || 10)} Common
             </Badge>}
           </div>
           <DialogTitle className="flex items-start gap-2 text-xl font-black">
@@ -259,7 +261,8 @@ export default function InboxMintActionDialog({
                    matchingCurrentWeek && weekly?.claimedThisWeek ? "You have already claimed this week's card." :
                    "This specific reward window is already claimed, expired without recovery eligibility, or not currently available."}
                 </p>
-                {blocked && <p className="mt-3 text-sm text-amber-200">Your Common collection is full (20-card cap). Make room before minting. No claim has been lost.</p>}
+                {blocked && <p className="mt-3 text-sm text-amber-200">Your Common collection is full. Select a card to replace for the current weekly reward. Collections above 10 must first be reduced in Collection. No claim has been lost.</p>}
+                {isCurrent && collectionFull && <CommonReplacementSelect value={replaceCardId} onChange={setReplaceCardId} />}
                 <Button data-inbox-mint-confirm className="mt-4 w-full bg-cyan-300 font-bold text-slate-950 hover:bg-cyan-200"
                   disabled={busy || (!canMintCurrent && !canRecover)}
                   onClick={()=>mint.mutate()}>

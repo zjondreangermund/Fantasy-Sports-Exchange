@@ -24,6 +24,11 @@ try{
  CREATE TABLE app.real_life_player_loans(app_player_id int,active boolean);
  CREATE TABLE app.player_cards(id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,player_id int REFERENCES app.players(id),owner_id varchar(255),rarity text,serial_id text,serial_number int,max_supply int,level int,xp int,decisive_score int,last_5_scores jsonb,for_sale boolean,price real,acquired_at timestamptz default now());
  CREATE TABLE app.notifications(user_id text,type text,title text,message text);
+ CREATE TABLE app.card_locks(card_id int,expires_at timestamptz);
+ CREATE TABLE app.auctions(card_id int,status text);
+ CREATE TABLE app.swap_offers(offered_card_id int,requested_card_id int,status text);
+ CREATE TABLE app.card_loans(card_id int,status text);
+ CREATE TABLE app.lineups(user_id text,card_ids jsonb);
  CREATE TABLE app.audit_logs(user_id text,action text,meta jsonb);
  INSERT INTO app.users VALUES('weekly',now()-interval '30 days'),('prize',now()-interval '30 days');`);
  for(let i=1;i<=20;i++)await pg.query('INSERT INTO app.api_football_fixtures VALUES($1,$2,39,$3)',[i,i%20+1,season]);
@@ -34,10 +39,37 @@ try{
  const execute=async statement=>{const query=dialect.sqlToQuery(statement);return pg.query(query.sql,query.params);};
  const db={execute,transaction:fn=>pg.transaction(async tx=>fn({execute:statement=>{const query=dialect.sqlToQuery(statement);return tx.query(query.sql,query.params);}}))};globalThis.__mintFixture.db=db;
  const stubs={notifications:'export const ensureNotificationsSchema=async()=>{};export const createNotificationOnce=async()=>true;',db:'export const db=globalThis.__mintFixture.db;',fpl:'export const fplApi={mintBootstrap:async()=>globalThis.__mintFixture.bootstrap()};',directory:`export const apiFootballSeasonNow=()=>globalThis.__mintFixture.season;export const apiFootballPhotoUrl=(id)=>id>0?'https://media.api-sports.io/football/players/'+id+'.png':'';export const loadApiFootballPlayerDirectory=async()=>globalThis.__mintFixture.directory();export const resolveApiFootballPlayer=(p,dir)=>dir.find(x=>x.name.toLowerCase()===p.name.toLowerCase()&&x.team===p.team)||null;`};
- await build({entryPoints:['server/services/currentPremierLeagueMintPool.ts','server/services/dailyLoginReward.ts','server/services/freeCupPrizes.ts'],outdir:temp,outbase:'.',outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm',plugins:[{name:'mint-fixtures',setup(b){for(const [filter,name] of [[/\/notifications\.js$/,'notifications'],[/\/db\.js$/,'db'],[/\/fplApi\.js$/,'fpl'],[/\/apiFootballPlayerDirectory\.js$/,'directory']])b.onResolve({filter},args=>args.importer.includes('node_modules')?undefined:({path:name,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:stubs[a.path],loader:'js'}));}}]});
+ await build({entryPoints:['server/services/currentPremierLeagueMintPool.ts','server/services/dailyLoginReward.ts','server/services/freeCupPrizes.ts','server/services/commonCollectionPolicy.ts'],outdir:temp,outbase:'.',outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm',plugins:[{name:'mint-fixtures',setup(b){for(const [filter,name] of [[/\/notifications\.js$/,'notifications'],[/\/db\.js$/,'db'],[/\/fplApi\.js$/,'fpl'],[/\/apiFootballPlayerDirectory\.js$/,'directory']])b.onResolve({filter},args=>args.importer.includes('node_modules')?undefined:({path:name,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:stubs[a.path],loader:'js'}));}}]});
  const {currentPremierLeagueMintIds}=await import(path.join(temp,'server/services/currentPremierLeagueMintPool.mjs'));const {claimDailyLoginReward}=await import(path.join(temp,'server/services/dailyLoginReward.mjs'));
  assert.deepEqual((await currentPremierLeagueMintIds(db)).sort(),[1,2,3,4]); // Injury does not mean departure.
  let result=await claimDailyLoginReward('weekly');assert(result.claimed);assert([1,2,3,4].includes(result.card.playerId));const issuedId=result.card.id;
+
+ // Common cap: replace exactly one owned/unprotected card atomically and retain progression.
+ const {claimWeeklyCommonReward}=await import(path.join(temp,'server/services/dailyLoginReward.mjs'));
+ const {reduceCommonCollection}=await import(path.join(temp,'server/services/commonCollectionPolicy.mjs'));
+ await pg.exec("INSERT INTO app.users VALUES('capped',now()-interval '30 days'),('reduce',now()-interval '30 days')");
+ for(let i=0;i<10;i++)await pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity,level,xp,for_sale) VALUES(5,'capped','common',4,123,false)");
+ const sources=(await pg.query("SELECT id FROM app.player_cards WHERE owner_id='capped' ORDER BY id")).rows;
+ let blocked=await claimWeeklyCommonReward('capped');assert.equal(blocked.claimed,false);assert.equal(blocked.cap,10);
+ await assert.rejects(claimWeeklyCommonReward('capped',issuedId),/unlisted Common/);
+ await pg.query("INSERT INTO app.card_locks VALUES($1,null)",[sources[0].id]);
+ await assert.rejects(claimWeeklyCommonReward('capped',sources[0].id),/protected use/);
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.daily_login_rewards WHERE user_id='capped'")).rows[0].n,0);
+ await pg.exec("DELETE FROM app.card_locks");
+ const replacement=await claimWeeklyCommonReward('capped',sources[0].id);
+ assert.equal(replacement.claimed,true);assert.equal(replacement.card.player.position,'GK');assert.equal(replacement.card.rarity,'common');assert.equal(replacement.card.level,4);assert.equal(replacement.card.xp,123);
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='capped'")).rows[0].n,10);
+ assert.equal((await pg.query('SELECT owner_id FROM app.player_cards WHERE id=$1',[sources[0].id])).rows[0].owner_id,null);
+ assert.equal((await claimWeeklyCommonReward('capped',sources[1].id)).card.id,replacement.card.id);
+ // Burn selection must retain two complete teams, validate ownership and roll back on failure.
+ for(const id of [1,1,2,2,2,2,3,3,4,4,1])await pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity,level,xp,for_sale) VALUES($1,'reduce','common',1,0,false)",[id]);
+ const reductionCards=(await pg.query("SELECT id,player_id FROM app.player_cards WHERE owner_id='reduce' ORDER BY id")).rows;
+ await assert.rejects(reduceCommonCollection('reduce',[reductionCards.find(c=>c.player_id===3).id]),/Keep two GK/);
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,11);
+ await assert.rejects(reduceCommonCollection('reduce',[issuedId]),/Only your/);
+ await reduceCommonCollection('reduce',[reductionCards[0].id]);
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,10);
+ console.log('Common policy transaction tests passed: cap, ownership, protected cards, same-position rarity and progression, claim replay, two-team sacrifice and rollback.');
  const original=bootstrap;bootstrap=null;
  result=await claimDailyLoginReward('weekly');assert.equal(result.alreadyClaimed,true);assert.equal(result.card.id,issuedId); // Replays do not reroll or need a working roster.
  await assert.rejects(claimDailyLoginReward('prize'),/No card was minted/);assert.equal((await pg.query("SELECT count(*)::int AS n FROM app.daily_login_rewards WHERE user_id='prize'")).rows[0].n,0);
