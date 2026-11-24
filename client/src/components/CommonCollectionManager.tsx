@@ -40,6 +40,19 @@ function PlayerRow({card,assignment,disabled,onSelect}:{card:Card;assignment:str
 const emptyTeams = ():number[][] => [Array(5).fill(0),Array(5).fill(0)];
 export default function CommonCollectionManager() {
   const {user}=useAuth();
+  // Scope the role check to this account so a cached admin result cannot
+  // suppress a regular user's mandatory reduction after switching accounts.
+  const adminCheck=useQuery<{isAdmin:boolean}>({
+    queryKey:['/api/admin/check',user?.id],
+    enabled:Boolean(user),
+    queryFn:async()=>{
+      const response=await fetch('/api/admin/check',{credentials:'include'});
+      if(!response.ok)throw new Error('Could not verify admin access');
+      return response.json();
+    },
+    retry:false,
+    staleTime:60_000,
+  });
   const {data}=useQuery<Plan>({queryKey:['/api/common-collection'],enabled:Boolean(user),staleTime:0,refetchInterval:60_000});
   const [teams,setTeams]=React.useState<number[][]>(emptyTeams);
   const [activeTeam,setActiveTeam]=React.useState(0);
@@ -58,7 +71,7 @@ export default function CommonCollectionManager() {
   // Nothing is preselected, including protected cards. Refetches never choose for the user.
   React.useEffect(()=>{setTeams(emptyTeams());setActiveTeam(0);setActiveSlot(0);setSearch('');setConfirmed(false);},[user?.id,Boolean(data?.excess)]);
   React.useEffect(()=>{setConfirmed(false);},[teams]);
-  if(!user || !data?.excess)return null;
+  if(!user || adminCheck.isPending || adminCheck.data?.isAdmin === true || !data?.excess)return null;
   const activeId=teams[activeTeam][activeSlot];
   const activePosition=COMMON_KEEP_SLOTS[activeSlot];
   const candidates=data.cards.filter(card=>commonKeepSlotAccepts(activePosition,card.position)
