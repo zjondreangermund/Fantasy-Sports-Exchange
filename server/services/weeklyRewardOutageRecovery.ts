@@ -1,3 +1,4 @@
+import { lockCommonCollection, loadCommonCollection, assertCommonCardsRemovable } from "./commonCollectionPolicy.js";
 /**
  * November 2026 football-data interruption recovery.
  * Original signup-anchored 7-day windows are the source of truth.
@@ -89,7 +90,7 @@ export async function getOutageRecoveryStatus(userId:string){
     interruptionStart:MINT_RECOVERY_START,interruptionEndExclusive:MINT_RECOVERY_END_EXCLUSIVE};
 }
 
-export async function claimOutageWeeklyCard(userId:string,windowStart:string){
+export async function claimOutageWeeklyCard(userId:string,windowStart:string,replaceCardId?:number){
   if(!/^2026-11-\d{2}$/.test(windowStart))throw new Error("Invalid missed reward window");
   await ensureOutageRecoverySchema();
   return db.transaction(async tx=>{
@@ -107,10 +108,16 @@ export async function claimOutageWeeklyCard(userId:string,windowStart:string){
       if(prior)return {claimed:false,alreadyClaimed:true,windowStart,cardId:Number(prior.cardId),playerName:String(prior.playerName)};
       throw new Error("This window is not eligible for recovery, was already claimed, or its deadline has passed.");
     }
+    await lockCommonCollection(tx,userId);
     const count=await commonCount(tx,userId);
-    if(count>=DAILY_LOGIN_COMMON_CARD_CAP)throw new Error(
-      "Your Common collection is full (20/20). Your missed reward is still reserved; make space before claiming."
-    );
+    if(count>DAILY_LOGIN_COMMON_CARD_CAP)throw new Error('Choose your 10 Common cards in Collection before claiming. Your missed reward remains reserved.');
+    let source:any=null;
+    if(count===DAILY_LOGIN_COMMON_CARD_CAP) {
+      if(!Number.isInteger(replaceCardId)||Number(replaceCardId)<=0)throw new Error('Select a Common card to replace before minting your missed reward.');
+      source=(await loadCommonCollection(tx,userId)).find(card=>Number(card.id)===replaceCardId&&!card.forSale);
+      if(!source)throw new Error('Choose one of your unlisted Common cards to replace.');
+      await assertCommonCardsRemovable(tx,userId,[Number(replaceCardId)]);
+    } else if(replaceCardId!==undefined)throw new Error('Your collection has space; no Common replacement is needed.');
     const eligibleIds=await currentPremierLeagueMintIds(tx);
     // Reuse current official FPL + fresh API-Football roster gating and database
     // mint guard, preserving supply and duplicate preferences.
@@ -122,10 +129,10 @@ export async function claimOutageWeeklyCard(userId:string,windowStart:string){
       GROUP BY p.position::text
     `));
     const tally=new Map<string,number>(positions.map(p=>[String(p.position),Number(p.count)] as [string,number]));
-    const priority=['GK','DEF','MID','FWD'].sort((a,b)=>(tally.get(a)||0)-(tally.get(b)||0));
+    const priority=source?[String(source.position)]:['GK','DEF','MID','FWD'].sort((a,b)=>(tally.get(a)||0)-(tally.get(b)||0));
     let chosen:any=null;
     for(const position of priority){
-      for(const avoidOwned of [true,false]){
+      for(const avoidOwned of (source?[true]:[true,false])){
         chosen=rows(await tx.execute(sql`
           SELECT p.id,p.name FROM app.players p
           WHERE p.id=ANY(${`{${eligibleIds.join(",")}}`}::int[])
@@ -144,9 +151,10 @@ export async function claimOutageWeeklyCard(userId:string,windowStart:string){
       if(chosen)break;
     }
     if(!chosen)throw new Error("No verified current Premier League player is available; your recovery remains pending.");
+    if(source)await tx.execute(sql`UPDATE app.player_cards SET owner_id=null,for_sale=false,price=0 WHERE id=${Number(source.id)} AND owner_id=${userId}`);
     const card=rows(await tx.execute(sql`
       INSERT INTO app.player_cards(player_id,owner_id,rarity,level,xp,decisive_score,for_sale,price)
-      VALUES(${Number(chosen.id)},${userId},'common',1,0,35,false,0)
+      VALUES(${Number(chosen.id)},${userId},'common',${Number(source?.level||1)},${Number(source?.xp||0)},35,false,0)
       RETURNING id
     `))[0];
     if(!card?.id)throw new Error("Could not create the recovered Common card");
@@ -160,9 +168,9 @@ export async function claimOutageWeeklyCard(userId:string,windowStart:string){
     await tx.execute(sql`
       INSERT INTO app.audit_logs(user_id,action,meta)
       VALUES(${userId},'reward.weekly_common.recovered',
-        ${JSON.stringify({windowStart,cardId:Number(card.id),playerId:Number(chosen.id)})}::jsonb)
+        ${JSON.stringify({windowStart,cardId:Number(card.id),playerId:Number(chosen.id),replacedCardId:source?Number(source.id):null})}::jsonb)
     `);
-    return {claimed:true,alreadyClaimed:false,windowStart,cardId:Number(card.id),playerName:String(chosen.name)};
+    return {claimed:true,alreadyClaimed:false,windowStart,cardId:Number(card.id),playerName:String(chosen.name),replacedCardId:source?Number(source.id):null};
   });
 }
 

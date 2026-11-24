@@ -55,7 +55,7 @@ export function registerDailyLoginRewardRoutes(app: Express) {
   app.post("/api/rewards/november-recovery/:windowStart/claim", requireSignedIn, async (req:any,res) => {
     try {
       res.setHeader("Cache-Control","private, no-store");
-      return res.json(await claimOutageWeeklyCard(String(req.authUserId),String(req.params.windowStart||"")));
+      return res.json(await claimOutageWeeklyCard(String(req.authUserId),String(req.params.windowStart||""),req.body?.replaceCardId));
     } catch(error:any) {
       console.error("November reward recovery claim failed:",error);
       const message=String(error?.message||"Could not recover weekly card");

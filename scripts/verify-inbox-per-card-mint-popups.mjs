@@ -20,7 +20,7 @@ for(const term of [
  "replacementQuery.data?.claims", "note.replacementClaimId",
  "replacementFinished", "data-inbox-mint-confirm",
  "The server verifies your specific entitlement when you confirm.",
- 'postJson("/api/rewards/daily-login/claim")',
+ 'postJson("/api/rewards/daily-login/claim",',
  "/api/rewards/november-recovery/", "/api/player-replacements/",
  "setReveal", "Later — keep in Inbox",
 ]) requireText(popup,term,`Inbox popup lost safety requirement ${term}`);
@@ -40,3 +40,18 @@ requireText(policy,"pg_advisory_xact_lock","Existing claim serialisation must re
 requireText(policy,"PRIMARY KEY(user_id,window_start)","Historical mint duplicate constraint must remain");
 assert.ok(!popup.includes('useEffect(()=>{void postJson'),"Opening the modal may not auto-mint");
 console.log("Exact per-card Inbox mint popups, deep-links and duplicate-prevention verified.");
+
+// Execute the actual popup capacity decisions for current and missed windows.
+const start=popup.indexOf('  const rewardStatus=');
+const end=popup.indexOf('  const replacementQuery =',start);
+const capacity=new Function('isRecoverable','isCurrent','recovery','weekly','replaceCardId',popup.slice(start,end)+';return {canRecover,canMintCurrent,replacementAvailable,collectionOverCap};');
+let state=capacity(true,false,{commonCount:10,cap:10},undefined,0);
+assert.equal(state.replacementAvailable,true);assert.equal(state.canRecover,false);
+state=capacity(true,false,{commonCount:10,cap:10},undefined,7);assert.equal(state.canRecover,true);
+state=capacity(true,false,{commonCount:20,cap:10},undefined,7);assert.equal(state.canRecover,false);assert.equal(state.collectionOverCap,true);assert.equal(state.replacementAvailable,false);
+state=capacity(true,false,{commonCount:9,cap:10},undefined,0);assert.equal(state.canRecover,true);
+state=capacity(false,true,undefined,{commonCount:10,cap:10,canClaim:true},7);assert.equal(state.canMintCurrent,true);
+state=capacity(false,true,undefined,{commonCount:10,cap:10,canClaim:false},7);assert.equal(state.canMintCurrent,false);
+requireText(popup,'Choose my 10 Common cards','Above-cap users must have an actionable route to reduction');
+requireText(popup,'{replacementAvailable && <CommonReplacementSelect','Missed rewards must expose the replacement selector at capacity');
+console.log('Current/missed reward capacity actions verified: reduce above ten, select replacement at ten, direct mint below ten.');
