@@ -58,7 +58,7 @@ export default function CommonCollectionManager() {
     retry:false,
     staleTime:60_000,
   });
-  const {data}=useQuery<Plan>({queryKey:['/api/common-collection'],enabled:Boolean(user),staleTime:0,refetchInterval:60_000});
+  const {data,isFetching:collectionFetching,refetch:refreshCollection}=useQuery<Plan>({queryKey:['/api/common-collection'],enabled:Boolean(user),staleTime:0,refetchInterval:60_000});
   const [teams,setTeams]=React.useState<number[][]>(emptyTeams);
   const [activeTeam,setActiveTeam]=React.useState(0);
   const [activeSlot,setActiveSlot]=React.useState(0);
@@ -111,7 +111,11 @@ export default function CommonCollectionManager() {
       <p className="text-[10px] text-white/45">The server checks positions, ten different owned cards and current Premier League eligibility. This saves your collection; enter tournaments separately. Other rarities are unaffected.</p>
     </div>
     <div className="shrink-0 space-y-2 border-t border-white/10 pt-2">
-      <label className="flex gap-2 text-xs"><input type="checkbox" disabled={!ready||mutation.isPending} checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Keep these two teams and permanently burn my other {data.excess} Common cards.</label>
+      {!ready && <div role="status" id="common-burn-blocker" className="max-h-24 overflow-y-auto rounded-lg border border-amber-300/25 bg-amber-300/5 p-2 text-xs text-amber-100">
+        <strong>Before burning: </strong>{teamError || `These protected cards must be kept or released from their existing entries, loans, listings or swaps: ${protectedMissing.map(card=>card.name).join(', ')}.`}
+      </div>}
+      <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-white/20 p-2 text-xs"><input id="common-burn-acknowledgement" type="checkbox" className="h-5 w-5 shrink-0 accent-cyan-300" disabled={mutation.isPending} checked={confirmed} aria-describedby={!ready?'common-burn-blocker':undefined} onChange={e=>setConfirmed(e.target.checked)}/>Keep these two teams and permanently burn my other {data.excess} Common cards.</label>
+      {protectedMissing.length>0 && <Button type="button" variant="ghost" className="h-8 w-full text-xs text-cyan-200" disabled={mutation.isPending||collectionFetching} onClick={()=>{void refreshCollection();}}>{collectionFetching?'Checking card locks…':'Recheck card locks after admin removes entries'}</Button>}
       {mutation.isError&&<p role="alert" className="text-xs text-red-300">{String((mutation.error as Error).message)}</p>}
       <Button className="h-10 w-full text-sm" disabled={!ready||!confirmed||mutation.isPending} onClick={()=>mutation.mutate()}>{mutation.isPending?'Updating collection…':`Keep two teams & burn ${data.excess} others`}</Button>
     </div>
