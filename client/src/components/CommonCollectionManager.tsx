@@ -9,8 +9,8 @@ import { useAuth } from '../hooks/use-auth';
 import { COMMON_KEEP_SLOTS, commonKeepSlotAccepts, validateCommonKeepTeams } from '../../../shared/common-collection';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
-type Card = {id:number;name:string;position:string;team:string;overall:number;level:number;xp:number;blocked:boolean;replacementBlocked?:boolean;imageUrl?:string|null};
-type Plan = {cap:number;excess:number;cards:Card[]};
+type Card = {id:number;name:string;position:string;team:string;overall:number;level:number;xp:number;blocked:boolean;replacementBlocked?:boolean;eligible?:boolean;imageUrl?:string|null};
+type Plan = {cap:number;excess:number;eligibilityVerified?:boolean;cards:Card[]};
 export function CommonReplacementSelect({value,onChange,allowedIds,disabled=false}:{value:number;onChange:(id:number)=>void;allowedIds?:number[];disabled?:boolean}) {
   const {data,isLoading,isError,refetch}=useQuery<Plan>({queryKey:['/api/common-collection'],staleTime:0});
   const [expanded,setExpanded]=React.useState(false);
@@ -33,7 +33,7 @@ export function CommonReplacementSelect({value,onChange,allowedIds,disabled=fals
     </div>}
   </div>;
 }
-function PlayerRow({card,assignment,disabled,onSelect}:{card:Card;assignment:string;disabled:boolean;onSelect:()=>void}) {
+function PlayerRow({card,assignment,disabled,onSelect,showEligibility=false}:{card:Card;assignment:string;disabled:boolean;onSelect:()=>void;showEligibility?:boolean}) {
   const {data,isLoading}=useQuery<CardProfileData>({
     queryKey:['/api/cards/profile',card.id],
     queryFn:async()=>{const response=await fetch(`/api/cards/${card.id}/profile`,{credentials:'include'});if(!response.ok)throw new Error('Recent points unavailable');return response.json();},
@@ -47,10 +47,16 @@ function PlayerRow({card,assignment,disabled,onSelect}:{card:Card;assignment:str
     <span className="min-w-0 flex-1">
       <strong className="block truncate text-sm">{card.name}</strong>
       <span className="block truncate text-[10px] text-white/55">{card.team} · {card.position} · Lv {card.level} · OVR {card.overall}{card.blocked?' · Protected':''}</span>
+      {showEligibility&&card.eligible===false&&<span className="block text-[10px] text-amber-200">Current Premier League eligibility not verified for this player</span>}
       <span className="mt-1 flex flex-wrap gap-x-2 text-[10px] text-cyan-100/80">{matches.length?matches.map((match,index)=><span key={`${match.gameweek}-${index}`} title={`GW ${match.gameweek} vs ${match.opponent}`}>GW{match.gameweek}: <b>{Number(Number(match.points).toFixed(2))}</b></span>):<span>{isLoading?'Loading points…':'Recent points unavailable'}</span>}</span>
     </span>
-    <span className={`shrink-0 text-right text-[10px] font-bold ${assignment?'text-emerald-200':'text-cyan-200'}`}>{assignment||'SELECT'}</span>
+    <span className={`shrink-0 text-right text-[10px] font-bold ${assignment?'text-emerald-200':'text-cyan-200'}`}>{showEligibility&&card.eligible===false?'NOT ELIGIBLE':assignment||'SELECT'}</span>
   </button>;
+}
+function cleanReductionError(error:unknown):string {
+  const message=error instanceof Error?error.message:String(error);
+  try{const payload=JSON.parse(message.replace(/^\d+:\s*/,""));if(typeof payload.message==="string")return payload.message;}catch{/* keep readable original */}
+  return message;
 }
 const emptyTeams = ():number[][] => [Array(5).fill(0),Array(5).fill(0)];
 export default function CommonCollectionManager() {
@@ -81,12 +87,13 @@ export default function CommonCollectionManager() {
   const selected=teams.flat().filter(Boolean);
   const kept=data?.cards.filter(c=>selected.includes(c.id)) || [];
   const burned=data?.cards.filter(c=>!selected.includes(c.id)) || [];
-  const teamError=validateCommonKeepTeams(kept,teams);
+  const invalidSelected=teams.flatMap((team,teamIndex)=>team.flatMap((id,slotIndex)=>{const card=data?.cards.find(c=>c.id===id);return card?.eligible===false?[{card,teamIndex,slotIndex}]:[];}));
+  const teamError=data?.eligibilityVerified!==true?"Current Premier League eligibility could not be verified. Recheck eligibility before burning.":validateCommonKeepTeams(kept,teams);
   const protectedMissing=burned.filter(card=>card.blocked);
-  const ready=Boolean(data && !teamError && protectedMissing.length===0);
+  const ready=Boolean(data && data.eligibilityVerified===true && !teamError && protectedMissing.length===0);
   const mutation=useMutation({mutationFn:async()=>{
     const response=await apiRequest('POST','/api/common-collection/sacrifice',{keepCardIds:selected,teamCardIds:teams});return response.json();
-  },onSuccess:async()=>{setTeams(emptyTeams());setConfirmed(false);await Promise.all(['/api/common-collection','/api/user/cards','/api/rewards/daily-login'].map(key=>queryClient.invalidateQueries({queryKey:[key]})));}});
+  },onError:()=>{setConfirmed(false);void refreshCollection();},onSuccess:async()=>{setTeams(emptyTeams());setConfirmed(false);await Promise.all(['/api/common-collection','/api/user/cards','/api/rewards/daily-login'].map(key=>queryClient.invalidateQueries({queryKey:[key]})));}});
   // Nothing is preselected, including protected cards. Refetches never choose for the user.
   React.useEffect(()=>{setTeams(emptyTeams());setActiveTeam(0);setActiveSlot(0);setSearch('');setConfirmed(false);},[user?.id,Boolean(data?.excess)]);
   React.useEffect(()=>{setConfirmed(false);setSubmissionIssue('');},[teams]);
@@ -95,6 +102,7 @@ export default function CommonCollectionManager() {
     if(!confirmed){setSubmissionIssue('Tick the confirmation box first.');return;}
     if(teamError){setSubmissionIssue(teamError);return;}
     if(protectedMissing.length){setSubmissionIssue(`These cards are still protected: ${protectedMissing.map(card=>card.name).join(', ')}. Keep them or ask admin to remove their submitted entries, then recheck card locks.`);return;}
+    if(!ready){setSubmissionIssue("Recheck player eligibility before confirming.");return;}
     setSubmissionIssue('');mutation.mutate();
   };
   if(!user || adminCheck.isPending || (adminCheck.data?.isAdmin === true && !manualReduction) || !data?.excess)return null;
@@ -103,7 +111,9 @@ export default function CommonCollectionManager() {
   const candidates=data.cards.filter(card=>commonKeepSlotAccepts(activePosition,card.position)
     && `${card.name} ${card.team}`.toLowerCase().includes(search.toLowerCase()));
   const choose=(card:Card)=>{
+    if(card.eligible===false&&activeId!==card.id)return;
     if(selected.includes(card.id)&&activeId!==card.id)return;
+    mutation.reset();
     const next=teams.map(team=>[...team]);
     next[activeTeam][activeSlot]=activeId===card.id?0:card.id;
     setTeams(next);
@@ -119,12 +129,12 @@ export default function CommonCollectionManager() {
     <DialogHeader className="shrink-0 pr-0"><DialogTitle>Choose two Common teams to keep</DialogTitle><DialogDescription className="text-xs">Start with empty teams. Choose GK, DEF, MID, FWD and an outfield Utility for each. Your other {data.excess} Common cards will be burned after confirmation.</DialogDescription></DialogHeader>
     <div data-common-selection-summary className="shrink-0 space-y-2">
       <div className="flex items-center gap-2">{[0,1].map(team=><button type="button" key={team} disabled={mutation.isPending} onClick={()=>{setActiveTeam(team);setActiveSlot(Math.max(0,teams[team].findIndex(id=>!id)));setSearch('');}} className={`flex-1 rounded-lg border p-2 text-xs font-bold ${activeTeam===team?'border-cyan-300 bg-cyan-300/15':'border-white/15'}`}>Team {team+1} · {teams[team].filter(Boolean).length}/5</button>)}<span className="text-xs">{selected.length}/10</span></div>
-      <div className="grid grid-cols-5 gap-1">{COMMON_KEEP_SLOTS.map((slot,index)=>{const card=data.cards.find(card=>card.id===teams[activeTeam][index]);return <button type="button" key={slot} disabled={mutation.isPending} aria-pressed={activeSlot===index} onClick={()=>{setActiveSlot(index);setSearch('');}} className={`min-w-0 rounded-lg border p-1.5 text-left ${activeSlot===index?'border-cyan-300 bg-cyan-300/10':'border-white/15'}`}><span className="block text-[10px] font-black text-cyan-100">{slot==='UTILITY'?'UTIL':slot}</span><span className="mt-1 block truncate text-[10px]">{card?.name||'Select'}</span></button>;})}</div>
+      <div className="grid grid-cols-5 gap-1">{COMMON_KEEP_SLOTS.map((slot,index)=>{const card=data.cards.find(card=>card.id===teams[activeTeam][index]);return <button type="button" key={slot} disabled={mutation.isPending} aria-pressed={activeSlot===index} onClick={()=>{setActiveSlot(index);setSearch('');}} className={`min-w-0 rounded-lg border p-1.5 text-left ${card?.eligible===false?'border-red-400 bg-red-400/15':activeSlot===index?'border-cyan-300 bg-cyan-300/10':'border-white/15'}`}><span className="block text-[10px] font-black text-cyan-100">{slot==='UTILITY'?'UTIL':slot}</span><span className="mt-1 block truncate text-[10px]">{card?.name||'Select'}</span>{card?.eligible===false&&<span className="block text-[9px] text-red-200">Replace</span>}</button>;})}</div>
       <div className="flex gap-2"><input aria-label="Search Common players" placeholder={`Search ${activePosition==='UTILITY'?'outfield':activePosition} players…`} value={search} onChange={event=>setSearch(event.target.value)} className="min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 px-2 py-1.5 text-xs"/><button type="button" disabled={mutation.isPending||!selected.length} onClick={()=>{setTeams(emptyTeams());setActiveTeam(0);setActiveSlot(0);}} className="text-xs text-white/60 disabled:opacity-40">Clear all</button></div>
     </div>
     <div data-common-reduction-scroll className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain">
       <p className="text-xs text-cyan-100">Team {activeTeam+1}: choose {activePosition} · last 3 game scores</p>
-      <div className="overflow-hidden rounded-xl border border-white/10">{candidates.map(card=>{const teamIndex=teams.findIndex(team=>team.includes(card.id));const slotIndex=teamIndex>=0?teams[teamIndex].indexOf(card.id):-1;return <PlayerRow key={card.id} card={card} assignment={teamIndex>=0?`T${teamIndex+1} ${COMMON_KEEP_SLOTS[slotIndex]==='UTILITY'?'UTIL':COMMON_KEEP_SLOTS[slotIndex]}`:''} disabled={mutation.isPending||(selected.includes(card.id)&&activeId!==card.id)} onSelect={()=>choose(card)}/>;})}</div>
+      <div className="overflow-hidden rounded-xl border border-white/10">{candidates.map(card=>{const teamIndex=teams.findIndex(team=>team.includes(card.id));const slotIndex=teamIndex>=0?teams[teamIndex].indexOf(card.id):-1;return <PlayerRow key={card.id} card={card} assignment={teamIndex>=0?`T${teamIndex+1} ${COMMON_KEEP_SLOTS[slotIndex]==='UTILITY'?'UTIL':COMMON_KEEP_SLOTS[slotIndex]}`:''} showEligibility disabled={mutation.isPending||(card.eligible===false&&activeId!==card.id)||(selected.includes(card.id)&&activeId!==card.id)} onSelect={()=>choose(card)}/>;})}</div>
       {!candidates.length&&<p className="text-xs text-amber-200">No matching players. Choose another slot or clear the search.</p>}
       {protectedMissing.length>0&&<p className="text-xs text-amber-200">Protected cards cannot be burned. Add them yourself to your teams: {protectedMissing.map(card=>card.name).join(', ')}.</p>}
       {teamError&&<p className="text-xs text-white/55">{teamError}</p>}
@@ -135,10 +145,12 @@ export default function CommonCollectionManager() {
       {!ready && <div role="status" id="common-burn-blocker" className="max-h-24 overflow-y-auto rounded-lg border border-amber-300/25 bg-amber-300/5 p-2 text-xs text-amber-100">
         <strong>Before burning: </strong>{teamError || `These protected cards must be kept or released from their existing entries, loans, listings or swaps: ${protectedMissing.map(card=>card.name).join(', ')}.`}
       </div>}
+      {invalidSelected.length>0&&<div className="max-h-24 overflow-y-auto space-y-1">{invalidSelected.map(({card,teamIndex,slotIndex})=><button key={card.id} type="button" className="block w-full rounded-lg border border-red-300/30 bg-red-400/10 p-2 text-left text-xs text-red-100" onClick={()=>{setActiveTeam(teamIndex);setActiveSlot(slotIndex);setSearch("");}}>Team {teamIndex+1} · {COMMON_KEEP_SLOTS[slotIndex]}: {card.name} — choose replacement</button>)}</div>}
+      {data.eligibilityVerified!==true&&<Button type="button" variant="outline" disabled={collectionFetching||mutation.isPending} onClick={()=>{void refreshCollection();}}>{collectionFetching?"Checking eligibility…":"Recheck player eligibility"}</Button>}
       <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border border-white/20 p-2 text-xs"><input id="common-burn-acknowledgement" type="checkbox" className="h-5 w-5 shrink-0 accent-cyan-300" disabled={mutation.isPending} checked={confirmed} aria-describedby={!ready?'common-burn-blocker':undefined} onChange={e=>setConfirmed(e.target.checked)}/>Keep these two teams and permanently burn my other {data.excess} Common cards.</label>
       {protectedMissing.length>0 && <Button type="button" variant="ghost" className="h-8 w-full text-xs text-cyan-200" disabled={mutation.isPending||collectionFetching} onClick={()=>{void refreshCollection();}}>{collectionFetching?'Checking card locks…':'Recheck card locks after admin removes entries'}</Button>}
       {submissionIssue&&<p role="alert" className="max-h-24 overflow-auto rounded-lg border border-amber-300/30 p-2 text-xs text-amber-100">{submissionIssue}</p>}
-      {mutation.isError&&<p role="alert" className="text-xs text-red-300">{String((mutation.error as Error).message)}</p>}
+      {mutation.isError&&<p role="alert" className="text-xs text-red-300">{cleanReductionError(mutation.error)}</p>}
       <Button className="h-10 w-full text-sm" disabled={!confirmed||mutation.isPending} onClick={submitReduction}>{mutation.isPending?'Updating collection…':`Keep two teams & burn ${data.excess} others`}</Button>
     </div>
   </DialogContent></Dialog>;
