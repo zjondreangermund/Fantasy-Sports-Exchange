@@ -30,8 +30,17 @@ export async function getCommonCollectionPlan(userId:string) {
   const protections=await findBlockedCards(db,userId,cards.map(c=>Number(c.id)));
   const blocked=new Set(protections.filter(row=>row.reason!=='active_lineup').map(row=>Number(row.cardId)));
   const replacementBlocked=new Set(protections.map(row=>Number(row.cardId)));
-  return {cap:COMMON_COLLECTION_CAP,cards:cards.map(card=>({...card,blocked:blocked.has(Number(card.id))||Boolean(card.forSale),replacementBlocked:replacementBlocked.has(Number(card.id))||Boolean(card.forSale)})),
-    excess:Math.max(0,cards.length-COMMON_COLLECTION_CAP)};
+  const excess=Math.max(0,cards.length-COMMON_COLLECTION_CAP);
+  // Use the exact same verified roster as the final reduction, not a stale club label.
+  // A provider outage must not mark every owned card ineligible or allow a burn.
+  let eligibleIds:Set<number>|null=null;
+  if(excess>0) {
+    try{eligibleIds=new Set(await currentPremierLeagueMintIds(db));}
+    catch(error){console.warn('Common keep roster verification unavailable',error);}
+  }
+  return {cap:COMMON_COLLECTION_CAP,eligibilityVerified:eligibleIds!==null,
+    cards:cards.map(card=>({...card,eligible:eligibleIds===null?undefined:eligibleIds.has(Number(card.playerId)),
+      blocked:blocked.has(Number(card.id))||Boolean(card.forSale),replacementBlocked:replacementBlocked.has(Number(card.id))||Boolean(card.forSale)})),excess};
 }
 
 export async function reduceCommonCollection(userId:string,raw:unknown, selectKept = false, teamCardIds?: unknown) {
@@ -48,7 +57,9 @@ export async function reduceCommonCollection(userId:string,raw:unknown, selectKe
     if(ids.length!==cards.length-COMMON_COLLECTION_CAP)throw new Error(`Select exactly ${cards.length-COMMON_COLLECTION_CAP} cards to keep your best 10.`);
     if(ids.some(id=>!cards.some(c=>Number(c.id)===id&&!c.forSale)))throw new Error('Only your unlisted Common cards can be sacrificed.');
     await assertCommonCardsRemovable(tx,userId,ids,true);
-    const eligibleIds=new Set(await currentPremierLeagueMintIds(tx));
+    let eligibleIds:Set<number>;
+    try{eligibleIds=new Set(await currentPremierLeagueMintIds(tx));}
+    catch{throw new Error("Current Premier League eligibility could not be verified. No cards were sacrificed. Recheck player eligibility and try again.");}
     const kept=cards.filter(c=>!ids.includes(Number(c.id))).map(c=>({...c,eligible:eligibleIds.has(Number(c.playerId))}));
     if(teamCardIds !== undefined) {
       const teamError = validateCommonKeepTeams(kept, teamCardIds);
