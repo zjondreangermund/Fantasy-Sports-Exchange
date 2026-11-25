@@ -1,5 +1,4 @@
 import {PopupPortal} from "../ui/popup-portal";
-import CaptainRequiredDialog from "../CaptainRequiredDialog";
 import * as React from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -158,7 +157,10 @@ export default function NativePlayPage() {
   const [selectedIds, setSelectedIds] = React.useState<Array<number | null>>([null, null, null, null, null]);
   const [activeSlot, setActiveSlot] = React.useState(0);
   const [captainId, setCaptainId] = React.useState<number | null>(null);
+  const [entryIssue, setEntryIssue] = React.useState("");
   const [captainPrompt, setCaptainPrompt] = React.useState(false);
+  const captainSectionRef = React.useRef<HTMLElement>(null);
+  const submissionLock = React.useRef(false);
   const [search, setSearch] = React.useState("");
   const [pinOpen, setPinOpen] = React.useState(false);
   const [pin, setPin] = React.useState("");
@@ -285,10 +287,14 @@ export default function NativePlayPage() {
     setSelectedIds([null, null, null, null, null]);
     setActiveSlot(0);
     setCaptainId(null);
+    setCaptainPrompt(false);
+    setEntryIssue("");
     setSearch("");
   }, [toast]);
 
   const chooseCard = (card: PlayerCardWithPlayer) => {
+    setEntryIssue("");
+    setCaptainPrompt(false);
     const next = [...selectedIds];
     const previous = next[activeSlot];
     next[activeSlot] = Number(card.id);
@@ -318,8 +324,24 @@ export default function NativePlayPage() {
       setTab("entries");
       toast({ title: "Team entered", description: "Your five-card team is locked for this tournament." });
     },
-    onError: (error: any) => toast({ title: "Could not enter", description: error?.message || "Please try again.", variant: "destructive" }),
+    onError: (error: any) => setEntryIssue(error?.message || "Could not enter. Please try again."),
+    onSettled: () => { submissionLock.current = false; },
   });
+
+  const submitEntry = () => {
+    if (submissionLock.current || joinMutation.isPending) return;
+    setEntryIssue("");
+    if (!complete) { setEntryIssue("Complete all five eligible positions and satisfy the tournament rarity rule before entering."); return; }
+    if (!captainId || !selectedIds.includes(captainId)) {
+      setCaptainPrompt(true);
+      setEntryIssue("Team not submitted. Choose your captain, then press Enter again.");
+      captainSectionRef.current?.scrollIntoView({block:"nearest",behavior:"smooth"});
+      return;
+    }
+    setCaptainPrompt(false);
+    submissionLock.current = true;
+    joinMutation.mutate();
+  };
 
   const pinMutation = useMutation({
     mutationFn: async () => {
@@ -341,7 +363,6 @@ export default function NativePlayPage() {
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-play>
-      <CaptainRequiredDialog open={captainPrompt} onOpenChange={setCaptainPrompt} cards={selectedCards.filter(Boolean)} onSelect={(id) => { setCaptainId(id); setCaptainPrompt(false); }} />
       <section className={`overflow-hidden rounded-[1.55rem] border ${selectedTone.border} ${selectedTone.soft} bg-gradient-to-br from-violet-400/[.11] via-[#0a0e1c] to-cyan-300/[.06] p-4 ${selectedTone.glow}`}>
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -407,9 +428,9 @@ export default function NativePlayPage() {
       {selected ? (
         <PopupPortal><div className="fixed inset-0 z-[140] flex flex-col bg-[#050713] text-white" role="dialog" aria-modal="true" aria-label={`Enter ${selected.name}`}>
           <header className="flex shrink-0 items-center gap-3 border-b border-white/[.08] bg-[#080b19] px-3 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)]">
-            <button onClick={() => setSelected(null)} className="grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
+            <button disabled={joinMutation.isPending} onClick={() => setSelected(null)} className="grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-white/5"><ArrowLeft className="h-5 w-5" /></button>
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{selected.name}</p><p className="mt-0.5 text-[10px] font-bold uppercase tracking-[.12em] text-slate-500">{String(selected.tier || "common").toUpperCase()} · 5 cards · choose captain</p></div>
-            <button onClick={() => setSelected(null)} className="grid h-10 w-10 place-items-center rounded-2xl bg-white/[.04]"><X className="h-5 w-5" /></button>
+            <button disabled={joinMutation.isPending} onClick={() => setSelected(null)} className="grid h-10 w-10 place-items-center rounded-2xl bg-white/[.04]"><X className="h-5 w-5" /></button>
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-32 pt-3">
@@ -425,10 +446,10 @@ export default function NativePlayPage() {
 
             {affectedCards.length ? <div role="status" className="mt-3 space-y-2">{affectedCards.map(row => <p key={row.card?.id} className="rounded-xl border border-orange-300/30 bg-orange-500/10 p-2.5 text-[11px] leading-4 text-orange-100"><b>{row.card?.player?.name}: </b>{row.warning}</p>)}</div> : null}
             {complete ? (
-              <section className="mt-3 rounded-2xl border border-amber-300/15 bg-amber-300/[.05] p-3">
+              <section ref={captainSectionRef} data-entry-captain-picker className={`mt-3 rounded-2xl border p-3 ${captainPrompt?"border-amber-300 bg-amber-300/10":"border-amber-300/15 bg-amber-300/[.05]"}`}>
                 <div className="flex items-center gap-2"><Crown className="h-4 w-4 text-amber-300" /><p className="text-xs font-black">Choose your captain</p></div>
-                <div className="mt-2 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
-                  {selectedCards.filter(Boolean).map((card) => <button key={card!.id} onClick={() => setCaptainId(Number(card!.id))} className={`shrink-0 rounded-xl border px-3 py-2 text-[10px] font-black ${captainId === Number(card!.id) ? "border-amber-300/50 bg-amber-300/15 text-amber-100" : "border-white/8 bg-white/[.035] text-slate-400"}`}>{card!.player?.name?.split(" ").slice(-1)[0]}{captainId === Number(card!.id) ? " · C" : ""}</button>)}
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {selectedCards.filter(Boolean).map((card) => <button key={card!.id} type="button" disabled={joinMutation.isPending} aria-pressed={captainId === Number(card!.id)} onClick={() => { setCaptainId(Number(card!.id)); setCaptainPrompt(false); setEntryIssue(""); }} className={`min-w-0 rounded-xl border px-2 py-2 text-xs font-black ${captainId === Number(card!.id) ? "border-amber-300/50 bg-amber-300/15 text-amber-100" : "border-white/8 bg-white/[.035] text-slate-400"}`}>{card!.player?.name?.split(" ").slice(-1)[0]}{captainId === Number(card!.id) ? " · C" : ""}</button>)}
                 </div>
               </section>
             ) : null}
@@ -442,7 +463,7 @@ export default function NativePlayPage() {
               {candidateCards.length ? candidateCards.map((card) => {
                 const tone = toneFor(card.rarity);
                 const fixtureWarning = warnForCard(card);
-                return <button key={card.id} onClick={() => chooseCard(card)} className={`flex w-full items-center gap-3 rounded-2xl border ${tone.border} ${tone.soft} ${tone.glow} p-2.5 text-left active:scale-[.995]`}>
+                return <button key={card.id} disabled={joinMutation.isPending} onClick={() => chooseCard(card)} className={`flex w-full items-center gap-3 rounded-2xl border ${tone.border} ${tone.soft} ${tone.glow} p-2.5 text-left active:scale-[.995]`}>
                   <div className="relative h-14 w-12 shrink-0 overflow-hidden rounded-xl bg-slate-900"><CardPlayerImage card={card} alt={card.player?.name || "Player"} className="h-full w-full object-cover object-top" /></div>
                   <div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{card.player?.name || "Player"}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">{cardPosition(card)} · {card.player?.team || "Premier League"}</p><div className="mt-1 flex items-center gap-1.5"><span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${tone.soft} ${tone.text}`}>{card.rarity}</span><span className="text-[9px] font-bold text-cyan-200">{Number((card as any).currentGameweekPoints || 0).toFixed(2)} PTS</span></div>{fixtureWarning ? <p className="mt-1.5 line-clamp-3 text-[10px] leading-4 font-semibold text-orange-200">{fixtureWarning}</p> : null}</div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-slate-600" />
@@ -452,9 +473,10 @@ export default function NativePlayPage() {
           </div>
 
           <footer className="absolute inset-x-0 bottom-0 border-t border-white/[.08] bg-[#080b19]/95 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.6rem)] pt-2.5 backdrop-blur-xl">
+            {entryIssue && <p data-entry-inline-error role="alert" className="mb-2 max-h-28 overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-amber-300/40 bg-slate-900 p-2.5 text-xs font-semibold leading-relaxed text-amber-100">{entryIssue}</p>}
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0"><p className="truncate text-xs font-black">{selectedIds.filter(Boolean).length}/5 selected</p><p className="text-[10px] text-slate-500">{captainId ? "Captain chosen · ready to submit" : complete ? "Choose a captain" : "Complete all five positions"}</p></div>
-              <button onClick={() => { if (!captainId) setCaptainPrompt(true); else joinMutation.mutate(); }} disabled={joinMutation.isPending} className={`rounded-2xl px-5 py-3 text-xs font-black disabled:cursor-not-allowed disabled:opacity-35 ${toneFor(selected.tier).button}`}>{joinMutation.isPending ? "Submitting…" : Number(selected.entryFee || 0) > 0 ? `Enter · ${money(selected.entryFee)}` : "Enter FREE"}</button>
+              <button onClick={submitEntry} disabled={joinMutation.isPending} className={`rounded-2xl px-5 py-3 text-xs font-black disabled:cursor-not-allowed disabled:opacity-35 ${toneFor(selected.tier).button}`}>{joinMutation.isPending ? "Submitting…" : Number(selected.entryFee || 0) > 0 ? `Enter · ${money(selected.entryFee)}` : "Enter FREE"}</button>
             </div>
           </footer>
         </div></PopupPortal>
