@@ -433,7 +433,7 @@ export default function NativePlayPage() {
             <button disabled={joinMutation.isPending} onClick={() => setSelected(null)} className="grid h-10 w-10 place-items-center rounded-2xl bg-white/[.04]"><X className="h-5 w-5" /></button>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-32 pt-3">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-3">
             <div className="grid grid-cols-5 gap-1.5">
               {slots.map((slot, index) => {
                 const card = selectedCards[index];
@@ -472,7 +472,7 @@ export default function NativePlayPage() {
             </div>
           </div>
 
-          <footer className="absolute inset-x-0 bottom-0 border-t border-white/[.08] bg-[#080b19]/95 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.6rem)] pt-2.5 backdrop-blur-xl">
+          <footer className="shrink-0 border-t border-white/[.08] bg-[#080b19]/95 px-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.6rem)] pt-2.5 backdrop-blur-xl">
             {entryIssue && <p data-entry-inline-error role="alert" className="mb-2 max-h-28 overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-amber-300/40 bg-slate-900 p-2.5 text-xs font-semibold leading-relaxed text-amber-100">{entryIssue}</p>}
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0"><p className="truncate text-xs font-black">{selectedIds.filter(Boolean).length}/5 selected</p><p className="text-[10px] text-slate-500">{captainId ? "Captain chosen · ready to submit" : complete ? "Choose a captain" : "Complete all five positions"}</p></div>
