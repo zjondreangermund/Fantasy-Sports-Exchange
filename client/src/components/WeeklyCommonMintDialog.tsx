@@ -1,5 +1,6 @@
 import { CommonReplacementSelect } from "./CommonCollectionManager";
 import * as React from "react";
+import { hasKeptWeeklyCommon, rememberKeptWeeklyCommon, useWeeklyCommonKeepRevision } from "../lib/weekly-common-keep";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Gift, Sparkles } from "lucide-react";
 import { apiRequest, queryClient } from "../lib/queryClient";
@@ -60,6 +61,7 @@ function expiryLabel(value?: string | null) {
 
 export default function WeeklyCommonMintDialog() {
   const { user, isLoading: authLoading } = useAuth();
+  useWeeklyCommonKeepRevision();
   const { toast } = useToast();
   const [replaceCardId, setReplaceCardId] = React.useState(0);
   const [revealedCard, setRevealedCard] = React.useState<WeeklyRewardCard | null>(null);
@@ -157,7 +159,7 @@ export default function WeeklyCommonMintDialog() {
   const inboxOpen = typeof window !== "undefined" &&
     window.location.pathname === "/account" &&
     new URLSearchParams(window.location.search).get("tab") === "inbox";
-  const waitingToMint = Boolean(status?.canClaim && status.commonCount <= status.cap && !previouslyDismissed && !tournamentPromptActive && !inboxOpen);
+  const waitingToMint = Boolean(!hasKeptWeeklyCommon(String(user?.id||""),windowId) && status?.canClaim && status.commonCount <= status.cap && !previouslyDismissed && !tournamentPromptActive && !inboxOpen);
   const open = waitingToMint || Boolean(revealedCard);
   const dismissPrompt = () => {
     if (revealedCard) { setRevealedCard(null); return; }
@@ -219,7 +221,7 @@ export default function WeeklyCommonMintDialog() {
           </div>
         )}
 
-        {!player && status?.capReached && <><Button type="button" variant="outline" className="w-full" disabled={claimMutation.isPending} onClick={dismissPrompt}>Keep my current squads</Button><CommonReplacementSelect key={promptKey} value={replaceCardId} onChange={setReplaceCardId} disabled={claimMutation.isPending}/><p className="text-xs text-white/55">No card is minted or burned if you keep your squads. This reward remains in Inbox until it expires.</p></>}
+        {!player && status?.capReached && <><Button type="button" variant="outline" className="w-full" disabled={claimMutation.isPending} onClick={()=>{rememberKeptWeeklyCommon(String(user?.id||""),windowId);dismissPrompt();}}>Keep my current squads</Button><CommonReplacementSelect key={promptKey} value={replaceCardId} onChange={setReplaceCardId} disabled={claimMutation.isPending}/><p className="text-xs text-white/55">No card is minted or burned. Automatic reminders for this reward stop on this device; it remains available in Inbox while eligible.</p></>}
 
         {player ? (
           <Button
