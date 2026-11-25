@@ -1,6 +1,8 @@
 import { useLocation } from "wouter";
 import { CommonReplacementSelect } from "./CommonCollectionManager";
 import * as React from "react";
+import { useAuth } from "../hooks/use-auth";
+import { rememberKeptWeeklyCommon } from "../lib/weekly-common-keep";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Gift, Sparkles, ShieldCheck, CheckCircle2, Clock3 } from "lucide-react";
 import { queryClient } from "../lib/queryClient";
@@ -87,6 +89,7 @@ export default function InboxMintActionDialog({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const {user}=useAuth();
   const [,navigate]=useLocation();
   const key = String(note.dedupeKey || "");
   const requestedWeek = readWindow(note);
@@ -274,7 +277,7 @@ export default function InboxMintActionDialog({
                 </p>
                 {blocked && <p className="mt-3 text-sm text-amber-200">{collectionOverCap?`You have ${commonCount} Common cards. Choose your ${commonCap} to keep first, then return to mint this reward. Your claim remains reserved.`:'Keep your current squads, or choose one eligible Common to replace with a random player of the same position and rarity, retaining its level and XP.'}</p>}
                 {collectionOverCap && <Button className="mt-3 w-full" disabled={busy} onClick={()=>{onClose();navigate('/collection?reduceCommons=1');}}>Choose my 10 Common cards</Button>}
-                {replacementAvailable && <><Button type="button" variant="outline" className="mt-3 w-full" disabled={busy} onClick={onClose}>Keep my current squads</Button><CommonReplacementSelect key={activeWeek} value={replaceCardId} onChange={setReplaceCardId} disabled={busy}/><p className="mt-2 text-xs text-white/55">Keeping your squads does not mint or burn a card. You can return to this reward while eligible.</p></>}
+                {replacementAvailable && <><Button type="button" variant="outline" className="mt-3 w-full" disabled={busy} onClick={()=>{if(activeWeek&&user?.id){rememberKeptWeeklyCommon(String(user.id),activeWeek);onClose();}}}>Keep my current squads</Button><CommonReplacementSelect key={activeWeek} value={replaceCardId} onChange={setReplaceCardId} disabled={busy}/><p className="mt-2 text-xs text-white/55">Keeping your squads stops automatic reminders for this reward on this device. No card is minted or burned. You can still open it from Inbox while eligible.</p></>}
                 {(eligibleWeeklyReward && !collectionOverCap && (!replacementAvailable || Boolean(replaceCardId))) && <Button data-inbox-mint-confirm className="mt-4 w-full bg-cyan-300 font-bold text-slate-950 hover:bg-cyan-200"
                   disabled={busy || (!canMintCurrent && !canRecover)}
                   onClick={()=>mint.mutate()}>
