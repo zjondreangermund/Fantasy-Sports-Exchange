@@ -11,14 +11,27 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from './ui/button';
 type Card = {id:number;name:string;position:string;team:string;overall:number;level:number;xp:number;blocked:boolean;replacementBlocked?:boolean;imageUrl?:string|null};
 type Plan = {cap:number;excess:number;cards:Card[]};
-export function CommonReplacementSelect({value,onChange}:{value:number;onChange:(id:number)=>void}) {
-  const {data}=useQuery<Plan>({queryKey:['/api/common-collection'],staleTime:0});
-  return <label className="block space-y-2 text-sm">Choose the Common card to sacrifice and replace
-    <select aria-label="Common card to replace" value={value} onChange={e=>onChange(Number(e.target.value))} className="w-full rounded-lg border border-white/20 bg-slate-950 p-3 text-white">
-      <option value={0}>Select a card…</option>
-      {data?.cards.map(card=><option key={card.id} value={card.id} disabled={card.replacementBlocked ?? card.blocked}>{card.name} · {card.position} · Lv {card.level}{(card.replacementBlocked ?? card.blocked)?' (protected)':''}</option>)}
-    </select><p className="text-xs text-white/60">Confirming permanently sacrifices this card. A random current Premier League Common of the same position replaces it, retaining level and XP. Player ratings and performance belong to the new player.</p>
-  </label>;
+export function CommonReplacementSelect({value,onChange,allowedIds,disabled=false}:{value:number;onChange:(id:number)=>void;allowedIds?:number[];disabled?:boolean}) {
+  const {data,isLoading,isError,refetch}=useQuery<Plan>({queryKey:['/api/common-collection'],staleTime:0});
+  const [expanded,setExpanded]=React.useState(false);
+  const [search,setSearch]=React.useState('');
+  const cards=(data?.cards||[]).map(card=>({...card,blocked:(card.replacementBlocked ?? card.blocked)||(allowedIds!==undefined&&!allowedIds.includes(card.id))}));
+  const selected=cards.find(card=>card.id===value&&!card.blocked);
+  React.useEffect(()=>{if(data&&value&&!selected)onChange(0);},[data,value,selected?.id,onChange]);
+  const candidates=cards.filter(card=>`${card.name} ${card.team} ${card.position}`.toLowerCase().includes(search.toLowerCase()));
+  return <div className="mt-3 space-y-2 text-left text-sm">
+    <Button type="button" variant="outline" className="w-full border-cyan-300/30 text-cyan-100" disabled={disabled} aria-expanded={expanded} onClick={()=>{setExpanded(!expanded);if(expanded){onChange(0);setSearch('');}}}>{expanded?'Cancel replacement selection':selected?'Change selected player':'Mint replacement — choose player'}</Button>
+    {expanded&&<div className="space-y-2">
+      <p className="text-xs text-cyan-100">Choose one Common to replace · last 3 game scores</p>
+      <input aria-label="Search replacement players" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search player, club or position…" className="w-full rounded-lg border border-white/15 bg-slate-950 px-3 py-2 text-sm text-white"/>
+      {isLoading&&<p role="status" className="text-xs text-white/60">Loading your Common cards…</p>}
+      {isError&&<Button type="button" variant="ghost" onClick={()=>{void refetch();}}>Retry loading players</Button>}
+      <div className="max-h-[38dvh] overflow-y-auto overscroll-contain rounded-xl border border-white/10">{candidates.map(card=><PlayerRow key={card.id} card={card} assignment={selected?.id===card.id?'REPLACE':''} disabled={disabled||card.blocked} onSelect={()=>onChange(selected?.id===card.id?0:card.id)}/>)}</div>
+      {data&&!candidates.length&&<p className="text-xs text-white/60">No matching players.</p>}
+      {data&&!cards.some(card=>!card.blocked)&&<p className="text-xs text-amber-200">All cards are protected. Keep your current squads or return after the locks end.</p>}
+      <p className="text-xs text-white/60">{selected?`Selected: ${selected.name}. `:''}Only confirmation permanently sacrifices the selected card. A random current Premier League Common of the same position replaces it, retaining level and XP.</p>
+    </div>}
+  </div>;
 }
 function PlayerRow({card,assignment,disabled,onSelect}:{card:Card;assignment:string;disabled:boolean;onSelect:()=>void}) {
   const {data,isLoading}=useQuery<CardProfileData>({
@@ -33,7 +46,7 @@ function PlayerRow({card,assignment,disabled,onSelect}:{card:Card;assignment:str
     <span data-common-card-portrait className="relative block h-12 w-10 shrink-0 overflow-hidden rounded-md"><CardPlayerImage card={commonCollectionPortraitCard(card,data) as any} alt={card.name} className="h-full w-full object-contain"/></span>
     <span className="min-w-0 flex-1">
       <strong className="block truncate text-sm">{card.name}</strong>
-      <span className="block truncate text-[10px] text-white/55">{card.team} · {card.position} · Lv {card.level}{card.blocked?' · Protected':''}</span>
+      <span className="block truncate text-[10px] text-white/55">{card.team} · {card.position} · Lv {card.level} · OVR {card.overall}{card.blocked?' · Protected':''}</span>
       <span className="mt-1 flex flex-wrap gap-x-2 text-[10px] text-cyan-100/80">{matches.length?matches.map((match,index)=><span key={`${match.gameweek}-${index}`} title={`GW ${match.gameweek} vs ${match.opponent}`}>GW{match.gameweek}: <b>{Number(Number(match.points).toFixed(2))}</b></span>):<span>{isLoading?'Loading points…':'Recent points unavailable'}</span>}</span>
     </span>
     <span className={`shrink-0 text-right text-[10px] font-bold ${assignment?'text-emerald-200':'text-cyan-200'}`}>{assignment||'SELECT'}</span>

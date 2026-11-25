@@ -44,7 +44,7 @@ console.log("Exact per-card Inbox mint popups, deep-links and duplicate-preventi
 // Execute the actual popup capacity decisions for current and missed windows.
 const start=popup.indexOf('  const rewardStatus=');
 const end=popup.indexOf('  const replacementQuery =',start);
-const capacity=new Function('isRecoverable','isCurrent','recovery','weekly','replaceCardId',popup.slice(start,end)+';return {canRecover,canMintCurrent,replacementAvailable,collectionOverCap};');
+const capacity=new Function('isRecoverable','isCurrent','recovery','weekly','replaceCardId',popup.slice(start,end)+';return {eligibleWeeklyReward,canRecover,canMintCurrent,replacementAvailable,collectionOverCap};');
 let state=capacity(true,false,{commonCount:10,cap:10},undefined,0);
 assert.equal(state.replacementAvailable,true);assert.equal(state.canRecover,false);
 state=capacity(true,false,{commonCount:10,cap:10},undefined,7);assert.equal(state.canRecover,true);
@@ -53,5 +53,18 @@ state=capacity(true,false,{commonCount:9,cap:10},undefined,0);assert.equal(state
 state=capacity(false,true,undefined,{commonCount:10,cap:10,canClaim:true},7);assert.equal(state.canMintCurrent,true);
 state=capacity(false,true,undefined,{commonCount:10,cap:10,canClaim:false},7);assert.equal(state.canMintCurrent,false);
 requireText(popup,'Choose my 10 Common cards','Above-cap users must have an actionable route to reduction');
-requireText(popup,'{replacementAvailable && <CommonReplacementSelect','Missed rewards must expose the replacement selector at capacity');
+state=capacity(false,true,undefined,{commonCount:10,cap:10,canClaim:true},0);
+assert.equal(state.eligibleWeeklyReward,true);assert.equal(state.replacementAvailable,true);assert.equal(state.canMintCurrent,false);
+state=capacity(false,true,undefined,{commonCount:10,cap:10,canClaim:false},7);
+assert.equal(state.eligibleWeeklyReward,false);assert.equal(state.replacementAvailable,false);
+requireText(popup,'<CommonReplacementSelect','Missed rewards must expose the replacement selector at capacity');
+requireText(popup,'Keep my current squads','Inbox reward must offer an explicit keep choice');
+requireText(weekly,'Keep my current squads','Login reward must offer an explicit keep choice');
+const picker=read("client/src/components/CommonCollectionManager.tsx");
+const won=read("client/src/components/CommonCardRewardChoiceDialog.tsx");
+requireText(picker,'Mint replacement — choose player','Replacement list must open only on choice');
+requireText(picker,'<PlayerRow','Replacement list must reuse player stats rows');
+requireText(picker,'CardPlayerImage','Replacement rows must include portraits');
+requireText(picker,'card.replacementBlocked ?? card.blocked','Replacement list must preserve card locks');
+requireText(won,'<CommonReplacementSelect','Won Common rewards must use the same player selection');
 console.log('Current/missed reward capacity actions verified: reduce above ten, select replacement at ten, direct mint below ten.');

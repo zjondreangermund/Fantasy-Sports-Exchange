@@ -103,12 +103,14 @@ export default function InboxMintActionDialog({
   const activeWeek = summary ? chosenWeek : requestedWeek;
   const isCurrent = Boolean(activeWeek && activeWeek === weekly?.eligibleFrom);
   const isRecoverable = Boolean(activeWeek && weeks.includes(activeWeek));
+  React.useEffect(()=>{setReplaceCardId(0);},[note.id,activeWeek]);
   const rewardStatus=isRecoverable?recovery:weekly;
   const commonCount=Number(rewardStatus?.commonCount ?? weekly?.commonCount ?? recovery?.commonCount ?? 0);
   const commonCap=Number(rewardStatus?.cap || 10);
   const collectionFull=commonCount>=commonCap;
   const collectionOverCap=commonCount>commonCap;
-  const replacementAvailable=commonCount===commonCap && (isCurrent||isRecoverable);
+  const eligibleWeeklyReward=Boolean((isCurrent && weekly?.canClaim)||isRecoverable);
+  const replacementAvailable=commonCount===commonCap && eligibleWeeklyReward;
   const canMintCurrent=Boolean(isCurrent && weekly?.canClaim && !collectionOverCap && (!collectionFull||replaceCardId));
   const canRecover=Boolean(isRecoverable && !collectionOverCap && (!collectionFull||replaceCardId));
 
@@ -195,7 +197,7 @@ export default function InboxMintActionDialog({
   const position = String(active?.sourcePosition || note.replacementSourcePosition || "same position").toUpperCase();
   const rarity = String(active?.rarity || note.replacementRarity || "same rarity").toUpperCase();
   const busy = mint.isPending || keep.isPending;
-  const blocked = collectionFull && !isReplacement;
+  const blocked = collectionFull && !isReplacement && (eligibleWeeklyReward || collectionOverCap);
   let subtitle = isReplacement
     ? `Replace ${player} with one verified current Premier League player in the same ${position} position and ${rarity} rarity.`
     : summary ? "Select each eligible missed weekly reward individually. Each seven-day window can be claimed only once."
@@ -265,19 +267,19 @@ export default function InboxMintActionDialog({
                   Reward window: {activeWeek || "Not available"}
                 </p>
                 <p className="mt-2 text-xs text-white/55">
-                  {canMintCurrent ? "This is your current, unclaimed weekly card." :
+                  {isCurrent && weekly?.canClaim ? "This is your current, unclaimed weekly card." :
                    isRecoverable ? "This missed reward is eligible for the November interruption recovery." :
                    matchingCurrentWeek && weekly?.claimedThisWeek ? "You have already claimed this week's card." :
                    "This specific reward window is already claimed, expired without recovery eligibility, or not currently available."}
                 </p>
-                {blocked && <p className="mt-3 text-sm text-amber-200">{collectionOverCap?`You have ${commonCount} Common cards. Choose your ${commonCap} to keep first, then return to mint this reward. Your claim remains reserved.`:'Choose one eligible Common below to replace with a random player of the same position and rarity, retaining its level and XP.'}</p>}
+                {blocked && <p className="mt-3 text-sm text-amber-200">{collectionOverCap?`You have ${commonCount} Common cards. Choose your ${commonCap} to keep first, then return to mint this reward. Your claim remains reserved.`:'Keep your current squads, or choose one eligible Common to replace with a random player of the same position and rarity, retaining its level and XP.'}</p>}
                 {collectionOverCap && <Button className="mt-3 w-full" disabled={busy} onClick={()=>{onClose();navigate('/collection?reduceCommons=1');}}>Choose my 10 Common cards</Button>}
-                {replacementAvailable && <CommonReplacementSelect value={replaceCardId} onChange={setReplaceCardId} />}
-                <Button data-inbox-mint-confirm className="mt-4 w-full bg-cyan-300 font-bold text-slate-950 hover:bg-cyan-200"
+                {replacementAvailable && <><Button type="button" variant="outline" className="mt-3 w-full" disabled={busy} onClick={onClose}>Keep my current squads</Button><CommonReplacementSelect key={activeWeek} value={replaceCardId} onChange={setReplaceCardId} disabled={busy}/><p className="mt-2 text-xs text-white/55">Keeping your squads does not mint or burn a card. You can return to this reward while eligible.</p></>}
+                {(eligibleWeeklyReward && !collectionOverCap && (!replacementAvailable || Boolean(replaceCardId))) && <Button data-inbox-mint-confirm className="mt-4 w-full bg-cyan-300 font-bold text-slate-950 hover:bg-cyan-200"
                   disabled={busy || (!canMintCurrent && !canRecover)}
                   onClick={()=>mint.mutate()}>
                   {busy?"Minting...":replacementAvailable?"Replace selected Common & mint":"Mint Random Common Card"}
-                </Button>
+                </Button>}
                 {summary && chosenWeek && <Button variant="ghost" className="mt-2 w-full" disabled={busy} onClick={()=>setChosenWeek(null)}>Choose another missed week</Button>}
               </div>
             )}
