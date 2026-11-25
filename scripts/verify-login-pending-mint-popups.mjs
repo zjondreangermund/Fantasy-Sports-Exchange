@@ -39,3 +39,28 @@ assert.ok(!/createNotificationOnce|sendWebPush|sendNativePush|notifyWeeklyCommon
 assert.ok(!/postJson\(/.test(queue),
  "Do not mint cards by simply logging in or opening a popup");
 console.log("Login pending-card flow verified: no new notifications, sequential individual claims, once-per-session snooze, prize/departure priority, backend idempotency.");
+
+const keepPolicy=read("client/src/lib/weekly-common-keep.ts");
+const weekly=read("client/src/components/WeeklyCommonMintDialog.tsx");
+requireText(popup,"rememberKeptWeeklyCommon(String(user.id),activeWeek)","Explicit Inbox keep must persist the exact reward");
+requireText(queue,'!hasKeptWeeklyCommon(userId,item.token.split(":")[1])',"Login queue must skip kept windows");
+requireText(weekly,'!hasKeptWeeklyCommon(String(user?.id||""),windowId)',"Standalone weekly popup must honor the same keep decision");
+requireText(weekly,'rememberKeptWeeklyCommon(String(user?.id||""),windowId)',"Standalone keep must persist");
+const policySource=keepPolicy.slice(keepPolicy.indexOf("const PREFIX"),keepPolicy.indexOf("export function useWeeklyCommonKeepRevision"))
+  .replaceAll("export function ","function ")
+  .replaceAll("new Set<string>()","new Set()")
+  .replaceAll("userId:string","userId")
+  .replaceAll("windowStart:string","windowStart")
+  .replace(/\):(string|boolean|void)\s*\{/g,"){");
+const persisted=new Map();
+const fakeWindow={localStorage:{getItem:key=>persisted.get(key)||null,setItem:(key,value)=>persisted.set(key,value)},dispatchEvent:()=>{}};
+const loadPolicy=()=>new Function("window","Event",policySource+";return {hasKeptWeeklyCommon,rememberKeptWeeklyCommon};")(fakeWindow,class {});
+let keep=loadPolicy();
+assert.equal(keep.hasKeptWeeklyCommon("manager-a","2026-11-17"),false);
+keep.rememberKeptWeeklyCommon("manager-a","2026-11-17");
+keep=loadPolicy(); // fresh JS instance: app reopen
+assert.equal(keep.hasKeptWeeklyCommon("manager-a","2026-11-17"),true);
+assert.equal(keep.hasKeptWeeklyCommon("manager-a","2026-11-24"),false);
+assert.equal(keep.hasKeptWeeklyCommon("manager-b","2026-11-17"),false);
+assert.equal(keep.hasKeptWeeklyCommon("manager-a",""),false);
+console.log("Keep decision survives app reopen; different reward windows and accounts remain independent.");

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { hasKeptWeeklyCommon, useWeeklyCommonKeepRevision } from "../lib/weekly-common-keep";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "../hooks/use-auth";
@@ -36,6 +37,7 @@ async function getExisting<T>(path:string):Promise<T>{
 export default function LoginPendingCardMintDialog() {
   const {user}=useAuth();
   const userId=String(user?.id || "");
+  const keepRevision=useWeeklyCommonKeepRevision();
   const [location]=useLocation();
   const previousAuthenticatedId=React.useRef(userId);
   const [active,setActive]=React.useState<Prompt|null>(null);
@@ -128,12 +130,13 @@ export default function LoginPendingCardMintDialog() {
     // can't open a second popup behind a weekly Common claim.
     if(weeklyQuery.isPending || recoveryQuery.isPending || prizeQuery.isPending
       || replacementQuery.isPending)return;
-    const next=pending.find(item=>!reviewedInMemory.includes(item.token)
+    const next=pending.find(item=>!hasKeptWeeklyCommon(userId,item.token.split(":")[1])
+      && !reviewedInMemory.includes(item.token)
       && !sessionReviewed(promptKey(userId,item.token)));
     if(next)setActive(next);
   },[ready,active,otherModalOpen,explicitMint,prizePending,departurePending,
      weeklyQuery.isPending,recoveryQuery.isPending,prizeQuery.isPending,
-     replacementQuery.isPending,pending,reviewedInMemory,userId,location]);
+     replacementQuery.isPending,pending,reviewedInMemory,userId,location,keepRevision]);
 
   // A genuine logout followed by a new login should offer still-unminted
   // rewards again, even if the same browser tab remains open.
