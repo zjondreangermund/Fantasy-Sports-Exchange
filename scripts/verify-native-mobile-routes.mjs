@@ -146,6 +146,30 @@ expect(nativeCss.includes("[data-native-static-card-grid] *"), "Native Collectio
 expect(nativeCss.includes(".fa-card-lift > span[aria-hidden=\"true\"]"), "Native Collection no longer suppresses the legacy moving glow fallback");
 expect(cards.includes("gameweekPoints(card).toFixed(2)"), "Native Collection no longer anchors GW points to each card tile");
 
+
+expect(play.includes('data-entry-inline-error role="alert"'), "Mobile entry errors must be visible in the foreground lineup footer");
+expect(play.includes("onError: (error: any) => setEntryIssue("), "Server entry errors must be displayed inline rather than behind the lineup");
+expect(!play.includes("<CaptainRequiredDialog"), "Native captain selection must not open a second modal behind the lineup");
+expect(play.includes('data-entry-captain-picker'), "Captain choices must remain inside the native lineup");
+expect(play.includes('grid grid-cols-2 gap-2 sm:grid-cols-3'), "All five captain choices must be visible without horizontal scrolling");
+const submitStart=play.indexOf("  const submitEntry = () => {");
+const submitEnd=play.indexOf("  const pinMutation",submitStart);
+const submitSource=play.slice(submitStart,submitEnd);
+function exerciseNativeEntry(complete,captainId,selectedIds,pending=false) {
+  let issue="",prompt=false,posts=0,scrolls=0;
+  const lock={current:false};
+  const mutation={isPending:pending,mutate:()=>{posts++;}};
+  const run=new Function("complete","captainId","selectedIds","submissionLock","joinMutation","setEntryIssue","setCaptainPrompt","captainSectionRef",submitSource+";return submitEntry;");
+  const submit=run(complete,captainId,selectedIds,lock,mutation,v=>{issue=v;},v=>{prompt=v;},{current:{scrollIntoView:()=>{scrolls++;}}});
+  submit();submit();
+  return {issue,prompt,posts,scrolls};
+}
+const noCaptain=exerciseNativeEntry(true,null,[1,2,3,4,5]);
+expect(noCaptain.posts===0 && noCaptain.prompt && noCaptain.issue.includes("Team not submitted"),"Missing captain must show an inline explanation, not submit");
+expect(exerciseNativeEntry(false,1,[1,2]).posts===0,"Incomplete teams must never submit");
+expect(exerciseNativeEntry(true,9,[1,2,3,4,5]).posts===0,"Captain must be part of the selected five");
+expect(exerciseNativeEntry(true,1,[1,2,3,4,5]).posts===1,"Valid entry submits once even on rapid double tap");
+expect(exerciseNativeEntry(true,1,[1,2,3,4,5],true).posts===0,"Pending entry must not resubmit");
 if (failures.length) {
   console.error("Native mobile route/layout verification failed:\n- " + failures.join("\n- "));
   process.exit(1);
