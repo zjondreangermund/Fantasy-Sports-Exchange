@@ -94,6 +94,23 @@ try{
  const keeperUtility=keepTeams.map(team=>[...team]);[keeperUtility[1][0],keeperUtility[0][4]]=[keeperUtility[0][4],keeperUtility[1][0]];
  await assert.rejects(reduceCommonCollection('reduce',keepIds,true,keeperUtility),/needs UTILITY/);
  assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,11);
+ // The picker must identify the same ineligible card that the transaction rejects.
+ const invalidCardId=keepTeams[1][0];
+ await pg.query("UPDATE app.player_cards SET player_id=5 WHERE id=$1",[invalidCardId]);
+ const invalidPlan=await getCommonCollectionPlan('reduce');
+ assert.equal(invalidPlan.eligibilityVerified,true);
+ assert.equal(invalidPlan.cards.find(c=>c.id===invalidCardId).eligible,false);
+ assert.equal(invalidPlan.cards.find(c=>c.id===keepTeams[0][0]).eligible,true);
+ await assert.rejects(reduceCommonCollection('reduce',keepIds,true,keepTeams),/Team 2, GK: Harvey Cartwright.*No cards were sacrificed/);
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,11);
+ await pg.query("UPDATE app.player_cards SET player_id=1 WHERE id=$1",[invalidCardId]);
+ const savedBootstrap=bootstrap;bootstrap=null;
+ const unverifiedPlan=await getCommonCollectionPlan('reduce');
+ assert.equal(unverifiedPlan.eligibilityVerified,false);
+ assert.equal(unverifiedPlan.cards.find(c=>c.id===invalidCardId).eligible,undefined);
+ await assert.rejects(reduceCommonCollection('reduce',keepIds,true,keepTeams),/eligibility could not be verified.*No cards were sacrificed/);
+ assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,11);
+ bootstrap=savedBootstrap;
  await reduceCommonCollection('reduce',keepIds,true,keepTeams);
  const savedTeams=(await pg.query("SELECT meta->'teamCardIds' as teams FROM app.audit_logs WHERE user_id='reduce' AND action='collection.common_limit.sacrificed'")).rows[0].teams;
  assert.deepEqual(savedTeams,keepTeams);
