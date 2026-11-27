@@ -539,7 +539,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
                  tr.api_player_id, tr.transfer_date, tr.from_team_id, tr.to_team_id,
                  tr.player_name, tr.updated_at
           from app.api_football_transfers tr
-          where tr.transfer_date >= make_date(${season}, 6, 1)
+          where tr.transfer_date >= make_date(${season}, 6, 1) and tr.transfer_date<=current_date
           order by tr.api_player_id, tr.transfer_date desc, tr.updated_at desc
         )
         select lt.api_player_id as "apiPlayerId",
@@ -562,7 +562,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
           order by ap.season desc, ap.updated_at desc
           limit 1
         ) p on true
-        where current_to.team_id is null
+        where current_to.team_id is null and lt.to_team_id>0
           and coalesce(lt.player_name, p.name, '') <> ''
       `));
       departedDirectory = departureRows.map((row: any) => ({
