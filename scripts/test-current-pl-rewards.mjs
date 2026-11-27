@@ -42,8 +42,26 @@ try{
  const db={execute,transaction:fn=>pg.transaction(async tx=>fn({execute:statement=>{const query=dialect.sqlToQuery(statement);return tx.query(query.sql,query.params);}}))};globalThis.__mintFixture.db=db;
  const stubs={notifications:'export const ensureNotificationsSchema=async()=>{};export const createNotificationOnce=async()=>true;',db:'export const db=globalThis.__mintFixture.db;',fpl:'export const fplApi={mintBootstrap:async()=>globalThis.__mintFixture.bootstrap()};',directory:`export const apiFootballSeasonNow=()=>globalThis.__mintFixture.season;export const apiFootballPhotoUrl=(id)=>id>0?'https://media.api-sports.io/football/players/'+id+'.png':'';export const loadApiFootballPlayerDirectory=async()=>globalThis.__mintFixture.directory();export const resolveApiFootballPlayer=(p,dir)=>dir.find(x=>x.name.toLowerCase()===p.name.toLowerCase()&&x.team===p.team)||null;`};
  await build({entryPoints:['server/services/currentPremierLeagueMintPool.ts','server/services/dailyLoginReward.ts','server/services/freeCupPrizes.ts','server/services/commonCollectionPolicy.ts','server/services/commonCollectionCapSchema.ts','server/services/commonEntryPolicy.ts','server/services/weeklyRewardOutageRecovery.ts'],outdir:temp,outbase:'.',outExtension:{'.js':'.mjs'},bundle:true,platform:'node',format:'esm',plugins:[{name:'mint-fixtures',setup(b){for(const [filter,name] of [[/\/notifications\.js$/,'notifications'],[/\/db\.js$/,'db'],[/\/fplApi\.js$/,'fpl'],[/\/apiFootballPlayerDirectory\.js$/,'directory']])b.onResolve({filter},args=>args.importer.includes('node_modules')?undefined:({path:name,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:stubs[a.path],loader:'js'}));}}]});
- const {currentPremierLeagueMintIds}=await import(path.join(temp,'server/services/currentPremierLeagueMintPool.mjs'));const {claimDailyLoginReward}=await import(path.join(temp,'server/services/dailyLoginReward.mjs'));
+ const {currentPremierLeagueMintIds,currentPremierLeagueOwnedIds}=await import(path.join(temp,'server/services/currentPremierLeagueMintPool.mjs'));const {claimDailyLoginReward}=await import(path.join(temp,'server/services/dailyLoginReward.mjs'));
  assert.deepEqual((await currentPremierLeagueMintIds(db)).sort(),[1,2,3,4]); // Injury does not mean departure.
+ // An owned injured or suspended footballer can remain on the official roster
+ // even when the provider's active squad record is temporarily missing.
+ const initialDirectory=directory;
+ const midfielder=elements.find(e=>e.id===players[2].fplId);
+ const defender=elements.find(e=>e.id===players[1].fplId);
+ midfielder.status='i';defender.status='s';
+ directory=directory.filter(p=>![502,503].includes(p.apiPlayerId));
+ const keepEligible=await currentPremierLeagueOwnedIds(db);
+ assert(keepEligible.includes(2)&&keepEligible.includes(3));
+ assert(!keepEligible.includes(5)&&!keepEligible.includes(6)&&!keepEligible.includes(8)&&!keepEligible.includes(9));
+ assert.deepEqual((await currentPremierLeagueMintIds(db)).sort(),[1,4]);
+ midfielder.status='u';midfielder.news='Knee injury - recovering after surgery';
+ assert((await currentPremierLeagueOwnedIds(db)).includes(3));
+ midfielder.news='Transferred outside the Premier League';
+ assert(!(await currentPremierLeagueOwnedIds(db)).includes(3));
+ delete midfielder.status;delete midfielder.news;delete defender.status;
+ directory=initialDirectory;
+
  let result=await claimDailyLoginReward('weekly');assert(result.claimed);assert([1,2,3,4].includes(result.card.playerId));const issuedId=result.card.id;
 
  // Common cap: replace exactly one owned/unprotected card atomically and retain progression.
