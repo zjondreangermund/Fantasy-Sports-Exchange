@@ -254,3 +254,16 @@ export function buildFplPlayerIndex(bootstrap: any) {
     canonical,
   };
 }
+
+
+// Availability is not membership. Use only a healthy current official roster;
+// a missing matchday/API squad row cannot by itself disqualify an owned player.
+// Unavailable (u) is ambiguous, so require explicit injury/suspension evidence.
+export function isCurrentOfficialRosterMember(index: ReturnType<typeof buildFplPlayerIndex>, element: any): boolean {
+  if (!element || index.teams.length !== 20 || index.elements.length < 300 || !index.teamById.has(Number(element.team))) return false;
+  const status=String(element.status || "a").trim().toLowerCase();
+  if (["a","d","i","s","available","doubtful","injured","suspended"].includes(status)) return true;
+  const news=String(element.news || "").toLowerCase();
+  return status==="u" && /injur|surgery|operation|fracture|rehab|suspend|suspension|recover|hamstring|knee|ankle/.test(news)
+    && !/transfer|left the club|released|retired|loaned out|on loan/.test(news);
+}

@@ -20,7 +20,7 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
   const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([
     fplApi.bootstrap().catch(() => null),
     fplApi.getLiveGameweek().catch(() => null),
-    loadApiFootballPlayerDirectory().catch(() => []),
+    loadApiFootballPlayerDirectory(undefined,true).catch(() => []),
   ]);
 
   const fplIndex = buildFplPlayerIndex(bootstrap || {});
@@ -39,7 +39,9 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
       { ...player, ...(canonical || {}) },
       apiFootballDirectory,
     );
-    const identityVerified = Boolean(apiFootballPlayer);
+    const storedStatus=String(player.status||"").trim().toLowerCase();
+    const storedLeague=String(player.league||"").trim().toLowerCase();
+    const identityVerified = Boolean(apiFootballPlayer) && !["departed","loaned_out","superseded","unlinked","archived"].includes(storedStatus) && (!storedLeague||["premier league","english premier league","epl"].includes(storedLeague));
     const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
     const liveElement = matchedElement ? liveByElementId.get(Number(matchedElement.id)) : null;
     const detailedStats = liveElement ? resolveDetailedStatsForPlayer(canonical || matchedElement, detailedScoringContext) : null;

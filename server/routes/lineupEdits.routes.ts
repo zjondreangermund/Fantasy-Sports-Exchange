@@ -96,7 +96,7 @@ export function registerLineupEditsRoutes(app: Express, deps: { requireAuth: any
         if (new Set(cards.map(c => Number(c.playerId))).size !== 5) throw new Error("Choose five distinct footballers.");
         const normalized = ordered.map((c: any) => {
           const storedLeague = String(c.league || "").toLowerCase();
-          const isDeparted = ["departed", "superseded", "unlinked", "archived"].includes(String(c.status || "").toLowerCase())
+          const isDeparted = ["departed", "superseded", "unlinked", "archived", "loaned_out"].includes(String(c.status || "").toLowerCase())
             || Boolean(storedLeague && !premier(storedLeague))
             || Boolean(resolveApiFootballPlayer({...c, name:c.playerName}, departed));
           if (isDeparted) throw new Error(`${c.playerName} is no longer eligible for Premier League entries.`);

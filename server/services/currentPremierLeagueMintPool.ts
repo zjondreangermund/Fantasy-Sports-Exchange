@@ -1,7 +1,7 @@
 import {sql} from 'drizzle-orm';
 import {db} from '../db.js';
 import {fplApi} from './fplApi.js';
-import {buildFplPlayerIndex} from './fplPlayerIdentity.js';
+import {buildFplPlayerIndex,isCurrentOfficialRosterMember} from './fplPlayerIdentity.js';
 import {apiFootballSeasonNow,loadApiFootballPlayerDirectory,resolveApiFootballPlayer} from './apiFootballPlayerDirectory.js';
 const rowsOf=(result:any):any[]=>Array.isArray(result?.rows)?result.rows:[];
 const unavailable=()=>new Error('Current Premier League reward eligibility could not be verified. No card was minted; your reward remains available. Please try again shortly.');
@@ -9,9 +9,9 @@ const excluded=new Set(['departed','loaned_out','superseded','unlinked','archive
 /** New rewards need present membership, not a historical PL label, photo or ID.
  * FPL is roster/identity corroboration only; it never supplies tournament points.
  */
-export async function currentPremierLeagueMintIds(executor:any=db):Promise<number[]> {
+async function verifiedPremierLeagueIds(executor:any,ownedOnly=false):Promise<number[]> {
   let bootstrap:any,directory:any[];
-  try{[bootstrap,directory]=await Promise.all([fplApi.mintBootstrap(),loadApiFootballPlayerDirectory()]);}catch{throw unavailable();}
+  try{[bootstrap,directory]=await Promise.all([fplApi.mintBootstrap(),loadApiFootballPlayerDirectory(apiFootballSeasonNow(),ownedOnly)]);}catch{throw unavailable();}
   const elements=Array.isArray(bootstrap?.elements)?bootstrap.elements:[];
   const teams=Array.isArray(bootstrap?.teams)?bootstrap.teams:[];
   if(elements.length<300||teams.length!==20)throw unavailable();
@@ -27,18 +27,25 @@ export async function currentPremierLeagueMintIds(executor:any=db):Promise<numbe
     return player.active===true&&Number(player.season)===season&&clubIds.has(Number(player.apiTeamId))
       &&Number.isFinite(updated)&&updated<=now+300000&&now-updated<=48*3600000;
   });
-  if(!currentDirectory.length)throw unavailable();
+  if(!currentDirectory.length&&!ownedOnly)throw unavailable();
   const locals=rowsOf(await executor.execute(sql`SELECT id,name,team,position::text AS position,league,status,
     fpl_id AS "fplId",code,web_name AS "webName" FROM app.players
     WHERE regexp_replace(lower(coalesce(league,'')), '[^a-z0-9]+', '', 'g') IN ('premierleague','englishpremierleague','epl')`));
   const index=buildFplPlayerIndex(bootstrap);
   const teamIds=new Set(teams.map((team:any)=>Number(team.id)));
+  const links=ownedOnly?rowsOf(await executor.execute(sql`SELECT player_id AS "playerId",api_player_id AS "providerId" FROM app.player_provider_identities`)):[];
+  const linkedIds=new Map(links.map(row=>[Number(row.playerId),Number(row.providerId)]));
+  const selectionDirectory=ownedOnly?directory.filter(row=>clubIds.has(Number(row.apiTeamId))&&(row.season===season||row.active===false)):currentDirectory;
   const candidates=locals.flatMap(player=>{
     if(excluded.has(String(player.status||'').toLowerCase()))return [];
     const official=index.resolve(player);
     if(!official||!teamIds.has(Number(official.team)))return [];
-    const provider=resolveApiFootballPlayer({...player,...index.canonical(official)},currentDirectory);
-    return provider?[{playerId:Number(player.id),providerId:Number(provider.apiPlayerId)}]:[];
+    const provider=resolveApiFootballPlayer({...player,...index.canonical(official)},selectionDirectory);
+    if(ownedOnly&&!isCurrentOfficialRosterMember(index,official))return [];
+    const providerId=Number(provider?.apiPlayerId||linkedIds.get(Number(player.id))||0);
+    // Official membership can establish retention eligibility even if the
+    // scoring provider identity is missing; new mints still require both.
+    return provider||ownedOnly?[{playerId:Number(player.id),providerId}]:[];
   });
   const blocked=new Set<number>();
   const tables=rowsOf(await executor.execute(sql`SELECT to_regclass('app.real_life_player_loans') AS loans,to_regclass('app.api_football_transfers') AS transfers`))[0]||{};
@@ -50,6 +57,7 @@ export async function currentPremierLeagueMintIds(executor:any=db):Promise<numbe
   }
   const valid=candidates.filter(row=>!blocked.has(row.playerId)&&!departedProviderIds.has(row.providerId));
   if(!valid.length)throw unavailable();
+  if(ownedOnly)return valid.map(row=>row.playerId);
   // Identity proof must exist for the mint-time database guard, including newly
   // discovered local rows. Never overwrite an established provider identity.
   await executor.execute(sql`INSERT INTO app.player_provider_identities(player_id,api_player_id)
@@ -57,6 +65,8 @@ export async function currentPremierLeagueMintIds(executor:any=db):Promise<numbe
     AS verified(player_id integer,api_player_id integer) ON CONFLICT(player_id) DO NOTHING`);
   return valid.map(row=>row.playerId);
 }
+export async function currentPremierLeagueMintIds(executor:any=db):Promise<number[]> {return verifiedPremierLeagueIds(executor);}
+export async function currentPremierLeagueOwnedIds(executor:any=db):Promise<number[]> {return verifiedPremierLeagueIds(executor,true);}
 export async function assertCurrentPremierLeagueMintPlayer(executor:any,playerId:number){
   if(!(await currentPremierLeagueMintIds(executor)).includes(Number(playerId)))throw new Error('This player is no longer eligible for a new Premier League card. No card was minted. Choose a current Premier League player.');
 }

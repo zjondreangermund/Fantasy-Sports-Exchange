@@ -126,7 +126,7 @@ export async function loadDetailedScoringContext(bootstrap: any, gameWeek: numbe
       statsByApiPlayerId.set(apiPlayerId, mergeDetailedStats(statsByApiPlayerId.get(apiPlayerId), detailed));
     }
 
-    const directory = await loadApiFootballPlayerDirectory();
+    const directory = await loadApiFootballPlayerDirectory(undefined,true);
     // SCORE_DETAIL_MATCH_ROW_IDENTITY_V1
     // Match-stat rows are also authoritative provider identities. Add them as
     // fallback candidates when the periodic squad directory is partial/stale.
@@ -290,7 +290,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
   });
 
   try {
-    const directory = await loadApiFootballPlayerDirectory();
+    const directory = await loadApiFootballPlayerDirectory(undefined,true);
     // A fixture can remain tagged to its original EPL round after being moved
     // weeks later. Do not score that delayed match inside this GW, regardless
     // of what the provider's round string says.
@@ -539,7 +539,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
                  tr.api_player_id, tr.transfer_date, tr.from_team_id, tr.to_team_id,
                  tr.player_name, tr.updated_at
           from app.api_football_transfers tr
-          where tr.transfer_date >= make_date(${season}, 6, 1)
+          where tr.transfer_date >= make_date(${season}, 6, 1) and tr.transfer_date<=current_date
           order by tr.api_player_id, tr.transfer_date desc, tr.updated_at desc
         )
         select lt.api_player_id as "apiPlayerId",
@@ -562,7 +562,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
           order by ap.season desc, ap.updated_at desc
           limit 1
         ) p on true
-        where current_to.team_id is null
+        where current_to.team_id is null and lt.to_team_id>0
           and coalesce(lt.player_name, p.name, '') <> ''
       `));
       departedDirectory = departureRows.map((row: any) => ({

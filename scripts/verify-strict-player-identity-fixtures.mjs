@@ -63,7 +63,7 @@ expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 2
 
 includesAll(marketplace, [
   "fplApi.bootstrap()",
-  "loadApiFootballPlayerDirectory()",
+  "loadApiFootballPlayerDirectory(undefined,true)",
   "resolveApiFootballPlayer",
   "apiFootballPhotoUrl",
   "fplIndex.resolve(storedPlayer)",
