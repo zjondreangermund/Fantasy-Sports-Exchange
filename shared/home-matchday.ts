@@ -20,7 +20,9 @@ export function selectHomeMatchday(live:any[],finished:any[],upcoming:any[],now:
     const api=homeApiFixtureId(f);
     const key=api?"api:"+api:"display:"+String(f.fplFixtureId||f.id);
     const old=rows.get(key);
-    if(!old||updated(f)>updated(old)||(updated(f)===updated(old)&&phase(f)>=phase(old)))rows.set(key,f);
+    // A confirmed full-time status must not be regressed by a stale live or schedule list.
+    if(old&&phase(old)===3&&phase(f)!==3)continue;
+    if(!old||phase(f)===3&&phase(old)!==3||updated(f)>updated(old)||(updated(f)===updated(old)&&phase(f)>=phase(old)))rows.set(key,f);
   }
   const all=[...rows.values()];
   const active=all.filter(f=>fixtureMatchesTab(f,"live")).sort((a,b)=>kickoff(a)-kickoff(b));
