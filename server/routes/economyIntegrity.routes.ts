@@ -500,7 +500,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             departedApiFootballDirectory,
           );
           const explicitlyDeparted = Boolean(departedApiFootballPlayer)
-            || ["departed", "superseded", "unlinked", "archived"].includes(storedStatus)
+            || ["departed", "superseded", "unlinked", "archived", "loaned_out"].includes(storedStatus)
             || (storedLeague && !["premier league", "english premier league", "epl"].includes(storedLeague));
           if (explicitlyDeparted) {
             return {
