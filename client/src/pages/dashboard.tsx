@@ -11,6 +11,7 @@ import { toFantasyCardData } from "../lib/fantasy-card-adapter";
 import { openNotification, type ArenaNotification } from "../lib/notifications";
 import { useAuth } from "../hooks/use-auth";
 import MatchdayCenter from "../components/dashboard/MatchdayCenter";
+import HomeMatchdayLive from "../components/dashboard/HomeMatchdayLive";
 import DailyLoginRewardPanel from "../components/dashboard/DailyLoginRewardPanel";
 import { PremiumHero, PremiumPage, PremiumPanel, PremiumStat } from "../components/premium";
 import { type Competition, type CompetitionEntry, type PlayerCardWithPlayer, type Wallet } from "../../../shared/schema";
@@ -65,7 +66,7 @@ export default function DashboardPage() {
 
   return (
     <PremiumPage>
-      <MatchdayCenter />
+      <HomeMatchdayLive fallback={<MatchdayCenter />} />
       <DailyLoginRewardPanel />
 
       <PremiumHero eyebrow="Club Command Centre" title="Fantasy Arena" subtitle="Your squad, wallet, tournaments and trading floor in one premium matchday control room.">
@@ -100,7 +101,7 @@ export default function DashboardPage() {
         <MetricCard icon={<WalletIcon className="h-5 w-5" />} label="Wallet Balance" value={walletLoading ? null : money(walletBalance)} helper="Finance hub" href="/wallet" />
         <MetricCard icon={<CreditCard className="h-5 w-5" />} label="Cards Owned" value={cardsLoading ? null : String(cards?.length || 0)} helper={`${listedCards.length} listed for sale`} href="/collection" />
         <MetricCard icon={<Trophy className="h-5 w-5" />} label="Live Entries" value={String(activeTournaments.length)} helper={`${openTournaments.length} open tournaments`} href="/competitions" />
-        <MetricCard icon={<LineChart className="h-5 w-5" />} label="Lineup Score" value={lineupLoading ? null : String(lineupScore)} helper={`${lineupCards.length}/5 cards selected`} href="/live-lineup" />
+        <MetricCard icon={<LineChart className="h-5 w-5" />} label="Collection lineup points" value={lineupLoading ? null : String(lineupScore)} helper={`${lineupCards.length}/5 selected · not tournament total`} href="/live-lineup" />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
