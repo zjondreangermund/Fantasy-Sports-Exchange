@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { normalizePlayerText, strongPlayerNameMatch, buildFplPlayerIndex, isCurrentOfficialRosterMember } from "./fplPlayerIdentity.js";
-import { fplApi } from "./fplApi.js";
 
 export type CanonicalPlayerPosition = "GK" | "DEF" | "MID" | "FWD";
 
@@ -260,6 +259,7 @@ export async function loadApiFootballPlayerDirectory(season = apiFootballSeasonN
   // squad records when the current official roster confirms the same club.
   // Never mark those records active or use them for new-card minting.
   try {
+    const {fplApi}=await import("./fplApi.js");
     const index=buildFplPlayerIndex(await fplApi.mintBootstrap());
     if(index.teams.length!==20||index.elements.length<300)return directory;
     const clubs=rowsOf(await db.execute(sql`select distinct team_id as id from (
