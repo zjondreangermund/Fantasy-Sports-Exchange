@@ -1,3 +1,4 @@
+import type {ReactNode} from "react";
 import {useQueries,useQuery} from "@tanstack/react-query";
 import {Link} from "wouter";
 import {useAuth} from "../../hooks/use-auth";
@@ -9,7 +10,7 @@ const points=(v:any)=>v==null||!Number.isFinite(Number(v))?"—":Number(v).toLoc
 const fixtureId=(f:any)=>f?.intelligenceAvailable===false?0:Number(f?.apiFixtureId||0);
 const href=(f:any)=>"/premier-league?nativeFull=1&matchCentre=live"+(fixtureId(f)>0?"&apiFixtureId="+fixtureId(f):"");
 
-export default function HomeMatchdayLive({fallback=null}:{fallback?:React.ReactNode}){
+export default function HomeMatchdayLive({fallback=null}:{fallback?:ReactNode}){
   const {user}=useAuth();
   const live=useQuery<any>({
     queryKey:["api-football-fixtures","premier-league","live",""],
@@ -32,7 +33,7 @@ export default function HomeMatchdayLive({fallback=null}:{fallback?:React.ReactN
     const related:any[]=[];
     for(const entry of list(q.data.entries)){
       const existing=entries.get(Number(entry.entryId));
-      if(!existing||Date.parse(entry.updatedAt||0)>=Date.parse(existing.updatedAt||0))entries.set(Number(entry.entryId),entry);
+      if(!existing||(Date.parse(entry.updatedAt||"")||0)>=(Date.parse(existing.updatedAt||"")||0))entries.set(Number(entry.entryId),entry);
       for(const player of list(entry.players)){
         const fact=facts.get(Number(player.apiPlayerId));
         if(fact)related.push({...player,fact,entry});
@@ -46,7 +47,7 @@ export default function HomeMatchdayLive({fallback=null}:{fallback?:React.ReactN
     <div className="flex items-start justify-between gap-3"><div><p className="flex items-center gap-2 text-xs font-black uppercase tracking-[.2em] text-red-300"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500"/>Matchday live</p><h1 className="mt-2 text-2xl font-black sm:text-4xl">Every minute matters.</h1><p className="mt-1 text-xs text-slate-300">Your football. Your players. Your tournament.</p></div><span className="shrink-0 rounded-full bg-red-500/15 px-3 py-1.5 text-xs font-bold text-red-200">{fixtures.length} live</span></div>
     {live.data?.stale?<p className="text-xs text-slate-400">Match feed delayed. Showing last received scores.</p>:null}
     <div className="grid gap-2 md:grid-cols-2">{sorted.map(f=>{
-      const related=matchPlayers.get(fixtureId(f))||[];
+      const related=(matchPlayers.get(fixtureId(f))||[]).map(row=>{const latest=entries.get(Number(row.entry.entryId));const current=list(latest?.players).find(p=>Number(p.cardId)===Number(row.cardId)&&Number(p.apiPlayerId)===Number(row.apiPlayerId));return {...row,contribution:current?.contribution??null,entry:latest||row.entry};});
       const players=[...new Map(related.map(p=>[p.apiPlayerId,p])).values()];
       return <article key={f.id} className="rounded-2xl border border-white/10 bg-black/25 p-3">
         <Link href={href(f)} className="block"><div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase"><span className="text-red-300">{fixtureClock(f)}</span><span className="text-slate-400">{f.round||"Premier League"}</span></div>
