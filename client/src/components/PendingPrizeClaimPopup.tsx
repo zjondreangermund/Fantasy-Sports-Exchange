@@ -30,6 +30,7 @@ export default function PendingPrizeClaimPopup() {
   const {data:onboarding}=useQuery<{completed:boolean}>({
     queryKey:["/api/onboarding/status"],enabled:Boolean(user),staleTime:30_000,
   });
+  const {data:commonChoices}=useQuery<{choices:{id:number;entryId:number}[]}>({queryKey:["/api/common-card-reward-choices"],enabled:Boolean(user)&&onboarding?.completed===true,staleTime:0,refetchInterval:15000});
   const {data:history}=useQuery<TrophyData>({
     queryKey:["/api/trophy-cabinet"],enabled:Boolean(user)&&onboarding?.completed===true,
     staleTime:0,refetchInterval:20_000,refetchOnWindowFocus:true,
@@ -99,7 +100,7 @@ export default function PendingPrizeClaimPopup() {
     onError:(error:any)=>toast({title:"Mint unsuccessful",description:error?.message||"Your reward remains available in the Trophy Cabinet.",variant:"destructive"}),
   });
   const open=Boolean(user&&onboarding?.completed&&(award||revealed||pendingChoice));
-  if(!open)return null;
+  if(!open || (Boolean(commonChoices?.choices?.length)&&!revealed))return null;
   const card=ownedCards.find(c=>Number(c.id)===Number(revealed?.id));
   return <Dialog open={open} onOpenChange={next=>{if(!next){setPendingChoice(false);dismiss();}}}>
     <DialogContent data-pending-prize-popup className="z-[145] max-h-[90dvh] w-[min(95vw,480px)] overflow-y-auto border-fuchsia-400/35 bg-[radial-gradient(circle_at_50%_0%,rgba(168,85,247,.25),transparent_60%),#060a1b] text-white shadow-[0_0_60px_rgba(168,85,247,.2)]">
