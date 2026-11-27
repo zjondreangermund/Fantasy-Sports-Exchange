@@ -1,4 +1,4 @@
-import {fixtureMatchesTab} from "./fixture-display";
+import {fixtureMatchesTab} from "./fixture-display.js";
 
 export const HOME_RECAP_WINDOW_MS=24*60*60*1000;
 export const HOME_PREMATCH_WINDOW_MS=90*60*1000;
