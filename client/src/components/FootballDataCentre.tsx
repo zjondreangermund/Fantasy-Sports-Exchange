@@ -2,7 +2,7 @@ import { fixtureMatchesTab, fixtureClock } from "../../../shared/fixture-display
 import {fixturePeriodScores} from "../lib/fixture-period-scores";
 import FootballTeamGroups from "./FootballTeamGroups";
 import { normalizeFootballData, uniqueFootballRows, footballPlayerKey, dedupeAvailability, groupAvailabilityByTeam } from "../../../shared/football-data";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PersonalMatchPerformance from "./PersonalMatchPerformance";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -152,6 +152,8 @@ export default function FootballDataCentre() {
   const [selectedCoachId, setSelectedCoachId] = useState<number | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
   const [fixtureFilter, setFixtureFilter] = useState("");
+  const manuallySelectedFixtures=useRef(false);
+  const [activeTab,setActiveTab]=useState("matches");
   const [clubFilter, setClubFilter] = useState("");
 
   const selectedCompetition = COMPETITIONS.find((item) => item.key === leagueKey) || COMPETITIONS[0];
@@ -193,6 +195,21 @@ export default function FootballDataCentre() {
     refetchInterval: 30_000,
   });
 
+  // MATCHDAY_LIVE_HOME_V1: use the same cached live-fixture request as the live filter.
+  const liveMatchday=useQuery<any>({
+    queryKey:["api-football-fixtures",leagueKey,"live",""],
+    queryFn:()=>getJson(`/api/football/fixtures/${leagueKey}?status=live&limit=20`),
+    staleTime:15_000,refetchInterval:30_000,
+  });
+  const liveRows=(Array.isArray(liveMatchday.data?.fixtures)?liveMatchday.data.fixtures:[]).filter((row:any)=>fixtureMatchesTab(row,"live"));
+  const liveMode=liveRows.length>0;
+  useEffect(()=>{
+    if(liveMode&&!manuallySelectedFixtures.current){setFixtureStatus("live");setSelectedRound("");}
+  },[liveMode]);
+  const openLiveFixture=(id:number)=>{
+    manuallySelectedFixtures.current=true;
+    setActiveTab("matches");setSelectedRound("");setFixtureStatus("live");setSelectedPlayerId(null);setSelectedFixtureId(id);
+  };
   const match = useQuery<any>({
     queryKey: ["api-football-match", leagueKey, selectedFixtureId],
     queryFn: () => getJson(`/api/football/match/${leagueKey}/${selectedFixtureId}?mode=live-centre`),
@@ -307,10 +324,19 @@ export default function FootballDataCentre() {
 
   return (
     <div className="space-y-5">
+      {liveMode?<section data-matchday-live-home className="overflow-hidden rounded-2xl border border-red-400/30 bg-[radial-gradient(ellipse_at_top_right,rgba(239,68,68,.16),transparent_55%),linear-gradient(135deg,#101425,#080c18)] p-4 text-white sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2 text-xs font-black uppercase tracking-[.23em] text-red-300"><span className="h-2 w-2 animate-pulse rounded-full bg-red-500"/> Matchday live</div><h2 className="mt-2 text-2xl font-black tracking-tight sm:text-4xl">Every minute matters.</h2><p className="mt-1 text-xs text-slate-300 sm:text-sm">Real football. Your players. Your tournament.</p></div><span className="rounded-full border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-xs font-black text-red-200">{liveRows.length} LIVE</span></div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">{liveRows.map((f:any)=><button type="button" key={f.id} onClick={()=>openLiveFixture(Number(f.id))} className="rounded-xl border border-white/10 bg-black/25 p-3 text-left transition hover:border-cyan-400/50">
+          <div className="mb-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-wide"><span className="text-red-300">{fixtureClock(f)}</span><span className="text-slate-400">{f.round||"Premier League"}</span></div>
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-center"><div className="min-w-0">{f.homeTeam?.logo?<img src={f.homeTeam.logo} alt="" className="mx-auto mb-1 h-9 w-9 object-contain"/>:null}<p className="text-xs font-bold">{f.homeTeam?.name}</p></div><b className="rounded-lg bg-white/5 px-3 py-2 text-2xl tabular-nums">{f.homeTeam?.score??"–"} : {f.awayTeam?.score??"–"}</b><div className="min-w-0">{f.awayTeam?.logo?<img src={f.awayTeam.logo} alt="" className="mx-auto mb-1 h-9 w-9 object-contain"/>:null}<p className="text-xs font-bold">{f.awayTeam?.name}</p></div></div>
+          <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-2 text-xs font-semibold text-cyan-200"><span>Open live match &amp; my players</span><span>→</span></div>
+        </button>)}</div>
+        <p className="mt-3 text-[10px] text-slate-400">Scores refresh automatically as data arrives. Match statistics and fantasy points can update at different times.</p>
+      </section>:null}
       <Card className="border-violet-500/20 bg-gradient-to-br from-violet-950/30 to-background/80 p-4 sm:p-5">
         <div className="flex flex-col gap-4">
           <div>
-            <div className="flex items-center gap-2 text-lg font-black"><BarChart3 className="h-5 w-5 text-violet-400" /> API-Football Pro Intelligence Centre</div>
+            <div className="flex items-center gap-2 text-lg font-black"><BarChart3 className="h-5 w-5 text-violet-400" /> {liveMode?"Premier League hub":"Premier League Match Centre"}</div>
             <p className="mt-1 text-sm text-muted-foreground">Standings, rounds, live match intelligence, visual lineups, advanced player form, injuries, squads, transfers, coaches and stadium data. Fantasy Arena tournament scoring uses synchronized API-Football player actions; provider match rating is excluded.</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -320,7 +346,7 @@ export default function FootballDataCentre() {
         {showProviderDiagnostics ? <div className="mt-4">{coverage.isLoading ? <Skeleton className="h-7 w-full" /> : <CoverageStrip data={coverage.data} />}</div> : null}
       </Card>
 
-      <Tabs defaultValue="matches" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="flex h-auto flex-wrap justify-start">
           <TabsTrigger value="matches" className="gap-1"><Activity className="h-4 w-4" /> Match Centre</TabsTrigger>
           <TabsTrigger value="table" className="gap-1"><BarChart3 className="h-4 w-4" /> Table</TabsTrigger>
@@ -334,8 +360,8 @@ export default function FootballDataCentre() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h3 className="font-black">{selectedCompetition.name} Match Centre</h3><p className="text-xs text-muted-foreground">Browse by live status or exact round/gameweek. Fixture ID links events, lineups, statistics, ratings, H2H and availability.</p></div>
             <div className="flex flex-wrap gap-2">
-              {(["upcoming", "live", "finished"] as const).map((status) => <Button key={status} size="sm" variant={!selectedRound && fixtureStatus === status ? "default" : "outline"} onClick={() => { setSelectedRound(""); setFixtureStatus(status); setSelectedFixtureId(null); }}>{status === "finished" ? "Results" : status[0].toUpperCase() + status.slice(1)}</Button>)}
-              <select className="rounded-md border border-white/10 bg-background px-3 py-1 text-sm" value={selectedRound} onChange={(event) => { setSelectedRound(event.target.value); setSelectedFixtureId(null); }}>
+              {(["upcoming", "live", "finished"] as const).map((status) => <Button key={status} size="sm" variant={!selectedRound && fixtureStatus === status ? "default" : "outline"} onClick={() => { manuallySelectedFixtures.current=true; setSelectedRound(""); setFixtureStatus(status); setSelectedFixtureId(null); }}>{status === "finished" ? "Results" : status[0].toUpperCase() + status.slice(1)}</Button>)}
+              <select className="rounded-md border border-white/10 bg-background px-3 py-1 text-sm" value={selectedRound} onChange={(event) => { manuallySelectedFixtures.current=true; setSelectedRound(event.target.value); setSelectedFixtureId(null); }}>
                 <option value="">Round / gameweek</option>
                 {roundRows.map((round: any, index: number) => {
                   const label = typeof round === "string" ? round : String(round?.round || round?.name || `Round ${index + 1}`);
