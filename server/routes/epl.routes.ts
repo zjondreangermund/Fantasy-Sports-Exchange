@@ -4,6 +4,18 @@ import { fplApi } from "../services/fplApi.js";
 import { buildGameweekFixtureStatus } from "../services/gameweekPlayerFixtures.js";
 import { db } from "../db.js";
 import { sql } from "drizzle-orm";
+import { storage } from "../storage.js";
+import { rankCompetitionEntries } from "../services/tournamentRules.js";
+
+// Shared ranking cache: a busy matchday must not re-rank the same cup for each viewer.
+const matchRankingCache=new Map<number,{expires:number;promise:Promise<Map<number,number>>}>();
+function matchRanks(competitionId:number){
+  const cached=matchRankingCache.get(competitionId);
+  if(cached&&cached.expires>Date.now())return cached.promise;
+  for(const [id,row] of matchRankingCache)if(row.expires<=Date.now())matchRankingCache.delete(id);
+  const promise=storage.getCompetitionEntries(competitionId).then(entries=>rankCompetitionEntries(storage,entries)).then(ranked=>new Map<number,number>(ranked.map((entry,index)=>[Number(entry.id),index+1]))).catch(()=>{matchRankingCache.delete(competitionId);return new Map<number,number>();});
+  matchRankingCache.set(competitionId,{expires:Date.now()+30_000,promise});return promise;
+}
 
 function teamLookup(bootstrap: any): Map<number, any> {
   const teams: any[] = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
@@ -232,7 +244,7 @@ export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreU
           and c.status::text in ('open','active','locked','completed')
           and c.start_date<=${fixture.kickoffAt} and c.end_date>=${fixture.kickoffAt}
         order by c.id,ce.id limit 100`);
-      const entries=(result.rows||[]).map((row:any)=>{
+      const entries=await Promise.all((result.rows||[]).map(async(row:any)=>{
         const snapshot=row.scoring||{};
         const validSnapshot=Number(snapshot.gameWeek)===gameWeek&&Number(snapshot.version)>=2;
         const cardIds=new Set<number>((Array.isArray(row.lineupCardIds)?row.lineupCardIds:[]).map(Number));
@@ -249,10 +261,10 @@ export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreU
             captain:Number(row.captainId)===cardId,gameweekPoints:scoreNumber}];
         });
         return {entryId:Number(row.entryId),competitionId:Number(row.competitionId),competitionName:row.competitionName,
-          status:row.status,gameWeek,rank:row.rank==null?null:Number(row.rank),entryCount:Number(row.entryCount||0),
+          status:row.status,gameWeek,rank:row.status==="completed"?(row.rank==null?null:Number(row.rank)):validSnapshot?(await matchRanks(Number(row.competitionId))).get(Number(row.entryId))??null:null,entryCount:Number(row.entryCount||0),
           totalScore:validSnapshot?Number(row.totalScore):null,complete:validSnapshot&&snapshot.complete===true,
           final:validSnapshot&&snapshot.final===true,updatedAt:validSnapshot?snapshot.updatedAt||null:null,players};
-      });
+      }));
       res.setHeader("Cache-Control","private, no-store");
       return res.json({fixtureId,gameWeek,entries});
     }catch(error){console.warn("[personal-match-centre] performance unavailable",error);return res.status(503).json({message:"Your tournament performance is temporarily unavailable"});}
