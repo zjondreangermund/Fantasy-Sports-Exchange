@@ -227,7 +227,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           ce.id as "entryId",
           ce.user_id as "userId",
           coalesce(u.manager_team_name, u.name, u.email, 'Manager') as "teamName",
-          coalesce(ce.total_score, 0)::float as "totalScore",
+          ${leaderboardTotal}::float as "totalScore",
           ce.lineup_card_ids as "lineupCardIds",
           ce.captain_id as "captainId",
           coalesce(ce.tiebreak_meta, '{}'::jsonb) as "tiebreakMeta",
@@ -351,7 +351,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         const captain = Number(card.cardId) === captainId;
         const calculatedCaptainBonus = Math.round(points * 0.1 * 10000) / 10000;
         const captainBonus = captain
-          ? Number(snapshot?.final === true ? snapshot?.captainBonus ?? calculatedCaptainBonus : calculatedCaptainBonus)
+          ? Number(snapshot?.captainBonus ?? calculatedCaptainBonus)
           : 0;
         const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";
         // API_ONLY_TOURNAMENT_TEAM_IMAGES_V1
@@ -397,10 +397,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         players.reduce((total: number, player: any) => total + Number(player.contribution || 0), 0) * 10000,
       ) / 10000;
       const storedTotalScore = Number(entry.totalScore || 0);
-      const snapshotTotalScore = Number(snapshot?.totalScore);
-      const canonicalTotalScore = snapshot && Number.isFinite(snapshotTotalScore)
-        ? snapshotTotalScore
-        : calculatedTotalScore;
+      const canonicalTotalScore = storedTotalScore;
       const scoreReconciliationRequired = snapshot?.final !== true
         && (
           Math.abs(storedTotalScore - canonicalTotalScore) > 0.00005
