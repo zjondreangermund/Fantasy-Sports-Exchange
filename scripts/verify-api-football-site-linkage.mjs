@@ -144,7 +144,9 @@ requireText(personal, "String(user?.id", "Personal cache must be isolated by acc
 requireText(centre, "?mode=live-centre", "Match centre must skip prediction requests");
 requireText(route, "!liveCentre && !finished", "Prediction endpoint must not be called by live centre");
 rejectText(centre, "Statistical prediction", "Predictions are excluded from the match centre");
-requireText(native, "matchCentre=live", "Mobile users need direct access to the live centre");
+requireText(native, "<FootballDataCentre />", "Native build must render the same live centre");
+requireText(centre, "MATCHDAY_LIVE_HOME_V1", "Automatic live landing page missing");
+requireText(centre, "manuallySelectedFixtures.current", "Live mode must respect manual navigation");
 requireText(centre, 'type LeagueKey = "premier-league";', "Data Centre is not locked to Premier League");
 requireText(centre, '{ key: "premier-league", name: "Premier League"', "Premier League Data Centre selector/config is missing");
 requireText(centre, "fixtures.isError", "Match Centre hides football-provider errors as empty fixture lists");
