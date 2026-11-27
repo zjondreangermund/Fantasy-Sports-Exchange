@@ -20,7 +20,7 @@ export async function enrichPlayerCards(cards: any[]): Promise<any[]> {
   const [bootstrap, liveData, apiFootballDirectory] = await Promise.all([
     fplApi.bootstrap().catch(() => null),
     fplApi.getLiveGameweek().catch(() => null),
-    loadApiFootballPlayerDirectory().catch(() => []),
+    loadApiFootballPlayerDirectory(undefined,true).catch(() => []),
   ]);
 
   const fplIndex = buildFplPlayerIndex(bootstrap || {});
