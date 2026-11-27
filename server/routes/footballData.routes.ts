@@ -872,6 +872,8 @@ export function registerFootballDataRoutes(app: Express) {
         if (fallback) return res.json(fallback);
         return res.status(404).json({ message: "Fixture not found" });
       }
+      if(Number(fixtureRow?.league?.id)!==league.config.id)return res.status(404).json({message:"Fixture does not belong to this league"});
+      const liveCentre=req.query.mode==="live-centre";
       const normalizedFixture = { ...normalizeFixture(fixtureRow), updatedAt: base.updatedAt };
       const savedMatchday = league.config.id === 39 ? await savedPremierLeagueMatchdayFixtures(season) : [];
       const displayFixture = newerFixture(normalizedFixture, savedMatchday.find((row: any) => Number(row.id) === fixtureId));
@@ -894,7 +896,7 @@ export function registerFootballDataRoutes(app: Express) {
         embeddedStats || fixtureCoverage.statistics_fixtures === false ? Promise.resolve(null) : cachedProvider("fixtures/statistics", { fixture: fixtureId }, finished ? 12 * 60 * 60 : 60),
         fixtureCoverage.statistics_fixtures === false ? Promise.resolve(null) : cachedProvider("fixtures/statistics", { fixture: fixtureId, half: true }, finished ? 12 * 60 * 60 : 60).catch(() => null),
         embeddedPlayers || fixtureCoverage.statistics_players === false ? Promise.resolve(null) : cachedProvider("fixtures/players", { fixture: fixtureId }, finished ? 12 * 60 * 60 : 60),
-        !finished && coverage.coverage?.predictions !== false ? cachedProvider("predictions", { fixture: fixtureId }, 60 * 60).catch(() => null) : Promise.resolve(null),
+        !liveCentre && !finished && coverage.coverage?.predictions !== false ? cachedProvider("predictions", { fixture: fixtureId }, 60 * 60).catch(() => null) : Promise.resolve(null),
         homeId && awayId ? cachedProvider("fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last: 5 }, 6 * 60 * 60).catch(() => null) : Promise.resolve(null),
         coverage.coverage?.injuries !== false ? cachedProvider("injuries", { fixture: fixtureId }, 4 * 60 * 60).catch(() => null) : Promise.resolve(null),
       ]);
@@ -914,6 +916,8 @@ export function registerFootballDataRoutes(app: Express) {
         headToHead: h2hResult ? responseRows(h2hResult.payload).map(normalizeFixture) : [],
         injuries: injuryResult ? responseRows(injuryResult.payload) : [],
         refreshAfterSeconds: ttl,
+        updatedAt:base.updatedAt,
+        stale:Boolean(base.stale||eventsResult?.stale||lineupsResult?.stale||statisticsResult?.stale||playersResult?.stale),
       });
     } catch (error: any) {
       if (league.config.id === 39) {

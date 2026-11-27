@@ -13,6 +13,9 @@ const sidebar = read("client/src/components/app-sidebar.tsx");
 const liveDock = read("client/src/components/LivePulseDock.tsx");
 const routeScene = read("client/src/components/RouteSceneBackground.tsx");
 
+const personal = read("client/src/components/PersonalMatchPerformance.tsx");
+const eplRoutes = read("server/routes/epl.routes.ts");
+const native = read("client/src/components/native/NativePremierLeaguePage.tsx");
 const failures = [];
 const requireText = (source, text, message) => { if (!source.includes(text)) failures.push(message); };
 const rejectText = (source, text, message) => { if (source.includes(text)) failures.push(message); };
@@ -107,7 +110,7 @@ rejectText(page, '"la-liga"', "Premier League page still carries other league st
 for (const marker of [
   "Match Centre",
   "Detailed match report",
-  "Statistical prediction",
+  "PersonalMatchPerformance",
   "Full-match statistics",
   "First-half / half-time statistics",
   "Event timeline",
@@ -129,6 +132,21 @@ for (const marker of [
   "Management career",
 ]) requireText(centre, marker, `Premier League Data Centre UI is missing: ${marker}`);
 
+// Personal centre is deliberately display-only; all scoring stays in its existing pipeline.
+requireText(eplRoutes, 'app.get("/api/epl/match-centre/:fixtureId/my-performance", deps.requireAuth', "Personal performance must require authentication");
+requireText(eplRoutes, 'where ce.user_id=${userId}', "Personal performance must only read the requesting user's entries");
+requireText(eplRoutes, "league_id=39", "Fixture must be Premier League");
+requireText(eplRoutes, "c.end_date>=${fixture.kickoffAt}", "Postponed fixtures must not receive old gameweek points");
+requireText(eplRoutes, "player_provider_identities", "Submitted players must use verified provider IDs");
+requireText(personal, "matchIds.has(Number(p.apiPlayerId))", "Show only submitted players from the selected match");
+requireText(personal, "Gameweek points", "Distinguish gameweek from match performance");
+requireText(personal, "String(user?.id", "Personal cache must be isolated by account");
+requireText(centre, "?mode=live-centre", "Match centre must skip prediction requests");
+requireText(route, "!liveCentre && !finished", "Prediction endpoint must not be called by live centre");
+rejectText(centre, "Statistical prediction", "Predictions are excluded from the match centre");
+requireText(native, "<FootballDataCentre />", "Native build must render the same live centre");
+requireText(centre, "MATCHDAY_LIVE_HOME_V1", "Automatic live landing page missing");
+requireText(centre, "manuallySelectedFixtures.current", "Live mode must respect manual navigation");
 requireText(centre, 'type LeagueKey = "premier-league";', "Data Centre is not locked to Premier League");
 requireText(centre, '{ key: "premier-league", name: "Premier League"', "Premier League Data Centre selector/config is missing");
 requireText(centre, "fixtures.isError", "Match Centre hides football-provider errors as empty fixture lists");
