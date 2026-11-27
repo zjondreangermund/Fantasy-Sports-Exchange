@@ -35,11 +35,12 @@ async function verifiedPremierLeagueIds(executor:any,ownedOnly=false):Promise<nu
   const teamIds=new Set(teams.map((team:any)=>Number(team.id)));
   const links=ownedOnly?rowsOf(await executor.execute(sql`SELECT player_id AS "playerId",api_player_id AS "providerId" FROM app.player_provider_identities`)):[];
   const linkedIds=new Map(links.map(row=>[Number(row.playerId),Number(row.providerId)]));
+  const selectionDirectory=ownedOnly?directory.filter(row=>clubIds.has(Number(row.apiTeamId))&&(row.season===season||row.active===false)):currentDirectory;
   const candidates=locals.flatMap(player=>{
     if(excluded.has(String(player.status||'').toLowerCase()))return [];
     const official=index.resolve(player);
     if(!official||!teamIds.has(Number(official.team)))return [];
-    const provider=resolveApiFootballPlayer({...player,...index.canonical(official)},ownedOnly?directory.filter(row=>clubIds.has(Number(row.apiTeamId))&&(row.season===season||row.active===false)):currentDirectory);
+    const provider=resolveApiFootballPlayer({...player,...index.canonical(official)},selectionDirectory);
     if(ownedOnly&&!isCurrentOfficialRosterMember(index,official))return [];
     const providerId=Number(provider?.apiPlayerId||linkedIds.get(Number(player.id))||0);
     // Official membership can establish retention eligibility even if the
