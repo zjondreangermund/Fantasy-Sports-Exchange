@@ -2,6 +2,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { BellRing, ChevronRight, Crown, Gem, ShoppingBag, Sparkles, Trophy, UsersRound, WalletCards } from "lucide-react";
+import HomeMatchdayLive from "../dashboard/HomeMatchdayLive";
 import { useAuth } from "../../hooks/use-auth";
 import { currentArenaOpenCups } from "../../lib/arena-current-gameweek";
 import type { Competition, CompetitionEntry, PlayerCardWithPlayer, Wallet } from "../../../../shared/schema";
@@ -52,6 +53,7 @@ export default function NativeHomePage() {
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-home-v2>
+      <HomeMatchdayLive />
       <section className="relative overflow-hidden rounded-[1.7rem] border p-4">
         <div className="pointer-events-none absolute -right-10 -top-16 h-44 w-44 rounded-full bg-fuchsia-500/15 blur-3xl" />
         <div className="pointer-events-none absolute -left-8 bottom-[-4rem] h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
