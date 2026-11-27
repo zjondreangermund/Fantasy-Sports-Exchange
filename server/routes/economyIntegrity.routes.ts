@@ -1111,7 +1111,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             cashAmount:cashPrizePool,winnerEntryId:Number(winner.id),winnerUserId:String(winner.userId),winnerPoints:Number(winner.totalScore),
             underMinimumCashFallback};
           // Bind approval to exact results, money, admin and frozen scores.
-          const approvalToken=createHash("sha256").update(JSON.stringify({adminId,review,ranked:ranked.map(e=>[Number(e.id),String(e.userId),Number(e.totalScore),e.tiebreak]),locked:lockedEntries.map(e=>[Number(e.id),e.totalScore,asObject(e.tiebreakMeta).scoring])})).digest("hex");
+          const approvalToken=createHash("sha256").update(JSON.stringify({adminId,review,ranked:ranked.map(e=>[Number(e.id),String(e.userId),Number(e.totalScore),e.tiebreak]),locked:lockedEntries.map(e=>{const scoring={...asObject(asObject(e.tiebreakMeta).scoring)};delete scoring.updatedAt;delete scoring.finalizedAt;return [Number(e.id),e.totalScore,scoring];})})).digest("hex");
           if(req.body?.previewOnly===true || req.skipNextGameweekRollover || req.body?.approvalToken!==approvalToken) {
             const user=rowsOf(await tx.execute(sql`select email from app.users where id=${review.winnerUserId}`))[0];
             return {approvalRequired:true,review:{...review,winnerEmail:String(user?.email||"")},approvalToken};
