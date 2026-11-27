@@ -144,7 +144,7 @@ function CoverageStrip({ data }: { data: any }) {
 
 export default function FootballDataCentre() {
   const [leagueKey, setLeagueKey] = useState<LeagueKey>("premier-league");
-  const [fixtureStatus, setFixtureStatus] = useState<"upcoming" | "live" | "finished">(()=>new URLSearchParams(window.location.search).get("matchCentre")==="live"?"live":"upcoming");
+  const [fixtureStatus, setFixtureStatus] = useState<"upcoming" | "live" | "finished">(()=>{const mode=new URLSearchParams(window.location.search).get("matchCentre");return mode==="live"||mode==="finished"?mode:"upcoming";});
   const [selectedRound, setSelectedRound] = useState("");
   const [selectedFixtureId, setSelectedFixtureId] = useState<number | null>(()=>{const id=Number(new URLSearchParams(window.location.search).get("apiFixtureId"));return Number.isSafeInteger(id)&&id>0?id:null;});
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
@@ -152,7 +152,7 @@ export default function FootballDataCentre() {
   const [selectedCoachId, setSelectedCoachId] = useState<number | null>(null);
   const [playerSearch, setPlayerSearch] = useState("");
   const [fixtureFilter, setFixtureFilter] = useState("");
-  const manuallySelectedFixtures=useRef(false);
+  const manuallySelectedFixtures=useRef(new URLSearchParams(window.location.search).get("matchCentre")==="finished"||new URLSearchParams(window.location.search).get("matchCentre")==="upcoming");
   const [activeTab,setActiveTab]=useState("matches");
   const [clubFilter, setClubFilter] = useState("");
 

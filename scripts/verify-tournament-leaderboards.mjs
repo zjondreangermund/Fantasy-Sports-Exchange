@@ -1,5 +1,6 @@
 import "./verify-manual-open-live-scoring.mjs";
 import fs from "node:fs";
+import ts from "typescript";
 
 const routes = fs.readFileSync("server/routes/marketplace.routes.ts", "utf8");
 const page = fs.readFileSync("client/src/pages/competitions-vault.tsx", "utf8");
@@ -111,3 +112,30 @@ requireText(home,"matchPlayers","Home must link submitted players to fixture sta
 requireText(fs.readFileSync("client/src/pages/dashboard.tsx","utf8"),"<HomeMatchdayLive","Web dashboard must include live home.");
 requireText(fs.readFileSync("client/src/components/native/NativeHomePage.tsx","utf8"),"<HomeMatchdayLive","Native home must include live home.");
 console.log("Home matchday canonical leaderboard projection and six contribution cases passed.");
+
+const compileMatchdayModule=(path,dependencies={})=>{
+  const code=ts.transpileModule(fs.readFileSync(path,"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+  const exports={};
+  new Function("exports","require",code)(exports,name=>{if(name in dependencies)return dependencies[name];throw new Error("Unexpected matchday import "+name);});
+  return exports;
+};
+const fixtureDisplay=compileMatchdayModule("shared/fixture-display.ts");
+const matchday=compileMatchdayModule("shared/home-matchday.ts",{"./fixture-display.js":fixtureDisplay});
+const now=Date.parse("2026-11-28T15:00:00Z");
+const row=(id,status,hour,extra={})=>({id,apiFixtureId:id,leagueId:39,status,kickoffTime:new Date(now+hour*3600000).toISOString(),updatedAt:new Date(now).toISOString(),...extra});
+const live=row(1,"2H",-1),half=row(2,"HT",-1),ft=row(1,"FT",-3),next=row(3,"NS",4),soon=row(4,"NS",1),old=row(5,"FT",-25);
+for(const [l,fi,u,healthy,want] of [
+  [[live],[ft],[soon],true,"upcoming"],[[half],[ft],[soon],true,"live"],
+  [[],[ft],[next],true,"recap"],[[],[ft],[soon],true,"upcoming"],
+  [[],[old],[next],true,"upcoming"],[[],[old],[],true,"normal"],
+  [[],[ft],[next],false,"unavailable"],[[row(9,"2H",-1,{elapsed:98})],[],[],true,"live"],
+  [[row(1,"2H",-1,{updatedAt:new Date(now+1000).toISOString()})],[ft],[],true,"recap"],
+  [[],[row(8,"PST",-2)],[],true,"normal"],[[],[row(8,"FT",-2,{leagueId:40})],[],true,"normal"]
+]){
+  const actual=matchday.selectHomeMatchday(l,fi,u,now,healthy).mode;
+  if(actual!==want)throw new Error("Home mode mismatch "+actual+" != "+want);
+}
+if(matchday.homeApiFixtureId(row(1,"LIVE",-1,{intelligenceAvailable:false}))!==0)throw new Error("FPL fallback ID must not request personal scoring");
+requireText(home,'points(row.contribution)',"Dynamic home must preserve exact saved contribution.");
+requireText(home,'e.status==="completed"&&e.final&&e.complete',"Match completion must not imply prize settlement.");
+console.log("Dynamic home fixture phases and safe identities verified.");
