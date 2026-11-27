@@ -1,9 +1,10 @@
 import * as React from "react";
 import { hasKeptWeeklyCommon, useWeeklyCommonKeepRevision } from "../lib/weekly-common-keep";
 import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "../lib/queryClient";
 import { useLocation } from "wouter";
 import { useAuth } from "../hooks/use-auth";
-import { shouldPromptPrizeMint } from "../../../shared/prize-notification-policy";
+import { shouldPromptPrizeMint, shouldPromptLadderCash } from "../../../shared/prize-notification-policy";
 import InboxMintActionDialog, {
   type InboxMintNote, type WeeklyMintStatus, type MissedMintStatus,
 } from "./InboxMintActionDialog";
@@ -13,7 +14,7 @@ import InboxMintActionDialog, {
 // Do not create or resend notification rows, web pushes or Android alerts.
 // Each eligible card is shown separately, only once per browser session;
 // after Later or Mint it remains independently accessible from Inbox.
-type PrizeAward = {entryId:number;kind:string;gameWeek:number;status:string;cardId?:number|null};
+type PrizeAward = {entryId:number;kind:string;gameWeek:number;status:string;cardId?:number|null;recordedAward?:boolean;prizeLadder?:boolean;value?:number;popupAcknowledged?:boolean};
 type TrophyData = {awards?:PrizeAward[]};
 type PendingReplacement = {id:number;replacementCardId?:number|null;claimedAt?:string|null;decision?:string};
 type ReplacementData = {claims?:PendingReplacement[]};
@@ -29,7 +30,7 @@ const reviewSession=(key:string)=>{
   try{window.sessionStorage.setItem(key,"later");}catch{/* memory-only fallback */}
 };
 async function getExisting<T>(path:string):Promise<T>{
-  const response=await fetch(path,{credentials:"include"});
+  const response=await apiRequest("GET",path);
   if(!response.ok)throw new Error("Could not load pending card rewards");
   return response.json() as Promise<T>;
 }
@@ -43,6 +44,8 @@ export default function LoginPendingCardMintDialog() {
   const [active,setActive]=React.useState<Prompt|null>(null);
   const [reviewedInMemory,setReviewedInMemory]=React.useState<string[]>([]);
   const [otherModalOpen,setOtherModalOpen]=React.useState(true);
+  const [,refreshPrizeReview]=React.useReducer(n=>n+1,0);
+  React.useEffect(()=>{window.addEventListener("fa-prize-popup-review",refreshPrizeReview);return()=>window.removeEventListener("fa-prize-popup-review",refreshPrizeReview);},[]);
 
   const {data:onboarding}=useQuery<{completed:boolean}>({
     queryKey:["/api/onboarding/status"],enabled:Boolean(userId),staleTime:30_000,
@@ -88,7 +91,7 @@ export default function LoginPendingCardMintDialog() {
 
   const prizePending=Array.isArray(prizeQuery.data?.awards)
     && prizeQuery.data!.awards!.some(award=>
-      award.kind==="card" && shouldPromptPrizeMint(award)
+      ((award.kind==="card" && shouldPromptPrizeMint(award)) || shouldPromptLadderCash(award))
       && !sessionReviewed(prizeReviewKey(userId,Number(award.entryId))));
   const departurePending=Array.isArray(replacementQuery.data?.claims)
     && replacementQuery.data!.claims!.some(claim=>
