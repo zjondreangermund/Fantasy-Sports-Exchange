@@ -69,7 +69,7 @@ need(economy, "cashPayoutEnabled", "fallback cash is not wired through payout an
 need(economy, "Prize Ladder minimum entry threshold was not reached", "winner notification does not explain the fallback");
 need(economy, 'prizeVault,\n          underMinimumCashFallback,\n          sharedEntries,', "fallback status is not returned by settlement");
 need(economy, '(N$${payout.toFixed(2)})', "fallback notification lost the Namibian-dollar symbol");
-assert.equal((economy.match(/manualSettlement: forceManual,\n            underMinimumCashFallback,/g) || []).length, 1, "fallback settlement metadata must be inserted exactly once");
+assert.equal((economy.match(/underMinimumCashFallback,\n            platformFeeRateApplied:/g) || []).length, 1, "fallback settlement metadata must be inserted exactly once");
 need(competitions, "PRIZE_LADDER_FALLBACK_DISCLOSURE_V1", "public tournament UI does not disclose the fallback");
 need(competitions, "#1 receives 80%", "public tournament UI does not explain the 80/20 rule");
 
