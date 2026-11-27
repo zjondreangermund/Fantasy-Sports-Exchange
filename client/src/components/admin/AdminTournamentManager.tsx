@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "../../lib/queryClient";
@@ -65,6 +65,8 @@ export default function AdminTournamentManager() {
   const [selectedGameWeek, setSelectedGameWeek] = useState("");
   const [bulkSettlement, setBulkSettlement] = useState<any>(null);
   const [settlementReview,setSettlementReview]=useState<any>(null);
+  const settlementReviewRef=useRef<HTMLElement>(null);
+  useEffect(()=>{if(settlementReview?.review)settlementReviewRef.current?.scrollIntoView({block:"start",behavior:"smooth"});},[settlementReview]);
   const [lastScoreRefresh, setLastScoreRefresh] = useState<any>(null);
   const { data: competitions } = useQuery<any[]>({ queryKey: ["/api/competitions"] });
   const { data: prizePayload } = useQuery<any>({ queryKey: ["/api/admin/prizes"] });
@@ -306,7 +308,8 @@ export default function AdminTournamentManager() {
   const requestSettlement = (comp: any) => {
     const deadline=Date.parse(String(comp.endDate||comp.end_date||""));
     const forceManual=!Number.isFinite(deadline)||Date.now()<deadline;
-    const key=String(comp.prizeKey||comp.prize_key||"");
+    const listed=officialCompetitions.find(item=>Number(item.id)===Number(comp.id));
+    const key=String(comp.prizeKey||comp.prize_key||listed?.prizeKey||listed?.prize_key||"");
     const ladder=key==="ladder"||!key;
     setSettlementReview(null);
     if(ladder){settleMutation.mutate({competitionId:Number(comp.id),forceManual,previewOnly:true});return;}
@@ -342,7 +345,7 @@ export default function AdminTournamentManager() {
         <div className="flex gap-2"><Link href="/prize-vault"><Button variant="outline" className="rounded-xl border-emerald-300/30 bg-emerald-300/10 text-emerald-100"><Gift className="mr-2 h-4 w-4" />Prize Vault</Button></Link><Button onClick={() => setForm(buildEmptyForm())} className="rounded-xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><Plus className="mr-2 h-4 w-4" />New</Button></div>
       </div>
 
-      {settlementReview?.review && <section role="dialog" aria-label="Prize Ladder settlement review" className="mt-4 rounded-2xl border border-amber-300/35 bg-slate-950 p-4">
+      {settlementReview?.review && <section ref={settlementReviewRef} role="region" aria-label="Prize Ladder settlement review" className="mt-4 rounded-2xl border border-amber-300/35 bg-slate-950 p-4">
         <h3 className="text-lg font-black text-amber-100">Review & approve Prize Ladder settlement</h3>
         <p className="mt-1 text-xs text-white/70">No prize has been paid. Approving credits the exact cash amount to the first-place winner's wallet.</p>
         <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
