@@ -1097,6 +1097,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           ? toMoney(grossPool * 0.2)
           : cashPayoutEnabled ? toMoney(Math.max(0,grossPool - cashPrizePool)) : toMoney(Math.max(0, grossPool - prizeValue));
         const prizePool = cashPayoutEnabled ? cashPrizePool : prizeValue;
+        if(req.body?.previewOnly===true && !prizeVault) throw new Error("This tournament is not a Prize Ladder. No settlement was performed.");
         if(prizeVault) {
           if(toMoney(paidFees)!==grossPool)throw new Error("Prize Ladder payment records are incomplete. No payout issued.");
           if(cashPrizePool<=0||cashPrizePool>grossPool)throw new Error("Prize Ladder prize exceeds verified collected fees or has no payable amount. No payout issued.");
@@ -1140,6 +1141,8 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             prizeVault,
             sharedEntries,
             prizeAward: index === 0 ? prizeAward : null,
+            underMinimumCashFallback,
+            platformFeeRateApplied: underMinimumCashFallback ? 0.2 : feeRate,
             settledAt: new Date().toISOString(),
           };
           await tx.execute(sql`
@@ -1383,7 +1386,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       }
       const cups = rowsOf(await db.execute(sql`
         select c.id, c.name, c.status::text as status, c.end_date as "endDate",
-          c.created_by_user_id as "createdByUserId", count(ce.id)::integer as "entryCount"
+          c.prize_key as "prizeKey", c.created_by_user_id as "createdByUserId", count(ce.id)::integer as "entryCount"
         from app.competitions c
         left join app.competition_entries ce on ce.competition_id=c.id
         where c.game_week=${gameWeek} and c.name not like '[TEST]%'
@@ -1462,12 +1465,17 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           continue;
         }
 
+        if(String(cup.prizeKey||"").toLowerCase()==="ladder"&&!cup.createdByUserId){
+          results.push({id,name,result:"blocked",code:"PRIZE_APPROVAL_REQUIRED",message:"Open this tournament to review the winner and cash equivalent, then approve settlement individually.",entryCount:Number(cup.entryCount||0)});
+          continue;
+        }
         const captured = {
           statusCode: 200, payload: null as any,
           status(code: number) { this.statusCode = code; return this; },
           json(payload: any) { this.payload = payload; return this; },
         };
         const childRequest = Object.create(req);
+        childRequest.body={};
         childRequest.params = { ...req.params, id: String(id) };
         childRequest.skipNextGameweekRollover = true;
         await settleSingleCompetition(childRequest, captured);
