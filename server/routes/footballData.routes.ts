@@ -772,7 +772,7 @@ export function registerFootballDataRoutes(app: Express) {
         console.warn("[football-data] Premier League live provider failed; checking saved/FPL matches:", error?.message || error);
       }
 
-      let fixtures = result ? responseRows(result.payload).map((row: any) => ({ ...normalizeFixture(row), updatedAt: result.updatedAt })) : [];
+      let fixtures = result ? responseRows(result.payload).map((row: any) => ({ ...normalizeFixture(row), apiFixtureId:Number(row?.fixture?.id||0)||null, intelligenceAvailable:true, source:"api-football", updatedAt: result.updatedAt })) : [];
       if (status === "live" && !round) {
         fixtures = fixtures.filter((fixture: any) => Number(fixture.leagueId || 0) === league.config.id);
       }
