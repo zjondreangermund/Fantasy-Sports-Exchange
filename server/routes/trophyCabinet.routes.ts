@@ -33,6 +33,8 @@ export function registerTrophyCabinetRoutes(app: Express, deps: { requireAuth: a
           ce.rank AS rank, ce.total_score AS "points",
           ce.prize_amount AS "cashAward", ce.prize_card_id AS "prizeCardId",
           ce.payout_completed_at AS "payoutCompletedAt",
+          ce.tiebreak_meta ->> 'cashPrizePopupAcknowledgedAt' AS "cashPopupAcknowledgedAt",
+          pa.metadata AS "awardMetadata", pa.rarity AS "awardRarity",
           ce.tiebreak_meta -> 'settlement' -> 'prizeAward' AS "settlementAward",
           pc.rarity::text AS "cardRarity", pc.serial_id AS "serialId",
           p.name AS "playerName", p.team AS "playerTeam", p.position::text AS "position",
@@ -61,7 +63,9 @@ export function registerTrophyCabinetRoutes(app: Express, deps: { requireAuth: a
         const freeCup = String(row.tier)==="common" && Number(row.entryFee||0)<=0 &&
           String(row.competitionPrizeKey||"").toLowerCase().startsWith("free-") &&
           Number(row.rank)>0 && Number(row.rank)<=3;
-        const cardId=Number(row.prizeCardId||0);
+        const cardId=Number(row.prizeCardId||row.settlementAward?.cardId||row.awardMetadata?.cardId||0);
+        const issued=cardId>0||row.vaultStatus==="claimed"||row.settlementAward?.claimed===true;
+        const recordedAward=Boolean(row.vaultAwardId||row.settlementAward?.rarity);
         const base={
           entryId:Number(row.entryId),competitionId:Number(row.competitionId),
           competitionName:String(row.competitionName||"Tournament"),
@@ -70,9 +74,9 @@ export function registerTrophyCabinetRoutes(app: Express, deps: { requireAuth: a
           competitionDate:row.competitionDate,
         };
         if(freeCup || (cardId>0 && !row.vaultAwardId)){
-          const rarity=String(row.cardRarity||row.settlementAward?.rarity|| (Number(row.rank)===1?"rare":"common")).toLowerCase();
+          const rarity=String(row.cardRarity||row.settlementAward?.rarity||row.awardRarity|| (Number(row.rank)===1?"rare":"common")).toLowerCase();
           entries.push({...base,kind:"card",rarity,title:`${rarity.toUpperCase()} Player Card`,
-            status:cardId>0?"minted":row.vaultStatus==="declined"?"declined":"ready_to_mint",cardId:cardId||null,
+            status:issued?"minted":row.vaultStatus==="declined"?"declined":"ready_to_mint",cardId:cardId||null,recordedAward,
             playerName:row.playerName||null,playerTeam:row.playerTeam||null,
             position:row.position||null,imageUrl:row.imageUrl||null,
             serialId:row.serialId||null});
@@ -85,7 +89,9 @@ export function registerTrophyCabinetRoutes(app: Express, deps: { requireAuth: a
         }
         if(Number(row.cashAward||0)>0){
           entries.push({...base,kind:"cash",title:row.settlementAward?.cashEquivalent?`${String(row.settlementAward.title||"Prize Ladder")} — cash equivalent`:"Tournament cash award",
-            value:Number(row.cashAward),status:row.payoutCompletedAt?"credited":"pending"});
+            value:Number(row.cashAward),status:row.payoutCompletedAt?"credited":"pending",
+            prizeLadder:String(row.competitionPrizeKey||"").toLowerCase()==="ladder",
+            popupAcknowledged:Boolean(row.cashPopupAcknowledgedAt)});
         }
       }
       return res.json({awards:entries,summary:{
@@ -98,5 +104,23 @@ export function registerTrophyCabinetRoutes(app: Express, deps: { requireAuth: a
       console.error("[trophy-cabinet] Could not load winnings:",error);
       return res.status(500).json({message:"Could not load the Trophy Cabinet. Please try again."});
     }
+  });
+  // Acknowledgement changes only the display preference, never the payout.
+  app.post("/api/trophy-cabinet/:entryId/acknowledge-cash", deps.requireAuth, async(req:any,res)=>{
+    const userId=String(req.authUserId||"");
+    const entryId=Number(req.params.entryId);
+    if(!userId)return res.status(401).json({message:"Sign in required"});
+    if(!Number.isSafeInteger(entryId)||entryId<=0)return res.status(400).json({message:"Invalid prize entry"});
+    try{
+      const result=await db.execute(sql`update app.competition_entries ce
+        set tiebreak_meta=jsonb_set(coalesce(ce.tiebreak_meta,'{}'::jsonb),'{cashPrizePopupAcknowledgedAt}',to_jsonb(now()::text),true)
+        from app.competitions c where ce.id=${entryId} and ce.user_id=${userId}
+          and c.id=ce.competition_id and c.status::text='completed'
+          and lower(coalesce(c.prize_key,''))='ladder'
+          and ce.prize_amount>0 and ce.payout_completed_at is not null
+        returning ce.id`);
+      if(!rowsOf(result).length)return res.status(409).json({message:"This cash prize has not been credited or is not yours"});
+      return res.json({success:true});
+    }catch(error){console.error("Cash prize acknowledgement failed",error);return res.status(500).json({message:"Could not acknowledge prize"});}
   });
 }
