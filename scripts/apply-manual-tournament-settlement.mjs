@@ -108,7 +108,7 @@ patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
 
 patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) => {
   let source = original;
-  source = replaceRequired(
+  if(!source.includes("PRIZE_LADDER_APPROVAL_UI_V1")) source = replaceRequired(
     source,
     '    mutationFn: async (competitionId: number) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, {})).json(),',
     '    mutationFn: async ({ competitionId, forceManual }: { competitionId: number; forceManual: boolean }) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, { forceManual })).json(),',
@@ -117,7 +117,7 @@ patchFile("client/src/components/admin/AdminTournamentManager.tsx", (original) =
 
   const requestFrom = `  const requestSettlement = (comp: any) => {\n    if (!window.confirm(\`Settle \"\${comp.name || \"this tournament\"}\" using the score frozen at \${settlementLabel(comp.endDate || comp.end_date)}?\`)) return;\n    settleMutation.mutate(Number(comp.id));\n  };`;
   const requestTo = `  const requestSettlement = (comp: any) => {\n    const settlement = comp.endDate || comp.end_date;\n    const settlementMs = new Date(String(settlement || \"\")).getTime();\n    const forceManual = !Number.isFinite(settlementMs) || Date.now() < settlementMs;\n    const warning = forceManual\n      ? \`MANUAL EARLY SETTLEMENT\\n\\nThis will freeze the current official Premier League scores, calculate ranks, issue the tournament prize/payout and release tournament card locks. It will only proceed if every eligible Premier League fixture is finished.\\n\\nSettle \"\${comp.name || \"this tournament\"}\" now?\`\n      : \`Settle \"\${comp.name || \"this tournament\"}\" using the final score at \${settlementLabel(settlement)}?\`;\n    if (!window.confirm(warning)) return;\n    settleMutation.mutate({ competitionId: Number(comp.id), forceManual });\n  };`;
-  source = replaceRequired(source, requestFrom, requestTo, "manual settlement confirmation");
+  if(!source.includes("PRIZE_LADDER_APPROVAL_UI_V1")) source = replaceRequired(source, requestFrom, requestTo, "manual settlement confirmation");
 
   const guardedReady = 'const readyToSettle = !isCancelled && !isCompleted && ["active", "closed"].includes(status) && Number.isFinite(settlementMs) && Date.now() >= settlementMs;';
   const simpleReady = 'const readyToSettle = ["active", "closed"].includes(status) && Number.isFinite(settlementMs) && Date.now() >= settlementMs;';

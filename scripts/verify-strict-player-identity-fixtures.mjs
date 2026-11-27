@@ -49,6 +49,7 @@ includesAll(directory, [
 ], "API-Football strict resolver");
 
 includesAll(cards, [
+  "loadApiFootballPlayerDirectory(undefined,true)",
   "const apiFootballImage = apiFootballPlayer ? apiFootballPhotoUrl",
   "imageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
   "verifiedImageUrl: apiFootballImage || (matchedElement ? fplApi.playerPhotoUrl(matchedElement, 250) : null)",
@@ -63,7 +64,7 @@ expect(!cards.includes("matchedElement ? fplApi.playerPhotoUrl(matchedElement, 2
 
 includesAll(marketplace, [
   "fplApi.bootstrap()",
-  "loadApiFootballPlayerDirectory(undefined,true)",
+  "loadApiFootballPlayerDirectory()",
   "resolveApiFootballPlayer",
   "apiFootballPhotoUrl",
   "fplIndex.resolve(storedPlayer)",

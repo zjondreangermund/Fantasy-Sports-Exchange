@@ -140,6 +140,7 @@ patchFile("client/src/App.tsx", (original) => {
 
 // Official Prize Ladder settlement: if no ladder reward unlocks, #1 receives 80% of collected fees and Fantasy Arena retains 20%.
 patchFile("server/routes/economyIntegrity.routes.ts", (original) => {
+  if(original.includes("PRIZE_LADDER_APPROVAL_CASH_V1"))return original;
   let source = original;
   source = replaceOneOf(
     source,

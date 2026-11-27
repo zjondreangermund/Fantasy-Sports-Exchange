@@ -2,6 +2,7 @@ import { CommonReplacementSelect } from "./CommonCollectionManager";
 import * as React from "react";
 import { hasKeptWeeklyCommon, rememberKeptWeeklyCommon, useWeeklyCommonKeepRevision } from "../lib/weekly-common-keep";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { shouldPromptPrizeMint, shouldPromptLadderCash } from "../../../shared/prize-notification-policy";
 import { Gift, Sparkles } from "lucide-react";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { useAuth } from "../hooks/use-auth";
@@ -85,19 +86,21 @@ export default function WeeklyCommonMintDialog() {
   // Tournament wins take priority over the weekly gift. Only ONE mint modal
   // is shown at a time. Once a manager mints or postpones the tournament card,
   // their weekly Common prompt can display normally.
-  const { data: trophies } = useQuery<{awards:Array<{entryId:number;kind:string;status:string}>}>({
-    queryKey:["/api/trophy-cabinet"],
+  const [,refreshPrizeReview]=React.useReducer(n=>n+1,0);
+  React.useEffect(()=>{window.addEventListener("fa-prize-popup-review",refreshPrizeReview);return()=>window.removeEventListener("fa-prize-popup-review",refreshPrizeReview);},[]);
+  const { data: trophies } = useQuery<{awards:Array<{entryId:number;kind:string;status:string;gameWeek?:number;cardId?:number|null;recordedAward?:boolean;prizeLadder?:boolean;value?:number;popupAcknowledged?:boolean}>}>({
+    queryKey:["/api/trophy-cabinet","login-pending",String(user?.id||"")],
     enabled:Boolean(user)&&onboarding?.completed===true,
     staleTime:0,
     refetchInterval:20_000,
     queryFn:async()=>{
-      const r=await fetch("/api/trophy-cabinet",{credentials:"include"});
-      return r.ok?r.json():{awards:[]};
+      const r=await apiRequest("GET","/api/trophy-cabinet");
+      return r.json();
     },
   });
   const tournamentPromptActive=Boolean((trophies?.awards||[]).some(a=>{
-    if(a.kind!=="card"||a.status!=="ready_to_mint")return false;
-    try{return localStorage.getItem(`fa:won-prize-prompt:${user?.id}:${a.entryId}`)!=="later";}
+    if(!(a.kind==="card"&&shouldPromptPrizeMint(a))&&!shouldPromptLadderCash(a))return false;
+    try{return sessionStorage.getItem(`fa:won-prize-prompt:${user?.id}:${a.entryId}`)!=="later";}
     catch{return true;}
   }));
 

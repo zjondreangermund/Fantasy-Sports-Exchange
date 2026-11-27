@@ -2,6 +2,7 @@ import { assertCommonEntryPolicy } from "../services/commonEntryPolicy.js";
 import { assertCommonCardsRemovable, lockCommonCollection } from "../services/commonCollectionPolicy.js";
 import {currentPremierLeagueMintIds} from "../services/currentPremierLeagueMintPool.js";
 import type { Express } from "express";
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { storage } from "../storage.js";
@@ -273,6 +274,7 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
   `))[0];
   if (!award || String(award.userId) !== userId) throw new Error("Prize claim not found");
   const rank = Number(award.rank || 0);
+  if(String(award.awardStatus)==="declined")throw new Error("This Common prize was declined; your existing collection was kept.");
   const freeCommonCup = String(award.competitionStatus) === "completed"
     && Number(award.entryFee || 0) <= 0
     && String(award.prizeKey || "").toLowerCase().startsWith("free-")
@@ -384,6 +386,10 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
   await tx.execute(sql`update app.competition_prize_awards set status='claimed',
     metadata=jsonb_set(coalesce(metadata,'{}'::jsonb),'{cardId}',to_jsonb(${Number(card.id)}::integer),true),updated_at=now()
     where entry_id=${entryId} and user_id=${userId} and prize_category='card' and status='pending_claim'`);
+  if(rarity==="common") {
+    await ensureCommonCardChoiceSchema(tx);
+    await tx.execute(sql`update app.common_card_reward_choices set status='replaced',replacement_card_id=${Number(card.id)},resolved_at=now() where competition_entry_id=${entryId} and user_id=${userId} and status='pending'`);
+  }
   await createNotificationOnce(tx, {
     userId,
     type: rank === 1 ? "win" : "runner_up",
@@ -691,7 +697,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const userId = String(req.authUserId || "");
       const entryId = Number(req.params.entryId);
       if (!Number.isInteger(entryId) || entryId <= 0) return res.status(400).json({ message: "Valid prize entry required" });
-      const card = await db.transaction((tx) => claimFreeCommonCupCard(tx, userId, entryId));
+      const card = await db.transaction(async(tx) => {await lockCommonCollection(tx,userId);return claimFreeCommonCupCard(tx,userId,entryId);});
       return res.json({ success:true,card,pendingChoice:card.pendingChoice===true,message:card.pendingChoice?"Choose whether to keep your collection or replace one Common card":card.replayed?"Prize already claimed":"Prize card claimed successfully" });
     } catch (error: any) {
       const message = error?.message || "Could not claim prize card";
@@ -705,7 +711,18 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
     try{
       await ensureCommonCardChoiceSchema();
       const userId=String(req.authUserId||"");
-      const choices=rowsOf(await db.execute(sql`select x.id,x.status,x.created_at as "createdAt",ce.id as "entryId",ce.rank,c.name as "competitionName" from app.common_card_reward_choices x join app.competition_entries ce on ce.id=x.competition_entry_id join app.competitions c on c.id=ce.competition_id where x.user_id=${userId} and x.status='pending' order by x.created_at asc`));
+      await ensurePrizeAwardSchema();
+      // Recover recorded Common wins at the cap before the user taps Mint.
+      // This creates a pending choice only; no cards are minted or sacrificed.
+      await db.execute(sql`insert into app.common_card_reward_choices(user_id,competition_entry_id)
+        select pa.user_id,pa.entry_id from app.competition_prize_awards pa
+        join app.competition_entries ce on ce.id=pa.entry_id and ce.user_id=pa.user_id
+        join app.competitions c on c.id=ce.competition_id
+        where pa.user_id=${userId} and pa.status='pending_claim' and pa.prize_category='card'
+          and pa.rarity='common' and ce.prize_card_id is null and c.status::text='completed'
+          and (select count(*) from app.player_cards where owner_id=${userId} and rarity::text='common')>=${COMMON_COLLECTION_CAP}
+        on conflict(competition_entry_id) do nothing`);
+      const choices=rowsOf(await db.execute(sql`select x.id,x.status,x.created_at as "createdAt",ce.id as "entryId",ce.rank,c.name as "competitionName" from app.common_card_reward_choices x join app.competition_entries ce on ce.id=x.competition_entry_id join app.competitions c on c.id=ce.competition_id where x.user_id=${userId} and x.status='pending' and ce.prize_card_id is null and (select count(*) from app.player_cards where owner_id=${userId} and rarity::text='common')>=${COMMON_COLLECTION_CAP} order by x.created_at asc`));
       const cards=choices.length?rowsOf(await db.execute(sql`
         select pc.id,p.name as "playerName",p.team,p.position::text as position,p.image_url as "imageUrl" from app.player_cards pc join app.players p on p.id=pc.player_id
         where pc.owner_id=${userId} and pc.rarity::text='common' and pc.for_sale=false
@@ -987,12 +1004,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const ranked = await rankCompetitionEntries(storage, entries);
       if (!ranked.length) return res.status(400).json({ message: "Cannot settle a tournament without entries" });
 
-      const settlement = await db.transaction(async (tx) => {
+      const settlement: any = await db.transaction(async (tx) => {
         const competition = rowsOf(await tx.execute(sql`
           select id, name, status::text as status, tier::text as tier, game_week as "gameWeek",
             coalesce(entry_fee, 0)::float as "entryFee", coalesce(platform_fee_rate, case when created_by_user_id is not null then 0.1 else 0 end)::float as "platformFeeRate",
             coalesce(prize_type, 'goods') as "prizeType", coalesce(prize_key, '') as "prizeKey",
-            coalesce(prize_description, '') as "prizeDescription", coalesce(visibility, 'public') as visibility,
+            coalesce(prize_description, '') as "prizeDescription", coalesce(visibility, 'public') as visibility, season,
             prize_card_rarity::text as "prizeCardRarity", created_by_user_id as "createdByUserId"
           from app.competitions
           where id = ${competitionId}
@@ -1039,7 +1056,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           && String(competition.prizeKey || "").toLowerCase().startsWith("free-");
         const cashPoolEnabled = prizeType === "cash_pool" || prizeType === "goods_plus_cash";
         const nonCashAwardEnabled = !freeCardCup && (prizeVault || ["goods", "goods_plus_cash", "packs", "sponsor_prize"].includes(prizeType));
-        const payoutPercentages = [0.6, 0.3, 0.1];
+        let payoutPercentages = [0.6, 0.3, 0.1];
 
         let sharedEntries = ranked.length;
         let prizeAward: any = null;
@@ -1049,6 +1066,8 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             from app.competition_entries ce
             join app.competitions c on c.id = ce.competition_id
             where c.game_week = ${Number(competition.gameWeek)}
+              and c.season is not distinct from ${competition.season}
+              and c.status::text <> 'cancelled'
               and c.tier::text = ${String(competition.tier)}
               and coalesce(c.visibility, 'public') = 'public'
               and coalesce(c.prize_key, '') = 'ladder'
@@ -1065,13 +1084,43 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           };
         }
 
+        // PRIZE_LADDER_APPROVAL_CASH_V1
+        // PRIZE_LADDER_UNDER_MINIMUM_CASH_FALLBACK_V1
+        const underMinimumCashFallback = prizeVault && !prizeAward && grossPool > 0;
+        const cashPayoutEnabled = cashPoolEnabled || prizeVault;
+        if (underMinimumCashFallback) payoutPercentages = [1];
+        if (prizeVault) payoutPercentages = [1];
         const feeRate = Math.max(0, Math.min(1, Number(competition.platformFeeRate ?? (competition.createdByUserId ? 0.1 : 0))));
-        const cashPrizePool = cashPoolEnabled ? toMoney(grossPool - toMoney(grossPool * feeRate)) : 0;
         const prizeValue = prizeAward ? toMoney(prizeAward.value || 0) : 0;
-        const platformFee = cashPoolEnabled ? toMoney(grossPool - cashPrizePool) : toMoney(Math.max(0, grossPool - prizeValue));
-        const prizePool = cashPoolEnabled ? cashPrizePool : prizeValue;
+        const cashPrizePool = prizeVault
+          ? (underMinimumCashFallback ? toMoney(grossPool * 0.8) : prizeValue)
+          : cashPoolEnabled ? toMoney(grossPool - toMoney(grossPool * feeRate)) : 0;
+        const platformFee = underMinimumCashFallback
+          ? toMoney(grossPool * 0.2)
+          : cashPayoutEnabled ? toMoney(Math.max(0,grossPool - cashPrizePool)) : toMoney(Math.max(0, grossPool - prizeValue));
+        const prizePool = cashPayoutEnabled ? cashPrizePool : prizeValue;
+        if(req.body?.previewOnly===true && !prizeVault) throw new Error("This tournament is not a Prize Ladder. No settlement was performed.");
+        let approvedPrizeReview:any=null;
+        if(prizeVault) {
+          if(toMoney(paidFees)!==grossPool || lockedEntries.some(e=>Number(e.entryFeePaid)<=0))throw new Error("Prize Ladder payment records are incomplete. No payout issued.");
+          if(cashPrizePool<=0||cashPrizePool>grossPool)throw new Error("Prize Ladder prize exceeds verified collected fees or has no payable amount. No payout issued.");
+          const winner=ranked[0];
+          const review={competitionId,competitionName:String(competition.name),gameWeek:Number(competition.gameWeek),
+            tier:String(competition.tier),entryCount:ranked.length,sharedEntries,grossPool,platformFee,
+            prizeTitle:prizeAward?.title||"80% collected entry fees (minimum not reached)",prizeKey:prizeAward?.key||"cash-fallback",
+            cashAmount:cashPrizePool,winnerEntryId:Number(winner.id),winnerUserId:String(winner.userId),winnerPoints:Number(winner.totalScore),
+            underMinimumCashFallback};
+          // Bind approval to exact results, money, admin and frozen scores.
+          const approvalToken=createHash("sha256").update(JSON.stringify({adminId,review,ranked:ranked.map(e=>[Number(e.id),String(e.userId),Number(e.totalScore),e.tiebreak]),locked:lockedEntries.map(e=>{const scoring={...asObject(asObject(e.tiebreakMeta).scoring)};delete scoring.updatedAt;delete scoring.finalizedAt;return [Number(e.id),e.totalScore,scoring];})})).digest("hex");
+          if(req.body?.previewOnly===true || req.skipNextGameweekRollover || req.body?.approvalToken!==approvalToken) {
+            const user=rowsOf(await tx.execute(sql`select email from app.users where id=${review.winnerUserId}`))[0];
+            return {approvalRequired:true,review:{...review,winnerEmail:String(user?.email||"")},approvalToken};
+          }
+          approvedPrizeReview={...review,approvedBy:adminId,approvalToken};
+          if(prizeAward)prizeAward={...prizeAward,originalCategory:prizeAward.category,category:"cash",cashEquivalent:true};
+        }
 
-        if (alreadyCompleted && cashPoolEnabled) {
+        if (alreadyCompleted && cashPayoutEnabled) {
           for (let index = 0; index < ranked.length; index += 1) {
             const rankedEntry = ranked[index];
             const lockedEntry = lockedEntries.find((entry: any) => Number(entry.id) === Number(rankedEntry.id));
@@ -1087,7 +1136,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         for (let index = 0; index < ranked.length; index += 1) {
           const rankedEntry = ranked[index];
           const entryId = Number(rankedEntry.id);
-          const payout = cashPoolEnabled ? toMoney(cashPrizePool * (payoutPercentages[index] || 0)) : 0;
+          const payout = cashPayoutEnabled ? toMoney(cashPrizePool * (payoutPercentages[index] || 0)) : 0;
           const settlementMeta = {
             ...rankedEntry.tiebreak,
             competitionId,
@@ -1096,6 +1145,9 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             prizeVault,
             sharedEntries,
             prizeAward: index === 0 ? prizeAward : null,
+            underMinimumCashFallback,
+            platformFeeRateApplied: underMinimumCashFallback ? 0.2 : feeRate,
+            prizeApproval: index===0 ? approvedPrizeReview : null,
             settledAt: new Date().toISOString(),
           };
           await tx.execute(sql`
@@ -1131,8 +1183,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           await createNotificationOnce(tx, {
             userId: winnerId,
             type: index === 0 ? "win" : "runner_up",
-            title: `Congratulations — #${index + 1} in ${competition.name}`,
-            message: `Congratulations from the Fantasy Arena Team! You finished #${index + 1} in ${competition.name} with ${toMoney(rankedEntry.totalScore).toFixed(1)} points. N$${payout.toFixed(2)} has been credited to your Fantasy Arena wallet.`,
+            title: prizeVault && index===0 ? `Prize Ladder winner — ${competition.name}` : `Congratulations — #${index + 1} in ${competition.name}`,
+            message: underMinimumCashFallback && index===0
+              ? `Prize Ladder minimum entry threshold was not reached. Your 80% winner share (N$${payout.toFixed(2)}) has been credited to your Fantasy Arena wallet. You may request a withdrawal.`
+              : prizeVault && index===0
+                ? `You won ${prizeAward?.title||"the Prize Ladder"}. The cash equivalent of N$${payout.toFixed(2)} has been credited to your Fantasy Arena wallet. You may request a withdrawal.`
+                : `Congratulations from the Fantasy Arena Team! You finished #${index + 1} in ${competition.name} with ${toMoney(rankedEntry.totalScore).toFixed(1)} points. N$${payout.toFixed(2)} has been credited to your Fantasy Arena wallet.`,
             dedupeKey: `competition:${competitionId}:entry:${entryId}:cash-congratulations`,
           });
         }
@@ -1200,7 +1256,11 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           status: freeCardAward.claimed ? "claimed" : "pending_claim",
           cardId: freeCardAward.cardId,
         } : null;
-        if (nonCashAwardEnabled && prizeAward) {
+        if (prizeVault && prizeAward) {
+          // The wallet posting is the award. Do not create a second claimable physical prize.
+          awardRecord={competitionId,entryId:Number(ranked[0].id),userId:String(ranked[0].userId),prizeKey:prizeAward.key,prizeTitle:prizeAward.title,prizeValue:cashPrizePool,prizeCategory:"cash",status:"credited"};
+        }
+        if (nonCashAwardEnabled && prizeAward && !prizeVault) {
           const winner = ranked[0];
           const winnerEntryId = Number(winner.id);
           const winnerUserId = String(winner.userId || "");
@@ -1256,14 +1316,16 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           prizePool,
           prizeType,
           prizeVault,
+          underMinimumCashFallback,
           sharedEntries,
           prizeAward: awardRecord,
-          winnersCount: cashPoolEnabled ? Math.min(3, ranked.length) : awardRecord ? 1 : 0,
+          winnersCount: cashPayoutEnabled ? Math.min(payoutPercentages.filter(value=>value>0).length,ranked.length) : freeCardCup ? Math.min(3,ranked.length) : awardRecord ? 1 : 0,
           replayedPostings,
           replayed: alreadyCompleted,
         };
       });
 
+      if(settlement.approvalRequired) return res.status(req.body?.previewOnly===true?200:409).json({success:false,code:"PRIZE_APPROVAL_REQUIRED",message:"Review the exact Prize Ladder winner and cash amount before approving settlement.",...settlement});
       let nextGameweek: any = null;
       if (!req.skipNextGameweekRollover) {
         try {
@@ -1288,7 +1350,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         message: settlement.replayed
           ? "Tournament settlement already completed and verified"
           : settlement.prizeVault
-            ? settlement.prizeAward ? "Tournament settled and Prize Vault claim created" : "Tournament settled; no Prize Vault tier was unlocked"
+            ? "Prize Ladder settled and cash equivalent credited to the winner’s wallet"
             : "Tournament settled with final scoring snapshots and exactly-once rewards",
         winner: ranked[0] || null,
         winnersCount: settlement.winnersCount,
@@ -1329,7 +1391,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       }
       const cups = rowsOf(await db.execute(sql`
         select c.id, c.name, c.status::text as status, c.end_date as "endDate",
-          c.created_by_user_id as "createdByUserId", count(ce.id)::integer as "entryCount"
+          c.prize_key as "prizeKey", c.created_by_user_id as "createdByUserId", count(ce.id)::integer as "entryCount"
         from app.competitions c
         left join app.competition_entries ce on ce.competition_id=c.id
         where c.game_week=${gameWeek} and c.name not like '[TEST]%'
@@ -1408,12 +1470,17 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           continue;
         }
 
+        if(String(cup.prizeKey||"").toLowerCase()==="ladder"&&!cup.createdByUserId){
+          results.push({id,name,result:"blocked",code:"PRIZE_APPROVAL_REQUIRED",message:"Open this tournament to review the winner and cash equivalent, then approve settlement individually.",entryCount:Number(cup.entryCount||0)});
+          continue;
+        }
         const captured = {
           statusCode: 200, payload: null as any,
           status(code: number) { this.statusCode = code; return this; },
           json(payload: any) { this.payload = payload; return this; },
         };
         const childRequest = Object.create(req);
+        childRequest.body={};
         childRequest.params = { ...req.params, id: String(id) };
         childRequest.skipNextGameweekRollover = true;
         await settleSingleCompetition(childRequest, captured);

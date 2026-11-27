@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "../../lib/queryClient";
@@ -64,6 +64,9 @@ export default function AdminTournamentManager() {
   const [tournamentListView, setTournamentListView] = useState<"current" | "closed">("closed");
   const [selectedGameWeek, setSelectedGameWeek] = useState("");
   const [bulkSettlement, setBulkSettlement] = useState<any>(null);
+  const [settlementReview,setSettlementReview]=useState<any>(null);
+  const settlementReviewRef=useRef<HTMLElement>(null);
+  useEffect(()=>{if(settlementReview?.review)settlementReviewRef.current?.scrollIntoView({block:"start",behavior:"smooth"});},[settlementReview]);
   const [lastScoreRefresh, setLastScoreRefresh] = useState<any>(null);
   const { data: competitions } = useQuery<any[]>({ queryKey: ["/api/competitions"] });
   const { data: prizePayload } = useQuery<any>({ queryKey: ["/api/admin/prizes"] });
@@ -221,8 +224,10 @@ export default function AdminTournamentManager() {
   });
 
   const settleMutation = useMutation({
-    mutationFn: async (competitionId: number) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, {})).json(),
-    onSuccess: (result: any) => {
+    mutationFn: async ({competitionId,forceManual,approvalToken,previewOnly}: {competitionId:number;forceManual:boolean;approvalToken?:string;previewOnly?:boolean}) => (await apiRequest("POST", `/api/admin/competitions/settle/${competitionId}`, {forceManual,approvalToken,previewOnly})).json(),
+    onSuccess: (result: any, input) => {
+      if(result.approvalRequired){setSettlementReview({...result,forceManual:input.forceManual});return;}
+      setSettlementReview(null);
       queryClient.invalidateQueries({ queryKey: ["/api/competitions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/competitions/my-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/prize-vault"] });
@@ -242,6 +247,11 @@ export default function AdminTournamentManager() {
         if (jsonStart >= 0) {
           const payload = JSON.parse(raw.slice(jsonStart));
           message = String(payload?.message || raw);
+          if (payload?.code === "PRIZE_APPROVAL_REQUIRED" && payload?.review) {
+            setSettlementReview({...payload,forceManual:false});
+            toast({title:"Review required",description:"Review the current winner and amount before approving."});
+            return;
+          }
           if (payload?.code === "SCORING_NOT_VERIFIED") {
             window.alert("Settlement blocked — not all players have verified final statistics.\n\n" + message + "\n\nThe tournament remains unsettled, and prizes have not been issued by this attempt.");
             return;
@@ -286,7 +296,7 @@ export default function AdminTournamentManager() {
   });
 
   const requestGameWeekSettlement = () => {
-    if (!window.confirm(`Settle every eligible tournament in Gameweek ${targetGameWeek}? Empty cups will close with no rewards. Already completed awards will never be rerolled. Unverified scores will remain blocked.`)) return;
+    if (!window.confirm(`Settle eligible FREE and empty cups in Gameweek ${targetGameWeek}? Entered Prize Ladder cups need individual approval. Empty cups will close with no rewards. Already completed awards will never be rerolled. Unverified scores will remain blocked.`)) return;
     settleGameWeekMutation.mutate(targetGameWeek);
   };
 
@@ -294,9 +304,17 @@ export default function AdminTournamentManager() {
     if (!window.confirm(`Delete "${comp.name || "this tournament"}" and all related entries? This cannot be undone.`)) return;
     deleteMutation.mutate(Number(comp.id));
   };
+  // PRIZE_LADDER_APPROVAL_UI_V1
   const requestSettlement = (comp: any) => {
-    if (!window.confirm(`Settle "${comp.name || "this tournament"}" using the score frozen at ${settlementLabel(comp.endDate || comp.end_date)}?`)) return;
-    settleMutation.mutate(Number(comp.id));
+    const deadline=Date.parse(String(comp.endDate||comp.end_date||""));
+    const forceManual=!Number.isFinite(deadline)||Date.now()<deadline;
+    const listed=officialCompetitions.find(item=>Number(item.id)===Number(comp.id));
+    const key=String(comp.prizeKey||comp.prize_key||listed?.prizeKey||listed?.prize_key||"");
+    const ladder=key==="ladder"||!key;
+    setSettlementReview(null);
+    if(ladder){settleMutation.mutate({competitionId:Number(comp.id),forceManual,previewOnly:true});return;}
+    if(!window.confirm((forceManual?"MANUAL EARLY SETTLEMENT\n\nAll eligible Premier League fixtures must be finished. This will finalize prizes and release card locks.\n\n":"")+"Settle "+String(comp.name||"this tournament")+" using verified final scores?"))return;
+    settleMutation.mutate({competitionId:Number(comp.id),forceManual});
   };
 
   const loadCompetition = (comp: any) => {
@@ -327,6 +345,25 @@ export default function AdminTournamentManager() {
         <div className="flex gap-2"><Link href="/prize-vault"><Button variant="outline" className="rounded-xl border-emerald-300/30 bg-emerald-300/10 text-emerald-100"><Gift className="mr-2 h-4 w-4" />Prize Vault</Button></Link><Button onClick={() => setForm(buildEmptyForm())} className="rounded-xl bg-cyan-300 font-black text-slate-950 hover:bg-cyan-200"><Plus className="mr-2 h-4 w-4" />New</Button></div>
       </div>
 
+      {settlementReview?.review && <section ref={settlementReviewRef} role="region" aria-label="Prize Ladder settlement review" className="mt-4 rounded-2xl border border-amber-300/35 bg-slate-950 p-4">
+        <h3 className="text-lg font-black text-amber-100">Review & approve Prize Ladder settlement</h3>
+        <p className="mt-1 text-xs text-white/70">{settlementReview.forceManual?"MANUAL EARLY SETTLEMENT — all eligible fixtures must be finished. ":""}No prize has been paid. Approving credits the exact cash amount to the first-place winner's wallet.</p>
+        <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+          <div><span className="block text-xs text-white/55">Tournament</span>{settlementReview.review.competitionName}</div>
+          <div><span className="block text-xs text-white/55">Winner · entry #{settlementReview.review.winnerEntryId}</span>{settlementReview.review.winnerEmail||settlementReview.review.winnerUserId}</div>
+          <div><span className="block text-xs text-white/55">Final points</span>{settlementReview.review.winnerPoints}</div>
+          <div><span className="block text-xs text-white/55">Entries</span>{settlementReview.review.entryCount}</div>
+          <div><span className="block text-xs text-white/55">Unlocked prize</span>{settlementReview.review.prizeTitle}</div>
+          <div><span className="block text-xs text-white/55">Cash equivalent to wallet</span><b className="text-xl text-emerald-200">{money(settlementReview.review.cashAmount)}</b></div>
+          <div><span className="block text-xs text-white/55">Collected fees</span>{money(settlementReview.review.grossPool)}</div>
+          <div><span className="block text-xs text-white/55">Platform share</span>{money(settlementReview.review.platformFee)}</div>
+        </div>
+        <p className="mt-3 text-xs text-white/60">The winner may request withdrawal through the existing wallet process. No physical prize claim is created. If the results or amount change, a new review is required.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <Button variant="outline" disabled={settleMutation.isPending} onClick={()=>setSettlementReview(null)}>Cancel — do not settle</Button>
+          <Button disabled={settleMutation.isPending} className="bg-emerald-300 font-black text-slate-950" onClick={()=>settleMutation.mutate({competitionId:settlementReview.review.competitionId,forceManual:settlementReview.forceManual,approvalToken:settlementReview.approvalToken})}>{settleMutation.isPending?"Approving…":"Approve & credit "+money(settlementReview.review.cashAmount)}</Button>
+        </div>
+      </section>}
       <section className="mt-5 rounded-2xl border border-emerald-300/25 bg-emerald-400/[.04] p-4">
         <div className="flex flex-wrap items-end gap-3">
           <label className="min-w-[140px] flex-1 space-y-1 text-sm">
@@ -339,7 +376,7 @@ export default function AdminTournamentManager() {
             <CheckCircle2 className="mr-2 h-4 w-4" />{settleGameWeekMutation.isPending ? "Settling gameweek…" : "Settle Gameweek"}
           </Button>
         </div>
-        <p className="mt-2 text-xs text-white/60">Settles every eligible cup for the selected week, including cups with zero entries. Pending API-Football scores remain blocked. Completed rewards are not repeated.</p>
+        <p className="mt-2 text-xs text-white/60">Settles eligible FREE and empty cups. Each entered Prize Ladder tournament requires a separate review and approval before any cash payout. Pending API-Football scores remain blocked.</p>
         {targetGameWeek === 10 ? <div className="mt-3 rounded-xl border border-sky-300/20 bg-sky-300/[.06] p-3 text-xs leading-5 text-sky-100">
           <b className="block text-sm text-white">🏆 GW10 results → 🌍 GW11 international break</b>
           <p className="mt-1"><b>1. GW10 settlement:</b> All entrants receive their results message once every cup is settled. Winners receive their own congratulations and prize notifications separately.</p>

@@ -31,6 +31,7 @@ try{
  CREATE TABLE app.lineups(user_id text,card_ids jsonb,captain_id int);
  CREATE TABLE IF NOT EXISTS app.competitions(id integer PRIMARY KEY,name text,status text,tier text,entry_fee real,prize_key text);
  CREATE TABLE app.competition_entries(id integer PRIMARY KEY,user_id text,rank int,prize_card_id int,competition_id int,tiebreak_meta jsonb,lineup_card_ids jsonb);
+ CREATE TABLE app.common_card_reward_choices(id serial PRIMARY KEY,user_id text,competition_entry_id int UNIQUE,status text default 'pending',replacement_card_id int,replaced_card_id int,created_at timestamptz default now(),resolved_at timestamptz);
  CREATE TABLE app.audit_logs(user_id text,action text,meta jsonb);
  INSERT INTO app.users VALUES('weekly',now()-interval '30 days'),('prize',now()-interval '30 days');`);
  for(let i=1;i<=20;i++)await pg.query('INSERT INTO app.api_football_fixtures VALUES($1,$2,39,$3)',[i,i%20+1,season]);
@@ -220,7 +221,7 @@ try{
  for(const entry of [1,2,3,4]){const prize=await db.transaction(tx=>claimPrize(tx,'prize',entry));assert.equal(prize.rarity,entry===2?'common':'rare');assert([1,2,3,4].includes(Number((await pg.query('SELECT player_id FROM app.player_cards WHERE id=$1',[prize.id])).rows[0].player_id)));const replay=await db.transaction(tx=>claimPrize(tx,'prize',entry));assert.equal(replay.id,prize.id);assert(replay.replayed);}
 
  // A won Common at ten creates a durable choice instead of an eleventh card.
- await pg.exec("INSERT INTO app.users VALUES('won',now()-interval '30 days'); INSERT INTO app.competition_entries VALUES(6,'won',2,null,1,'{\"settlement\":{}}'); CREATE TABLE app.common_card_reward_choices(id serial PRIMARY KEY,user_id text,competition_entry_id int UNIQUE,status text default 'pending',replacement_card_id int,replaced_card_id int,created_at timestamptz default now(),resolved_at timestamptz)");
+ await pg.exec("INSERT INTO app.users VALUES('won',now()-interval '30 days'); INSERT INTO app.competition_entries VALUES(6,'won',2,null,1,'{\"settlement\":{}}')");
  for(let i=0;i<10;i++)await pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity,level,xp,for_sale) VALUES(5,'won','common',3,42,false)");
  const wonSource=(await pg.query("SELECT id FROM app.player_cards WHERE owner_id='won' ORDER BY id LIMIT 1")).rows[0].id;
  const pendingPrize=await db.transaction(tx=>claimPrize(tx,'won',6));assert.equal(pendingPrize.pendingChoice,true);
