@@ -126,7 +126,7 @@ export async function loadDetailedScoringContext(bootstrap: any, gameWeek: numbe
       statsByApiPlayerId.set(apiPlayerId, mergeDetailedStats(statsByApiPlayerId.get(apiPlayerId), detailed));
     }
 
-    const directory = await loadApiFootballPlayerDirectory();
+    const directory = await loadApiFootballPlayerDirectory(undefined,true);
     // SCORE_DETAIL_MATCH_ROW_IDENTITY_V1
     // Match-stat rows are also authoritative provider identities. Add them as
     // fallback candidates when the periodic squad directory is partial/stale.
@@ -290,7 +290,7 @@ export async function loadApiFootballGameweekScoringContext(gameWeek: number, el
   });
 
   try {
-    const directory = await loadApiFootballPlayerDirectory();
+    const directory = await loadApiFootballPlayerDirectory(undefined,true);
     // A fixture can remain tagged to its original EPL round after being moved
     // weeks later. Do not score that delayed match inside this GW, regardless
     // of what the provider's round string says.
