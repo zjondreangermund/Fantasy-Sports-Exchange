@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import vm from "node:vm";
+import ts from "typescript";
 
 const read = (file) => fs.readFileSync(file, "utf8");
 const shared = read("shared/game-rules.ts");
@@ -153,22 +154,24 @@ const cheaperSquad = { id: 1, tiebreak: { totalScore: 80.1234, captainPoints: 20
 check(rankingContext.compare(betterFootball, cheaperSquad) < 0,
   "Actual football performance must resolve exact-score ties before card value or ownership attributes.");
 
-const executableIdentity = playerIdentity
-  .replace(/^export type FplPosition = .*;$/m, "")
-  .replace("export const FPL_POSITION_BY_ELEMENT_TYPE: Record<number, FplPosition>", "const FPL_POSITION_BY_ELEMENT_TYPE")
-  .replace(/export function /g, "function ")
-  .replace(/: unknown/g, "")
-  .replace(/: string\[\]/g, "")
-  .replace(/: string/g, "")
-  .replace(/: any\[\]/g, "")
-  .replace(/: any/g, "")
-  .replace(/: number/g, "")
-  .replace(/: boolean/g, "")
-  .replace(/: FplPosition/g, "")
-  .replace(/new Map<[^>]+>/g, "new Map")
-  .replace(/ as any\[\]/g, "");
-const identityContext = {};
-vm.runInNewContext(`${executableIdentity}\nglobalThis.buildIndex = buildFplPlayerIndex;\nglobalThis.matchName = strongPlayerNameMatch;`, identityContext);
+// Compile the actual TypeScript rather than guessing which annotations to strip.
+const executableIdentity = ts.transpileModule(playerIdentity, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const identityContext = { exports: {} };
+vm.runInNewContext(executableIdentity, identityContext);
+identityContext.buildIndex = identityContext.exports.buildFplPlayerIndex;
+identityContext.matchName = identityContext.exports.strongPlayerNameMatch;
+const member = identityContext.exports.isCurrentOfficialRosterMember;
+const rosterIndex = identityContext.buildIndex({
+  teams: Array.from({length:20},(_,i)=>({id:i+1,name:"Club "+(i+1)})),
+  elements: Array.from({length:300},(_,i)=>({id:i+1,team:i%20+1,code:i+1})),
+});
+for (const status of ["a","d","i","s"]) check(member(rosterIndex,{team:1,status}),"Injury or suspension must not remove roster membership");
+check(member(rosterIndex,{team:1,status:"u",news:"Recovering from knee surgery"}),"Verified long-term injury remains eligible");
+check(!member(rosterIndex,{team:1,status:"u",news:"Transferred outside the Premier League"}),"Transfers must not pass injury fallback");
+check(!member(rosterIndex,{team:99,status:"i"}),"A club outside the current league is not eligible");
+check(!member(rosterIndex,{team:1,status:"u",news:""}),"Ambiguous unavailability must not prove current membership");
 
 const officialIndex = identityContext.buildIndex({
   teams: [{ id: 1, name: "Sunderland" }, { id: 2, name: "Brighton" }],
