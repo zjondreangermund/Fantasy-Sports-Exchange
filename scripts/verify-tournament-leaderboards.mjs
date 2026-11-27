@@ -120,7 +120,7 @@ const compileMatchdayModule=(path,dependencies={})=>{
   return exports;
 };
 const fixtureDisplay=compileMatchdayModule("shared/fixture-display.ts");
-const matchday=compileMatchdayModule("shared/home-matchday.ts",{"./fixture-display":fixtureDisplay});
+const matchday=compileMatchdayModule("shared/home-matchday.ts",{"./fixture-display.js":fixtureDisplay});
 const now=Date.parse("2026-11-28T15:00:00Z");
 const row=(id,status,hour,extra={})=>({id,apiFixtureId:id,leagueId:39,status,kickoffTime:new Date(now+hour*3600000).toISOString(),updatedAt:new Date(now).toISOString(),...extra});
 const live=row(1,"2H",-1),half=row(2,"HT",-1),ft=row(1,"FT",-3),next=row(3,"NS",4),soon=row(4,"NS",1),old=row(5,"FT",-25);
