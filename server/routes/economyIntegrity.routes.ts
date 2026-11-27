@@ -1185,10 +1185,10 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             type: index === 0 ? "win" : "runner_up",
             title: prizeVault && index===0 ? `Prize Ladder winner — ${competition.name}` : `Congratulations — #${index + 1} in ${competition.name}`,
             message: underMinimumCashFallback && index===0
-              ? `Prize Ladder minimum entry threshold was not reached. Your 80% winner share (N${payout.toFixed(2)}) has been credited to your Fantasy Arena wallet. You may request a withdrawal.`
+              ? `Prize Ladder minimum entry threshold was not reached. Your 80% winner share (N$${payout.toFixed(2)}) has been credited to your Fantasy Arena wallet. You may request a withdrawal.`
               : prizeVault && index===0
-                ? `You won ${prizeAward?.title||"the Prize Ladder"}. The cash equivalent of N${payout.toFixed(2)} has been credited to your Fantasy Arena wallet. You may request a withdrawal.`
-                : `Congratulations from the Fantasy Arena Team! You finished #${index + 1} in ${competition.name} with ${toMoney(rankedEntry.totalScore).toFixed(1)} points. N${payout.toFixed(2)} has been credited to your Fantasy Arena wallet.`,
+                ? `You won ${prizeAward?.title||"the Prize Ladder"}. The cash equivalent of N$${payout.toFixed(2)} has been credited to your Fantasy Arena wallet. You may request a withdrawal.`
+                : `Congratulations from the Fantasy Arena Team! You finished #${index + 1} in ${competition.name} with ${toMoney(rankedEntry.totalScore).toFixed(1)} points. N$${payout.toFixed(2)} has been credited to your Fantasy Arena wallet.`,
             dedupeKey: `competition:${competitionId}:entry:${entryId}:cash-congratulations`,
           });
         }
