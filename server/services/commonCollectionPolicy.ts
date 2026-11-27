@@ -3,7 +3,7 @@ import { db } from '../db.js';
 import { COMMON_COLLECTION_CAP, supportsTwoCommonTeams, validateCommonKeepTeams, canKeepTwoCommonTeams } from '../../shared/common-collection.js';
 import { findBlockedCards } from './commonCardProtection.js';
 import { createNotificationOnce, ensureNotificationsSchema } from './notifications.js';
-import { currentPremierLeagueMintIds } from './currentPremierLeagueMintPool.js';
+import { currentPremierLeagueOwnedIds } from './currentPremierLeagueMintPool.js';
 const rowsOf = (r:any):any[] => r?.rows || (Array.isArray(r) ? r : []);
 
 export async function lockCommonCollection(tx:any,userId:string) {
@@ -35,7 +35,7 @@ export async function getCommonCollectionPlan(userId:string) {
   // A provider outage must not mark every owned card ineligible or allow a burn.
   let eligibleIds:Set<number>|null=null;
   if(excess>0) {
-    try{eligibleIds=new Set(await currentPremierLeagueMintIds(db));}
+    try{eligibleIds=new Set(await currentPremierLeagueOwnedIds(db));}
     catch(error){console.warn('Common keep roster verification unavailable',error);}
   }
   const annotated=cards.map(card=>({...card,eligible:eligibleIds===null?undefined:eligibleIds.has(Number(card.playerId)),
@@ -59,7 +59,7 @@ export async function reduceCommonCollection(userId:string,raw:unknown, selectKe
     if(ids.some(id=>!cards.some(c=>Number(c.id)===id&&!c.forSale)))throw new Error('Only your unlisted Common cards can be sacrificed.');
     await assertCommonCardsRemovable(tx,userId,ids,true);
     let eligibleIds:Set<number>;
-    try{eligibleIds=new Set(await currentPremierLeagueMintIds(tx));}
+    try{eligibleIds=new Set(await currentPremierLeagueOwnedIds(tx));}
     catch{throw new Error("Current Premier League eligibility could not be verified. No cards were sacrificed. Recheck player eligibility and try again.");}
     const kept=cards.filter(c=>!ids.includes(Number(c.id))).map(c=>({...c,eligible:eligibleIds.has(Number(c.playerId))}));
     if(collectionOnly) {
