@@ -4,18 +4,7 @@ import { fplApi } from "../services/fplApi.js";
 import { buildGameweekFixtureStatus } from "../services/gameweekPlayerFixtures.js";
 import { db } from "../db.js";
 import { sql } from "drizzle-orm";
-import { storage } from "../storage.js";
-import { rankCompetitionEntries } from "../services/tournamentRules.js";
-
-// Shared ranking cache: a busy matchday must not re-rank the same cup for each viewer.
-const matchRankingCache=new Map<number,{expires:number;promise:Promise<Map<number,number>>}>();
-function matchRanks(competitionId:number){
-  const cached=matchRankingCache.get(competitionId);
-  if(cached&&cached.expires>Date.now())return cached.promise;
-  for(const [id,row] of matchRankingCache)if(row.expires<=Date.now())matchRankingCache.delete(id);
-  const promise=storage.getCompetitionEntries(competitionId).then(entries=>rankCompetitionEntries(storage,entries)).then(ranked=>new Map<number,number>(ranked.map((entry,index)=>[Number(entry.id),index+1]))).catch(()=>{matchRankingCache.delete(competitionId);return new Map<number,number>();});
-  matchRankingCache.set(competitionId,{expires:Date.now()+30_000,promise});return promise;
-}
+import {leaderboardRank,leaderboardTotal} from "../services/leaderboardProjection.js";
 
 function teamLookup(bootstrap: any): Map<number, any> {
   const teams: any[] = Array.isArray(bootstrap?.teams) ? bootstrap.teams : [];
@@ -227,11 +216,17 @@ export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreU
       // The original round and actual competition window must both agree.
       // A postponed fixture outside the original window must never acquire old GW points.
       const result:any=await db.execute(sql`
+        with ranked as (select ce.id, ${leaderboardRank} as rank, ${leaderboardTotal}::float as "totalScore", count(*) over(partition by ce.competition_id)::int as "entryCount"
+          from app.competition_entries ce where ce.competition_id in (
+            select own.competition_id from app.competition_entries own join app.competitions cup on cup.id=own.competition_id
+            where own.user_id=${userId} and cup.game_week=${gameWeek}
+              and cup.start_date<=${fixture.kickoffAt} and cup.end_date>=${fixture.kickoffAt}
+              and cup.status::text in ('open','upcoming','closed','active','completed')))
         select ce.id as "entryId",c.id as "competitionId",c.name as "competitionName",
-          c.status::text as status,c.game_week as "gameWeek",ce.rank,ce.total_score as "totalScore",
+          c.status::text as status,c.game_week as "gameWeek",ranked.rank,ranked."totalScore",
           ce.captain_id as "captainId",ce.lineup_card_ids as "lineupCardIds",
           ce.tiebreak_meta->'scoring' as scoring,
-          (select count(*)::int from app.competition_entries other where other.competition_id=c.id) as "entryCount",
+          ranked."entryCount",
           (select coalesce(jsonb_agg(jsonb_build_object('cardId',pc.id,'playerId',pc.player_id,
             'apiPlayerId',pi.api_player_id,'name',p.name,'rarity',pc.rarity::text)), '[]'::jsonb)
             from app.player_cards pc join app.players p on p.id=pc.player_id
@@ -239,12 +234,12 @@ export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreU
             where pc.id in (select case when value ~ '^[0-9]+$' then value::int end
               from jsonb_array_elements_text(coalesce(ce.lineup_card_ids,'[]'::jsonb)))
           ) as identities
-        from app.competition_entries ce join app.competitions c on c.id=ce.competition_id
+        from app.competition_entries ce join app.competitions c on c.id=ce.competition_id join ranked on ranked.id=ce.id
         where ce.user_id=${userId} and c.game_week=${gameWeek}
           and c.status::text in ('open','upcoming','closed','active','completed')
           and c.start_date<=${fixture.kickoffAt} and c.end_date>=${fixture.kickoffAt}
         order by c.id,ce.id limit 100`);
-      const entries=await Promise.all((result.rows||[]).map(async(row:any)=>{
+      const entries=(result.rows||[]).map((row:any)=>{
         const snapshot=row.scoring||{};
         const validSnapshot=Number(snapshot.gameWeek)===gameWeek&&Number(snapshot.version)>=2;
         const cardIds=new Set<number>((Array.isArray(row.lineupCardIds)?row.lineupCardIds:[]).map(Number));
@@ -253,20 +248,26 @@ export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreU
         const players=[...cardIds].flatMap(cardId=>{
           const identity=identities.get(cardId),score=scores.get(cardId);
           const verifiedScore=score&&Number(score.apiFootballPlayerId)>0&&
-            !['identity-unlinked','identity-ambiguous','identity-mismatch'].includes(String(score.identityStatus||''));
+            String(score.identityStatus||"")==="verified";
           const apiPlayerId=Number(verifiedScore?score.apiFootballPlayerId:identity?.apiPlayerId);
           if(!Number.isSafeInteger(apiPlayerId)||apiPlayerId<=0)return [];
           const scoreNumber=verifiedScore&&score.score!=null&&Number.isFinite(Number(score.score))?Number(score.score):null;
           return [{cardId,apiPlayerId,name:score?.officialPlayerName||identity?.name||"",rarity:identity?.rarity||null,
-            captain:Number(row.captainId)===cardId,gameweekPoints:scoreNumber}];
+            captain:Number(row.captainId)===cardId,gameweekPoints:scoreNumber,
+            captainBonus:scoreNumber!=null&&Number(row.captainId)===cardId&&Number.isFinite(Number(snapshot.captainBonus))?Number(snapshot.captainBonus):scoreNumber!=null?0:null,
+            contribution:scoreNumber==null?null:Math.round((scoreNumber+(Number(row.captainId)===cardId?Number(snapshot.captainBonus||0):0))*10000)/10000}];
         });
         return {entryId:Number(row.entryId),competitionId:Number(row.competitionId),competitionName:row.competitionName,
-          status:row.status,gameWeek,rank:row.status==="completed"?(row.rank==null?null:Number(row.rank)):validSnapshot?(await matchRanks(Number(row.competitionId))).get(Number(row.entryId))??null:null,entryCount:Number(row.entryCount||0),
-          totalScore:validSnapshot?Number(row.totalScore):null,complete:validSnapshot&&snapshot.complete===true,
+          status:row.status,gameWeek,rank:row.rank==null?null:Number(row.rank),entryCount:Number(row.entryCount||0),
+          totalScore:Number(row.totalScore),hasScoringSnapshot:validSnapshot,complete:validSnapshot&&snapshot.complete===true,
           final:validSnapshot&&snapshot.final===true,updatedAt:validSnapshot?snapshot.updatedAt||null:null,players};
-      }));
+      });
+      // Read existing synchronized match facts only; never use the preview fantasy_score column.
+      const statsResult:any=await db.execute(sql`select api_player_id as "apiPlayerId",player_name as name,minutes,rating,statistics,synced_at as "updatedAt" from app.api_football_player_match_stats where api_fixture_id=${fixtureId}`).catch(()=>({rows:[]}));
+      const submittedIds=new Set(entries.flatMap((entry:any)=>entry.players.map((p:any)=>p.apiPlayerId)));
+      const matchPlayers=(statsResult.rows||[]).filter((p:any)=>submittedIds.has(Number(p.apiPlayerId)));
       res.setHeader("Cache-Control","private, no-store");
-      return res.json({fixtureId,gameWeek,entries});
+      return res.json({fixtureId,gameWeek,entries,matchPlayers});
     }catch(error){console.warn("[personal-match-centre] performance unavailable",error);return res.status(503).json({message:"Your tournament performance is temporarily unavailable"});}
   });
 
