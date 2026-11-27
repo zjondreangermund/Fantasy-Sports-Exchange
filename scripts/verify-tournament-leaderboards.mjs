@@ -16,8 +16,17 @@ function requireText(source, expected, message) {
 
 requireText(routes, 'app.get("/api/competitions/:id/leaderboard"', "The tournament leaderboard endpoint is missing.");
 requireText(routes, "Math.min(requestedPageSize, 100)", "Tournament leaderboard pages must be capped at 100 teams.");
-requireText(routes, "row_number() over", "Leaderboard positions must be ranked deterministically.");
-requireText(routes, "->>'completedPasses'", "Exact-score ties must include verified football actions.");
+const projection = fs.readFileSync("server/services/leaderboardProjection.ts", "utf8");
+const matchRoutes = fs.readFileSync("server/routes/epl.routes.ts", "utf8");
+const home = fs.readFileSync("client/src/components/dashboard/HomeMatchdayLive.tsx", "utf8");
+requireText(routes, "${leaderboardRank} as rank", "Leaderboard must use shared ranking.");
+requireText(matchRoutes, "${leaderboardRank} as rank", "Matchday must use the exact leaderboard ranking.");
+requireText(matchRoutes, "${leaderboardTotal}::float", "Matchday must use the exact leaderboard total.");
+requireText(home, "points(row.contribution)", "Home must use recorded contributions.");
+requireText(home, "maximumFractionDigits:4", "Home must retain leaderboard precision.");
+requireText(projection, "partition by ce.competition_id", "Ranking must be partitioned per competition.");
+requireText(projection, "row_number() over", "Leaderboard positions must be ranked deterministically.");
+requireText(projection, "->>'completedPasses'", "Exact-score ties must include verified football actions.");
 requireText(routes, 'limit ${pageSize} offset ${offset}', "Tournament leaderboard pages must use a real database offset.");
 requireText(routes, "totalPages: Math.max(1, Math.ceil(totalEntries / pageSize))", "Tournament leaderboard pagination totals are missing.");
 requireText(routes, 'app.get("/api/competitions/:id/entries/:entryId"', "The submitted-team scoring endpoint is missing.");
