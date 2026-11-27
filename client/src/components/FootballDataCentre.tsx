@@ -465,6 +465,7 @@ function MatchIntelligence({ data, loading, onPlayer, showProviderDiagnostics }:
   const h2h = Array.isArray(data.headToHead) ? data.headToHead : [];
   const ratedPlayers = playerGroups.flatMap((group: any) => (Array.isArray(group?.players) ? group.players.map((item: any) => ({ ...item, team: group.team })) : [])).filter((item: any) => item?.player?.id).sort((a: any, b: any) => asNumber(b?.statistics?.[0]?.games?.rating) - asNumber(a?.statistics?.[0]?.games?.rating)).slice(0, 12);
   const score = raw?.score || fixture?.score || {};
+  const live=fixtureMatchesTab(fixture,"live");
   const periodScores = fixturePeriodScores(fixture.status || raw?.fixture?.status?.short, score);
 
   return (
@@ -476,11 +477,12 @@ function MatchIntelligence({ data, loading, onPlayer, showProviderDiagnostics }:
         </div>
       ) : null}
       <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
-        <div className="text-center text-xs uppercase tracking-[.18em] text-muted-foreground">{fixture.round}</div>
-        <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center"><div className="font-black">{fixture.homeTeam?.name}</div><div className="rounded-lg bg-black/30 px-4 py-2 text-2xl font-black">{fixture.homeTeam?.score ?? "-"} : {fixture.awayTeam?.score ?? "-"}</div><div className="font-black">{fixture.awayTeam?.name}</div></div>
+        <div className="flex items-center justify-center gap-2 text-center text-xs uppercase tracking-[.18em] text-muted-foreground">{fixture.round}{live?<Badge className="bg-red-500/20 text-red-200">LIVE</Badge>:null}</div>
+        <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center"><div className="min-w-0 font-black">{fixture.homeTeam?.logo?<img src={fixture.homeTeam.logo} alt="" className="mx-auto mb-2 h-10 w-10 object-contain"/>:null}{fixture.homeTeam?.name}</div><div className="rounded-lg bg-black/30 px-3 py-2 text-2xl font-black tabular-nums">{fixture.homeTeam?.score ?? "-"} : {fixture.awayTeam?.score ?? "-"}</div><div className="min-w-0 font-black">{fixture.awayTeam?.logo?<img src={fixture.awayTeam.logo} alt="" className="mx-auto mb-2 h-10 w-10 object-contain"/>:null}{fixture.awayTeam?.name}</div></div>
         <div className="mt-2 text-center text-xs text-muted-foreground">{formatDate(fixture.kickoffTime)} · {fixture.venue?.name || "Venue TBD"} · {fixtureClock(fixture)}</div>
       </div>
 
+      {data.stale||data.source==="fpl-fallback"?<p className="rounded-lg border border-white/10 p-2 text-xs text-muted-foreground">Some match details are delayed or not available yet. Scores and statistics are shown as last received.</p>:null}
       <PersonalMatchPerformance data={data} onPlayer={onPlayer}/>
       <section>
         <h4 className="mb-2 font-black">Detailed match report</h4>
@@ -494,8 +496,8 @@ function MatchIntelligence({ data, loading, onPlayer, showProviderDiagnostics }:
 
 
 
-      <section><h4 className="mb-2 font-black">Full-match statistics</h4>{statistics.length ? <StatisticsBlocks rows={statistics} /> : <EmptyText text="Match statistics are not available yet for this fixture." />}</section>
-      {halfStatistics.length ? <section><h4 className="mb-2 font-black">First-half / half-time statistics</h4><StatisticsBlocks rows={halfStatistics} /></section> : null}
+      <section><h4 className="mb-2 font-black">Full-match statistics</h4>{statistics.length ? <StatisticsBlocks rows={statistics} homeId={Number(fixture.homeTeam?.id)} /> : <EmptyText text="Match statistics are not available yet for this fixture." />}</section>
+      {halfStatistics.length ? <section><h4 className="mb-2 font-black">First-half / half-time statistics</h4><StatisticsBlocks rows={halfStatistics} homeId={Number(fixture.homeTeam?.id)} /></section> : null}
 
       <section><h4 className="mb-2 font-black">Event timeline</h4>{events.length ? <div className="space-y-2">{events.map((event: any, index: number) => <div key={`${event?.time?.elapsed}-${event?.time?.extra}-${event?.player?.id}-${index}`} className="flex items-center gap-3 rounded-lg border border-white/10 bg-black/20 p-2 text-sm"><Badge variant="outline">{formatEventMinute(event)}</Badge><div className="min-w-0 flex-1"><span className="font-semibold">{event?.player?.name || event?.team?.name}</span> <span className="text-muted-foreground">{event?.detail || event?.type}</span>{event?.assist?.name ? <span className="text-muted-foreground"> · assist {event.assist.name}</span> : null}</div></div>)}</div> : <EmptyText text="No match events available yet." />}</section>
 
@@ -508,8 +510,18 @@ function MatchIntelligence({ data, loading, onPlayer, showProviderDiagnostics }:
   );
 }
 
-function StatisticsBlocks({ rows }: { rows: any[] }) {
-  return <div className="grid gap-3 md:grid-cols-2">{rows.map((block: any, index: number) => <FootballTeamGroups key={`${block?.team?.id || block?.team?.name}-${index}`} title={block?.team?.name || `Team ${index + 1}`}><div className="grid grid-cols-2 gap-2 text-xs"><Metric label="Possession" value={statValue(block, "Ball Possession") ?? "-"} /><Metric label="Shots" value={statValue(block, "Total Shots") ?? "-"} /><Metric label="On target" value={statValue(block, "Shots on Goal") ?? "-"} /><Metric label="Corners" value={statValue(block, "Corner Kicks") ?? "-"} /><Metric label="Passes" value={statValue(block, "Total passes") ?? "-"} /><Metric label="Pass %" value={statValue(block, "Passes %") ?? "-"} /><Metric label="Fouls" value={statValue(block, "Fouls") ?? "-"} /><Metric label="Offsides" value={statValue(block, "Offsides") ?? "-"} /></div></FootballTeamGroups>)}</div>;
+function StatisticsBlocks({ rows,homeId }: { rows: any[];homeId:number }) {
+  const home=rows.find(r=>Number(r?.team?.id)===homeId)||rows[0],away=rows.find(r=>Number(r?.team?.id)!==Number(home?.team?.id));
+  const labels=["Ball Possession","Total Shots","Shots on Goal","Shots off Goal","Corner Kicks","Total passes","Passes %","Fouls","Offsides","Yellow Cards","Red Cards","Goalkeeper Saves","expected_goals"];
+  return <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+    <div className="mb-3 flex justify-between gap-3 text-xs font-bold"><span>{home?.team?.name||"Home"}</span><span>{away?.team?.name||"Away"}</span></div>
+    <div className="space-y-3">{labels.map(label=>{
+      const a=statValue(home,label),b=statValue(away,label);if(a==null&&b==null)return null;
+      const available=a!=null&&b!=null,an=asNumber(a),bn=asNumber(b),total=an+bn;
+      const share=available&&total>0?100*an/total:null;
+      return <div key={label}><div className="flex items-center justify-between gap-2 text-xs"><b className="tabular-nums">{a??"—"}</b><span className="text-center text-muted-foreground">{label==="expected_goals"?"Expected goals (xG)":label}</span><b className="tabular-nums">{b??"—"}</b></div>{share!=null?<div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-white/10"><div className="bg-cyan-400" style={{width:share+"%"}}/><div className="bg-violet-400" style={{width:(100-share)+"%"}}/></div>:null}</div>
+    })}</div>
+  </div>;
 }
 
 function FormationPitch({ lineup, onPlayer }: { lineup: any; onPlayer: (id: number) => void }) {
