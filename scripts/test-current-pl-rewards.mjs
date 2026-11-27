@@ -120,6 +120,25 @@ try{
  assert.deepEqual((await pg.query("SELECT id FROM app.player_cards WHERE owner_id='reduce' ORDER BY id")).rows.map(c=>c.id),keepIds);
  assert.equal((await pg.query('SELECT owner_id FROM app.player_cards WHERE id=$1',[reductionCards[0].id])).rows[0].owner_id,null);
  assert.equal((await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='reduce'")).rows[0].n,10);
+ // Collection-only recovery for impossible squads: no eligibility bypass in normal mode.
+ await pg.exec("INSERT INTO app.users VALUES('impossible',now()-interval '30 days'),('possible',now()-interval '30 days')");
+ for(const playerId of [1,1,2,2,3,3,4,4,2,5,6])await pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity,level,xp,for_sale) VALUES($1,'impossible','common',1,0,false)",[playerId]);
+ for(const playerId of [1,1,2,2,3,3,4,4,2,3,6])await pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity,level,xp,for_sale) VALUES($1,'possible','common',1,0,false)",[playerId]);
+ const impossible=await getCommonCollectionPlan('impossible');
+ assert.equal(impossible.eligibilityVerified,true);assert.equal(impossible.canKeepTwoTeams,false);
+ const impossibleKeep=impossible.cards.slice(0,10).map(c=>c.id);
+ const possible=await getCommonCollectionPlan('possible');
+ assert.equal(possible.canKeepTwoTeams,true);
+ await assert.rejects(reduceCommonCollection('possible',possible.cards.slice(0,10).map(c=>c.id),true,undefined,true),/can form two valid teams/);
+ await assert.rejects(reduceCommonCollection('impossible',impossibleKeep.slice(0,9),true,undefined,true),/exactly 10/);
+ await assert.rejects(reduceCommonCollection('impossible',impossibleKeep,true),/Keep two GK/);
+ await pg.query("INSERT INTO app.card_locks(card_id,expires_at,reason) VALUES($1,null,'security_review')",[impossible.cards[10].id]);
+ await assert.rejects(reduceCommonCollection('impossible',impossibleKeep,true,undefined,true),/protected use/);
+ await pg.exec("DELETE FROM app.card_locks");
+ const beforeFallback=(await pg.query("SELECT count(*)::int n FROM app.player_cards WHERE owner_id='impossible'")).rows[0].n;assert.equal(beforeFallback,11);
+ await reduceCommonCollection('impossible',impossibleKeep,true,undefined,true);
+ assert.deepEqual((await pg.query("SELECT id FROM app.player_cards WHERE owner_id='impossible' ORDER BY id")).rows.map(c=>c.id),impossibleKeep);
+ console.log('Impossible squad fallback verified: exact ten, normal-mode and protected-card enforcement, feasible-account denial, and explicit collection-only confirmation.');
  // Expired November rewards offer the same opt-in replacement at ten.
  await pg.exec("ALTER TABLE app.users ADD COLUMN is_banned boolean default false; INSERT INTO app.users VALUES('recovery',now()-interval '30 days',false)");
  for(let i=0;i<11;i++)await pg.query("INSERT INTO app.player_cards(player_id,owner_id,rarity,level,xp,for_sale) VALUES(5,'recovery','common',6,250,false)");

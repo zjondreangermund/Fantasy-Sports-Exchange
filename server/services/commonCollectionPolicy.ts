@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
-import { COMMON_COLLECTION_CAP, supportsTwoCommonTeams, validateCommonKeepTeams } from '../../shared/common-collection.js';
+import { COMMON_COLLECTION_CAP, supportsTwoCommonTeams, validateCommonKeepTeams, canKeepTwoCommonTeams } from '../../shared/common-collection.js';
 import { findBlockedCards } from './commonCardProtection.js';
 import { createNotificationOnce, ensureNotificationsSchema } from './notifications.js';
 import { currentPremierLeagueMintIds } from './currentPremierLeagueMintPool.js';
@@ -38,12 +38,13 @@ export async function getCommonCollectionPlan(userId:string) {
     try{eligibleIds=new Set(await currentPremierLeagueMintIds(db));}
     catch(error){console.warn('Common keep roster verification unavailable',error);}
   }
+  const annotated=cards.map(card=>({...card,eligible:eligibleIds===null?undefined:eligibleIds.has(Number(card.playerId)),
+      blocked:blocked.has(Number(card.id))||Boolean(card.forSale),replacementBlocked:replacementBlocked.has(Number(card.id))||Boolean(card.forSale)}));
   return {cap:COMMON_COLLECTION_CAP,eligibilityVerified:eligibleIds!==null,
-    cards:cards.map(card=>({...card,eligible:eligibleIds===null?undefined:eligibleIds.has(Number(card.playerId)),
-      blocked:blocked.has(Number(card.id))||Boolean(card.forSale),replacementBlocked:replacementBlocked.has(Number(card.id))||Boolean(card.forSale)})),excess};
+    canKeepTwoTeams:eligibleIds===null?null:canKeepTwoCommonTeams(annotated),cards:annotated,excess};
 }
 
-export async function reduceCommonCollection(userId:string,raw:unknown, selectKept = false, teamCardIds?: unknown) {
+export async function reduceCommonCollection(userId:string,raw:unknown, selectKept = false, teamCardIds?: unknown, collectionOnly=false) {
   if(!Array.isArray(raw)||raw.some(id=>!Number.isInteger(id)||id<=0)||new Set(raw).size!==raw.length)
     throw new Error('Select the Common cards you want to sacrifice.');
   const selection=raw as number[];
@@ -61,11 +62,17 @@ export async function reduceCommonCollection(userId:string,raw:unknown, selectKe
     try{eligibleIds=new Set(await currentPremierLeagueMintIds(tx));}
     catch{throw new Error("Current Premier League eligibility could not be verified. No cards were sacrificed. Recheck player eligibility and try again.");}
     const kept=cards.filter(c=>!ids.includes(Number(c.id))).map(c=>({...c,eligible:eligibleIds.has(Number(c.playerId))}));
-    if(teamCardIds !== undefined) {
+    if(collectionOnly) {
+      if(!selectKept || teamCardIds !== undefined)throw new Error('Choose exactly ten cards to keep in collection-only mode.');
+      const protection=await findBlockedCards(tx,userId,cards.map(c=>Number(c.id)),false);
+      const protectedIds=new Set(protection.filter(row=>row.reason!=='active_lineup').map(row=>Number(row.cardId)));
+      const annotated=cards.map(c=>({...c,eligible:eligibleIds.has(Number(c.playerId)),blocked:protectedIds.has(Number(c.id))||Boolean(c.forSale)}));
+      if(canKeepTwoCommonTeams(annotated))throw new Error('Your collection can form two valid teams. Choose those teams instead. No cards were sacrificed.');
+    } else if(teamCardIds !== undefined) {
       const teamError = validateCommonKeepTeams(kept, teamCardIds);
       if(teamError) throw new Error(teamError + ' No cards were sacrificed.');
     }
-    if(!supportsTwoCommonTeams(kept))throw new Error('Keep two GK, two DEF, two MID, two FWD and two extra outfield cards, all current Premier League players, for two teams. No cards were sacrificed.');
+    if(!collectionOnly&&!supportsTwoCommonTeams(kept))throw new Error('Keep two GK, two DEF, two MID, two FWD and two extra outfield cards, all current Premier League players, for two teams. No cards were sacrificed.');
     // Saved default lineups are drafts, not tournament entries. Remove only
     // discarded IDs from that draft; submitted teams remain protected above.
     const discardedIds=`{${ids.join(',')}}`;
@@ -80,7 +87,7 @@ export async function reduceCommonCollection(userId:string,raw:unknown, selectKe
     `);
     // Retain historical rows and reward references; sacrifice removes ownership.
     await tx.execute(sql`update app.player_cards set owner_id=null,for_sale=false,price=0 where owner_id=${userId} and id=any(${`{${ids.join(',')}}`}::int[])`);
-    await tx.execute(sql`insert into app.audit_logs(user_id,action,meta) values(${userId},'collection.common_limit.sacrificed',${JSON.stringify({cardIds:ids,keptCardIds:kept.map(c=>c.id),teamCardIds:teamCardIds || null})}::jsonb)`);
+    await tx.execute(sql`insert into app.audit_logs(user_id,action,meta) values(${userId},'collection.common_limit.sacrificed',${JSON.stringify({cardIds:ids,keptCardIds:kept.map(c=>c.id),teamCardIds:teamCardIds || null,collectionOnly})}::jsonb)`);
     return {sacrificed:ids.length,commonCount:COMMON_COLLECTION_CAP};
   });
 }
