@@ -196,6 +196,68 @@ export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreU
     }
   });
 
+  // PERSONAL_LIVE_MATCH_CENTRE_V1: authenticated, read-only scoring projection.
+  // Match identity uses provider IDs; never match a footballer by surname.
+  app.get("/api/epl/match-centre/:fixtureId/my-performance", deps.requireAuth, async (req:any,res)=>{
+    const userId=String(req.authUserId||"");
+    const fixtureId=Number(req.params.fixtureId);
+    if(!userId)return res.status(401).json({message:"Sign in required"});
+    if(!Number.isSafeInteger(fixtureId)||fixtureId<=0)return res.status(400).json({message:"Invalid fixture"});
+    try{
+      const fixtureResult:any=await db.execute(sql`
+        select api_fixture_id as id,round,season,kickoff_at as "kickoffAt",status_short as status
+        from app.api_football_fixtures where league_id=39 and api_fixture_id=${fixtureId}
+        limit 1`);
+      const fixture=fixtureResult.rows?.[0];
+      if(!fixture)return res.status(404).json({message:"Verified Premier League fixture not synchronized yet"});
+      const gameWeek=Number(String(fixture.round||"").match(/(?:Regular Season|Gameweek)\s*-?\s*(\d+)$/i)?.[1]||0);
+      if(gameWeek<1||gameWeek>38)return res.json({fixtureId,gameWeek:null,entries:[],players:[],reason:"No verified gameweek for this match"});
+      // The original round and actual competition window must both agree.
+      // A postponed fixture outside the original window must never acquire old GW points.
+      const result:any=await db.execute(sql`
+        select ce.id as "entryId",c.id as "competitionId",c.name as "competitionName",
+          c.status::text as status,c.game_week as "gameWeek",ce.rank,ce.total_score as "totalScore",
+          ce.captain_id as "captainId",ce.lineup_card_ids as "lineupCardIds",
+          ce.tiebreak_meta->'scoring' as scoring,
+          (select count(*)::int from app.competition_entries other where other.competition_id=c.id) as "entryCount",
+          (select coalesce(jsonb_agg(jsonb_build_object('cardId',pc.id,'playerId',pc.player_id,
+            'apiPlayerId',pi.api_player_id,'name',p.name,'rarity',pc.rarity::text)), '[]'::jsonb)
+            from app.player_cards pc join app.players p on p.id=pc.player_id
+            join app.player_provider_identities pi on pi.player_id=pc.player_id
+            where pc.id in (select case when value ~ '^[0-9]+$' then value::int end
+              from jsonb_array_elements_text(coalesce(ce.lineup_card_ids,'[]'::jsonb)))
+          ) as identities
+        from app.competition_entries ce join app.competitions c on c.id=ce.competition_id
+        where ce.user_id=${userId} and c.game_week=${gameWeek}
+          and c.status::text in ('open','active','locked','completed')
+          and c.start_date<=${fixture.kickoffAt} and c.end_date>=${fixture.kickoffAt}
+        order by c.id,ce.id limit 100`);
+      const entries=(result.rows||[]).map((row:any)=>{
+        const snapshot=row.scoring||{};
+        const validSnapshot=Number(snapshot.gameWeek)===gameWeek&&Number(snapshot.version)>=2;
+        const cardIds=new Set<number>((Array.isArray(row.lineupCardIds)?row.lineupCardIds:[]).map(Number));
+        const identities=new Map<number,any>((Array.isArray(row.identities)?row.identities:[]).map((item:any)=>[Number(item.cardId),item]));
+        const scores=new Map<number,any>((validSnapshot&&Array.isArray(snapshot.cardScores)?snapshot.cardScores:[]).map((item:any)=>[Number(item.cardId),item]));
+        const players=[...cardIds].flatMap(cardId=>{
+          const identity=identities.get(cardId),score=scores.get(cardId);
+          const verifiedScore=score&&Number(score.apiFootballPlayerId)>0&&
+            !['identity-unlinked','identity-ambiguous','identity-mismatch'].includes(String(score.identityStatus||''));
+          const apiPlayerId=Number(verifiedScore?score.apiFootballPlayerId:identity?.apiPlayerId);
+          if(!Number.isSafeInteger(apiPlayerId)||apiPlayerId<=0)return [];
+          const scoreNumber=verifiedScore&&score.score!=null&&Number.isFinite(Number(score.score))?Number(score.score):null;
+          return [{cardId,apiPlayerId,name:score?.officialPlayerName||identity?.name||"",rarity:identity?.rarity||null,
+            captain:Number(row.captainId)===cardId,gameweekPoints:scoreNumber}];
+        });
+        return {entryId:Number(row.entryId),competitionId:Number(row.competitionId),competitionName:row.competitionName,
+          status:row.status,gameWeek,rank:row.rank==null?null:Number(row.rank),entryCount:Number(row.entryCount||0),
+          totalScore:validSnapshot?Number(row.totalScore):null,complete:validSnapshot&&snapshot.complete===true,
+          final:validSnapshot&&snapshot.final===true,updatedAt:validSnapshot?snapshot.updatedAt||null:null,players};
+      });
+      res.setHeader("Cache-Control","private, no-store");
+      return res.json({fixtureId,gameWeek,entries});
+    }catch(error){console.warn("[personal-match-centre] performance unavailable",error);return res.status(503).json({message:"Your tournament performance is temporarily unavailable"});}
+  });
+
   app.get("/api/epl/fixtures", async (req, res) => {
     try {
       const status = String(req.query.status || "upcoming");
