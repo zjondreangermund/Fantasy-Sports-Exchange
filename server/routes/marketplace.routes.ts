@@ -1,3 +1,4 @@
+import {leaderboardTotal,leaderboardRank} from "../services/leaderboardProjection.js";
 import { coalesceConcurrentRead } from "../services/concurrentRead.js";
 import {createTournamentPositionResolver} from "../services/tournamentPositions.js";
 import type { Express } from "express";
@@ -171,28 +172,11 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
             ce.id as "entryId",
             ce.user_id as "userId",
             coalesce(u.manager_team_name, u.name, u.email, 'Manager') as "teamName",
-            coalesce(nullif(ce.tiebreak_meta->'scoring'->>'totalScore', '')::float, ce.total_score, 0)::float as "totalScore",
+            ${leaderboardTotal}::float as "totalScore",
             ce.lineup_card_ids as "lineupCardIds",
             ce.captain_id as "captainId",
             ce.joined_at as "joinedAt",
-            row_number() over (
-              order by
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'totalScore', '')::float, ce.total_score, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'captainBasePoints', '')::float, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'goalsScored', '')::float, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'assists', '')::float, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'keyPasses', '')::float, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'shotsOnTarget', '')::float, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'defensiveActions', '')::float, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'goalkeeperSaves', '')::float, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'completedPasses', '')::float, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'minutesPlayed', '')::float, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'squadValue', '')::float, 0) asc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'totalXp', '')::float, 0) desc,
-                coalesce(nullif(ce.tiebreak_meta->'scoring'->>'rarityPrestige', '')::float, 0) desc,
-                ce.joined_at asc,
-                ce.id asc
-            )::int as rank
+            ${leaderboardRank} as rank
           from app.competition_entries ce
           left join app.users u on u.id = ce.user_id
           where ce.competition_id = ${competitionId}
@@ -243,7 +227,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
           ce.id as "entryId",
           ce.user_id as "userId",
           coalesce(u.manager_team_name, u.name, u.email, 'Manager') as "teamName",
-          coalesce(ce.total_score, 0)::float as "totalScore",
+          ${leaderboardTotal}::float as "totalScore",
           ce.lineup_card_ids as "lineupCardIds",
           ce.captain_id as "captainId",
           coalesce(ce.tiebreak_meta, '{}'::jsonb) as "tiebreakMeta",
@@ -367,7 +351,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         const captain = Number(card.cardId) === captainId;
         const calculatedCaptainBonus = Math.round(points * 0.1 * 10000) / 10000;
         const captainBonus = captain
-          ? Number(snapshot?.final === true ? snapshot?.captainBonus ?? calculatedCaptainBonus : calculatedCaptainBonus)
+          ? Number(snapshot?.captainBonus ?? calculatedCaptainBonus)
           : 0;
         const apiImage = apiPlayer ? apiFootballPhotoUrl(apiPlayer.apiPlayerId, apiPlayer.photo) : "";
         // API_ONLY_TOURNAMENT_TEAM_IMAGES_V1
@@ -413,10 +397,7 @@ export function registerMarketplaceRoutes(app: Express, deps: RegisterMarketplac
         players.reduce((total: number, player: any) => total + Number(player.contribution || 0), 0) * 10000,
       ) / 10000;
       const storedTotalScore = Number(entry.totalScore || 0);
-      const snapshotTotalScore = Number(snapshot?.totalScore);
-      const canonicalTotalScore = snapshot && Number.isFinite(snapshotTotalScore)
-        ? snapshotTotalScore
-        : calculatedTotalScore;
+      const canonicalTotalScore = storedTotalScore;
       const scoreReconciliationRequired = snapshot?.final !== true
         && (
           Math.abs(storedTotalScore - canonicalTotalScore) > 0.00005

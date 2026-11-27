@@ -10,6 +10,7 @@ const bridge = read("server/services/apiFootballScoringBridge.ts");
 const updater = read("server/services/scoreUpdater.ts");
 const tournament = read("server/services/tournamentRules.ts");
 const leaderboard = read("server/routes/marketplace.routes.ts");
+const leaderboardProjection = read("server/services/leaderboardProjection.ts");
 const standingsPage = read("client/src/pages/competitions-vault.tsx");
 const scoringPage = read("client/src/pages/scoring-rules.tsx");
 
@@ -34,7 +35,8 @@ for (const [source, required, label] of [
   [updater, "identityStatus: String(score?.identity_status", "Player identity status in official scoring snapshots"],
   [updater, "Recovered verified player points", "Automatic recovered-points diagnostics"],
   [bridge, "api_position: match.position", "Verified API-Football player position"],
-  [leaderboard, "->>'completedPasses'", "Leaderboard completed-passes tie-breaker"],
+  [leaderboardProjection, "->>'completedPasses'", "Leaderboard completed-passes tie-breaker"],
+  [leaderboard, "${leaderboardRank} as rank", "Leaderboard uses shared ranking projection"],
   [leaderboard, "resolveApiFootballGameweekPlayer(card, apiScoringContext)", "Verified API-Football submitted-team player safeguard"],
   [leaderboard, 'identityProvider: "api-football"', "API-Football submitted-team scoring provider"],
   [standingsPage, "maximumFractionDigits: 4", "Visible precise tournament scores"],
@@ -49,7 +51,7 @@ check(!scoring.includes("official FPL bonus point(s)"), "Provider fantasy bonus 
 check(!scoring.includes("matchRating * d.matchRating"), "API-Football match ratings must not affect Fantasy Arena scoring.");
 check(!updater.includes("providerRatingTotal"), "API-Football match ratings must not affect tournament tie-breaks.");
 check(!updater.includes("mapFplStatsToPlayerStats"), "Tournament score updater must not map FPL player statistics.");
-check(!leaderboard.includes("providerRatingTotal"), "Leaderboard ordering must not use API-Football match ratings.");
+check(!leaderboard.includes("providerRatingTotal") && !leaderboardProjection.includes("providerRatingTotal"), "Leaderboard ordering must not use API-Football match ratings.");
 check(!updater.includes("const explicit = Number(player?.externalId || player?.fplId || 0);"), "Stale player IDs must not bypass official identity verification.");
 
 const rulesMarker = "export const PLAYER_SCORE_RULES = ";

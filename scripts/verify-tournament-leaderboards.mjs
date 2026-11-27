@@ -16,8 +16,17 @@ function requireText(source, expected, message) {
 
 requireText(routes, 'app.get("/api/competitions/:id/leaderboard"', "The tournament leaderboard endpoint is missing.");
 requireText(routes, "Math.min(requestedPageSize, 100)", "Tournament leaderboard pages must be capped at 100 teams.");
-requireText(routes, "row_number() over", "Leaderboard positions must be ranked deterministically.");
-requireText(routes, "->>'completedPasses'", "Exact-score ties must include verified football actions.");
+const projection = fs.readFileSync("server/services/leaderboardProjection.ts", "utf8");
+const matchRoutes = fs.readFileSync("server/routes/epl.routes.ts", "utf8");
+const home = fs.readFileSync("client/src/components/dashboard/HomeMatchdayLive.tsx", "utf8");
+requireText(routes, "${leaderboardRank} as rank", "Leaderboard must use shared ranking.");
+requireText(matchRoutes, "${leaderboardRank} as rank", "Matchday must use the exact leaderboard ranking.");
+requireText(matchRoutes, "${leaderboardTotal}::float", "Matchday must use the exact leaderboard total.");
+requireText(home, "points(row.contribution)", "Home must use recorded contributions.");
+requireText(home, "maximumFractionDigits:4", "Home must retain leaderboard precision.");
+requireText(projection, "partition by ce.competition_id", "Ranking must be partitioned per competition.");
+requireText(projection, "row_number() over", "Leaderboard positions must be ranked deterministically.");
+requireText(projection, "->>'completedPasses'", "Exact-score ties must include verified football actions.");
 requireText(routes, 'limit ${pageSize} offset ${offset}', "Tournament leaderboard pages must use a real database offset.");
 requireText(routes, "totalPages: Math.max(1, Math.ceil(totalEntries / pageSize))", "Tournament leaderboard pagination totals are missing.");
 requireText(routes, 'app.get("/api/competitions/:id/entries/:entryId"', "The submitted-team scoring endpoint is missing.");
@@ -81,3 +90,24 @@ requireText(freeCupSync, "Deleted past FREE Card Cups are not recreated.", "FREE
 console.log("Play tournament leaderboard launcher, 25-team pagination, official player scoring details and the GW2 FREE Common first-kickoff entry window verified.");
 
 if (routes.includes("providerRatingTotal")) throw new Error("Tournament leaderboard must not use API-Football match ratings.");
+
+const contributionStart=matchRoutes.indexOf("          const isCaptain=");
+const contributionEnd=matchRoutes.indexOf("\n        });",contributionStart);
+if(contributionStart<0||contributionEnd<0)throw new Error("Missing canonical contribution projection");
+const contribution=new Function("row","cardId","verifiedScore","score","snapshot","apiPlayerId","identity",matchRoutes.slice(contributionStart,contributionEnd));
+for(const [row,cardId,verified,score,snapshot,want] of [
+  [{captainId:1},1,true,{score:12.3456},{captainBonus:1.2346},13.5802],
+  [{captainId:2},1,true,{score:12.3456},{captainBonus:1.2346},12.3456],
+  [{captainId:1},1,true,{score:0},{captainBonus:0},0],
+  [{captainId:1},1,false,{score:50},{captainBonus:5},null],
+  [{captainId:1},1,true,{score:12},{},null],
+  [{captainId:2},1,true,{score:-2.5},{},-2.5],
+]){
+  const result=contribution(row,cardId,verified,score,snapshot,123,{});
+  if(result[0].contribution!==want)throw new Error("Home contribution mismatch: "+JSON.stringify({result,want}));
+}
+requireText(home,"entries.set(Number(entry.entryId),entry)","Home must deduplicate a tournament entry across simultaneous fixtures.");
+requireText(home,"matchPlayers","Home must link submitted players to fixture statistics.");
+requireText(fs.readFileSync("client/src/pages/dashboard.tsx","utf8"),"<HomeMatchdayLive","Web dashboard must include live home.");
+requireText(fs.readFileSync("client/src/components/native/NativeHomePage.tsx","utf8"),"<HomeMatchdayLive","Native home must include live home.");
+console.log("Home matchday canonical leaderboard projection and six contribution cases passed.");

@@ -2,6 +2,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { BellRing, ChevronRight, Crown, Gem, ShoppingBag, Sparkles, Trophy, UsersRound, WalletCards } from "lucide-react";
+import HomeMatchdayLive from "../dashboard/HomeMatchdayLive";
 import { useAuth } from "../../hooks/use-auth";
 import { currentArenaOpenCups } from "../../lib/arena-current-gameweek";
 import type { Competition, CompetitionEntry, PlayerCardWithPlayer, Wallet } from "../../../../shared/schema";
@@ -52,6 +53,7 @@ export default function NativeHomePage() {
 
   return (
     <div className="mx-auto w-full max-w-xl px-3 pb-4 pt-3" data-native-home-v2>
+      <HomeMatchdayLive />
       <section className="relative overflow-hidden rounded-[1.7rem] border p-4">
         <div className="pointer-events-none absolute -right-10 -top-16 h-44 w-44 rounded-full bg-fuchsia-500/15 blur-3xl" />
         <div className="pointer-events-none absolute -left-8 bottom-[-4rem] h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
@@ -95,7 +97,7 @@ export default function NativeHomePage() {
 
       {featured ? <section className="mt-3 rounded-[1.45rem] border p-3.5"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-[8px] font-black uppercase tracking-[.17em] text-emerald-200/60">Featured cup</p><h3 className="mt-1 truncate text-[15px] font-black">{featured.name || "Fantasy Arena tournament"}</h3></div><span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[8px] font-black">GW{Number(featured.gameWeek || (featured as any).game_week || 0)}</span></div><div className="mt-3 grid grid-cols-[1fr_1fr_auto] items-end gap-2"><div><p className="text-[8px] text-slate-600">ENTRY</p><p className="mt-0.5 text-[12px] font-black text-emerald-200">{Number(featured.entryFee || 0) <= 0 ? "FREE" : money(featured.entryFee)}</p></div><div><p className="text-[8px] text-slate-600">CLOSES</p><p className="mt-0.5 text-[10px] font-black">{deadline(featured.submissionClosesAt || (featured as any).submission_closes_at)}</p></div><Link href="/competitions"><button className="grid h-9 w-9 place-items-center rounded-xl border border-cyan-300/15 bg-cyan-300/[.08]"><ChevronRight className="h-4 w-4 text-cyan-100" /></button></Link></div></section> : null}
 
-      <section className="mt-3 grid grid-cols-2 gap-2"><Link href="/live-lineup"><div className="rounded-2xl border border-white/[.07] bg-white/[.03] p-3"><p className="text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Active entries</p><div className="mt-1 flex items-end justify-between"><p className="text-xl font-black">{activeEntries.length}</p><span className="text-[8px] text-slate-600">View squad</span></div></div></Link><Link href="/live-lineup"><div className="rounded-2xl border border-cyan-300/10 bg-cyan-300/[.035] p-3"><p className="text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Squad score</p><div className="mt-1 flex items-end justify-between"><p className="text-xl font-black text-cyan-100">{lineupScore.toFixed(2)}</p><span className="text-[8px] text-cyan-100/40">Arena pts</span></div></div></Link></section>
+      <section className="mt-3 grid grid-cols-2 gap-2"><Link href="/live-lineup"><div className="rounded-2xl border border-white/[.07] bg-white/[.03] p-3"><p className="text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Active entries</p><div className="mt-1 flex items-end justify-between"><p className="text-xl font-black">{activeEntries.length}</p><span className="text-[8px] text-slate-600">View squad</span></div></div></Link><Link href="/live-lineup"><div className="rounded-2xl border border-cyan-300/10 bg-cyan-300/[.035] p-3"><p className="text-[8px] font-black uppercase tracking-[.12em] text-slate-600">Collection lineup points</p><div className="mt-1 flex items-end justify-between"><p className="text-xl font-black text-cyan-100">{lineupScore.toFixed(2)}</p><span className="text-[8px] text-cyan-100/40">Not tournament total</span></div></div></Link></section>
 
       {latest ? <Link href="/account?tab=inbox"><div className="mt-3 flex items-center gap-3 rounded-2xl border border-violet-300/10 bg-gradient-to-r from-violet-300/[.055] to-cyan-300/[.025] p-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-fuchsia-400/15 to-cyan-300/10 text-cyan-100"><BellRing className="h-4 w-4" /></div><div className="min-w-0 flex-1"><p className="truncate text-[11px] font-black">{latest.title || "Fantasy Arena update"}</p><p className="mt-0.5 line-clamp-1 text-[9px] text-slate-600">{latest.message || "Open your inbox for the latest update."}</p></div><ChevronRight className="h-4 w-4 text-slate-700" /></div></Link> : null}
     </div>
