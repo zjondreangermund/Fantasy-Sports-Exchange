@@ -70,7 +70,7 @@ export function registerTrophyCabinetRoutes(app: Express, deps: { requireAuth: a
           competitionDate:row.competitionDate,
         };
         if(freeCup || (cardId>0 && !row.vaultAwardId)){
-          const rarity=String(row.cardRarity|| (Number(row.rank)===1?"rare":"common")).toLowerCase();
+          const rarity=String(row.cardRarity||row.settlementAward?.rarity|| (Number(row.rank)===1?"rare":"common")).toLowerCase();
           entries.push({...base,kind:"card",rarity,title:`${rarity.toUpperCase()} Player Card`,
             status:cardId>0?"minted":row.vaultStatus==="declined"?"declined":"ready_to_mint",cardId:cardId||null,
             playerName:row.playerName||null,playerTeam:row.playerTeam||null,
@@ -84,7 +84,7 @@ export function registerTrophyCabinetRoutes(app: Express, deps: { requireAuth: a
             status:String(row.vaultStatus||"pending_claim"),awardId:Number(row.vaultAwardId)});
         }
         if(Number(row.cashAward||0)>0){
-          entries.push({...base,kind:"cash",title:"Tournament cash award",
+          entries.push({...base,kind:"cash",title:row.settlementAward?.cashEquivalent?`${String(row.settlementAward.title||"Prize Ladder")} — cash equivalent`:"Tournament cash award",
             value:Number(row.cashAward),status:row.payoutCompletedAt?"credited":"pending"});
         }
       }
