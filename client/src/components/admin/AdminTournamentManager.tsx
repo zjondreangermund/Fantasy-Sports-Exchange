@@ -313,7 +313,7 @@ export default function AdminTournamentManager() {
     const ladder=key==="ladder"||!key;
     setSettlementReview(null);
     if(ladder){settleMutation.mutate({competitionId:Number(comp.id),forceManual,previewOnly:true});return;}
-    if(!window.confirm("Settle "+String(comp.name||"this tournament")+" using verified final scores?"))return;
+    if(!window.confirm((forceManual?"MANUAL EARLY SETTLEMENT\n\nAll eligible Premier League fixtures must be finished. This will finalize prizes and release card locks.\n\n":"")+"Settle "+String(comp.name||"this tournament")+" using verified final scores?"))return;
     settleMutation.mutate({competitionId:Number(comp.id),forceManual});
   };
 
@@ -347,7 +347,7 @@ export default function AdminTournamentManager() {
 
       {settlementReview?.review && <section ref={settlementReviewRef} role="region" aria-label="Prize Ladder settlement review" className="mt-4 rounded-2xl border border-amber-300/35 bg-slate-950 p-4">
         <h3 className="text-lg font-black text-amber-100">Review & approve Prize Ladder settlement</h3>
-        <p className="mt-1 text-xs text-white/70">No prize has been paid. Approving credits the exact cash amount to the first-place winner's wallet.</p>
+        <p className="mt-1 text-xs text-white/70">{settlementReview.forceManual?"MANUAL EARLY SETTLEMENT — all eligible fixtures must be finished. ":""}No prize has been paid. Approving credits the exact cash amount to the first-place winner's wallet.</p>
         <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           <div><span className="block text-xs text-white/55">Tournament</span>{settlementReview.review.competitionName}</div>
           <div><span className="block text-xs text-white/55">Winner · entry #{settlementReview.review.winnerEntryId}</span>{settlementReview.review.winnerEmail||settlementReview.review.winnerUserId}</div>
