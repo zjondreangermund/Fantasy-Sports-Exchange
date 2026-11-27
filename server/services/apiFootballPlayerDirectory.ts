@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
-import { normalizePlayerText, strongPlayerNameMatch } from "./fplPlayerIdentity.js";
+import { normalizePlayerText, strongPlayerNameMatch, buildFplPlayerIndex, isCurrentOfficialRosterMember } from "./fplPlayerIdentity.js";
+import { fplApi } from "./fplApi.js";
 
 export type CanonicalPlayerPosition = "GK" | "DEF" | "MID" | "FWD";
 
@@ -211,7 +212,7 @@ export async function replaceApiFootballSquad(season: number, team: any, players
   return records;
 }
 
-export async function loadApiFootballPlayerDirectory(season = apiFootballSeasonNow()): Promise<ApiFootballDirectoryPlayer[]> {
+export async function loadApiFootballPlayerDirectory(season = apiFootballSeasonNow(), includeOwnedRosterFallback = false): Promise<ApiFootballDirectoryPlayer[]> {
   await ensureApiFootballPlayerDirectorySchema();
   let rows = rowsOf(await db.execute(sql`
     select api_player_id as "apiPlayerId", season, api_team_id as "apiTeamId",
@@ -236,7 +237,7 @@ export async function loadApiFootballPlayerDirectory(season = apiFootballSeasonN
     `));
   }
 
-  const directory = rows.map((row: any) => ({
+  const toDirectoryPlayer = (row:any):ApiFootballDirectoryPlayer => ({
     apiPlayerId: Number(row.apiPlayerId || 0),
     season: Number(row.season || season),
     apiTeamId: Number(row.apiTeamId || 0),
@@ -251,8 +252,58 @@ export async function loadApiFootballPlayerDirectory(season = apiFootballSeasonN
     squadNumber: row.squadNumber == null ? null : Number(row.squadNumber),
     active: Boolean(row.active),
     updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
-  }));
+  });
+  const directory=rows.map(toDirectoryPlayer);
   await synchronizeProviderIdentities(directory);
+  if (!includeOwnedRosterFallback || season!==apiFootballSeasonNow()) return directory;
+  // OWNED_ROSTER_AVAILABILITY_V1: use real provider identities from earlier
+  // squad records when the current official roster confirms the same club.
+  // Never mark those records active or use them for new-card minting.
+  try {
+    const index=buildFplPlayerIndex(await fplApi.mintBootstrap());
+    if(index.teams.length!==20||index.elements.length<300)return directory;
+    const clubs=rowsOf(await db.execute(sql`select distinct team_id as id from (
+      select home_team_id as team_id from app.api_football_fixtures where league_id=39 and season=${season}
+      union select away_team_id from app.api_football_fixtures where league_id=39 and season=${season}
+    ) clubs`));
+    const clubIds=new Set(clubs.map(row=>Number(row.id)));
+    if(clubIds.size<18||clubIds.size>20)return directory;
+    const tables=rowsOf(await db.execute(sql`select to_regclass('app.api_football_transfers') as transfers`))[0];
+    const outside=new Set<number>();
+    if(tables?.transfers)for(const row of rowsOf(await db.execute(sql`select distinct on(api_player_id) api_player_id as id,to_team_id as "teamId"
+       from app.api_football_transfers where transfer_date<=current_date order by api_player_id,transfer_date desc,updated_at desc`))){
+      if(Number(row.teamId)>0&&!clubIds.has(Number(row.teamId)))outside.add(Number(row.id));
+    }
+    const prior=rowsOf(await db.execute(sql`select api_player_id as "apiPlayerId", season, api_team_id as "apiTeamId",
+       name, coalesce(first_name,'') as "firstName", coalesce(last_name,'') as "lastName", team_name as team,
+       coalesce(position,'MID') as position, coalesce(photo,'') as photo, coalesce(nationality,'') as nationality,
+       age, squad_number as "squadNumber", active, updated_at as "updatedAt"
+       from app.api_football_players where season between ${season-1} and ${season}
+       order by season desc,updated_at desc`));
+    const known=new Set(directory.filter(row=>row.season===season).map(row=>row.apiPlayerId));
+    const candidates=prior.map(toDirectoryPlayer).filter(row=>!known.has(row.apiPlayerId)&&clubIds.has(row.apiTeamId)&&!outside.has(row.apiPlayerId));
+    // A provider ID is accepted only if a unique verified official footballer
+    // matches its name AND current club. Historical rows are identity evidence,
+    // not evidence of an appearance or a current API squad registration.
+    const matches=new Map<number,ApiFootballDirectoryPlayer[]>();
+    for(const row of candidates){
+      const element=index.resolve({name:row.name,webName:`${row.firstName} ${row.lastName}`.trim(),team:row.team,position:row.position});
+      if(!isCurrentOfficialRosterMember(index,element))continue;
+      const canonical=index.canonical(element);
+      if(teamCompatibility(canonical.team,row.team)<20)continue;
+      const identityMatches=[canonical.name,canonical.webName].some(name=>nameCompatibility(name,row)>=100);
+      if(!identityMatches)continue;
+      const list=matches.get(Number(element.id))||[];
+      if(!list.some(candidate=>candidate.apiPlayerId===row.apiPlayerId))list.push(row);
+      matches.set(Number(element.id),list);
+    }
+    const activeOfficialIds=new Set(directory.filter(row=>row.season===season).map(row=>index.resolve({name:row.name,webName:`${row.firstName} ${row.lastName}`.trim(),team:row.team,position:row.position})).filter(Boolean).map(element=>Number(element.id)));
+    for(const [elementId,list] of matches){
+      if(list.length!==1||activeOfficialIds.has(elementId))continue;
+      const row=list[0];if(known.has(row.apiPlayerId))continue;
+      directory.push({...row,active:false});known.add(row.apiPlayerId);
+    }
+  } catch(error){console.warn("Owned player roster identity fallback unavailable:",error);}
   return directory;
 }
 
