@@ -217,7 +217,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
         const storedStatus = String(player.status || "").trim().toLowerCase();
         const storedLeague = String(player.league || "").trim().toLowerCase();
         const outsidePremierLeague = Boolean(departedApiFootballPlayer)
-          || ["departed", "superseded", "unlinked", "archived"].includes(storedStatus)
+          || ["departed", "superseded", "unlinked", "archived", "loaned_out"].includes(storedStatus)
           || (storedLeague && !["premier league", "english premier league", "epl"].includes(storedLeague));
         const identityVerified = !outsidePremierLeague && Boolean(apiFootballPlayer);
         const currentPosition = canonical?.position || String(player.position || "") || apiFootballPlayer?.position || "MID";
