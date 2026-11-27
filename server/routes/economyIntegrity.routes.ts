@@ -273,6 +273,7 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
   `))[0];
   if (!award || String(award.userId) !== userId) throw new Error("Prize claim not found");
   const rank = Number(award.rank || 0);
+  if(String(award.awardStatus)==="declined")throw new Error("This Common prize was declined; your existing collection was kept.");
   const freeCommonCup = String(award.competitionStatus) === "completed"
     && Number(award.entryFee || 0) <= 0
     && String(award.prizeKey || "").toLowerCase().startsWith("free-")
@@ -384,6 +385,10 @@ async function claimFreeCommonCupCard(tx: any, userId: string, entryId: number) 
   await tx.execute(sql`update app.competition_prize_awards set status='claimed',
     metadata=jsonb_set(coalesce(metadata,'{}'::jsonb),'{cardId}',to_jsonb(${Number(card.id)}::integer),true),updated_at=now()
     where entry_id=${entryId} and user_id=${userId} and prize_category='card' and status='pending_claim'`);
+  if(rarity==="common") {
+    await ensureCommonCardChoiceSchema(tx);
+    await tx.execute(sql`update app.common_card_reward_choices set status='replaced',replacement_card_id=${Number(card.id)},resolved_at=now() where competition_entry_id=${entryId} and user_id=${userId} and status='pending'`);
+  }
   await createNotificationOnce(tx, {
     userId,
     type: rank === 1 ? "win" : "runner_up",
@@ -705,7 +710,18 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
     try{
       await ensureCommonCardChoiceSchema();
       const userId=String(req.authUserId||"");
-      const choices=rowsOf(await db.execute(sql`select x.id,x.status,x.created_at as "createdAt",ce.id as "entryId",ce.rank,c.name as "competitionName" from app.common_card_reward_choices x join app.competition_entries ce on ce.id=x.competition_entry_id join app.competitions c on c.id=ce.competition_id where x.user_id=${userId} and x.status='pending' order by x.created_at asc`));
+      await ensurePrizeAwardSchema();
+      // Recover recorded Common wins at the cap before the user taps Mint.
+      // This creates a pending choice only; no cards are minted or sacrificed.
+      await db.execute(sql`insert into app.common_card_reward_choices(user_id,competition_entry_id)
+        select pa.user_id,pa.entry_id from app.competition_prize_awards pa
+        join app.competition_entries ce on ce.id=pa.entry_id and ce.user_id=pa.user_id
+        join app.competitions c on c.id=ce.competition_id
+        where pa.user_id=${userId} and pa.status='pending_claim' and pa.prize_category='card'
+          and pa.rarity='common' and ce.prize_card_id is null and c.status::text='completed'
+          and (select count(*) from app.player_cards where owner_id=${userId} and rarity::text='common')>=${COMMON_COLLECTION_CAP}
+        on conflict(competition_entry_id) do nothing`);
+      const choices=rowsOf(await db.execute(sql`select x.id,x.status,x.created_at as "createdAt",ce.id as "entryId",ce.rank,c.name as "competitionName" from app.common_card_reward_choices x join app.competition_entries ce on ce.id=x.competition_entry_id join app.competitions c on c.id=ce.competition_id where x.user_id=${userId} and x.status='pending' and ce.prize_card_id is null and (select count(*) from app.player_cards where owner_id=${userId} and rarity::text='common')>=${COMMON_COLLECTION_CAP} order by x.created_at asc`));
       const cards=choices.length?rowsOf(await db.execute(sql`
         select pc.id,p.name as "playerName",p.team,p.position::text as position,p.image_url as "imageUrl" from app.player_cards pc join app.players p on p.id=pc.player_id
         where pc.owner_id=${userId} and pc.rarity::text='common' and pc.for_sale=false
