@@ -251,11 +251,13 @@ export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreU
             String(score.identityStatus||"")==="verified";
           const apiPlayerId=Number(verifiedScore?score.apiFootballPlayerId:identity?.apiPlayerId);
           if(!Number.isSafeInteger(apiPlayerId)||apiPlayerId<=0)return [];
+          const isCaptain=Number(row.captainId)===cardId;
           const scoreNumber=verifiedScore&&score.score!=null&&Number.isFinite(Number(score.score))?Number(score.score):null;
+          const bonus=isCaptain?(snapshot.captainBonus!=null&&Number.isFinite(Number(snapshot.captainBonus))?Number(snapshot.captainBonus):null):0;
           return [{cardId,apiPlayerId,name:score?.officialPlayerName||identity?.name||"",rarity:identity?.rarity||null,
-            captain:Number(row.captainId)===cardId,gameweekPoints:scoreNumber,
-            captainBonus:scoreNumber!=null&&Number(row.captainId)===cardId&&Number.isFinite(Number(snapshot.captainBonus))?Number(snapshot.captainBonus):scoreNumber!=null?0:null,
-            contribution:scoreNumber==null?null:Math.round((scoreNumber+(Number(row.captainId)===cardId?Number(snapshot.captainBonus||0):0))*10000)/10000}];
+            captain:isCaptain,gameweekPoints:scoreNumber,
+            captainBonus:scoreNumber==null?null:bonus,
+            contribution:scoreNumber==null||bonus==null?null:Math.round((scoreNumber+bonus)*10000)/10000}];
         });
         return {entryId:Number(row.entryId),competitionId:Number(row.competitionId),competitionName:row.competitionName,
           status:row.status,gameWeek,rank:row.rank==null?null:Number(row.rank),entryCount:Number(row.entryCount||0),
