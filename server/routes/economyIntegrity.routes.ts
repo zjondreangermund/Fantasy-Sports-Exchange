@@ -697,7 +697,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const userId = String(req.authUserId || "");
       const entryId = Number(req.params.entryId);
       if (!Number.isInteger(entryId) || entryId <= 0) return res.status(400).json({ message: "Valid prize entry required" });
-      const card = await db.transaction((tx) => claimFreeCommonCupCard(tx, userId, entryId));
+      const card = await db.transaction(async(tx) => {await lockCommonCollection(tx,userId);return claimFreeCommonCupCard(tx,userId,entryId);});
       return res.json({ success:true,card,pendingChoice:card.pendingChoice===true,message:card.pendingChoice?"Choose whether to keep your collection or replace one Common card":card.replayed?"Prize already claimed":"Prize card claimed successfully" });
     } catch (error: any) {
       const message = error?.message || "Could not claim prize card";
@@ -1009,7 +1009,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           select id, name, status::text as status, tier::text as tier, game_week as "gameWeek",
             coalesce(entry_fee, 0)::float as "entryFee", coalesce(platform_fee_rate, case when created_by_user_id is not null then 0.1 else 0 end)::float as "platformFeeRate",
             coalesce(prize_type, 'goods') as "prizeType", coalesce(prize_key, '') as "prizeKey",
-            coalesce(prize_description, '') as "prizeDescription", coalesce(visibility, 'public') as visibility,
+            coalesce(prize_description, '') as "prizeDescription", coalesce(visibility, 'public') as visibility, season,
             prize_card_rarity::text as "prizeCardRarity", created_by_user_id as "createdByUserId"
           from app.competitions
           where id = ${competitionId}
@@ -1066,6 +1066,8 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             from app.competition_entries ce
             join app.competitions c on c.id = ce.competition_id
             where c.game_week = ${Number(competition.gameWeek)}
+              and c.season is not distinct from ${competition.season}
+              and c.status::text <> 'cancelled'
               and c.tier::text = ${String(competition.tier)}
               and coalesce(c.visibility, 'public') = 'public'
               and coalesce(c.prize_key, '') = 'ladder'
@@ -1098,8 +1100,9 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           : cashPayoutEnabled ? toMoney(Math.max(0,grossPool - cashPrizePool)) : toMoney(Math.max(0, grossPool - prizeValue));
         const prizePool = cashPayoutEnabled ? cashPrizePool : prizeValue;
         if(req.body?.previewOnly===true && !prizeVault) throw new Error("This tournament is not a Prize Ladder. No settlement was performed.");
+        let approvedPrizeReview:any=null;
         if(prizeVault) {
-          if(toMoney(paidFees)!==grossPool)throw new Error("Prize Ladder payment records are incomplete. No payout issued.");
+          if(toMoney(paidFees)!==grossPool || lockedEntries.some(e=>Number(e.entryFeePaid)<=0))throw new Error("Prize Ladder payment records are incomplete. No payout issued.");
           if(cashPrizePool<=0||cashPrizePool>grossPool)throw new Error("Prize Ladder prize exceeds verified collected fees or has no payable amount. No payout issued.");
           const winner=ranked[0];
           const review={competitionId,competitionName:String(competition.name),gameWeek:Number(competition.gameWeek),
@@ -1113,6 +1116,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             const user=rowsOf(await tx.execute(sql`select email from app.users where id=${review.winnerUserId}`))[0];
             return {approvalRequired:true,review:{...review,winnerEmail:String(user?.email||"")},approvalToken};
           }
+          approvedPrizeReview={...review,approvedBy:adminId,approvalToken};
           if(prizeAward)prizeAward={...prizeAward,originalCategory:prizeAward.category,category:"cash",cashEquivalent:true};
         }
 
@@ -1143,6 +1147,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
             prizeAward: index === 0 ? prizeAward : null,
             underMinimumCashFallback,
             platformFeeRateApplied: underMinimumCashFallback ? 0.2 : feeRate,
+            prizeApproval: index===0 ? approvedPrizeReview : null,
             settledAt: new Date().toISOString(),
           };
           await tx.execute(sql`
