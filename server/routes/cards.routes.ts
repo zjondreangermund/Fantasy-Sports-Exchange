@@ -146,7 +146,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       // only AFTER that sweep, preserving newly minted replacement visibility.
       const providerDataPromise = Promise.all([
         fplApi.bootstrap().catch(() => null),
-        loadApiFootballPlayerDirectory().catch(() => []),
+        loadApiFootballPlayerDirectory(undefined,true).catch(() => []),
       ]);
       // DELAYED_EPL_DEPARTURE_REPLACEMENT_V1
       // Ensure a confirmed departure has a protected replacement claim before
@@ -382,7 +382,7 @@ export function registerCardsRoutes(app: Express, deps: RegisterCardsRoutesDeps)
       }
       const [bootstrap, apiFootballDirectory, liveData, ownershipResult] = await Promise.all([
         fplApi.bootstrap().catch(() => null),
-        loadApiFootballPlayerDirectory().catch(() => []),
+        loadApiFootballPlayerDirectory(undefined,true).catch(() => []),
         fplApi.getLiveGameweek().catch(() => null),
         db.execute(sql`
           select
