@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import "./apply-departed-card-archive.mjs";
 
 const read = (path) => fs.readFileSync(path, "utf8");
@@ -127,3 +128,22 @@ await import("./apply-tournament-neon-rarity.mjs");
 await import("./apply-notification-self-test.mjs");
 await import("./verify-tournament-neon-rarity.mjs");
 await import("./verify-notification-self-test.mjs");
+
+const approvalStart=economy.indexOf("        // PRIZE_LADDER_APPROVAL_CASH_V1");
+const approvalEnd=economy.indexOf("        if (alreadyCompleted && cashPayoutEnabled)",approvalStart);
+assert.ok(approvalStart>=0&&approvalEnd>approvalStart,"Prize Ladder approval must precede any payout");
+const approvalBlock=economy.slice(approvalStart,approvalEnd).replace("let approvedPrizeReview:any=null","let approvedPrizeReview=null");
+const runApproval=new Function("req","competition","competitionId","ranked","lockedEntries","paidFees","grossPool","prizeVault","cashPoolEnabled","prizeAward","payoutPercentages","sharedEntries","adminId","tx","rowsOf","sql","toMoney","asObject","createHash","return (async()=>{"+approvalBlock+"\nreturn {approved:true,approvedPrizeReview,cashPrizePool,platformFee,payoutPercentages,prizeAward};})()");
+const approvalEntries=[{id:4,userId:"winner",totalScore:90,tiebreak:{goals:2}},{id:5,userId:"other",totalScore:70,tiebreak:{goals:1}}];
+const testApproval=({body={},bulk=false,award={key:"voucher",title:"Voucher",value:500,category:"Voucher"},gross=1000,ranked=approvalEntries,admin="admin",fees=gross}={})=>runApproval({body,skipNextGameweekRollover:bulk},{name:"GW12 Common",gameWeek:12,tier:"common",platformFeeRate:0},8,ranked,[{id:4,entryFeePaid:fees/2,totalScore:ranked[0].totalScore,tiebreakMeta:{scoring:{complete:true}}},{id:5,entryFeePaid:fees/2,totalScore:ranked[1].totalScore,tiebreakMeta:{scoring:{complete:true}}}],fees,gross,true,false,award,[.6,.3,.1],2,admin,{execute:async()=>({rows:[{email:"test@example.com"}]})},r=>r.rows,()=>"",n=>Math.round(Number(n)*100)/100,v=>v||{},createHash);
+const review=await testApproval({body:{previewOnly:true}});
+assert.equal(review.approvalRequired,true);assert.equal(review.review.cashAmount,500);
+const approved=await testApproval({body:{approvalToken:review.approvalToken}});
+assert.equal(approved.approved,true);assert.equal(approved.cashPrizePool,500);assert.deepEqual(approved.payoutPercentages,[1]);assert.equal(approved.prizeAward.cashEquivalent,true);
+for(const variant of [{body:{}},{body:{approvalToken:"wrong"}},{body:{approvalToken:review.approvalToken},bulk:true},{body:{approvalToken:review.approvalToken},admin:"other-admin"},{body:{approvalToken:review.approvalToken},award:{key:"voucher",title:"Voucher",value:600}},{body:{approvalToken:review.approvalToken},ranked:[approvalEntries[1],approvalEntries[0]]}]){
+ assert.equal((await testApproval(variant)).approvalRequired,true,"Changed approval cannot pay");
+}
+const fallback=await testApproval({award:null});assert.equal(fallback.review.cashAmount,800);assert.equal(fallback.review.platformFee,200);
+await assert.rejects(testApproval({gross:100,award:{value:500}}),/exceeds verified/);
+await assert.rejects(testApproval({fees:0}),/payment records/);
+console.log("Prize Ladder approval, cash-equivalent amount, funding, stale approval and bulk safeguards verified.");
