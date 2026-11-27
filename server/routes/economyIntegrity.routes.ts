@@ -2,6 +2,7 @@ import { assertCommonEntryPolicy } from "../services/commonEntryPolicy.js";
 import { assertCommonCardsRemovable, lockCommonCollection } from "../services/commonCollectionPolicy.js";
 import {currentPremierLeagueMintIds} from "../services/currentPremierLeagueMintPool.js";
 import type { Express } from "express";
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { storage } from "../storage.js";
@@ -1003,7 +1004,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
       const ranked = await rankCompetitionEntries(storage, entries);
       if (!ranked.length) return res.status(400).json({ message: "Cannot settle a tournament without entries" });
 
-      const settlement = await db.transaction(async (tx) => {
+      const settlement: any = await db.transaction(async (tx) => {
         const competition = rowsOf(await tx.execute(sql`
           select id, name, status::text as status, tier::text as tier, game_week as "gameWeek",
             coalesce(entry_fee, 0)::float as "entryFee", coalesce(platform_fee_rate, case when created_by_user_id is not null then 0.1 else 0 end)::float as "platformFeeRate",
@@ -1055,7 +1056,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           && String(competition.prizeKey || "").toLowerCase().startsWith("free-");
         const cashPoolEnabled = prizeType === "cash_pool" || prizeType === "goods_plus_cash";
         const nonCashAwardEnabled = !freeCardCup && (prizeVault || ["goods", "goods_plus_cash", "packs", "sponsor_prize"].includes(prizeType));
-        const payoutPercentages = [0.6, 0.3, 0.1];
+        let payoutPercentages = [0.6, 0.3, 0.1];
 
         let sharedEntries = ranked.length;
         let prizeAward: any = null;
@@ -1081,13 +1082,40 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           };
         }
 
+        // PRIZE_LADDER_APPROVAL_CASH_V1
+        // PRIZE_LADDER_UNDER_MINIMUM_CASH_FALLBACK_V1
+        const underMinimumCashFallback = prizeVault && !prizeAward && grossPool > 0;
+        const cashPayoutEnabled = cashPoolEnabled || prizeVault;
+        if (underMinimumCashFallback) payoutPercentages = [1];
+        if (prizeVault) payoutPercentages = [1];
         const feeRate = Math.max(0, Math.min(1, Number(competition.platformFeeRate ?? (competition.createdByUserId ? 0.1 : 0))));
-        const cashPrizePool = cashPoolEnabled ? toMoney(grossPool - toMoney(grossPool * feeRate)) : 0;
         const prizeValue = prizeAward ? toMoney(prizeAward.value || 0) : 0;
-        const platformFee = cashPoolEnabled ? toMoney(grossPool - cashPrizePool) : toMoney(Math.max(0, grossPool - prizeValue));
-        const prizePool = cashPoolEnabled ? cashPrizePool : prizeValue;
+        const cashPrizePool = prizeVault
+          ? (underMinimumCashFallback ? toMoney(grossPool * 0.8) : prizeValue)
+          : cashPoolEnabled ? toMoney(grossPool - toMoney(grossPool * feeRate)) : 0;
+        const platformFee = underMinimumCashFallback
+          ? toMoney(grossPool * 0.2)
+          : cashPayoutEnabled ? toMoney(Math.max(0,grossPool - cashPrizePool)) : toMoney(Math.max(0, grossPool - prizeValue));
+        const prizePool = cashPayoutEnabled ? cashPrizePool : prizeValue;
+        if(prizeVault) {
+          if(toMoney(paidFees)!==grossPool)throw new Error("Prize Ladder payment records are incomplete. No payout issued.");
+          if(cashPrizePool<=0||cashPrizePool>grossPool)throw new Error("Prize Ladder prize exceeds verified collected fees or has no payable amount. No payout issued.");
+          const winner=ranked[0];
+          const review={competitionId,competitionName:String(competition.name),gameWeek:Number(competition.gameWeek),
+            tier:String(competition.tier),entryCount:ranked.length,sharedEntries,grossPool,platformFee,
+            prizeTitle:prizeAward?.title||"80% collected entry fees (minimum not reached)",prizeKey:prizeAward?.key||"cash-fallback",
+            cashAmount:cashPrizePool,winnerEntryId:Number(winner.id),winnerUserId:String(winner.userId),winnerPoints:Number(winner.totalScore),
+            underMinimumCashFallback};
+          // Bind approval to exact results, money, admin and frozen scores.
+          const approvalToken=createHash("sha256").update(JSON.stringify({adminId,review,ranked:ranked.map(e=>[Number(e.id),String(e.userId),Number(e.totalScore),e.tiebreak]),locked:lockedEntries.map(e=>[Number(e.id),e.totalScore,asObject(e.tiebreakMeta).scoring])})).digest("hex");
+          if(req.body?.previewOnly===true || req.skipNextGameweekRollover || req.body?.approvalToken!==approvalToken) {
+            const user=rowsOf(await tx.execute(sql`select email from app.users where id=${review.winnerUserId}`))[0];
+            return {approvalRequired:true,review:{...review,winnerEmail:String(user?.email||"")},approvalToken};
+          }
+          if(prizeAward)prizeAward={...prizeAward,originalCategory:prizeAward.category,category:"cash",cashEquivalent:true};
+        }
 
-        if (alreadyCompleted && cashPoolEnabled) {
+        if (alreadyCompleted && cashPayoutEnabled) {
           for (let index = 0; index < ranked.length; index += 1) {
             const rankedEntry = ranked[index];
             const lockedEntry = lockedEntries.find((entry: any) => Number(entry.id) === Number(rankedEntry.id));
@@ -1103,7 +1131,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         for (let index = 0; index < ranked.length; index += 1) {
           const rankedEntry = ranked[index];
           const entryId = Number(rankedEntry.id);
-          const payout = cashPoolEnabled ? toMoney(cashPrizePool * (payoutPercentages[index] || 0)) : 0;
+          const payout = cashPayoutEnabled ? toMoney(cashPrizePool * (payoutPercentages[index] || 0)) : 0;
           const settlementMeta = {
             ...rankedEntry.tiebreak,
             competitionId,
@@ -1147,8 +1175,12 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           await createNotificationOnce(tx, {
             userId: winnerId,
             type: index === 0 ? "win" : "runner_up",
-            title: `Congratulations — #${index + 1} in ${competition.name}`,
-            message: `Congratulations from the Fantasy Arena Team! You finished #${index + 1} in ${competition.name} with ${toMoney(rankedEntry.totalScore).toFixed(1)} points. N$${payout.toFixed(2)} has been credited to your Fantasy Arena wallet.`,
+            title: prizeVault && index===0 ? `Prize Ladder winner — ${competition.name}` : `Congratulations — #${index + 1} in ${competition.name}`,
+            message: underMinimumCashFallback && index===0
+              ? `Prize Ladder minimum entry threshold was not reached. Your 80% winner share (N${payout.toFixed(2)}) has been credited to your Fantasy Arena wallet. You may request a withdrawal.`
+              : prizeVault && index===0
+                ? `You won ${prizeAward?.title||"the Prize Ladder"}. The cash equivalent of N${payout.toFixed(2)} has been credited to your Fantasy Arena wallet. You may request a withdrawal.`
+                : `Congratulations from the Fantasy Arena Team! You finished #${index + 1} in ${competition.name} with ${toMoney(rankedEntry.totalScore).toFixed(1)} points. N${payout.toFixed(2)} has been credited to your Fantasy Arena wallet.`,
             dedupeKey: `competition:${competitionId}:entry:${entryId}:cash-congratulations`,
           });
         }
@@ -1216,7 +1248,11 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           status: freeCardAward.claimed ? "claimed" : "pending_claim",
           cardId: freeCardAward.cardId,
         } : null;
-        if (nonCashAwardEnabled && prizeAward) {
+        if (prizeVault && prizeAward) {
+          // The wallet posting is the award. Do not create a second claimable physical prize.
+          awardRecord={competitionId,entryId:Number(ranked[0].id),userId:String(ranked[0].userId),prizeKey:prizeAward.key,prizeTitle:prizeAward.title,prizeValue:cashPrizePool,prizeCategory:"cash",status:"credited"};
+        }
+        if (nonCashAwardEnabled && prizeAward && !prizeVault) {
           const winner = ranked[0];
           const winnerEntryId = Number(winner.id);
           const winnerUserId = String(winner.userId || "");
@@ -1272,14 +1308,16 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
           prizePool,
           prizeType,
           prizeVault,
+          underMinimumCashFallback,
           sharedEntries,
           prizeAward: awardRecord,
-          winnersCount: cashPoolEnabled ? Math.min(3, ranked.length) : awardRecord ? 1 : 0,
+          winnersCount: cashPayoutEnabled ? Math.min(payoutPercentages.filter(value=>value>0).length,ranked.length) : freeCardCup ? Math.min(3,ranked.length) : awardRecord ? 1 : 0,
           replayedPostings,
           replayed: alreadyCompleted,
         };
       });
 
+      if(settlement.approvalRequired) return res.status(req.body?.previewOnly===true?200:409).json({success:false,code:"PRIZE_APPROVAL_REQUIRED",message:"Review the exact Prize Ladder winner and cash amount before approving settlement.",...settlement});
       let nextGameweek: any = null;
       if (!req.skipNextGameweekRollover) {
         try {
@@ -1304,7 +1342,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         message: settlement.replayed
           ? "Tournament settlement already completed and verified"
           : settlement.prizeVault
-            ? settlement.prizeAward ? "Tournament settled and Prize Vault claim created" : "Tournament settled; no Prize Vault tier was unlocked"
+            ? "Prize Ladder settled and cash equivalent credited to the winner’s wallet"
             : "Tournament settled with final scoring snapshots and exactly-once rewards",
         winner: ranked[0] || null,
         winnersCount: settlement.winnersCount,
