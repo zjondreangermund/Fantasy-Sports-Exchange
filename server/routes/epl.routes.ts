@@ -241,7 +241,7 @@ export function registerEplRoutes(app: Express, deps: { requireAuth: any; scoreU
           ) as identities
         from app.competition_entries ce join app.competitions c on c.id=ce.competition_id
         where ce.user_id=${userId} and c.game_week=${gameWeek}
-          and c.status::text in ('open','active','locked','completed')
+          and c.status::text in ('open','upcoming','closed','active','completed')
           and c.start_date<=${fixture.kickoffAt} and c.end_date>=${fixture.kickoffAt}
         order by c.id,ce.id limit 100`);
       const entries=await Promise.all((result.rows||[]).map(async(row:any)=>{
