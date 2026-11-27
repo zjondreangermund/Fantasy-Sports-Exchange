@@ -449,7 +449,7 @@ export function registerEconomyIntegrityRoutes(app: Express, deps: RegisterEcono
         fplApi.bootstrap(),
         loadApiFootballGameweekScoringContext(Number(preview.gameWeek || 0)).catch(() => null),
       ]);
-      const apiFootballDirectory = apiScoringContext?.directory || await loadApiFootballPlayerDirectory().catch(() => []);
+      const apiFootballDirectory = apiScoringContext?.directory || await loadApiFootballPlayerDirectory(undefined,true).catch(() => []);
       const departedApiFootballDirectory = apiScoringContext?.departedDirectory || [];
       const officialPlayerIndex = buildFplPlayerIndex(officialBootstrap);
 
