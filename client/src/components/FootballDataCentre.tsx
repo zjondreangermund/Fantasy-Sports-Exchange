@@ -3,6 +3,7 @@ import {fixturePeriodScores} from "../lib/fixture-period-scores";
 import FootballTeamGroups from "./FootballTeamGroups";
 import { normalizeFootballData, uniqueFootballRows, footballPlayerKey, dedupeAvailability, groupAvailabilityByTeam } from "../../../shared/football-data";
 import { useState } from "react";
+import PersonalMatchPerformance from "./PersonalMatchPerformance";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -129,7 +130,6 @@ function CoverageStrip({ data }: { data: any }) {
     ["Match stats", fixture.statistics_fixtures],
     ["Player stats", fixture.statistics_players],
     ["Injuries", data?.coverage?.injuries],
-    ["Predictions", data?.coverage?.predictions],
   ];
   return (
     <div className="flex flex-wrap gap-2">
@@ -144,9 +144,9 @@ function CoverageStrip({ data }: { data: any }) {
 
 export default function FootballDataCentre() {
   const [leagueKey, setLeagueKey] = useState<LeagueKey>("premier-league");
-  const [fixtureStatus, setFixtureStatus] = useState<"upcoming" | "live" | "finished">("upcoming");
+  const [fixtureStatus, setFixtureStatus] = useState<"upcoming" | "live" | "finished">(()=>new URLSearchParams(window.location.search).get("matchCentre")==="live"?"live":"upcoming");
   const [selectedRound, setSelectedRound] = useState("");
-  const [selectedFixtureId, setSelectedFixtureId] = useState<number | null>(null);
+  const [selectedFixtureId, setSelectedFixtureId] = useState<number | null>(()=>{const id=Number(new URLSearchParams(window.location.search).get("apiFixtureId"));return Number.isSafeInteger(id)&&id>0?id:null;});
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
   const [selectedCoachId, setSelectedCoachId] = useState<number | null>(null);
@@ -195,7 +195,7 @@ export default function FootballDataCentre() {
 
   const match = useQuery<any>({
     queryKey: ["api-football-match", leagueKey, selectedFixtureId],
-    queryFn: () => getJson(`/api/football/match/${leagueKey}/${selectedFixtureId}`),
+    queryFn: () => getJson(`/api/football/match/${leagueKey}/${selectedFixtureId}?mode=live-centre`),
     enabled: Boolean(selectedFixtureId),
     staleTime: 15_000,
     refetchInterval: selectedFixtureId ? 30_000 : false,
@@ -332,7 +332,7 @@ export default function FootballDataCentre() {
 
         <TabsContent value="matches" className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h3 className="font-black">{selectedCompetition.name} Match Centre</h3><p className="text-xs text-muted-foreground">Browse by live status or exact round/gameweek. Fixture ID links events, lineups, statistics, ratings, H2H, predictions and availability.</p></div>
+            <div><h3 className="font-black">{selectedCompetition.name} Match Centre</h3><p className="text-xs text-muted-foreground">Browse by live status or exact round/gameweek. Fixture ID links events, lineups, statistics, ratings, H2H and availability.</p></div>
             <div className="flex flex-wrap gap-2">
               {(["upcoming", "live", "finished"] as const).map((status) => <Button key={status} size="sm" variant={!selectedRound && fixtureStatus === status ? "default" : "outline"} onClick={() => { setSelectedRound(""); setFixtureStatus(status); setSelectedFixtureId(null); }}>{status === "finished" ? "Results" : status[0].toUpperCase() + status.slice(1)}</Button>)}
               <select className="rounded-md border border-white/10 bg-background px-3 py-1 text-sm" value={selectedRound} onChange={(event) => { setSelectedRound(event.target.value); setSelectedFixtureId(null); }}>
@@ -456,8 +456,6 @@ function MatchIntelligence({ data, loading, onPlayer, showProviderDiagnostics }:
   if (!data?.fixture) return <Card className="flex min-h-[18rem] items-center justify-center p-8 text-center text-muted-foreground">Select a fixture to open full API-Football match intelligence.</Card>;
   const fixture = data.fixture;
   const raw = data.rawFixture || {};
-  const prediction = data.prediction?.predictions || data.prediction || null;
-  const percent = prediction?.percent || {};
   const events = Array.isArray(data.events) ? data.events : [];
   const lineups = Array.isArray(data.lineups) ? data.lineups : [];
   const statistics = Array.isArray(data.statistics) ? data.statistics : [];
@@ -480,9 +478,10 @@ function MatchIntelligence({ data, loading, onPlayer, showProviderDiagnostics }:
       <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
         <div className="text-center text-xs uppercase tracking-[.18em] text-muted-foreground">{fixture.round}</div>
         <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center"><div className="font-black">{fixture.homeTeam?.name}</div><div className="rounded-lg bg-black/30 px-4 py-2 text-2xl font-black">{fixture.homeTeam?.score ?? "-"} : {fixture.awayTeam?.score ?? "-"}</div><div className="font-black">{fixture.awayTeam?.name}</div></div>
-        <div className="mt-2 text-center text-xs text-muted-foreground">{formatDate(fixture.kickoffTime)} · {fixture.venue?.name || "Venue TBD"} · {fixture.statusLong || fixture.status}</div>
+        <div className="mt-2 text-center text-xs text-muted-foreground">{formatDate(fixture.kickoffTime)} · {fixture.venue?.name || "Venue TBD"} · {fixtureClock(fixture)}</div>
       </div>
 
+      <PersonalMatchPerformance data={data} onPlayer={onPlayer}/>
       <section>
         <h4 className="mb-2 font-black">Detailed match report</h4>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -493,7 +492,7 @@ function MatchIntelligence({ data, loading, onPlayer, showProviderDiagnostics }:
         </div>
       </section>
 
-      {prediction ? <section><h4 className="mb-2 font-black">Statistical prediction</h4><div className="grid grid-cols-3 gap-2 text-center"><Metric label="Home" value={percent.home || "-"} /><Metric label="Draw" value={percent.draw || "-"} /><Metric label="Away" value={percent.away || "-"} /></div><p className="mt-2 text-sm text-muted-foreground">{prediction.advice || prediction?.winner?.comment || "Prediction available"}</p></section> : null}
+
 
       <section><h4 className="mb-2 font-black">Full-match statistics</h4>{statistics.length ? <StatisticsBlocks rows={statistics} /> : <EmptyText text="Match statistics are not available yet for this fixture." />}</section>
       {halfStatistics.length ? <section><h4 className="mb-2 font-black">First-half / half-time statistics</h4><StatisticsBlocks rows={halfStatistics} /></section> : null}
@@ -525,7 +524,7 @@ function FormationPitch({ lineup, onPlayer }: { lineup: any; onPlayer: (id: numb
     rows.get(row)!.push(entry);
   }
   const ordered = [...rows.entries()].sort(([a], [b]) => a - b);
-  return <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between"><div className="font-black">{lineup?.team?.name}</div><Badge variant="outline">{lineup?.formation || "Formation"}</Badge></div><div className="relative overflow-hidden rounded-xl border border-emerald-500/20 bg-emerald-950/30 p-3"><div className="absolute inset-x-0 top-1/2 border-t border-white/10" /><div className="relative space-y-4">{ordered.map(([row, entries]) => <div key={row} className="flex justify-around gap-1">{entries.map((entry: any, index: number) => <button type="button" key={`${entry?.player?.id}-${index}`} onClick={() => onPlayer(Number(entry?.player?.id || 0))} className="max-w-[90px] rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-center text-[10px] hover:bg-white/10"><div className="font-bold">{entry?.player?.name}</div><div className="text-white/45">#{entry?.player?.number || "-"}</div></button>)}</div>)}</div></div><div><div className="mb-1 text-xs font-black uppercase tracking-wide text-white/50">Bench</div><div className="flex flex-wrap gap-1">{bench.map((entry: any) => <button type="button" key={entry?.player?.id} onClick={() => onPlayer(Number(entry?.player?.id || 0))} className="rounded-md border border-white/10 px-2 py-1 text-[10px] hover:bg-white/5">{entry?.player?.name}</button>)}</div></div></div>;
+  return <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between"><div className="font-black">{lineup?.team?.name}</div><Badge variant="outline">{lineup?.formation || "Formation"}</Badge></div><div className="relative overflow-hidden rounded-xl border border-emerald-500/20 bg-emerald-950/30 p-3"><div className="absolute inset-x-0 top-1/2 border-t border-white/10" /><div className="relative space-y-4">{ordered.map(([row, entries]) => <div key={row} className="flex justify-around gap-1">{[...entries].sort((a,b)=>Number(String(a?.player?.grid||"0:0").split(":")[1]||0)-Number(String(b?.player?.grid||"0:0").split(":")[1]||0)).map((entry: any, index: number) => <button type="button" key={`${entry?.player?.id}-${index}`} onClick={() => onPlayer(Number(entry?.player?.id || 0))} className="min-w-0 max-w-[90px] flex-1 rounded-lg border border-white/10 bg-black/50 px-1 py-1 text-center text-[10px] hover:bg-white/10">{Number(entry?.player?.id)>0?<img loading="lazy" src={`https://media.api-sports.io/football/players/${Number(entry.player.id)}.png`} onError={event=>{event.currentTarget.style.visibility="hidden";}} className="mx-auto mb-1 h-9 w-9 object-contain sm:h-12 sm:w-12" alt=""/>:null}<div className="break-words font-bold">{entry?.player?.name}</div><div className="text-white/45">#{entry?.player?.number || "-"}</div></button>)}</div>)}</div></div><div><div className="mb-1 text-xs font-black uppercase tracking-wide text-white/50">Bench</div><div className="flex flex-wrap gap-1">{bench.map((entry: any) => <button type="button" key={entry?.player?.id} onClick={() => onPlayer(Number(entry?.player?.id || 0))} className="rounded-md border border-white/10 px-2 py-1 text-[10px] hover:bg-white/5">{Number(entry?.player?.id)>0?<img loading="lazy" alt="" src={`https://media.api-sports.io/football/players/${Number(entry.player.id)}.png`} className="mr-1 inline h-7 w-7 object-contain" onError={event=>{event.currentTarget.style.visibility="hidden";}}/>:null}{entry?.player?.name}</button>)}</div></div></div>;
 }
 
 function StandingsTable({ data, loading }: { data: any; loading: boolean }) {
