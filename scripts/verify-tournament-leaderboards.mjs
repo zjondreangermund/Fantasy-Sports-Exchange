@@ -139,3 +139,20 @@ if(matchday.homeApiFixtureId(row(1,"LIVE",-1,{intelligenceAvailable:false}))!==0
 requireText(home,'points(row.contribution)',"Dynamic home must preserve exact saved contribution.");
 requireText(home,'e.status==="completed"&&e.final&&e.complete',"Match completion must not imply prize settlement.");
 console.log("Dynamic home fixture phases and safe identities verified.");
+
+const homeRoutes=fs.readFileSync("server/routes/footballData.routes.ts","utf8");
+const quickFixtureRoute=homeRoutes.slice(homeRoutes.indexOf("// HOME_MATCHDAY_FAST_READ_V1"),homeRoutes.indexOf('  app.get("/api/football/leagues"'));
+requireText(quickFixtureRoute,'f.league_id=39',"Quick home feed must only include Premier League.");
+if(!quickFixtureRoute.includes("db.execute")||/cachedProvider\(|fetchApiFootballProvider\(|fplApi\./.test(quickFixtureRoute))throw new Error("Quick home feed must not wait for an external provider.");
+requireText(home,'savedHealthy',"Saved fixtures must unlock home without waiting for provider.");
+requireText(home,'readHomeJson("/api/football/home-matchday",signal)',"Home must use bounded local fixture read.");
+const quickRead=fs.readFileSync("client/src/lib/queryClient.ts","utf8");
+requireText(quickRead,"setTimeout(abort,8000)","Home reads must have a finite timeout.");
+const nativeHome=fs.readFileSync("client/src/components/native/NativeHomePage.tsx","utf8");
+requireText(nativeHome,'readHomeJson("/api/home/summary",signal)',"Native home must use lightweight summary.");
+requireText(nativeHome,'cardCount??"—"',"An unresolved card count must not display as zero.");
+if(nativeHome.includes('queryKey: ["/api/user/cards"]'))throw new Error("Native home must not block on full card enrichment.");
+const clubRoutes=fs.readFileSync("server/routes.ts","utf8");
+requireText(clubRoutes,'app.get("/api/home/summary",requireAuth',"Private summary must require authentication.");
+requireText(clubRoutes,"ce.user_id=${userId} and c.status::text in ('open','upcoming','closed','active')","Active counts must use actual competition status.");
+console.log("Fast home data, bounded reads and authenticated count safeguards verified.");
