@@ -694,6 +694,38 @@ export function registerFootballDataRoutes(app: Express) {
     res.json=(payload:any)=>sendJson(normalizeFootballData(payload));
     next();
   });
+  // HOME_MATCHDAY_FAST_READ_V1: database-only initial screen, no provider waits.
+  app.get("/api/football/home-matchday", async (_req,res)=>{
+    try {
+      const season=currentSeason();
+      const rows=rowsOf(await db.execute(sql`
+        select f.api_fixture_id as "apiFixtureId", f.raw, f.season, f.round,
+          f.kickoff_at as "kickoffTime", f.timezone, f.updated_at as "updatedAt",
+          coalesce(f.status_short,'NS') as status, f.status_long as "statusLong", f.elapsed,
+          f.home_team_id as "homeTeamId", f.away_team_id as "awayTeamId",
+          f.home_score as "homeScore", f.away_score as "awayScore",
+          ht.name as "homeName", ht.logo as "homeLogo", at.name as "awayName", at.logo as "awayLogo"
+        from app.api_football_fixtures f
+        left join app.api_football_teams ht on ht.api_team_id=f.home_team_id
+        left join app.api_football_teams at on at.api_team_id=f.away_team_id
+        where f.league_id=39 and f.season=${season}
+          and f.kickoff_at between now()-interval '24 hours' and now()+interval '21 days'
+        order by f.kickoff_at asc, f.api_fixture_id asc limit 100
+      `));
+      const fixtures=rows.map(normalizeSavedFixture);
+      const now=Date.now();
+      const uncertain=fixtures.some(f=>{
+        const kickoff=Date.parse(String(f.kickoffTime||"")),updated=Date.parse(String(f.updatedAt||""));
+        return (String(f.status)==="NS"&&kickoff<=now&&kickoff>now-4*3600000)
+          || (fixtureMatchesTab(f,"live")&&(!Number.isFinite(updated)||now-updated>5*60000));
+      });
+      res.setHeader("Cache-Control","no-store");
+      return res.json({fixtures,stale:uncertain||!fixtures.length,source:"api-football-database",updatedAt:new Date().toISOString()});
+    }catch(error:any){
+      return publicError(res,error,"Saved matchday data temporarily unavailable");
+    }
+  });
+
   app.get("/api/football/leagues", (_req, res) => {
     return res.json({ leagues: Object.entries(FOOTBALL_LEAGUES).map(([key, value]) => ({ key, ...value })) });
   });

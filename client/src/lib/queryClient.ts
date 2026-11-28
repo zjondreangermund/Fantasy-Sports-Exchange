@@ -37,6 +37,20 @@ export async function apiRequest(
   return res;
 }
 
+// Bounded read-only requests: do not let a slow upstream leave Home loading indefinitely.
+export async function readHomeJson<T=any>(url:string,signal?:AbortSignal):Promise<T>{
+  const controller=new AbortController();
+  const abort=()=>controller.abort();
+  if(signal?.aborted)abort();
+  else signal?.addEventListener("abort",abort,{once:true});
+  const timer=setTimeout(abort,8000);
+  try{
+    const res=await fetch(toApiUrl(resolveApiUrl(url)),{credentials:"include",headers:activitySessionHeaders(),signal:controller.signal});
+    await throwIfResNotOk(res);
+    return await res.json();
+  }finally{clearTimeout(timer);signal?.removeEventListener("abort",abort);}
+}
+
 type UnauthorizedBehavior = "returnNull" | "throw";
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;

@@ -2,7 +2,7 @@ import type {ReactNode} from "react";
 import {useQueries,useQuery} from "@tanstack/react-query";
 import {Link} from "wouter";
 import {useAuth} from "../../hooks/use-auth";
-import {apiRequest} from "../../lib/queryClient";
+import {readHomeJson} from "../../lib/queryClient";
 import {fixtureClock} from "../../../../shared/fixture-display";
 import {homeApiFixtureId,selectHomeMatchday} from "../../../../shared/home-matchday";
 
@@ -14,33 +14,46 @@ const kickoffLabel=(f:any)=>{const date=new Date(f.kickoffTime);return Number.is
 
 export default function HomeMatchdayLive({fallback=null}:{fallback?:ReactNode}){
   const {user}=useAuth();
+  const saved=useQuery<any>({
+    queryKey:["/api/football/home-matchday"],
+    queryFn:({signal})=>readHomeJson("/api/football/home-matchday",signal),
+    staleTime:10_000,refetchInterval:30_000,refetchOnWindowFocus:true,
+  });
   const live=useQuery<any>({
     queryKey:["api-football-fixtures","premier-league","live",""],
-    queryFn:async()=> (await apiRequest("GET","/api/football/fixtures/premier-league?status=live&limit=20")).json(),
+    queryFn:({signal})=>readHomeJson("/api/football/fixtures/premier-league?status=live&limit=20",signal),
     staleTime:15_000,refetchInterval:30_000,refetchOnWindowFocus:true,
   });
   // All three reads reuse the Premier League centre's existing provider cache.
   const finished=useQuery<any>({
     queryKey:["api-football-fixtures","premier-league","finished",""],
-    queryFn:async()=> (await apiRequest("GET","/api/football/fixtures/premier-league?status=finished&limit=20")).json(),
+    queryFn:({signal})=>readHomeJson("/api/football/fixtures/premier-league?status=finished&limit=20",signal),
     staleTime:30_000,refetchInterval:60_000,refetchOnWindowFocus:true,
   });
   const upcoming=useQuery<any>({
     queryKey:["api-football-fixtures","premier-league","upcoming",""],
-    queryFn:async()=> (await apiRequest("GET","/api/football/fixtures/premier-league?status=upcoming&limit=20")).json(),
+    queryFn:({signal})=>readHomeJson("/api/football/fixtures/premier-league?status=upcoming&limit=20",signal),
     staleTime:60_000,refetchInterval:60_000,refetchOnWindowFocus:true,
   });
   const now=Date.now();
   const liveFeedHealthy=Boolean(live.data)&&!live.isError&&!live.data?.stale;
-  const selection=selectHomeMatchday(list(live.data?.fixtures),list(finished.data?.fixtures),list(upcoming.data?.fixtures),now,liveFeedHealthy);
+  const savedHealthy=Boolean(saved.data)&&!saved.isError&&!saved.data?.stale;
+  const savedRows=list(saved.data?.fixtures);
+  const liveRows=[...savedRows.filter(f=>["1H","HT","2H","ET","BT","P","LIVE","INT"].includes(String(f.status))),...list(live.data?.fixtures)];
+  const finishedRows=[...savedRows.filter(f=>["FT","AET","PEN"].includes(String(f.status))),...list(finished.data?.fixtures)];
+  const upcomingRows=[...savedRows.filter(f=>String(f.status)==="NS"),...list(upcoming.data?.fixtures)];
+  const confirmed=selectHomeMatchday(liveRows,finishedRows,upcomingRows,now,liveFeedHealthy||savedHealthy);
+  // Show available schedule/results even if the live feed cannot confirm its status.
+  const selection=confirmed.mode==="unavailable"&&(finishedRows.length||upcomingRows.length)
+    ?selectHomeMatchday([],finishedRows,upcomingRows,now,true):confirmed;
   const {mode,fixtures}=selection;
   const isLive=mode==="live",isRecap=mode==="recap",isUpcoming=mode==="upcoming";
   const ids=isLive||isRecap?[...new Set(fixtures.map(fixtureId).filter(id=>Number.isSafeInteger(id)&&id>0))]:[];
   const nextMinutes=selection.next.length?Math.max(0,Math.ceil((Date.parse(selection.next[0].kickoffTime)-now)/60000)):null;
-  const delayed=live.isError||live.data?.stale||finished.isError||finished.data?.stale||upcoming.isError||upcoming.data?.stale;
+  const delayed=(!liveFeedHealthy&&!savedHealthy)||live.isError||live.data?.stale||finished.isError||finished.data?.stale||upcoming.isError||upcoming.data?.stale;
   const personal=useQueries({queries:ids.map(id=>({
     queryKey:["personal-match-performance",String(user?.id||""),id],
-    queryFn:async()=> (await apiRequest("GET",`/api/epl/match-centre/${id}/my-performance`)).json(),
+    queryFn:({signal}:{signal:AbortSignal})=>readHomeJson(`/api/epl/match-centre/${id}/my-performance`,signal),
     enabled:Boolean(user?.id),staleTime:20_000,refetchInterval:30_000,refetchOnWindowFocus:true,
   }))});
   const entries=new Map<number,any>();
@@ -61,11 +74,11 @@ export default function HomeMatchdayLive({fallback=null}:{fallback?:ReactNode}){
     matchPlayers.set(matchId,related);
   });
   const sorted=[...fixtures].sort((a,b)=>Number(Boolean(matchPlayers.get(fixtureId(b))?.length))-Number(Boolean(matchPlayers.get(fixtureId(a))?.length)));
-  if(mode==="unavailable")return <section className="mb-3 rounded-2xl border border-white/10 bg-slate-950/70 p-3 text-white"><p className="text-sm font-bold">{live.isLoading?"Loading matchday…":"Matchday feed unavailable"}</p><p className="mt-1 text-xs text-slate-400">{live.isLoading?"Checking current Premier League fixture status.":"Live status could not be confirmed. Your club dashboard is still available."}</p><Link href="/premier-league" className="mt-2 block text-xs font-bold text-cyan-200">Premier League →</Link></section>;
-  if(!fixtures.length)return <>{fallback}</>;
+  if(mode==="unavailable")return <section className="mb-3 rounded-2xl border border-white/10 bg-slate-950/70 p-3 text-white"><p className="text-sm font-bold">{saved.isLoading&&live.isLoading?"Loading matchday…":"Matchday feed unavailable"}</p><p className="mt-1 text-xs text-slate-400">{saved.isLoading&&live.isLoading?"Checking current Premier League fixture status.":"Live status could not be confirmed. Your club dashboard is still available."}</p><div className="mt-2 flex gap-4"><button type="button" className="text-xs font-bold text-cyan-200" onClick={()=>{void saved.refetch();void live.refetch();void finished.refetch();void upcoming.refetch();}}>Retry</button><Link href="/premier-league" className="text-xs font-bold text-cyan-200">Premier League →</Link></div></section>;
+  if(!fixtures.length)return <>{delayed?<p className="mb-2 text-xs text-slate-400">Live fixture status could not be confirmed. Retrying automatically.</p>:null}{fallback}</>;
   return <section data-home-matchday-live data-matchday-mode={mode} className={`mb-3 space-y-4 overflow-hidden rounded-3xl border p-3 text-white sm:p-6 ${isLive?"border-red-400/25 bg-[radial-gradient(ellipse_at_top_right,rgba(239,68,68,.15),transparent_55%),linear-gradient(135deg,#111527,#070b17)]":isRecap?"border-emerald-400/25 bg-gradient-to-br from-emerald-950/60 to-[#070b17]":"border-cyan-300/25 bg-gradient-to-br from-cyan-950/60 to-[#070b17]"}`}>
     <div className="flex items-start justify-between gap-3"><div><p className={`flex items-center gap-2 text-xs font-black uppercase tracking-[.2em] ${isLive?"text-red-300":isRecap?"text-emerald-300":"text-cyan-200"}`}>{isLive?<span className="h-2 w-2 animate-pulse rounded-full bg-red-500"/>:null}{isLive?"Matchday live":isRecap?"Matchday recap":"Next up · Premier League"}</p><h1 className="mt-2 text-2xl font-black sm:text-4xl">{isLive?"Every minute matters.":isRecap?"The final whistle.":"Get matchday ready."}</h1><p className="mt-1 text-xs text-slate-300">{isLive?"Your football. Your players. Your tournament.":isRecap?"Recent results, your players and current tournament standings.":"Upcoming fixtures and your next tournament opportunity."}</p></div><span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold ${isLive?"bg-red-500/15 text-red-200":isRecap?"bg-emerald-400/10 text-emerald-200":"bg-cyan-400/10 text-cyan-200"}`}>{isLive?fixtures.length+" live":isRecap?fixtures.length+" finished":nextMinutes!=null&&nextMinutes<=90?nextMinutes+" min to kickoff":"Scheduled"}</span></div>
-    {delayed?<p className="text-xs text-slate-400">Some fixture data is delayed or unavailable. Showing confirmed information last received.</p>:null}
+    {delayed?<p className="text-xs text-slate-400">Some fixture data is delayed or unavailable. Showing last received information; live status may have changed.</p>:null}
     <div className="grid gap-2 md:grid-cols-2">{sorted.map(f=>{
       const related=(matchPlayers.get(fixtureId(f))||[]).map(row=>{const latest=entries.get(Number(row.entry.entryId));const current=list(latest?.players).find(p=>Number(p.cardId)===Number(row.cardId)&&Number(p.apiPlayerId)===Number(row.apiPlayerId));return {...row,contribution:current?.contribution??null,entry:latest||row.entry};});
       const players=[...new Map(related.map(p=>[p.apiPlayerId,p])).values()].sort((a,b)=>Math.max(...related.filter(row=>row.apiPlayerId===b.apiPlayerId).map(row=>row.contribution==null?-Infinity:Number(row.contribution)))-Math.max(...related.filter(row=>row.apiPlayerId===a.apiPlayerId).map(row=>row.contribution==null?-Infinity:Number(row.contribution))));
