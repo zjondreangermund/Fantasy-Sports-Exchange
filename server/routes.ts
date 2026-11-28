@@ -326,6 +326,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error: any) { console.error("Failed to fetch competitions:", error); return res.status(500).json({ message: "Failed to fetch tournaments" }); }
   });
 
+  // HOME_QUICK_SUMMARY_V1: accurate ownership and competition counts, without card enrichment.
+  app.get("/api/home/summary",requireAuth,async(req:any,res)=>{
+    try{
+      const {db}=await import("./db.js");
+      const userId=String(req.authUserId);
+      const row=rowsOf(await db.execute(sql`
+        select
+          (select count(*)::int from app.player_cards pc join app.players p on p.id=pc.player_id where pc.owner_id=${userId}) as "cardCount",
+          (select count(*)::int from app.competition_entries ce join app.competitions c on c.id=ce.competition_id
+             where ce.user_id=${userId} and c.status::text in ('open','upcoming','closed','active')) as "activeEntryCount"
+      `))[0];
+      res.setHeader("Cache-Control","private, no-store");
+      return res.json(row);
+    }catch(error){console.warn("[home-summary] read failed",error);return res.status(503).json({message:"Club summary unavailable"});}
+  });
   app.get("/api/competitions/my-entries", requireAuth, async (req: any, res) => res.json(await storage.getUserCompetitions(req.authUserId)));
 
   console.log("🚀 Starting automatic score update service...");
