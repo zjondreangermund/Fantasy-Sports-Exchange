@@ -53,7 +53,7 @@ export default function HomeMatchdayLive({fallback=null}:{fallback?:ReactNode}){
   const delayed=(!liveFeedHealthy&&!savedHealthy)||live.isError||live.data?.stale||finished.isError||finished.data?.stale||upcoming.isError||upcoming.data?.stale;
   const personal=useQueries({queries:ids.map(id=>({
     queryKey:["personal-match-performance",String(user?.id||""),id],
-    queryFn:({signal})=>readHomeJson(`/api/epl/match-centre/${id}/my-performance`,signal),
+    queryFn:({signal}:{signal:AbortSignal})=>readHomeJson(`/api/epl/match-centre/${id}/my-performance`,signal),
     enabled:Boolean(user?.id),staleTime:20_000,refetchInterval:30_000,refetchOnWindowFocus:true,
   }))});
   const entries=new Map<number,any>();
